@@ -3,25 +3,42 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ScrollText,
+  LayoutDashboard,
+  CalendarDays,
+  BedDouble,
+  Wallet,
+  Users,
+  Receipt,
+  UtensilsCrossed,
+  BarChart3,
+  Building2,
+  Compass,
+  Upload,
+  User,
+  Settings,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { Select } from "@/components/ui";
 
-const NAV: { href: string; labelKey: DictKey; icon: string; roles: string[] }[] = [
-  { href: "/daysheet", labelKey: "nav.daySheet", icon: "▦", roles: ["STAFF"] },
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: "◫", roles: ["STAFF"] },
-  { href: "/calendar", labelKey: "nav.calendar", icon: "▤", roles: ["*"] },
-  { href: "/bookings", labelKey: "nav.bookings", icon: "≡", roles: ["*"] },
-  { href: "/payments", labelKey: "nav.dues", icon: "৳", roles: ["STAFF"] },
-  { href: "/guests", labelKey: "nav.guests", icon: "☺", roles: ["STAFF"] },
-  { href: "/expenses", labelKey: "nav.expenses", icon: "−", roles: ["STAFF"] },
-  { href: "/fb", labelKey: "nav.fb", icon: "☕", roles: ["STAFF"] },
-  { href: "/reports", labelKey: "nav.reports", icon: "▨", roles: ["STAFF"] },
-  { href: "/rooms", labelKey: "nav.rooms", icon: "⌂", roles: ["MGMT"] },
-  { href: "/activities", labelKey: "nav.activities", icon: "◈", roles: ["STAFF"] },
-  { href: "/import", labelKey: "nav.import", icon: "↑", roles: ["MGMT"] },
-  { href: "/profile", labelKey: "nav.profile", icon: "★", roles: ["AGENT"] },
-  { href: "/settings", labelKey: "nav.settings", icon: "⚙", roles: ["MGMT"] },
+const NAV: { href: string; labelKey: DictKey; icon: LucideIcon; roles: string[] }[] = [
+  { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"] },
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"] },
+  { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"] },
+  { href: "/bookings", labelKey: "nav.bookings", icon: BedDouble, roles: ["*"] },
+  { href: "/payments", labelKey: "nav.dues", icon: Wallet, roles: ["STAFF"] },
+  { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"] },
+  { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"] },
+  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"] },
+  { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"] },
+  { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"] },
+  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"] },
+  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"] },
+  { href: "/profile", labelKey: "nav.profile", icon: User, roles: ["AGENT"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, roles: ["MGMT"] },
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -75,7 +92,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                   active ? "bg-white/15 font-medium text-white" : "text-brand-100 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <span className="w-4 text-center opacity-70">{n.icon}</span>
+                <n.icon className="h-4 w-4 opacity-70" strokeWidth={1.75} />
                 {lang === "bn" ? BN_NAV[n.labelKey] ?? n.labelKey : EN_NAV[n.labelKey] ?? n.labelKey}
               </Link>
             );

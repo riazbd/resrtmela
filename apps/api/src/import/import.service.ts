@@ -1,4 +1,4 @@
-﻿import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
@@ -697,7 +697,7 @@ export class ImportService {
         if (!ours) continue;
 
         const cell7 = (s7[i + 1] ?? "").trim();
-        const m7 = cell7.match(/^(.*)\s*-\s*à§³([\d,.]*)$/);
+        const m7 = cell7.match(/^(.*)\s*-\s*৳([\d,.]*)$/);
         const isOosText = /out of service/i.test(cell7);
         const ourDue = ours.cell.mode === "booked" && ours.cell.due != null ? (ours.cell.due as number) : null;
 

@@ -184,12 +184,12 @@ export interface GuestRow {
 
 export const bdt = (n: number | string | null | undefined) =>
   n === null || n === undefined
-    ? "â€”"
-    : `à§³${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+    ? "—"
+    : `৳${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 export const dmy = (d: string | Date | null | undefined) =>
   !d
-    ? "â€”"
+    ? "—"
     : new Date(d).toLocaleDateString("en-GB", {
         day: "2-digit",
         month: "short",
