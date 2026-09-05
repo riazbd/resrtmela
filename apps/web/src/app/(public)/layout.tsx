@@ -7,6 +7,8 @@ import { getToken } from "@/lib/api";
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const logged = typeof window !== "undefined" && !!getToken();
+  // the homepage is fully immersive — it renders its own chrome
+  if (pathname === "/") return <main>{children}</main>;
 
   return (
     <div className="min-h-screen bg-slate-50">
