@@ -114,6 +114,16 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
    * Console "provider" in dev — swap for SMS/WhatsApp gateway in production.
    */
   async tick(): Promise<{ sent: number; swept: number; failed: number }> {
+    // never let a background-tick error become an unhandled rejection (would kill the process)
+    try {
+      return await this.tickInner();
+    } catch (e) {
+      this.logger.error(`notification tick failed: ${String(e).slice(0, 300)}`);
+      return { sent: 0, swept: 0, failed: 0 };
+    }
+  }
+
+  private async tickInner(): Promise<{ sent: number; swept: number; failed: number }> {
     this.ticks++;
     let swept = 0;
     // D-1 check-in reminder sweep
