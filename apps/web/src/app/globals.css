@@ -28,6 +28,11 @@
 .anim-rise { opacity: 0; animation: rise-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .anim-marquee { animation: marquee 28s linear infinite; }
 .anim-bounce-soft { animation: bounce-soft 2.2s ease-in-out infinite; }
+@keyframes kenburns {
+  from { transform: scale(1); }
+  to { transform: scale(1.1); }
+}
+.anim-kenburns { animation: kenburns 24s ease-in-out infinite alternate; }
 
 html { scroll-behavior: smooth; }
 

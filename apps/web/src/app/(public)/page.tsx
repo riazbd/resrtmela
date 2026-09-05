@@ -116,14 +116,17 @@ export default function HomePage() {
 
       {/* ── hero ── */}
       <section className="relative flex min-h-screen items-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-emerald-900 to-teal-900" />
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src="https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=2400&q=80"
+            alt="Resort pool surrounded by palm trees and villas"
+            className="anim-kenburns h-full w-full object-cover"
+          />
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-emerald-950/80 via-emerald-950/45 to-emerald-950/85" />
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-950/60 via-transparent to-transparent" />
         <div className="anim-float absolute -left-32 top-10 h-[28rem] w-[28rem] rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="anim-float-slow absolute -right-24 bottom-0 h-[32rem] w-[32rem] rounded-full bg-teal-400/15 blur-3xl" />
-        <div className="anim-float absolute left-1/3 top-1/2 h-72 w-72 rounded-full bg-lime-300/10 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "26px 26px" }}
-        />
 
         <div className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-28 pt-32">
           <div className="anim-rise max-w-3xl" style={{ animationDelay: "0.05s" }}>
