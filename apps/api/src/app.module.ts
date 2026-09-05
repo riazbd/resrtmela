@@ -20,7 +20,7 @@ import { ReportsModule } from "./reports/reports.module";
 import { ExpensesModule } from "./expenses/expenses.module";
 import { FbModule } from "./fb/fb.module";
 
-const ROOT_ENV = resolve(__dirname, "..", "..", "..", "..", ".env");
+const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
 
 @Module({
   imports: [
