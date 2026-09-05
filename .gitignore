@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+.next/
+out/
+.expo/
+web-build/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# misc
+*.log
+.DS_Store
+Thumbs.db
+.turbo/
+coverage/

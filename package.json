@@ -1,0 +1,31 @@
+{
+  "name": "resorthub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Resort Mela - multi-resort booking & activities SaaS platform",
+  "packageManager": "pnpm@9.15.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rimraf node_modules",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm -F @rh/db migrate",
+    "db:deploy": "pnpm -F @rh/db deploy",
+    "db:studio": "pnpm -F @rh/db studio",
+    "db:seed": "pnpm -F @rh/db seed"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.2.5",
+      "@types/react-dom": "19.2.5"
+    }
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

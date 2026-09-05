@@ -1,0 +1,16 @@
+﻿{
+  "expo": {
+    "name": "Resort Mela",
+    "slug": "resortmela",
+    "scheme": "resorthub",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": { "backgroundColor": "#14532d", "resizeMode": "contain" },
+    "ios": { "supportsTablet": true },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#14532d" }
+    },
+    "web": { "bundler": "metro" }
+  }
+}

@@ -1,0 +1,28 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: rh-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: resorthub
+      MYSQL_USER: resorthub
+      MYSQL_PASSWORD: hubpass
+    ports:
+      - "3307:3306"
+    volumes:
+      - rh_mysql_data:/var/lib/mysql
+    command: [ "mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci" ]
+
+  redis:
+    image: redis:7-alpine
+    container_name: rh-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - rh_redis_data:/data
+
+volumes:
+  rh_mysql_data:
+  rh_redis_data:

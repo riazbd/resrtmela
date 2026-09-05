@@ -1,0 +1,1 @@
+﻿ALTER TABLE `resorts` ADD COLUMN `fyStartMonthDay` VARCHAR(5) NOT NULL DEFAULT '07-01';
