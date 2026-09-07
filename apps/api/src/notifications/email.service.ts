@@ -32,6 +32,9 @@ export class EmailService {
       port: Number(process.env.SMTP_PORT ?? 587),
       secure: Number(process.env.SMTP_PORT ?? 587) === 465,
       auth: { user, pass },
+      // loopback SMTP (local mail server) presents a cert for the mail domain,
+      // not for 127.0.0.1 — skip name verification on loopback only
+      tls: /^(127\.0\.0\.1|localhost)$/.test(host) ? { rejectUnauthorized: false } : undefined,
     });
     return this.transporter;
   }
