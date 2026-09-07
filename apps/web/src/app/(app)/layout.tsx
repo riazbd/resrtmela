@@ -19,12 +19,14 @@ import {
   Upload,
   User,
   Settings,
+  Globe,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { Select } from "@/components/ui";
 
-const NAV: { href: string; labelKey: DictKey; icon: LucideIcon; roles: string[] }[] = [
+const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[] }[] = [
+  { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"] },
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"] },
   { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"] },
@@ -67,6 +69,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   const allowed = (roles: string[]) =>
     roles.includes("*") ||
+    (roles.includes("SUPER") && role === "SUPER_ADMIN") ||
     (roles.includes("STAFF") && isStaff) ||
     (roles.includes("MGMT") && isManagement);
 
@@ -93,7 +96,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <n.icon className="h-4 w-4 opacity-70" strokeWidth={1.75} />
-                {lang === "bn" ? BN_NAV[n.labelKey] ?? n.labelKey : EN_NAV[n.labelKey] ?? n.labelKey}
+                {n.label ?? (n.labelKey ? (lang === "bn" ? BN_NAV[n.labelKey] ?? n.labelKey : EN_NAV[n.labelKey] ?? n.labelKey) : n.href)}
               </Link>
             );
           })}

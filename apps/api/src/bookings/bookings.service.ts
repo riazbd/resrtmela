@@ -11,6 +11,7 @@ import { RoomsService } from "../rooms/rooms.service";
 import { ActivitiesService } from "../activities/activities.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "../notifications/email.service";
+import { DiscountService } from "../common/discount.service";
 import { BookingSource, type BookingState } from "@rh/db";
 
 export interface CreateBookingInput {
@@ -60,6 +61,7 @@ export class BookingsService {
     @Inject(RoomsService) private readonly rooms: RoomsService,
     @Inject(ActivitiesService) private readonly activities: ActivitiesService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(DiscountService) private readonly discounts: DiscountService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
   ) {}
@@ -109,11 +111,33 @@ export class BookingsService {
     if (nights <= 0) throw badRequest("checkOut must be after checkIn");
     if (input.roomIds.length === 0) throw badRequest("At least one room required");
 
-    // role rules: agents create under their own name, no discount (doc §1)
+    // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
     const guest = claims.role === ROLE.GUEST;
     if (guest) throw forbid("Guests book via the mobile app flow (phase 4)");
-    const discount = isAgent ? 0 : Number(input.discount ?? 0);
+    if (isAgent) {
+      const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
+      if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");
+    }
+
+    // precheck rooms exist in resort
+    const roomRows = await this.prisma.room.findMany({
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
+    });
+    if (roomRows.length !== input.roomIds.length) {
+      throw badRequest("One or more rooms missing/inactive for this resort");
+    }
+
+    let discount: number;
+    if (isAgent) {
+      discount = 0;
+    } else if (input.discount == null) {
+      // no manual discount → apply best active offer (per-room or resort-wide)
+      const rent0 = roomRows.reduce((s, r) => s + Number(r.baseRate), 0) * nights;
+      discount = await this.discounts.bestFor(input.resortId, roomRows[0]?.roomTypeId ?? null, rent0, checkIn);
+    } else {
+      discount = Number(input.discount);
+    }
     let source = input.source ?? BookingSource.DIRECT;
     let agentUserId: number | null = null;
     if (isAgent) {
@@ -154,14 +178,6 @@ export class BookingsService {
         where: { id: guestId, resortId: input.resortId },
       });
       if (!g) throw badRequest("guestId not in this resort");
-    }
-
-    // precheck rooms exist in resort
-    const roomRows = await this.prisma.room.findMany({
-      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
-    });
-    if (roomRows.length !== input.roomIds.length) {
-      throw badRequest("One or more rooms missing/inactive for this resort");
     }
 
     // fast-fail conflict listing before tx (nice 409 payload)

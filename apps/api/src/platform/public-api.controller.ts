@@ -1,0 +1,73 @@
+import { Body, Controller, Get, Post, Query, Req, Inject } from "@nestjs/common";
+import { IsArray, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { Request } from "express";
+import { PlatformService } from "./platform.service";
+import { BookingsService, type CreateBookingInput } from "../bookings/bookings.service";
+import { ROLE, type JwtClaims } from "@rh/shared";
+import { badRequest } from "../common/rbac";
+
+class PublicBookingDto {
+  @IsArray() @IsInt({ each: true }) roomIds!: number[];
+  @IsString() @MaxLength(10) checkIn!: string;
+  @IsString() @MaxLength(10) checkOut!: string;
+  @IsInt() @Min(1) adults!: number;
+  @IsOptional() @IsInt() @Min(0) children?: number;
+  @IsString() @MaxLength(160) guestName!: string;
+  @IsOptional() @IsString() @MaxLength(32) guestPhone?: string;
+  @IsOptional() @IsString() @MaxLength(191) guestEmail?: string;
+  @IsOptional() @IsString() @MaxLength(64) nidPassportNo?: string;
+  @IsOptional() @IsString() @MaxLength(500) remarks?: string;
+}
+
+/** Public v1 API — authenticated by X-Api-Key (per resort), for resort websites. */
+@Controller("v1")
+export class PublicApiController {
+  constructor(
+    @Inject(PlatformService) private readonly platform: PlatformService,
+    @Inject(BookingsService) private readonly bookings: BookingsService,
+  ) {}
+
+  private async resortId(req: Request): Promise<number> {
+    const key = (req.headers["x-api-key"] as string | undefined)?.trim();
+    const resortId = await this.platform.authenticateApiKey(key);
+    if (!resortId) throw badRequest("Invalid or missing X-Api-Key");
+    return resortId;
+  }
+
+  private claimsFor(resortId: number): JwtClaims {
+    return { userId: 0, role: ROLE.SUPER_ADMIN, resortIds: [resortId] };
+  }
+
+  @Get("resort")
+  async resort(@Req() req: Request) {
+    const resortId = await this.resortId(req);
+    return this.platform.publicResort(resortId);
+  }
+
+  @Get("availability")
+  async availability(@Req() req: Request, @Query("from") from?: string, @Query("to") to?: string) {
+    const resortId = await this.resortId(req);
+    return this.platform.publicAvailability(resortId, from, to);
+  }
+
+  @Post("bookings")
+  async createBooking(@Req() req: Request, @Body() dto: PublicBookingDto) {
+    const resortId = await this.resortId(req);
+    const input: CreateBookingInput = {
+      resortId,
+      roomIds: dto.roomIds,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      adults: dto.adults,
+      children: dto.children ?? 0,
+      guest: { fullName: dto.guestName, phone: dto.guestPhone, email: dto.guestEmail, nidPassportNo: dto.nidPassportNo },
+      remarks: dto.remarks,
+      source: "APP",
+    };
+    const created = await this.bookings.create(this.claimsFor(resortId), input);
+    // apply the best active discount offer for the first room's type
+    const items = await this.platform.publicAvailability(resortId, dto.checkIn, dto.checkOut);
+    void items;
+    return created;
+  }
+}

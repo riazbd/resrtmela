@@ -145,6 +145,10 @@ model Resort {
   counters        Counter[]
   expenses Expense[]
   fbBills  FbBill[]
+  subscriptions   Subscription[]
+  subscriptionDues SubscriptionDue[]
+  apiKeys         ApiKey[]
+  discountOffers  DiscountOffer[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -166,6 +170,7 @@ model User {
   agentBookings   Booking[]    @relation("BookingAgent")
   paymentsRecv    Payment[]    @relation("PaymentReceivedBy")
   auditLogs       AuditLog[]   @relation("AuditActor")
+  wallet          Wallet?
 
   @@map("users")
 }
@@ -185,17 +190,20 @@ model UserResort {
 // ───────────────────────── Inventory ─────────────────────────
 
 model RoomType {
-  id          Int     @id @default(autoincrement())
-  resortId    Int
-  resort      Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  name        String  @db.VarChar(120)
-  maxAdults   Int     @default(2)
-  maxChildren Int     @default(0)
-  amenities   Json?
-  active      Boolean @default(true)
+  id               Int     @id @default(autoincrement())
+  resortId         Int
+  resort           Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name             String  @db.VarChar(120)
+  maxAdults        Int     @default(2)
+  maxChildren      Int     @default(0)
+  extraPersonAllowed Boolean @default(false)
+  extraPersonRate  Decimal @default(0) @db.Decimal(10, 2)
+  amenities        Json?
+  active           Boolean @default(true)
 
   rooms     Room[]
   ratePlans RatePlan[]
+  discountOffers DiscountOffer[]
 
   @@index([resortId])
   @@map("room_types")
@@ -461,7 +469,7 @@ model Expense {
   @@map("expenses")
 }
 
-/// Restaurant / F&B bills (RES-##### sequence) � walk-in or charged to a stay
+/// Restaurant / F&B bills (RES-##### sequence) � walk-in or charged to a stay
 model FbBill {
   id         Int        @id @default(autoincrement())
   resortId   Int
@@ -530,4 +538,126 @@ model Counter {
 
   @@unique([resortId, kind])
   @@map("counters")
+}
+
+// ───────────────────────── SaaS platform layer ─────────────────────────
+
+enum SubscriptionPlan {
+  STARTER
+  GROWTH
+  CHAIN
+}
+
+/// A resort's platform subscription ("booking" the resort makes with the platform).
+model Subscription {
+  id          BigInt           @id @default(autoincrement())
+  resortId    Int
+  resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  plan        SubscriptionPlan @default(STARTER)
+  status      String           @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  monthlyFee  Decimal          @db.Decimal(10, 2)
+  startedAt   DateTime         @default(now())
+  trialEndsAt DateTime?
+  renewsAt    DateTime?
+  cancelledAt DateTime?
+  note        String?          @db.VarChar(255)
+
+  dues SubscriptionDue[]
+
+  @@index([resortId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+/// One billing period the resort owes the platform.
+model SubscriptionDue {
+  id             BigInt       @id @default(autoincrement())
+  subscriptionId BigInt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  resortId       Int
+  resort         Resort       @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  amount         Decimal      @db.Decimal(10, 2)
+  periodStart    DateTime
+  periodEnd      DateTime
+  dueDate        DateTime
+  status         String       @default("DUE") @db.VarChar(16) // DUE | PAID | OVERDUE | WAIVED
+  paidAt         DateTime?
+  note           String?      @db.VarChar(255)
+
+  @@index([status])
+  @@index([resortId])
+  @@map("subscription_dues")
+}
+
+enum WalletKind {
+  TOPUP
+  COMMISSION
+  BOOKING_HOLD
+  PAYOUT
+  REFUND
+  ADJUST
+}
+
+/// Per-user wallet (agents + resort owners).
+model Wallet {
+  id        Int         @id @default(autoincrement())
+  userId    Int         @unique
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance   Decimal     @default(0) @db.Decimal(12, 2)
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  txns      WalletTxn[]
+
+  @@map("wallets")
+}
+
+model WalletTxn {
+  id        BigInt     @id @default(autoincrement())
+  walletId  Int
+  wallet    Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind      WalletKind
+  amount    Decimal    @db.Decimal(12, 2) // signed: + credit, − debit
+  balanceAfter Decimal @db.Decimal(12, 2)
+  bookingId Int?
+  note      String?    @db.VarChar(255)
+  createdAt DateTime   @default(now())
+
+  @@index([walletId])
+  @@map("wallet_txns")
+}
+
+/// API keys so a resort's own website can talk to the platform.
+model ApiKey {
+  id         BigInt    @id @default(autoincrement())
+  resortId   Int
+  resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name       String    @db.VarChar(120)
+  prefix     String    @unique @db.VarChar(24) // shown as rm_live_xxxx
+  keyHash    String    @db.VarChar(128)
+  active     Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([resortId])
+  @@map("api_keys")
+}
+
+/// Discount offers: per room type or resort-wide; auto-applied at booking time.
+model DiscountOffer {
+  id         Int       @id @default(autoincrement())
+  resortId   Int
+  resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  scope      String    @default("RESORT") @db.VarChar(8) // RESORT | ROOM
+  roomTypeId Int?
+  roomType   RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  name       String    @db.VarChar(120)
+  kind       String    @default("PERCENT") @db.VarChar(8) // PERCENT | FLAT
+  value      Decimal   @db.Decimal(10, 2)
+  validFrom  DateTime?
+  validTo    DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+
+  @@index([resortId])
+  @@map("discount_offers")
 }

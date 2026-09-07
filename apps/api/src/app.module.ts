@@ -19,6 +19,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { ReportsModule } from "./reports/reports.module";
 import { ExpensesModule } from "./expenses/expenses.module";
 import { FbModule } from "./fb/fb.module";
+import { PlatformModule } from "./platform/platform.module";
 
 const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
 
@@ -39,6 +40,7 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     ReportsModule,
     ExpensesModule,
     FbModule,
+    PlatformModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
