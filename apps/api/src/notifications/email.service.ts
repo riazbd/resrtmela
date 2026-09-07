@@ -20,7 +20,12 @@ export class EmailService {
     const host = process.env.SMTP_HOST;
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
-    if (!host || !user || !pass) return null;
+    if (!host || !user || !pass) {
+      this.logger.warn(
+        `[EMAIL:not-configured] host=${host ? "set" : "MISSING"} user=${user ? "set" : "MISSING"} pass=${pass ? "set" : "MISSING"}`,
+      );
+      return null;
+    }
     this.transporter = nodemailer.createTransport({
       host,
       port: Number(process.env.SMTP_PORT ?? 587),
