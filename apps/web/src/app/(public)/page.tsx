@@ -491,7 +491,7 @@ export default function HomePage() {
               The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
               agents with wallets, and a booking API for your website.
             </p>
-            <div className="mt-4 text-xs text-slate-400">support@resortmela.com · rootcodebd.com</div>
+            <div className="mt-4 text-xs text-slate-400">support@rootcodebd.com</div>
           </div>
           <div>
             <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Functionalities</div>
