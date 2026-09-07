@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Post, Query, Req, Inject } from "@nestjs/common";
 import { IsArray, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
-import { Request } from "express";
 import { PlatformService } from "./platform.service";
 import { BookingsService, type CreateBookingInput } from "../bookings/bookings.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
 import { badRequest } from "../common/rbac";
+
+interface ApiKeyRequest {
+  headers: Record<string, string | string[] | undefined>;
+}
 
 class PublicBookingDto {
   @IsArray() @IsInt({ each: true }) roomIds!: number[];
@@ -27,7 +30,7 @@ export class PublicApiController {
     @Inject(BookingsService) private readonly bookings: BookingsService,
   ) {}
 
-  private async resortId(req: Request): Promise<number> {
+  private async resortId(req: ApiKeyRequest): Promise<number> {
     const key = (req.headers["x-api-key"] as string | undefined)?.trim();
     const resortId = await this.platform.authenticateApiKey(key);
     if (!resortId) throw badRequest("Invalid or missing X-Api-Key");
@@ -39,19 +42,19 @@ export class PublicApiController {
   }
 
   @Get("resort")
-  async resort(@Req() req: Request) {
+  async resort(@Req() req: ApiKeyRequest) {
     const resortId = await this.resortId(req);
     return this.platform.publicResort(resortId);
   }
 
   @Get("availability")
-  async availability(@Req() req: Request, @Query("from") from?: string, @Query("to") to?: string) {
+  async availability(@Req() req: ApiKeyRequest, @Query("from") from?: string, @Query("to") to?: string) {
     const resortId = await this.resortId(req);
     return this.platform.publicAvailability(resortId, from, to);
   }
 
   @Post("bookings")
-  async createBooking(@Req() req: Request, @Body() dto: PublicBookingDto) {
+  async createBooking(@Req() req: ApiKeyRequest, @Body() dto: PublicBookingDto) {
     const resortId = await this.resortId(req);
     const input: CreateBookingInput = {
       resortId,
