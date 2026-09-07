@@ -5,6 +5,10 @@ import { ConfigModule } from "@nestjs/config";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
+  // BigInt ids (subscription/api-key rows) must survive JSON serialization
+  (BigInt.prototype as unknown as { toJSON(): string }).toJSON = function () {
+    return (this as unknown as bigint).toString();
+  };
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
