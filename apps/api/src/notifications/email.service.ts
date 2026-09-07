@@ -21,8 +21,9 @@ export class EmailService {
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
     if (!host || !user || !pass) {
+      const fmt = (v: string | undefined) => (v === undefined ? "UNDEF" : v === "" ? "EMPTY" : `len${v.length}`);
       this.logger.warn(
-        `[EMAIL:not-configured] host=${host ? "set" : "MISSING"} user=${user ? "set" : "MISSING"} pass=${pass ? "set" : "MISSING"}`,
+        `[EMAIL:not-configured] host=${fmt(host)} user=${fmt(user)} pass=${fmt(pass)}`,
       );
       return null;
     }
