@@ -159,6 +159,8 @@ export interface RoomType {
   name: string;
   maxAdults: number;
   maxChildren: number;
+  extraPersonAllowed?: boolean;
+  extraPersonRate?: string | number;
   amenities?: string[];
   active: boolean;
 }

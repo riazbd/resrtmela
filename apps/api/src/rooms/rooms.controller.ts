@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { RoomsService } from "./rooms.service";
 
@@ -7,7 +7,18 @@ class CreateRoomTypeDto {
   @IsString() @MaxLength(120) name!: string;
   @IsInt() @Min(1) maxAdults!: number;
   @IsOptional() @IsInt() @Min(0) maxChildren?: number;
+  @IsOptional() @IsBoolean() extraPersonAllowed?: boolean;
+  @IsOptional() @IsNumber() @Min(0) extraPersonRate?: number;
   @IsOptional() amenities?: string[];
+}
+
+class UpdateRoomTypeDto {
+  @IsOptional() @IsString() @MaxLength(120) name?: string;
+  @IsOptional() @IsInt() @Min(1) maxAdults?: number;
+  @IsOptional() @IsInt() @Min(0) maxChildren?: number;
+  @IsOptional() @IsBoolean() extraPersonAllowed?: boolean;
+  @IsOptional() @IsNumber() @Min(0) extraPersonRate?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
 }
 
 class CreateRoomDto {
@@ -46,6 +57,15 @@ export class RoomsController {
     @Body() dto: CreateRoomTypeDto,
   ) {
     return this.rooms.createRoomType(req.user, resortId, dto);
+  }
+
+  @Patch("room-types/:id")
+  updateRoomType(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: UpdateRoomTypeDto,
+  ) {
+    return this.rooms.updateRoomType(req.user, id, dto);
   }
 
   @Get("resorts/:resortId/rooms")

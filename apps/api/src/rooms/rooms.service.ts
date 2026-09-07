@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, JwtClaims } from "@rh/shared";
-import { isManagement, requireResortAccess, requireRoles } from "../common/rbac";
+import { isManagement, requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { checkRoomCap } from "../common/plans";
 import { AuditService } from "../common/audit.service";
@@ -23,14 +23,46 @@ export class RoomsService {
   async createRoomType(
     claims: JwtClaims,
     resortId: number,
-    data: { name: string; maxAdults: number; maxChildren?: number; amenities?: string[] },
+    data: { name: string; maxAdults: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; amenities?: string[] },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
     const rt = await this.prisma.roomType.create({
-      data: { resortId, name: data.name, maxAdults: data.maxAdults, maxChildren: data.maxChildren ?? 0, amenities: data.amenities },
+      data: {
+        resortId,
+        name: data.name,
+        maxAdults: data.maxAdults,
+        maxChildren: data.maxChildren ?? 0,
+        extraPersonAllowed: data.extraPersonAllowed ?? false,
+        extraPersonRate: data.extraPersonRate ?? 0,
+        amenities: data.amenities,
+      },
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "roomType.create", entity: "roomType", entityId: rt.id, diff: data });
+    return rt;
+  }
+
+  async updateRoomType(
+    claims: JwtClaims,
+    id: number,
+    data: { name?: string; maxAdults?: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; active?: boolean },
+  ) {
+    const rt0 = await this.prisma.roomType.findUnique({ where: { id } });
+    if (!rt0) throw badRequest("room type not found");
+    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    requireResortAccess(claims, rt0.resortId);
+    const rt = await this.prisma.roomType.update({
+      where: { id },
+      data: {
+        ...(data.name != null ? { name: data.name } : {}),
+        ...(data.maxAdults != null ? { maxAdults: data.maxAdults } : {}),
+        ...(data.maxChildren != null ? { maxChildren: data.maxChildren } : {}),
+        ...(data.extraPersonAllowed != null ? { extraPersonAllowed: data.extraPersonAllowed } : {}),
+        ...(data.extraPersonRate != null ? { extraPersonRate: data.extraPersonRate } : {}),
+        ...(data.active != null ? { active: data.active } : {}),
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, resortId: rt0.resortId, action: "roomType.update", entity: "roomType", entityId: id, diff: data });
     return rt;
   }
 

@@ -35,6 +35,13 @@ export default function InvoicePage() {
       .catch((e) => setErr((e as Error).message));
   }, [params.id]);
 
+  useEffect(() => {
+    if (inv && typeof window !== "undefined" && window.location.search.includes("print=1")) {
+      const t = setTimeout(() => window.print(), 600);
+      return () => clearTimeout(t);
+    }
+  }, [inv]);
+
   if (err) return <div className="p-10 text-center text-sm text-red-600">{err}</div>;
   if (!inv) return <Spinner />;
 

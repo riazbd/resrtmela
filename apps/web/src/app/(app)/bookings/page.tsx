@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { FileDown } from "lucide-react";
 import {
   api, bdt, dmy, iso,
   type BookingDetail, type BookingRow, type RoomAvail,
@@ -28,8 +29,9 @@ const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
   NO_SHOW: [],
 };
 
-function NewBookingModal({ open, onClose, onCreated }: {
+function NewBookingModal({ open, onClose, onCreated, preset }: {
   open: boolean; onClose: () => void; onCreated: (code: string) => void;
+  preset?: { roomId?: number | null; checkIn?: string | null; checkOut?: string | null } | null;
 }) {
   const { activeResort, isStaff } = useAuth();
   const { push } = useToast();
@@ -49,6 +51,15 @@ function NewBookingModal({ open, onClose, onCreated }: {
   const [busy, setBusy] = useState(false);
   const [loadingGrid, setLoadingGrid] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !preset) return;
+    if (preset.checkIn) setCheckIn(preset.checkIn);
+    if (preset.checkOut) setCheckOut(preset.checkOut);
+    else if (preset.checkIn) setCheckOut(iso(new Date(new Date(preset.checkIn).getTime() + 86400000)));
+    if (preset.roomId) setPicked([preset.roomId]);
+    else setPicked([]);
+  }, [open, preset]);
 
   const loadGrid = useCallback(async () => {
     if (!activeResort) return;
@@ -280,6 +291,18 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
     try {
       await api(`/bookings/${id}/transition`, { method: "POST", body: { to } });
       push(`Booking ${to.replace(/_/g, " ").toLowerCase()}`);
+      if (to === "CHECKED_OUT" && !b?.invoiceNo) {
+        try {
+          await api(`/bookings/${id}/invoice`, { method: "POST" });
+          push("Invoice generated — opening print view");
+        } catch {
+          push("Checked out (invoice generation failed)", "err");
+        }
+        await load();
+        onChanged();
+        window.open(`/invoice/${id}?print=1`, "_blank");
+        return;
+      }
       await load();
       onChanged();
     } catch (ex) {
@@ -444,14 +467,33 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             Generate invoice
           </Button>
         )}        {isStaff && b.invoiceNo && (
-          <a
-            href={`/invoice/${b.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Invoice {b.invoiceNo}
-          </a>
+          <>
+            <a
+              href={`/invoice/${b.id}?print=1`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              title="Open invoice and print / save as PDF"
+            >
+              <FileDown className="mr-1.5 inline h-3.5 w-3.5" /> Invoice PDF {b.invoiceNo}
+            </a>
+            <Button
+              size="sm"
+              variant="ghost"
+              loading={busy}
+              onClick={async () => {
+                try {
+                  await api(`/bookings/${b.id}/email-invoice`, { method: "POST", body: {} });
+                  push("Invoice emailed to guest");
+                } catch (ex) {
+                  push((ex as Error).message, "err");
+                }
+              }}
+              title="Email invoice to the guest"
+            >
+              Email invoice
+            </Button>
+          </>
         )}
         {isStaff && ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state) && (
           <Button size="sm" variant="danger" onClick={cancelStaff} loading={busy}>Cancel booking</Button>
@@ -469,6 +511,11 @@ function BookingsInner() {
   const { activeResort } = useAuth();
   const params = useSearchParams();
   const focusId = params.get("id");
+  const preset = {
+    roomId: params.get("roomId") ? Number(params.get("roomId")) : null,
+    checkIn: params.get("checkIn"),
+    checkOut: params.get("checkOut"),
+  };
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [total, setTotal] = useState(0);
   const [state, setState] = useState("");
@@ -479,6 +526,13 @@ function BookingsInner() {
   const [group, setGroup] = useState("");
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [presetOn, setPresetOn] = useState(false);
+  useEffect(() => {
+    if (params.get("new") === "1") {
+      setPresetOn(true);
+      setShowNew(true);
+    }
+  }, [params]);
   const [openId, setOpenId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
@@ -585,7 +639,7 @@ function BookingsInner() {
       </Card>
       <div className="text-xs text-slate-400">{filtered.length} of {total} bookings</div>
 
-      <NewBookingModal open={showNew} onClose={() => setShowNew(false)} onCreated={() => void load()} />
+      <NewBookingModal open={showNew} preset={presetOn ? preset : null} onClose={() => setShowNew(false)} onCreated={() => void load()} />
 
       <Modal open={openId !== null} onClose={() => setOpenId(null)} title="Booking" wide>
         {openId !== null && (

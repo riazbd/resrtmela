@@ -171,7 +171,14 @@ export default function CalendarPage() {
                               </span>
                             </button>
                           ) : (
-                            <div className="h-8 min-w-[34px] rounded bg-slate-50" />
+                            <button
+                              title={`Book ${room.name} on ${iso(d)}`}
+                              onClick={() => {
+                                const next = new Date(new Date(d).getTime() + 86400000);
+                                router.push(`/bookings?new=1&roomId=${room.id}&checkIn=${iso(d)}&checkOut=${iso(next)}`);
+                              }}
+                              className="h-8 w-full min-w-[34px] rounded bg-slate-50 transition hover:bg-brand-100 hover:ring-1 hover:ring-brand-300"
+                            />
                           )}
                         </td>
                       );

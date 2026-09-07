@@ -14,6 +14,7 @@ export default function RoomsPage() {
   const [loading, setLoading] = useState(true);
   const [addRoom, setAddRoom] = useState(false);
   const [addType, setAddType] = useState(false);
+  const [editType, setEditType] = useState<RoomType | null>(null);
   const [addPlan, setAddPlan] = useState(false);
 
   const canEdit = isManagement;
@@ -104,12 +105,22 @@ export default function RoomsPage() {
       >
         <div className="flex flex-wrap gap-2">
           {types.map((t) => (
-            <div key={t.id} className="rounded-lg border border-slate-200 px-3 py-2">
+            <button
+              key={t.id}
+              onClick={() => canEdit && setEditType(t)}
+              title={canEdit ? "Click to edit" : undefined}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/50"
+            >
               <div className="text-sm font-medium">{t.name}</div>
-              <div className="text-[11px] text-slate-400">{t.maxAdults}A · {t.maxChildren}C{t.amenities?.length ? ` · ${(t.amenities as string[]).join(", ")}` : ""}</div>
-            </div>
+              <div className="text-[11px] text-slate-400">
+                {t.maxAdults}A · {t.maxChildren}C
+                {t.extraPersonAllowed ? ` · +extra ${bdt(Number(t.extraPersonRate))}/n` : ""}
+                {t.amenities?.length ? ` · ${(t.amenities as string[]).join(", ")}` : ""}
+              </div>
+            </button>
           ))}
         </div>
+        {types.length === 0 && <Empty msg="No room types yet" />}
       </Card>
 
       <Card
@@ -135,7 +146,8 @@ export default function RoomsPage() {
         )}
       </Card>
 
-      <AddRoomTypeModal open={addType} onClose={() => setAddType(false)} onDone={() => void load()} />
+        <AddRoomTypeModal open={addType} onClose={() => setAddType(false)} onDone={() => void load()} />
+        <EditRoomTypeModal t={editType} onClose={() => setEditType(null)} onDone={() => void load()} />
       <AddPlanModal open={addPlan} onClose={() => setAddPlan(false)} onDone={() => void load()} types={types} />
       <AddRoomModal open={addRoom} onClose={() => setAddRoom(false)} onDone={() => void load()} types={types} />
     </div>
@@ -185,12 +197,72 @@ function AddRoomModal({ open, onClose, onDone, types }: {
   );
 }
 
+function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose: () => void; onDone: () => void }) {
+  const { push } = useToast();
+  const [name, setName] = useState("");
+  const [a, setA] = useState(2);
+  const [c, setC] = useState(0);
+  const [extraAllowed, setExtraAllowed] = useState(false);
+  const [extraRate, setExtraRate] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (t) {
+      setName(t.name);
+      setA(t.maxAdults);
+      setC(t.maxChildren);
+      setExtraAllowed(!!t.extraPersonAllowed);
+      setExtraRate(Number(t.extraPersonRate ?? 0));
+    }
+  }, [t]);
+
+  async function submit() {
+    if (!t) return;
+    setBusy(true);
+    try {
+      await api(`/room-types/${t.id}`, {
+        method: "PATCH",
+        body: { name, maxAdults: a, maxChildren: c, extraPersonAllowed: extraAllowed, extraPersonRate: extraAllowed ? extraRate : 0 },
+      });
+      push("Room type updated");
+      onDone();
+      onClose();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={!!t} onClose={onClose} title={`Edit room type — ${t?.name ?? ""}`}>
+      <div className="space-y-3">
+        <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Max adults"><Input type="number" min={1} value={a} onChange={(e) => setA(Number(e.target.value))} /></Field>
+          <Field label="Max children"><Input type="number" min={0} value={c} onChange={(e) => setC(Number(e.target.value))} /></Field>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={extraAllowed} onChange={(e) => setExtraAllowed(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+          Allow extra person (beyond max adults)
+        </label>
+        {extraAllowed && (
+          <Field label="Extra person rate (৳/night)"><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
+        )}
+        <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Save</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
 function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { activeResort } = useAuth();
   const { push } = useToast();
   const [name, setName] = useState("");
   const [a, setA] = useState(2);
   const [c, setC] = useState(0);
+  const [extraAllowed, setExtraAllowed] = useState(false);
+  const [extraRate, setExtraRate] = useState(0);
   const [amen, setAmen] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -200,7 +272,12 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
     try {
       await api(`/resorts/${activeResort.id}/room-types`, {
         method: "POST",
-        body: { name, maxAdults: a, maxChildren: c, amenities: amen ? amen.split(",").map((s) => s.trim()) : undefined },
+        body: {
+          name, maxAdults: a, maxChildren: c,
+          extraPersonAllowed: extraAllowed,
+          extraPersonRate: extraAllowed ? extraRate : 0,
+          amenities: amen ? amen.split(",").map((s) => s.trim()) : undefined,
+        },
       });
       push("Room type added");
       onDone();
@@ -221,6 +298,13 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
           <Field label="Max adults"><Input type="number" min={1} value={a} onChange={(e) => setA(Number(e.target.value))} /></Field>
           <Field label="Max children"><Input type="number" min={0} value={c} onChange={(e) => setC(Number(e.target.value))} /></Field>
         </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={extraAllowed} onChange={(e) => setExtraAllowed(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+          Allow extra person (beyond max adults)
+        </label>
+        {extraAllowed && (
+          <Field label="Extra person rate (৳/night)"><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
+        )}
         <Field label="Amenities" hint="comma separated"><Input value={amen} onChange={(e) => setAmen(e.target.value)} placeholder="AC, WiFi, Balcony" /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Add</Button></div>
       </div>
