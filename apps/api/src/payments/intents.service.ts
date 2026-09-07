@@ -36,7 +36,7 @@ export class IntentsService {
     const isGuest = claims.role === ROLE.GUEST;
     if (isGuest) {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-      const guestRows = await this.prisma.guest.findMany({ where: { phone: user.phone }, select: { id: true } });
+      const guestRows = await this.prisma.guest.findMany({ where: { phone: user.phone ?? "" }, select: { id: true } });
       if (!guestRows.some((g) => g.id === b.guestId)) {
         throw Object.assign(new Error("Not your booking"), { status: 403 });
       }

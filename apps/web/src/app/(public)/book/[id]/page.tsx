@@ -28,6 +28,8 @@ export default function ResortBookingPage() {
   // checkout fields
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [verifyMode, setVerifyMode] = useState<"email" | "phone">("email");
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpHint, setOtpHint] = useState<string | null>(null);
@@ -73,16 +75,22 @@ export default function ResortBookingPage() {
   async function sendOtp() {
     setErr(null); setBusy(true);
     try {
-      const res = await api<{ devCode?: string }>("/auth/otp/request", { method: "POST", body: { phone } });
+      const body = verifyMode === "email" ? { email } : { phone };
+      const res = await api<{ devCode?: string; sent?: boolean }>("/auth/otp/request", { method: "POST", body });
       setOtpSent(true);
-      setOtpHint(res.devCode ? `Dev code: ${res.devCode}` : "Code sent via SMS");
+      if (verifyMode === "email") {
+        setOtpHint(res.sent === false ? "Email could not be sent — check the address" : "Verification code sent — check your email");
+      } else {
+        setOtpHint(res.devCode ? `Dev code: ${res.devCode}` : "Code sent via SMS");
+      }
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
   async function verifyOtp() {
     setErr(null); setBusy(true);
     try {
-      const res = await api<{ accessToken: string }>("/auth/otp/verify", { method: "POST", body: { phone, code: otpCode } });
+      const body = verifyMode === "email" ? { email, code: otpCode } : { phone, code: otpCode };
+      const res = await api<{ accessToken: string }>("/auth/otp/verify", { method: "POST", body });
       setToken(res.accessToken);
       setVerified(true);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
@@ -158,18 +166,40 @@ export default function ResortBookingPage() {
                 <div className="mt-3 space-y-3">
                   {!verified && (
                     <div className="rounded-lg bg-slate-50 p-3 space-y-3">
-                      <p className="text-xs font-medium text-slate-500">Verify your phone to confirm</p>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-slate-500">Verify to confirm your booking</p>
+                        <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-semibold">
+                          {(["email", "phone"] as const).map((m) => (
+                            <button
+                              key={m}
+                              onClick={() => { setVerifyMode(m); setOtpSent(false); setOtpHint(null); }}
+                              className={`rounded-md px-2.5 py-1 ${verifyMode === m ? "bg-brand-600 text-white" : "text-slate-500"}`}
+                            >
+                              {m === "email" ? "Email" : "Mobile"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <Field label="Your name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" /></Field>
-                        <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></Field>
+                        {verifyMode === "email" ? (
+                          <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></Field>
+                        ) : (
+                          <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></Field>
+                        )}
                       </div>
                       {!otpSent ? (
-                        <Button size="sm" onClick={sendOtp} loading={busy} disabled={phone.length < 10}>Send OTP</Button>
+                        <Button size="sm" onClick={sendOtp} loading={busy} disabled={verifyMode === "email" ? !email.includes("@") : phone.length < 10}>
+                          Send verification code
+                        </Button>
                       ) : (
                         <div className="space-y-2">
-                          <Field label="OTP code"><Input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={6} placeholder="6-digit code" /></Field>
+                          <Field label="Verification code"><Input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={6} placeholder="6-digit code" /></Field>
                           {otpHint && <p className="text-xs text-brand-600 font-medium">{otpHint}</p>}
-                          <Button size="sm" onClick={verifyOtp} loading={busy} disabled={otpCode.length !== 6}>Verify</Button>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" onClick={verifyOtp} loading={busy} disabled={otpCode.length !== 6}>Verify</Button>
+                            <button onClick={() => setOtpSent(false)} className="text-xs text-slate-400 hover:text-slate-600">Change {verifyMode === "email" ? "email" : "number"}</button>
+                          </div>
                         </div>
                       )}
                     </div>

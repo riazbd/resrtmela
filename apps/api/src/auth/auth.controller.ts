@@ -11,12 +11,14 @@ export class LoginDto {
 }
 
 class OtpRequestDto {
-  @IsString() phone!: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
 }
 
 class OtpVerifyDto {
-  @IsString() phone!: string;
-  @IsString() code!: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
+  @IsString() @MaxLength(8) code!: string;
 }
 
 class SetPasswordDto {
@@ -47,13 +49,19 @@ export class PublicAuthController {
   @Post("otp/request")
   @HttpCode(200)
   requestOtp(@Body() dto: OtpRequestDto) {
-    return this.auth.requestOtp(dto.phone);
+    if (!dto.phone && !dto.email) {
+      throw Object.assign(new Error("phone or email required"), { status: 400 });
+    }
+    return this.auth.requestOtp({ phone: dto.phone, email: dto.email });
   }
 
   @Post("otp/verify")
   @HttpCode(200)
   verifyOtp(@Body() dto: OtpVerifyDto) {
-    return this.auth.verifyOtp(dto.phone, dto.code);
+    if (!dto.phone && !dto.email) {
+      throw Object.assign(new Error("phone or email required"), { status: 400 });
+    }
+    return this.auth.verifyOtp({ phone: dto.phone, email: dto.email }, dto.code);
   }
 
   /** Public self-serve onboarding: tenant + resort + admin account. */

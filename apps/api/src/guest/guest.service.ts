@@ -28,7 +28,7 @@ export class GuestService {
   /** Guest rows tied to this user's phone (incl. sheet-imported history). */
   private async myGuestIds(claims: JwtClaims): Promise<number[]> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-    const key = phoneKey(normalizePhone(user.phone));
+    const key = phoneKey(normalizePhone(user.phone ?? ""));
     const rows = await this.prisma.guest.findMany({ where: { phoneKey: key }, select: { id: true } });
     return rows.map((r) => r.id);
   }
@@ -193,7 +193,7 @@ export class GuestService {
     if (!input.items?.length) throw badRequest("Select at least one room");
 
     // my guest identity in this resort
-    const phone = normalizePhone(user.phone);
+    const phone = normalizePhone(user.phone ?? "");
     const key = phoneKey(phone);
     let guest = await this.prisma.guest.findFirst({
       where: { phoneKey: key, resortId: input.resortId },

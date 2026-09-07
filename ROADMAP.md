@@ -18,15 +18,16 @@
 ~~2. On the VPS set `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `/opt/resortmela/.env`.~~
 ~~3. `pm2 restart api --update-env` and verify with a test invoice email.~~
 
-### 2. Guest OTP is generated but never delivered
-**Where:** `apps/api/src/auth/auth.service.ts` — OTP store is an in-memory `Map` (comment: *"dev-only OTP store; replaced by SMS provider + job queue in phase 6"*). No SMS gateway integration exists.
+### 2. Guest OTP — EMAIL LIVE, SMS PENDING (updated 2026-09-07)
+**Current state:** guests verify by **email OTP** — a 6-digit code is emailed (SMTP is live). The unified endpoint accepts either channel:
 
-**Impact:** guests **cannot log in** via the mobile app or the web trips flow — the OTP is never sent to them.
+- `POST /auth/otp/request` with `{ email }` (works today) or `{ phone }` (auto-activates when the SMS gateway gets a sender ID)
+- `POST /auth/otp/verify` with `{ email|phone, code }` returns `{ accessToken }` — finds or creates the GUEST account
+- `User.phone` is now nullable (email-only guest accounts supported)
 
-**Fix:**
-- Wire a Bangladeshi SMS gateway (BulkSMSBD / AlphaNet / SSL Wireless) into `apps/api/src/notifications/` as the SMS provider adapter (the `NotificationsService.tick` already has the console adapter slot).
-- Send the OTP through it in `auth.service.requestOtp()`.
-- Add the gateway API key to `.env` (`SMS_PROVIDER_KEY` etc.).
+**SMS path fully built but dormant** — SSL Wireless iSMS Plus adapter exists (`apps/api/src/notifications/sms.service.ts`: `user` + SHA-256 `hash` + `sid`, auto Bangla/Unicode detection). Credentials already in the VPS `.env`; only `SMS_SENDER_ID` is empty.
+
+**To activate SMS:** log into https://ismsplus.sslwireless.com (user: mishatil) -> copy the approved sender ID -> set `SMS_SENDER_ID` in `/opt/resortmela/.env` -> recreate the api PM2 process (with the SMTP env vars, see blocker 1 note) -> test an OTP to a real phone.
 
 ### 3. No database backups
 **Where:** VPS crontab is empty. All business data lives in MariaDB `resortmela` with zero backups.
@@ -47,8 +48,15 @@
 
 ## 🟠 Important soon
 
-### 5. Online payments (bKash / Nagad / SSLCommerz)
-Today the booking flow is "pay at resort" only. `payment_intents` exist with a **mock** provider (`apps/api/src/payments/intents.service.ts`). Needed for true self-service guest booking and for collecting platform subscription dues online.
+### 5. Online payment gateway — FUTURE (offline entry works today)
+**Current state:** guests book "pay at resort". All payments — advances, F&B, dues, agent wallets — are **manual/offline entry** in the console (cash / bKash-manual / Nagad-manual / card-manual). Fully functional today.
+
+**Future work:**
+1. Choose PSP: bKash PGW, Nagad, or SSLCommerz (aggregator for all).
+2. `apps/api/src/payments/intents.service.ts` already has the `payment_intents` table + a mock provider — swap the mock for the real PSP adapter.
+3. Guest flow: "Pay now" button on the trip page -> hosted checkout -> webhook marks the intent paid -> `Payment` row + booking `paymentState` recompute.
+4. Platform subscription dues get the same PSP later.
+5. PSP merchant credentials + webhook secret in `.env`.
 
 ### 6. Automatic subscription renewal sweep
 Renewals are manual (Platform → Resorts → Renew creates the due). Deferred by decision — build a daily sweep that: on `trialEndsAt`/`renewsAt` passing → generate the due → flip `Subscription.status` to `PAST_DUE` when unpaid. Suggested home: a cron-style method next to `sweepAgentDeadlines()` in `apps/api/src/notifications/notifications.service.ts` or a dedicated `subscriptions.sweep()` in `apps/api/src/platform/platform.service.ts`.

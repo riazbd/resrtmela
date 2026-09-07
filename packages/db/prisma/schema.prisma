@@ -160,7 +160,7 @@ model Resort {
 model User {
   id           Int       @id @default(autoincrement())
   name         String    @db.VarChar(160)
-  phone        String    @unique @db.VarChar(32)
+  phone        String?   @unique @db.VarChar(32)
   email        String?   @unique @db.VarChar(191)
   passwordHash String?   @db.VarChar(255)
   role         Role

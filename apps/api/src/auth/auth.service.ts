@@ -5,6 +5,7 @@ import { signToken } from "../common/auth.guard";
 import { normalizePhone } from "../common/dates";
 import { slugify } from "../common/plans";
 import { SmsService } from "../notifications/sms.service";
+import { EmailService } from "../notifications/email.service";
 import { ROLE, type Role } from "@rh/shared";
 
 interface OtpEntry {
@@ -12,6 +13,8 @@ interface OtpEntry {
   expiresAt: number;
   attempts: number;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 @Injectable()
 export class AuthService {
@@ -21,6 +24,7 @@ export class AuthService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(SmsService) private readonly sms: SmsService,
+    @Inject(EmailService) private readonly email: EmailService,
   ) {}
 
   private readonly logger = new Logger(AuthService.name);
@@ -36,15 +40,44 @@ export class AuthService {
     return this.issueToken(user.id, user.role);
   }
 
-  async requestOtp(phoneRaw: string) {
-    const phone = normalizePhone(phoneRaw);
+  /**
+   * Unified OTP request: guests verify by email (works today) or phone/SMS
+   * (activates automatically once the SMS gateway gets a sender ID).
+   */
+  async requestOtp(input: { phone?: string; email?: string }) {
+    const isEmail = !!input.email;
+    if (!isEmail && !input.phone) throw Object.assign(new Error("phone or email required"), { status: 400 });
+    if (isEmail && !EMAIL_RE.test(input.email!)) throw Object.assign(new Error("invalid email"), { status: 400 });
+
+    const key = isEmail ? `email:${input.email!.trim().toLowerCase()}` : normalizePhone(input.phone!);
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    this.otps.set(phone, {
+    this.otps.set(key, {
       code,
       expiresAt: Date.now() + 5 * 60_000,
       attempts: 0,
     });
-    // deliver the OTP over the SMS gateway (console fallback in dev)
+
+    if (isEmail) {
+      const email = input.email!.trim().toLowerCase();
+      const r = await this.email.send(
+        email,
+        `Resort Mela verification code`,
+        `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a">
+           <p>Your Resort Mela verification code is:</p>
+           <p style="font-size:30px;font-weight:bold;letter-spacing:6px;color:#047857">${code}</p>
+           <p style="color:#64748b;font-size:13px">Valid for 5 minutes. If you didn't request this, ignore this email.</p>
+         </div>`,
+      );
+      if (!r.sent) {
+        this.logger.warn(`OTP email not delivered to ${email}: ${r.error}`);
+        const allowFallback = process.env.SMS_DEV_FALLBACK === "1";
+        return { sent: false, channel: "email", expiresInSeconds: 300, devCode: allowFallback ? code : undefined };
+      }
+      return { sent: true, channel: "email", expiresInSeconds: 300 };
+    }
+
+    // SMS path (works once the gateway has an approved sender ID)
+    const phone = normalizePhone(input.phone!);
     const r = await this.sms.send(phone, `Resort Mela: your verification code is ${code}. Valid for 5 minutes.`);
     if (!r.sent) {
       this.logger.warn(`OTP SMS not delivered to ${phone}: ${r.error}`);
@@ -53,6 +86,7 @@ export class AuthService {
         const allowFallback = process.env.SMS_DEV_FALLBACK === "1";
         return {
           sent: false,
+          channel: "sms",
           expiresInSeconds: 300,
           devCode: allowFallback ? code : undefined,
         };
@@ -60,17 +94,19 @@ export class AuthService {
     }
     return {
       sent: r.sent,
+      channel: "sms",
       expiresInSeconds: 300,
       devCode: process.env.NODE_ENV === "production" ? undefined : code,
     };
   }
 
-  async verifyOtp(phoneRaw: string, code: string) {
-    const phone = normalizePhone(phoneRaw);
-    const entry = this.otps.get(phone);
+  async verifyOtp(identifier: { phone?: string; email?: string }, code: string) {
+    const isEmail = !!identifier.email;
+    const key = isEmail ? `email:${identifier.email!.trim().toLowerCase()}` : normalizePhone(identifier.phone!);
+    const entry = this.otps.get(key);
     if (!entry) throw new UnauthorizedException("No OTP requested");
     if (Date.now() > entry.expiresAt) {
-      this.otps.delete(phone);
+      this.otps.delete(key);
       throw new UnauthorizedException("OTP expired");
     }
     if (entry.attempts >= 5) throw new UnauthorizedException("Too many attempts");
@@ -78,13 +114,29 @@ export class AuthService {
       entry.attempts += 1;
       throw new UnauthorizedException("Wrong code");
     }
-    this.otps.delete(phone);
+    this.otps.delete(key);
 
-    let user = await this.prisma.user.findUnique({ where: { phone } });
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: { name: phone, phone, role: ROLE.GUEST },
-      });
+    let user: { id: number; role: Role; status: string } | null;
+    if (isEmail) {
+      const email = identifier.email!.trim().toLowerCase();
+      user = await this.prisma.user.findFirst({ where: { email } });
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: {
+            name: email.split("@")[0]!,
+            email,
+            role: ROLE.GUEST,
+          },
+        });
+      }
+    } else {
+      const phone = normalizePhone(identifier.phone!);
+      user = await this.prisma.user.findUnique({ where: { phone } });
+      if (!user) {
+        user = await this.prisma.user.create({
+          data: { name: phone, phone, role: ROLE.GUEST },
+        });
+      }
     }
     if (user.status !== "active") throw new UnauthorizedException("User disabled");
     return this.issueToken(user.id, user.role);
