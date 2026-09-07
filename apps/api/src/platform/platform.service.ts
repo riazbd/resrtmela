@@ -11,7 +11,22 @@ import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 
 const PLAN_FEES: Record<string, number> = { STARTER: 2500, GROWTH: 5000, CHAIN: 12000 };
+const PLAN_LIMITS: Record<string, number> = { STARTER: 10, GROWTH: 40, CHAIN: 10000 };
 const TRIAL_DAYS = 14;
+
+const PLAN_SEEDS = [
+  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
+  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
+  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, blurb: "For multi-resort owners", sortOrder: 3 },
+];
+
+/** ensure the three plans exist (first call seeds them) */
+async function ensurePlans(prisma: PrismaService) {
+  const count = await prisma.platformPlan.count();
+  if (count === 0) {
+    await prisma.platformPlan.createMany({ data: PLAN_SEEDS as never });
+  }
+}
 
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86_400_000);
@@ -147,6 +162,8 @@ export class PlatformService {
     input: { plan: "STARTER" | "GROWTH" | "CHAIN"; monthlyFee?: number; note?: string },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+    const def = await this.prisma.platformPlan.findUnique({ where: { name: input.plan } });
     const now = new Date();
     const trialEndsAt = addDays(now, TRIAL_DAYS);
     const sub = await this.prisma.subscription.create({
@@ -154,7 +171,7 @@ export class PlatformService {
         resortId,
         plan: input.plan,
         status: "TRIAL",
-        monthlyFee: input.monthlyFee ?? PLAN_FEES[input.plan] ?? 0,
+        monthlyFee: input.monthlyFee ?? Number(def?.monthlyFee ?? PLAN_FEES[input.plan] ?? 0),
         trialEndsAt,
         renewsAt: trialEndsAt,
         note: input.note,
@@ -162,6 +179,30 @@ export class PlatformService {
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "platform.subscription.create", entity: "subscription", entityId: Number(sub.id), diff: input });
     return sub;
+  }
+
+  // ── plan definitions ──
+  async listPlans(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+    return this.prisma.platformPlan.findMany({ orderBy: { sortOrder: "asc" } });
+  }
+
+  async updatePlan(claims: JwtClaims, name: string, input: { monthlyFee?: number; maxRooms?: number; label?: string; blurb?: string; active?: boolean }) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+    const plan = await this.prisma.platformPlan.update({
+      where: { name },
+      data: {
+        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee } : {}),
+        ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
+        ...(input.label != null ? { label: input.label } : {}),
+        ...(input.blurb != null ? { blurb: input.blurb } : {}),
+        ...(input.active != null ? { active: input.active } : {}),
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input });
+    return plan;
   }
 
   async renewSubscription(claims: JwtClaims, subscriptionId: number, months = 1) {

@@ -118,6 +118,14 @@ export class PlatformController {
     return this.platform.subscriptionCalendar(req.user, from, to);
   }
 
+  // plan definitions
+  @Get("platform/plans") plans(@Req() req: AuthedRequest) {
+    return this.platform.listPlans(req.user);
+  }
+  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: { monthlyFee?: number; maxRooms?: number; label?: string; blurb?: string; active?: boolean }) {
+    return this.platform.updatePlan(req.user, name, dto);
+  }
+
   // owner — users & roles
   @Get("resorts/:id/users") users(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.resortUsers(req.user, id);

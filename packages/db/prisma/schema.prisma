@@ -726,3 +726,17 @@ model EmailCampaign {
   @@index([userId])
   @@map("email_campaigns")
 }
+
+/// Editable subscription plan definitions (fees & limits) — super admin manages.
+model PlatformPlan {
+  id         BigInt  @id @default(autoincrement())
+  name       String  @unique @db.VarChar(16) // STARTER | GROWTH | CHAIN
+  label      String  @db.VarChar(40)
+  monthlyFee Decimal @db.Decimal(10, 2)
+  maxRooms   Int     @default(10)
+  blurb      String? @db.VarChar(200)
+  active     Boolean @default(true)
+  sortOrder  Int     @default(0)
+
+  @@map("platform_plans")
+}

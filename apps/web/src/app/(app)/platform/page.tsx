@@ -35,6 +35,17 @@ interface AgentRow {
   resorts: { id: number; name: string }[];
   wallet: { balance: number; active: boolean } | null;
 }
+interface PlanDef {
+  id: string;
+  name: string;
+  label: string;
+  monthlyFee: string;
+  maxRooms: number;
+  blurb: string | null;
+  active: boolean;
+  sortOrder: number;
+}
+
 interface DueRow {
   id: string;
   resortId: number;
@@ -54,7 +65,7 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Subscriptions", "Dues", "Calendar"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar"] as const;
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -64,6 +75,7 @@ export default function PlatformPage() {
   const [agents, setAgents] = useState<AgentRow[] | null>(null);
   const [dues, setDues] = useState<DueRow[] | null>(null);
   const [cal, setCal] = useState<CalCell[] | null>(null);
+  const [plans, setPlans] = useState<PlanDef[] | null>(null);
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [subFor, setSubFor] = useState<ResortRow | null>(null);
   const [subPlan, setSubPlan] = useState("GROWTH");
@@ -73,21 +85,37 @@ export default function PlatformPage() {
 
   const loadAll = useCallback(async () => {
     setErr("");
-    const [o, r, a, d] = await Promise.all([
+    const [o, r, a, d, p] = await Promise.all([
       api<Overview>("/platform/overview").catch(() => null),
       api<ResortRow[]>("/platform/resorts").catch(() => null),
       api<AgentRow[]>("/platform/agents").catch(() => null),
       api<DueRow[]>("/platform/dues").catch(() => null),
+      api<PlanDef[]>("/platform/plans").catch(() => null),
     ]);
     setOv(o);
     setResorts(r);
     setAgents(a);
     setDues(d);
+    setPlans(p);
   }, []);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  async function savePlan(name: string, monthlyFee: number, maxRooms: number) {
+    setBusy(true);
+    setErr("");
+    try {
+      await api(`/platform/plans/${name}`, { method: "PATCH", body: { monthlyFee, maxRooms } });
+      await loadAll();
+      setErr("");
+    } catch (e) {
+      setErr(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const loadCal = useCallback(async () => {
     const [y, m] = month.split("-").map(Number);
@@ -324,6 +352,26 @@ export default function PlatformPage() {
         </Card>
       )}
 
+      {/* ── plans ── */}
+      {tab === "Plans" && plans && (
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {plans.map((p) => (
+            <PlanCard key={p.name} plan={p} busy={busy} onSave={savePlan} />
+          ))}
+          <div className="md:col-span-3">
+            <Card className="p-4">
+              <div className="text-sm font-bold">How plan billing works</div>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
+                <li>Assign a plan per resort in the <b>Resorts</b> tab — every subscription starts with a 14-day free trial.</li>
+                <li><b>Renew</b> generates the next period&apos;s due (fee × months) and extends the renewal date.</li>
+                <li>Collect the money in the <b>Dues</b> tab — marking paid keeps the subscription <b>Active</b>.</li>
+                <li>Fee edits here apply to <b>new subscriptions</b>; existing ones keep their fee until you renew them manually with the new amount in mind.</li>
+              </ul>
+            </Card>
+          </div>
+        </div>
+      )}
+
       {/* ── subscriptions calendar ── */}
       {tab === "Calendar" && (
         <div className="mt-5">
@@ -427,6 +475,38 @@ export default function PlatformPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function PlanCard({ plan, busy, onSave }: { plan: PlanDef; busy: boolean; onSave: (name: string, fee: number, rooms: number) => void }) {
+  const [fee, setFee] = useState(String(Number(plan.monthlyFee)));
+  const [rooms, setRooms] = useState(String(plan.maxRooms));
+  const dirty = Number(fee) !== Number(plan.monthlyFee) || Number(rooms) !== plan.maxRooms;
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <div className="text-lg font-bold text-slate-900">{plan.label}</div>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${plan.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{plan.active ? "active" : "hidden"}</span>
+      </div>
+      <div className="mt-0.5 text-xs text-slate-400">{plan.blurb}</div>
+      <div className="mt-4 space-y-3">
+        <label className="block">
+          <span className="text-xs font-semibold text-slate-500">Monthly fee (৳)</span>
+          <input type="number" min={0} value={fee} onChange={(e) => setFee(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="block">
+          <span className="text-xs font-semibold text-slate-500">Max rooms per resort</span>
+          <input type="number" min={1} value={rooms} onChange={(e) => setRooms(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </label>
+        <button
+          disabled={!dirty || busy}
+          onClick={() => onSave(plan.name, Number(fee), Number(rooms))}
+          className="w-full rounded-lg bg-brand-600 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-40"
+        >
+          {busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+        </button>
+      </div>
+    </Card>
   );
 }
 
