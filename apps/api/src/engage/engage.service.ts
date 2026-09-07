@@ -211,10 +211,11 @@ export class EngageService {
       fromName = resort?.name;
     }
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.7;color:#0f172a">${input.body.replace(/\n/g, "<br/>")}</div>`;
+    const listUnsub = `${process.env.WEB_ORIGIN ?? "https://resortmela.rootcodebd.com"}/unsubscribe?u=${claims.userId}&c=${Buffer.from(`${input.subject}`).toString("base64url").slice(0, 24)}`;
     let sent = 0;
     let failed = 0;
     for (const r of recipients) {
-      const res = await this.email.send(r.email, input.subject, html, fromName);
+      const res = await this.email.send(r.email, input.subject, html, fromName, { listUnsubscribe: listUnsub });
       if (res.sent) sent++;
       else failed++;
     }

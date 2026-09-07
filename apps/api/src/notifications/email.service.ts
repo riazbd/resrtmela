@@ -58,15 +58,30 @@ export class EmailService {
     subject: string,
     html: string,
     fromName?: string,
+    opts?: { listUnsubscribe?: string },
   ): Promise<{ sent: boolean; error?: string }> {
     const tx = this.getTransport();
     if (!tx) {
       this.logger.log(`[EMAIL:console] to=${to} subject="${subject}" (${html.length} bytes html)`);
-      return { sent: false }; // dev mode — caller marks the job done
+      return { sent: false }; // dev mode - caller marks the job done
     }
     const name = fromName?.trim() || "Resort Mela";
     try {
-      await tx.sendMail({ from: `"${name}" <${this.fromAddress}>`, to, subject, html });
+      await tx.sendMail({
+        from: `"${name}" <${this.fromAddress}>`,
+        to,
+        subject,
+        html,
+        // Gmail/Yahoo bulk-sender rules: campaigns must carry one-click unsubscribe
+        ...(opts?.listUnsubscribe
+          ? {
+              headers: {
+                "List-Unsubscribe": `<${opts.listUnsubscribe}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+              },
+            }
+          : {}),
+      });
       return { sent: true };
     } catch (e) {
       this.logger.warn(`email send failed to ${to}: ${String(e).slice(0, 200)}`);
