@@ -121,7 +121,7 @@ const TESTIMONIALS = [
   {
     quote: "The day sheet used to take my manager an hour every morning. Now it opens and everything is already there — bookings, dues, restaurant, expenses.",
     name: "Resort Manager",
-    meta: "Sky Eco Resort & Restaurant",
+    meta: "Partner resort · Cox's Bazar",
   },
   {
     quote: "I manage 3 resorts. Before this I had three different Excel files and a notebook. Now one login, three resorts, zero confusion.",
@@ -229,7 +229,7 @@ export default function HomePage() {
             <div className="anim-rise relative" style={{ animationDelay: "0.25s" }}>
               <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl backdrop-blur">
                 <div className="mb-3 flex items-center justify-between px-1">
-                  <div className="text-xs font-semibold text-slate-300">Today · Sky Eco Resort</div>
+                  <div className="text-xs font-semibold text-slate-300">Today · Your resort</div>
                   <div className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300">LIVE</div>
                 </div>
                 <MockCalendar />

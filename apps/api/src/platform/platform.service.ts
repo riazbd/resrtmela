@@ -549,6 +549,35 @@ export class PlatformService {
     });
   }
 
+  /** admin approves an agent booking whose full-payment deadline has passed */
+  async approveLatePayment(claims: JwtClaims, bookingId: number) {
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, code: true, resortId: true, state: true, agentUserId: true, paymentState: true },
+    });
+    if (!b) throw badRequest("booking not found");
+    requireResortAccess(claims, b.resortId);
+    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    if (!b.agentUserId) throw badRequest("not an agent booking");
+    if (!["PENDING", "CONFIRMED"].includes(b.state)) throw badRequest("booking is not active");
+    if (b.paymentState === "PAID") throw badRequest("already fully paid");
+    if (b.state === "PENDING") {
+      await this.prisma.booking.update({ where: { id: b.id }, data: { state: "CONFIRMED" } });
+    }
+    await this.audit.log({ actorId: claims.userId, resortId: b.resortId, action: "booking.late_payment_approved", entity: "booking", entityId: bookingId, diff: { code: b.code } });
+    await this.prisma.notification.create({
+      data: {
+        userId: b.agentUserId,
+        resortId: b.resortId,
+        title: `Late payment approved for ${b.code}`,
+        body: "The resort approved your booking despite the missed full-payment deadline. Settle the dues with the guest as agreed.",
+        kind: "info",
+        link: `/bookings?id=${b.id}`,
+      },
+    });
+    return { ok: true, code: b.code };
+  }
+
   /** email the booking invoice (reuses invoice rendering) */
   async emailInvoice(claims: JwtClaims, bookingId: number) {
     const b = await this.prisma.booking.findUnique({

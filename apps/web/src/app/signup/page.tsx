@@ -85,11 +85,11 @@ export default function SignupPage() {
             <>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Company / group name</label>
-                <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Sky Eco Group" autoFocus />
+                <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Sundarban Group" autoFocus />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">First resort name</label>
-                <Input value={resortName} onChange={(e) => setResortName(e.target.value)} placeholder="Sky Eco Resort" />
+                <Input value={resortName} onChange={(e) => setResortName(e.target.value)} placeholder="e.g. Sundarban Retreat" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Location (optional)</label>

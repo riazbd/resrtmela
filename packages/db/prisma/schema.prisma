@@ -123,6 +123,7 @@ model Resort {
   currency           String         @default("BDT") @db.VarChar(8)
   showRatesToAgents  Boolean        @default(false)
   taxRatePct         Decimal        @default(0.00) @db.Decimal(5, 2)
+  agentPaymentHours  Int            @default(48) // agent bookings must be fully paid this many hours before check-in
   invoicePrefix      String         @default("SER") @db.VarChar(12)
   fyStartMonthDay    String         @default("07-01") @db.VarChar(5) // financial year start MM-DD
   checkInTime        String         @default("12:00 PM") @db.VarChar(16)
@@ -149,6 +150,7 @@ model Resort {
   subscriptionDues SubscriptionDue[]
   apiKeys         ApiKey[]
   discountOffers  DiscountOffer[]
+  accessRequests  ResortAccess[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -171,6 +173,10 @@ model User {
   paymentsRecv    Payment[]    @relation("PaymentReceivedBy")
   auditLogs       AuditLog[]   @relation("AuditActor")
   wallet          Wallet?
+  notifications   Notification[]
+  accessRequests  ResortAccess[]
+  emailCredits    EmailCredit?
+  campaigns       EmailCampaign[]
 
   @@map("users")
 }
@@ -660,4 +666,63 @@ model DiscountOffer {
 
   @@index([resortId])
   @@map("discount_offers")
+}
+/// In-app notification (bell).
+model Notification {
+  id        BigInt    @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resortId  Int?
+  title     String    @db.VarChar(160)
+  body      String?   @db.VarChar(500)
+  kind      String    @default("info") @db.VarChar(16) // info | booking | payment | alert | request
+  link      String?   @db.VarChar(160)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+/// Agent ↔ resort access request (agents discover resorts, owner approves).
+model ResortAccess {
+  id        BigInt    @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resortId  Int
+  resort    Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  status    String    @default("PENDING") @db.VarChar(16) // PENDING | APPROVED | REJECTED
+  note      String?   @db.VarChar(255)
+  decidedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, resortId])
+  @@map("resort_access")
+}
+
+/// Bulk email credits (sender.net style) — owner or agent buys packs, sends greetings.
+model EmailCredit {
+  id          BigInt    @id @default(autoincrement())
+  userId      Int       @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credits     Int       @default(0)
+  purchasedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@map("email_credits")
+}
+
+model EmailCampaign {
+  id         BigInt   @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resortId   Int?
+  subject    String   @db.VarChar(200)
+  body       String   @db.Text
+  recipients Int      @default(0)
+  status     String   @default("SENT") @db.VarChar(16) // SENT | FAILED | PARTIAL
+  sentAt     DateTime @default(now())
+
+  @@index([userId])
+  @@map("email_campaigns")
 }

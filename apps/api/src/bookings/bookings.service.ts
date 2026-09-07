@@ -118,6 +118,9 @@ export class BookingsService {
     if (isAgent) {
       const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
       if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");
+      // live access check (token may be stale after approval)
+      const linked = await this.prisma.userResort.findFirst({ where: { userId: claims.userId, resortId: input.resortId } });
+      if (!linked) throw forbid("No access to this resort — request access from the resorts page");
     }
 
     // precheck rooms exist in resort
@@ -239,6 +242,29 @@ export class BookingsService {
       booking.id,
       booking.state === "CONFIRMED" ? "booking_confirmed" : "booking_received",
     );
+
+    // in-app notification for resort staff
+    try {
+      const staff = await this.prisma.userResort.findMany({
+        where: { resortId: input.resortId, user: { role: { in: ["RESORT_ADMIN", "MANAGER", "FRONT_DESK"] } } },
+        select: { userId: true },
+      });
+      const guestName = await this.prisma.guest.findUnique({ where: { id: guestId }, select: { fullName: true } });
+      if (staff.length > 0) {
+        await this.prisma.notification.createMany({
+          data: staff.map((s) => ({
+            userId: s.userId,
+            resortId: input.resortId,
+            title: `New booking ${booking.code}`,
+            body: `${guestName?.fullName ?? "Guest"} · ${roomRows.map((r) => r.name).join(", ")} · ${checkIn} → ${checkOut}`,
+            kind: "booking",
+            link: `/bookings?id=${booking.id}`,
+          })),
+        });
+      }
+    } catch {
+      // never block booking creation on notifications
+    }
     return this.detail(claims, booking.id);
   }
 

@@ -126,6 +126,14 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private async tickInner(): Promise<{ sent: number; swept: number; failed: number }> {
     this.ticks++;
     let swept = 0;
+    // agent payment deadline sweep — hourly
+    if (this.ticks % 240 === 0) {
+      try {
+        await this.sweepAgentDeadlines();
+      } catch (e) {
+        this.logger.warn(`agent deadline sweep failed: ${String(e).slice(0, 200)}`);
+      }
+    }
     // D-1 check-in reminder sweep
     const tomorrow = new Date(today().getTime() + 86_400_000);
     const arrivals = await this.prisma.booking.findMany({
@@ -214,5 +222,55 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       orderBy: { id: "desc" },
       take: Math.min(take, 200),
     });
+  }
+
+  /** flag agent bookings approaching the resort's full-payment deadline (in-app alerts to admins) */
+  private async sweepAgentDeadlines() {
+    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true } });
+    const now = new Date();
+    for (const resort of resorts) {
+      const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
+      const bookings = await this.prisma.booking.findMany({
+        where: {
+          resortId: resort.id,
+          agentUserId: { not: null },
+          state: { in: ["PENDING", "CONFIRMED"] },
+          deletedAt: null,
+          checkIn: { lte: horizon, gte: now },
+        },
+        select: {
+          id: true, code: true, checkIn: true, discount: true,
+          items: { select: { qty: true, unitPrice: true } },
+          payments: { select: { amount: true, paymentType: true } },
+        },
+      });
+      for (const b of bookings) {
+        const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
+        const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
+        const due = Math.max(0, rent - Number(b.discount) - paid);
+        if (due <= 0 || !b.checkIn) continue;
+        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const existing = await this.prisma.notification.findFirst({
+          where: { kind: "alert", link: `/bookings?id=${b.id}`, createdAt: { gte: dayStart }, title: { contains: b.code } },
+        });
+        if (existing) continue;
+        const admins = await this.prisma.userResort.findMany({
+          where: { resortId: resort.id, user: { role: { in: ["RESORT_ADMIN", "MANAGER"] } } },
+          select: { userId: true },
+        });
+        if (admins.length === 0) continue;
+        const hoursLeft = Math.max(0, Math.round((b.checkIn.getTime() - now.getTime()) / 3_600_000));
+        await this.prisma.notification.createMany({
+          data: admins.map((a) => ({
+            userId: a.userId,
+            resortId: resort.id,
+            title: `${b.code} unpaid — ${hoursLeft}h to check-in`,
+            body: `${due.toLocaleString("en-IN")} BDT due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
+            kind: "alert",
+            link: `/bookings?id=${b.id}`,
+          })),
+        });
+      }
+    }
   }
 }

@@ -33,6 +33,7 @@ class UpdateResortDto {
   @IsOptional() @IsString() @MaxLength(160) website?: string;
   @IsOptional() @IsString() @MaxLength(32) contactPhone?: string;
   @IsOptional() @IsString() @MaxLength(5) fyStartMonthDay?: string;
+  @IsOptional() @IsInt() agentPaymentHours?: number;
 }
 
 @Controller()

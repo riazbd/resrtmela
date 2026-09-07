@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
@@ -179,7 +179,7 @@ export default function ImportPage() {
       >
         {tab === "bookings" && (
           <p className="mb-3 text-xs text-slate-500">
-            Expects the Sky Eco sheet layout (Booking ID, Guest Name, Mobile, Room, Check-In/Out, …).
+            Expects the standard Resort Mela sheet layout (Booking ID, Guest Name, Mobile, Room, Check-In/Out, …).
             Guests are deduped by mobile; BK-codes are preserved; advances become ledger entries;
             &quot;out of service&quot; rows flip the room status instead of creating bookings. Always dry-run first.
           </p>

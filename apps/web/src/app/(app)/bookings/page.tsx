@@ -273,10 +273,11 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
 }
 
 function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { isStaff, isAgent, isManagement } = useAuth();
+  const { isStaff, isAgent, isManagement, activeResort } = useAuth();
   const { push } = useToast();
   const [b, setB] = useState<BookingDetail | null>(null);
   const [busy, setBusy] = useState(false);
+  const [payHours, setPayHours] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setB(await api<BookingDetail>(`/bookings/${id}`));
@@ -284,7 +285,36 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
 
   useEffect(() => {
     void load();
-  }, [load]);
+    if (activeResort) {
+      api<{ agentPaymentHours?: number }>(`/resorts/${activeResort.id}`)
+        .then((r) => setPayHours(r.agentPaymentHours ?? 48))
+        .catch(() => setPayHours(48));
+    }
+  }, [load, activeResort]);
+
+  // agent payment deadline flag
+  const latePayment =
+    b && b.agent && b.due > 0 && ["PENDING", "CONFIRMED"].includes(b.state) && payHours != null && b.checkIn
+      ? (() => {
+          const deadline = new Date(new Date(b.checkIn!).getTime() - payHours! * 3_600_000);
+          const hoursLeft = Math.round((new Date(b.checkIn!).getTime() - Date.now()) / 3_600_000);
+          return { deadlinePassed: Date.now() >= deadline.getTime(), hoursLeft, deadline };
+        })()
+      : null;
+
+  async function approveLate() {
+    setBusy(true);
+    try {
+      await api(`/bookings/${id}/approve-late`, { method: "POST", body: {} });
+      push("Late payment approved — agent notified");
+      await load();
+      onChanged();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function transition(to: string) {
     setBusy(true);
@@ -440,6 +470,25 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
 
       {b.remarks && (
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs italic text-slate-500">{b.remarks}</div>
+      )}
+
+      {latePayment && (
+        <div className={`rounded-xl px-4 py-3 text-sm ${latePayment.deadlinePassed ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+          <div className="font-bold">
+            {latePayment.deadlinePassed
+              ? `Full-payment deadline passed — ${bdt(b.due)} still due`
+              : `Full payment due within ${latePayment.hoursLeft}h (deadline ${bdt(b.due)})`}
+          </div>
+          <div className="mt-0.5 text-xs">
+            Agent bookings must be fully paid {payHours}h before check-in.
+            {latePayment.deadlinePassed && isManagement && " You can approve late payment."}
+          </div>
+          {latePayment.deadlinePassed && isManagement && (
+            <Button size="sm" className="mt-2" onClick={approveLate} loading={busy}>
+              Approve late payment
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">

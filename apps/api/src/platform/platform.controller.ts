@@ -171,4 +171,9 @@ export class PlatformController {
   @Post("bookings/:id/email-invoice") emailInvoice(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() _dto: EmailInvoiceDto) {
     return this.platform.emailInvoice(req.user, id);
   }
+
+  // late agent payment approval
+  @Post("bookings/:id/approve-late") approveLate(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.approveLatePayment(req.user, id);
+  }
 }

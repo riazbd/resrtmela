@@ -21,6 +21,7 @@ interface ResortDetail {
   website: string | null;
   contactPhone: string | null;
   fyStartMonthDay: string;
+  agentPaymentHours?: number;
   _count?: { bookings: number; guests: number };
 }
 
@@ -34,6 +35,14 @@ interface Usage {
   rooms: number;
   staffUsers: number;
   guests: number;
+}
+
+interface AccessRow {
+  id: string;
+  user: { id: number; name: string; phone: string; role: string; status: string };
+  status: string;
+  note: string | null;
+  createdAt: string;
 }
 
 interface UserRow {
@@ -79,7 +88,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Activity log", "Discounts", "API keys"] as const;
+const TABS = ["Resort info", "Users & Roles", "Agent access", "Activity log", "Discounts", "API keys"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, role } = useAuth();
@@ -121,6 +130,7 @@ export default function SettingsPage() {
           website: d.website ?? undefined,
           contactPhone: d.contactPhone ?? undefined,
           fyStartMonthDay: d.fyStartMonthDay || undefined,
+          agentPaymentHours: (d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? undefined,
         },
       });
       push("Settings saved");
@@ -189,6 +199,13 @@ export default function SettingsPage() {
               <Field label="Resort name"><Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></Field>
               <Field label="Location"><Input value={d.location ?? ""} onChange={(e) => setD({ ...d, location: e.target.value })} /></Field>
               <Field label="Tax rate (%)"><Input type="number" min={0} max={100} value={String(d.taxRatePct)} onChange={(e) => setD({ ...d, taxRatePct: e.target.value })} /></Field>
+          <Field label="Agent full-payment deadline (hours before check-in)" hint="agent bookings must be fully paid this many hours before check-in">
+            <Select value={String((d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? 48)} onChange={(e) => setD({ ...d, agentPaymentHours: Number(e.target.value) } as ResortDetail)}>
+              <option value="24">24 hours</option>
+              <option value="48">48 hours</option>
+              <option value="72">72 hours</option>
+            </Select>
+          </Field>
               <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
                 <input type="checkbox" checked={d.showRatesToAgents} onChange={(e) => setD({ ...d, showRatesToAgents: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
                 Show room rates to agents
@@ -220,10 +237,76 @@ export default function SettingsPage() {
       )}
 
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
+      {tab === "Agent access" && rid && <AccessTab rid={rid} />}
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
       {tab === "API keys" && rid && <ApiKeysTab rid={rid} />}
     </div>
+  );
+}
+
+function AccessTab({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const [rows, setRows] = useState<AccessRow[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then(setRows).catch(() => setRows([]));
+  }, [rid]);
+  useEffect(() => load(), [load]);
+
+  async function decide(id: string, decision: "APPROVE" | "REJECT") {
+    setBusy(id);
+    try {
+      await api(`/access-requests/${id}/decision`, { method: "POST", body: { decision } });
+      push(decision === "APPROVE" ? "Agent approved — they can now book" : "Request rejected");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!rows) return <Empty msg="Loading…" />;
+  return (
+    <Card title={`Agent access requests (${rows.length})`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr><Th>Agent</Th><Th>Phone</Th><Th>Status</Th><Th>Note</Th><Th>Requested</Th><Th /></tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-slate-100">
+                <Td>
+                  <div className="font-semibold text-slate-800">{r.user.name}</div>
+                  <div className="text-xs text-slate-400">{r.user.role.replace(/_/g, " ")} · {r.user.status}</div>
+                </Td>
+                <Td className="text-xs">{r.user.phone}</Td>
+                <Td>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : r.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
+                </Td>
+                <Td className="text-xs text-slate-500">{r.note ?? "—"}</Td>
+                <Td className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString("en-GB")}</Td>
+                <Td>
+                  <div className="flex justify-end gap-1.5">
+                    {r.status === "PENDING" && (
+                      <>
+                        <button onClick={() => decide(r.id, "APPROVE")} disabled={busy === r.id} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Approve</button>
+                        <button onClick={() => decide(r.id, "REJECT")} disabled={busy === r.id} className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Reject</button>
+                      </>
+                    )}
+                    {r.status === "APPROVED" && <span className="text-xs text-slate-400">has access</span>}
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <Empty msg="No requests yet — agents find your resort on the Discover page and request access" />}
+      </div>
+    </Card>
   );
 }
 

@@ -2,31 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
-  ScrollText,
-  LayoutDashboard,
-  CalendarDays,
-  BedDouble,
-  Wallet,
-  Users,
-  Receipt,
-  UtensilsCrossed,
-  BarChart3,
-  Building2,
-  Compass,
-  Upload,
-  User,
-  Settings,
-  Globe,
+  ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
+  UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
+  Bell, Mail, MapPin as MapIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
+import { api } from "@/lib/api";
 import { Select } from "@/components/ui";
 
 const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[] }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
+  { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
+  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"] },
   { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"] },
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"] },
   { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"] },
@@ -137,6 +128,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </Select>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             <button
               onClick={() => setLang(lang === "bn" ? "en" : "bn")}
               className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -159,6 +151,93 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <LangProvider>
       <Shell>{children}</Shell>
     </LangProvider>
+  );
+}
+
+interface NotificationRow {
+  id: string;
+  title: string;
+  body: string | null;
+  kind: string;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<NotificationRow[]>([]);
+  const [unread, setUnread] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api<{ unread: number; rows: NotificationRow[] }>("/notifications");
+      setRows(d.rows);
+      setUnread(d.unread);
+    } catch {
+      // not fatal
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function openPanel() {
+    setOpen((o) => !o);
+    if (!open) {
+      load();
+      if (unread > 0) {
+        await api("/notifications/read", { method: "POST", body: {} }).catch(() => {});
+        setUnread(0);
+        load();
+      }
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button onClick={openPanel} className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100" title="Notifications">
+        <Bell className="h-5 w-5" />
+        {unread > 0 && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+            <div className="text-sm font-bold text-slate-800">Notifications</div>
+            <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-700">Close</button>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {rows.length === 0 && <div className="px-4 py-8 text-center text-sm text-slate-400">Nothing yet</div>}
+            {rows.map((n) => {
+              const inner = (
+                <div className={`border-b border-slate-50 px-4 py-3 ${n.readAt ? "" : "bg-brand-50/40"}`}>
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${n.kind === "alert" ? "bg-red-400" : n.kind === "request" ? "bg-amber-400" : n.kind === "booking" ? "bg-emerald-400" : "bg-slate-300"}`} />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800">{n.title}</div>
+                      {n.body && <div className="mt-0.5 text-xs text-slate-500">{n.body}</div>}
+                      <div className="mt-1 text-[10px] text-slate-400">{new Date(n.createdAt).toLocaleString("en-GB")}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+              return n.link ? (
+                <a key={n.id} href={n.link} onClick={() => setOpen(false)} className="block hover:bg-slate-50">{inner}</a>
+              ) : (
+                <div key={n.id}>{inner}</div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

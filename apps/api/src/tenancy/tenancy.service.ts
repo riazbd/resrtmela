@@ -99,6 +99,7 @@ export class TenancyService {
       website: string;
       contactPhone: string;
       fyStartMonthDay: string;
+      agentPaymentHours: number;
     }>,
   ) {
     if (claims.role !== ROLE.SUPER_ADMIN) {
@@ -153,7 +154,7 @@ export class TenancyService {
     return { fyStartMonthDay: resort.fyStartMonthDay, years: years.reverse() };
   }
 
-  /** Tenant usage snapshot — super_admin or any member of the tenant. */
+  /** Tenant usage snapshot ï¿½ super_admin or any member of the tenant. */
   async usage(claims: JwtClaims, tenantId: number) {
     if (claims.role !== ROLE.SUPER_ADMIN) {
       const mine = await this.prisma.userResort.findMany({
@@ -195,7 +196,7 @@ export class TenancyService {
     };
   }
 
-  /** Plan change — platform team only. */
+  /** Plan change ï¿½ platform team only. */
   async updatePlan(claims: JwtClaims, tenantId: number, plan: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!isPlanName(plan)) {
