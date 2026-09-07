@@ -295,7 +295,7 @@ export default function ImportPage() {
           )}
           {rec.unexplained.length > 0 && (
             <div className="max-h-64 overflow-auto border-t border-slate-100">
-              <table className="w-full">
+              <div className="overflow-x-auto"><table className="w-full">
                 <thead className="sticky top-0 bg-white">
                   <tr><Th>Date</Th><Th>Room</Th><Th>Kind</Th><Th>Sheet</Th><Th>Ours</Th></tr>
                 </thead>
@@ -310,7 +310,7 @@ export default function ImportPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           )}
         </Card>
@@ -340,7 +340,7 @@ export default function ImportPage() {
           )}
           <Card title="Row detail" className="!p-0">
             <div className="max-h-[420px] overflow-auto">
-              <table className="w-full min-w-[560px]">
+              <div className="overflow-x-auto"><table className="w-full min-w-[560px]">
                 <thead className="sticky top-0 border-b border-slate-100 bg-white">
                   <tr><Th>Row</Th><Th>Code</Th><Th>Outcome</Th><Th>Detail</Th></tr>
                 </thead>
@@ -354,7 +354,7 @@ export default function ImportPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </Card>
         </>

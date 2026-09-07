@@ -212,7 +212,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Advance (৳)"><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
           <Field label="Method">
             <Select value={advMethod} onChange={(e) => setAdvMethod(e.target.value)}>

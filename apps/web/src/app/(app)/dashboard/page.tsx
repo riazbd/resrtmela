@@ -104,7 +104,7 @@ export default function DashboardPage() {
           {feed.arrivals.length === 0 ? (
             <Empty msg="No arrivals today" />
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead>
                 <tr>
                   <Th>Guest</Th>
@@ -128,7 +128,7 @@ export default function DashboardPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
 
@@ -136,7 +136,7 @@ export default function DashboardPage() {
           {feed.departures.length === 0 ? (
             <Empty msg="No departures today" />
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto"><table className="w-full">
               <thead>
                 <tr>
                   <Th>Guest</Th>
@@ -160,7 +160,7 @@ export default function DashboardPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
       </div>

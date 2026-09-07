@@ -160,7 +160,7 @@ export default function ExpensesPage() {
         ) : rows.length === 0 ? (
           <Empty msg="No entries for this day" />
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto"><table className="w-full">
             <thead className="border-b border-slate-100">
               <tr><Th>খাত / Category</Th><Th>বিবরণ / Details</Th><Th className="text-right">৳</Th>{canManage && <Th />}</tr>
             </thead>
@@ -178,7 +178,7 @@ export default function ExpensesPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </div>

@@ -17,240 +17,227 @@ import {
   FileText,
   ShieldCheck,
   ChevronDown,
-  Code2,
   Plug,
+  Menu,
+  X,
   Bell,
+  Receipt,
+  TrendingUp,
+  MessageSquare,
 } from "lucide-react";
 
 const STATS = [
   { n: "89+", l: "Bookings managed" },
   { n: "৳1M+", l: "Revenue tracked" },
-  { n: "10", l: "Rooms under management" },
+  { n: "10+", l: "Rooms per resort" },
   { n: "99.9%", l: "Uptime" },
 ];
 
-const FEATURES = [
-  {
-    icon: CalendarDays,
-    tag: "BOOKING CALENDAR",
-    title: "One calendar for every room",
-    body: "See every arrival, departure and gap at a glance. Click any free date to create a booking for a walk-in or a phone caller in seconds — the way resorts actually work.",
-    points: ["Drag-free, click-to-book", "Live availability per room", "Check-in / check-out states", "Bangla & English"],
-    grad: "from-emerald-600 to-teal-400",
-  },
-  {
-    icon: BedDouble,
-    tag: "FRONT DESK & PMS",
-    title: "Run the whole resort from one screen",
-    body: "Room rates, extra-person charges, discounts, day sheet, dues and guest history — everything your front desk touches, without spreadsheets.",
-    points: ["Room types & rates", "Extra person pricing", "Resort-wide or per-room discounts", "Guest database"],
-    grad: "from-teal-600 to-emerald-400",
-  },
-  {
-    icon: UtensilsCrossed,
-    tag: "RESTAURANT POS",
-    title: "Room-tab restaurant billing",
-    body: "In-house guests eat first and pay with their room. Walk-in bills, partial payments and daily F&B revenue reports included.",
-    points: ["Charge to room", "Partial & full payments", "Daily F&B revenue", "Bangla item names"],
-    grad: "from-amber-500 to-orange-400",
-  },
-  {
-    icon: Users,
-    tag: "AGENTS & WALLETS",
-    title: "Sell through agents — with control",
-    body: "Activate trusted agents, give them their own login and wallet. They book for their clients, you track commission and dues automatically. No walk-ins under an agent's name.",
-    points: ["Owner-approved activation", "Agent wallet & top-ups", "Commission tracking", "Per-agent reports"],
-    grad: "from-violet-600 to-fuchsia-400",
-  },
-  {
-    icon: Wallet,
-    tag: "MONEY",
-    title: "Dues, payments & audit trail",
-    body: "Every taka in and out is recorded. Advance payments, refunds, subscription dues, and a role-based activity log so you always know who did what.",
-    points: ["Payment history per booking", "Subscription dues tracking", "Role activity log", "Invoice PDFs by email"],
-    grad: "from-sky-600 to-cyan-400",
-  },
-  {
-    icon: Plug,
-    tag: "FOR DEVELOPERS",
-    title: "API for your resort website",
-    body: "Already have a website? Drop in our booking API or embed the hosted booking page. Availability, rates and bookings — synced with your console in real time.",
-    points: ["REST API keys", "Availability & rates endpoints", "Hosted booking page", "Webhooks on new bookings"],
-    grad: "from-slate-600 to-slate-400",
-  },
-];
+function MockDaySheet() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
+        <div className="text-xs font-bold text-slate-700">Day Sheet · Today</div>
+        <div className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">LIVE</div>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 p-3">
+        {[
+          { r: "Camellia", g: "Raju · arrives 12 PM", s: "in" },
+          { r: "Lunaria", g: "shakil · staying", s: "stay" },
+          { r: "Snow Drop", g: "available", s: "free" },
+          { r: "Cherry Blossom", g: "local · staying", s: "stay" },
+          { r: "Margarita", g: "maliha · checkout", s: "out" },
+          { r: "Lavender", g: "available", s: "free" },
+        ].map((c) => (
+          <div
+            key={c.r}
+            className={`rounded-lg border px-2.5 py-2 text-[11px] ${
+              c.s === "free"
+                ? "border-dashed border-slate-200 text-slate-400"
+                : c.s === "in"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : c.s === "out"
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : "border-sky-200 bg-sky-50 text-sky-800"
+            }`}
+          >
+            <div className="font-bold">{c.r}</div>
+            <div className="truncate opacity-75">{c.g}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 border-t border-slate-100 p-3">
+        {[
+          { l: "Arrivals", v: "6", c: "text-emerald-600" },
+          { l: "In-house", v: "14", c: "text-sky-600" },
+          { l: "Dues", v: "৳48,200", c: "text-amber-600" },
+        ].map((s) => (
+          <div key={s.l} className="rounded-lg bg-slate-50 p-2.5 text-center">
+            <div className={`text-base font-black ${s.c}`}>{s.v}</div>
+            <div className="text-[10px] text-slate-400">{s.l}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-const PLANS = [
-  {
-    name: "Starter",
-    price: "৳2,500",
-    period: "/month",
-    tagline: "For small resorts getting off spreadsheets",
-    features: ["Up to 10 rooms", "Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"],
-    cta: "Start free trial",
-    highlight: false,
-  },
-  {
-    name: "Growth",
-    price: "৳5,000",
-    period: "/month",
-    tagline: "For busy resorts with agents & restaurant",
-    features: [
-      "Up to 40 rooms",
-      "Everything in Starter",
-      "Restaurant POS & room tabs",
-      "Agents with wallets",
-      "Discount engine",
-      "5 staff accounts",
-    ],
-    cta: "Start free trial",
-    highlight: true,
-  },
-  {
-    name: "Chain",
-    price: "৳12,000",
-    period: "/month",
-    tagline: "For multi-resort owners",
-    features: ["Unlimited rooms & resorts", "Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"],
-    cta: "Talk to us",
-    highlight: false,
-  },
-];
+function MockBooking() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">New booking · BK-00095</div>
+      <div className="space-y-2 p-4 text-[11px]">
+        <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+          <span className="text-slate-400">Guest</span><span className="font-semibold text-slate-700">Kazi Abir</span>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+          <span className="text-slate-400">Room</span><span className="font-semibold text-slate-700">Lunaria · 2 nights</span>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+          <span className="text-emerald-600">Advance</span><span className="font-bold text-emerald-700">৳1,000 paid</span>
+        </div>
+        <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+          <span className="text-slate-400">Source</span><span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">AGENT · Rikan</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-const TESTIMONIALS = [
-  {
-    quote: "The day sheet used to take my manager an hour every morning. Now it opens and everything is already there — bookings, dues, restaurant, expenses.",
-    name: "Resort Manager",
-    meta: "Partner resort · Cox's Bazar",
-  },
-  {
-    quote: "I manage 3 resorts. Before this I had three different Excel files and a notebook. Now one login, three resorts, zero confusion.",
-    name: "Resort Owner",
-    meta: "Multi-property owner",
-  },
-  {
-    quote: "My agents used to call me for every booking. Now they book from their own account and I just approve and track commission.",
-    name: "Owner",
-    meta: "Tour & travel partners",
-  },
-];
+function MockPos() {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">Restaurant · Table order</div>
+      <div className="space-y-1.5 p-4 text-[11px]">
+        {[
+          { i: "Lunch buffet", q: 2, p: "৳1,200" },
+          { i: "Grilled Rui", q: 1, p: "৳450" },
+          { i: "Cold coffee", q: 3, p: "৳360" },
+        ].map((it) => (
+          <div key={it.i} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+            <span className="text-slate-600">{it.i} × {it.q}</span>
+            <span className="font-semibold text-slate-700">{it.p}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between rounded-lg bg-brand-600 px-3 py-2.5 font-bold text-white">
+          <span>Bill total</span><span>৳2,010 · cash</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function HomePage() {
-  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 24);
-    window.addEventListener("scroll", on);
-    return () => window.removeEventListener("scroll", on);
+    document.documentElement.style.scrollBehavior = "smooth";
   }, []);
 
   return (
-    <div className="bg-slate-950 text-white">
+    <div className="bg-white text-slate-800">
       {/* ── nav ── */}
-      <header className={`fixed inset-x-0 top-0 z-50 transition ${scrolled ? "bg-slate-950/85 backdrop-blur border-b border-white/5" : ""}`}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 font-bold text-emerald-300">R</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">R</div>
             <div>
-              <div className="text-sm font-bold leading-tight">Resort Mela</div>
-              <div className="text-[10px] text-emerald-200/60">Resort management platform</div>
+              <div className="text-sm font-bold leading-tight text-slate-900">Resort Mela</div>
+              <div className="text-[10px] text-slate-400">Resort management platform</div>
             </div>
           </Link>
-          <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
-            <a href="#features" className="transition hover:text-white">Features</a>
-            <a href="#how" className="transition hover:text-white">How it works</a>
-            <a href="#pricing" className="transition hover:text-white">Pricing</a>
-            <a href="#api" className="transition hover:text-white">API</a>
+          <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
+            <a href="#features" className="hover:text-brand-700">Functionalities</a>
+            <a href="#solutions" className="hover:text-brand-700">Solutions</a>
+            <a href="#pricing" className="hover:text-brand-700">Pricing</a>
+            <a href="#api" className="hover:text-brand-700">API</a>
+            <a href="#contact" className="hover:text-brand-700">Contact</a>
           </nav>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="hidden text-sm text-slate-300 hover:text-white sm:block">
+          <div className="flex items-center gap-2">
+            <Link href="/login" className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">
               Log in
             </Link>
             <Link
               href="/signup"
-              className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-emerald-950 shadow-lg shadow-emerald-500/25 transition hover:bg-emerald-300"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
             >
-              Register free
+              Register
             </Link>
+            <button onClick={() => setMenuOpen((o) => !o)} className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden">
+              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
           </div>
         </div>
+        {menuOpen && (
+          <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
+            <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["#api", "API"], ["#contact", "Contact"], ["/login", "Log in"]].map(([h, l]) => (
+                <a key={h} href={h} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
+                  {l}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── hero ── */}
-      <section className="relative flex min-h-screen items-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-slate-950 to-teal-950" />
-        <div className="anim-float absolute -left-32 top-10 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-3xl" />
-        <div className="anim-float-slow absolute -right-24 bottom-0 h-[32rem] w-[32rem] rounded-full bg-teal-400/10 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.05]"
-          style={{ backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 0)", backgroundSize: "26px 26px" }}
-        />
-
-        <div className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-36">
-          <div className="grid items-center gap-14 lg:grid-cols-[1.15fr_1fr]">
-            <div className="anim-rise" style={{ animationDelay: "0.05s" }}>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-4 py-1.5 text-xs font-medium text-emerald-300">
-                <Sparkle /> The all-in-one platform for resorts
-              </div>
-              <h1 className="text-5xl font-black leading-[1.04] tracking-tight sm:text-6xl">
-                Run your resort.
-                <br />
-                <span className="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">
-                  Bookings, kitchen, agents & money.
-                </span>
-              </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-300">
-                Resort Mela replaces the register, the spreadsheet and the phone calls — one calendar, one
-                dashboard, every room, every agent, every taka. Built for Bangladeshi resorts, in Bangla and English.
-              </p>
-              <div className="mt-9 flex flex-wrap items-center gap-4">
-                <Link
-                  href="/signup"
-                  className="group inline-flex items-center gap-2 rounded-full bg-emerald-400 px-7 py-3.5 text-base font-bold text-emerald-950 shadow-xl shadow-emerald-500/30 transition hover:bg-emerald-300"
-                >
-                  Create free account
-                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                </Link>
-                <a
-                  href="#features"
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-7 py-3.5 text-base font-semibold text-white/90 transition hover:border-white/40 hover:bg-white/5"
-                >
-                  See how it works
-                </a>
-              </div>
-              <div className="mt-10 flex flex-wrap gap-x-8 gap-y-2 text-xs text-slate-400">
-                <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> 14-day free trial</span>
-                <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> No card required</span>
-                <span className="inline-flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-emerald-400" /> Pay at resort billing</span>
-              </div>
+      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white">
+        <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-brand-100/60 blur-3xl" />
+        <div className="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-teal-100/50 blur-3xl" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pt-20">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-sm">
+              <Star className="h-3.5 w-3.5 fill-brand-600 text-brand-600" />
+              The all-in-one software for resorts
             </div>
-
-            {/* product mock */}
-            <div className="anim-rise relative" style={{ animationDelay: "0.25s" }}>
-              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl backdrop-blur">
-                <div className="mb-3 flex items-center justify-between px-1">
-                  <div className="text-xs font-semibold text-slate-300">Today · Your resort</div>
-                  <div className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[10px] font-bold text-emerald-300">LIVE</div>
-                </div>
-                <MockCalendar />
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {[
-                    { l: "Arrivals", v: "6", c: "text-emerald-300" },
-                    { l: "In-house", v: "14", c: "text-sky-300" },
-                    { l: "Dues", v: "৳48,200", c: "text-amber-300" },
-                  ].map((s) => (
-                    <div key={s.l} className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
-                      <div className={`text-lg font-black ${s.c}`}>{s.v}</div>
-                      <div className="text-[10px] text-slate-400">{s.l}</div>
-                    </div>
+            <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-slate-900 sm:text-5xl">
+              Reservation calendar & front desk for your resort.
+            </h1>
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
+              Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see
+              every taka — from your phone or laptop. In Bangla and English.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link
+                href="/signup"
+                className="group inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-700"
+              >
+                Start free — no card
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+              </Link>
+              <a
+                href="#features"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                See how it works
+              </a>
+            </div>
+            <div className="mt-10 flex items-center gap-8">
+              <div>
+                <div className="flex items-center gap-1 text-amber-400">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
+                <div className="mt-1 text-xs text-slate-500">Loved by resort teams</div>
               </div>
-              <div className="absolute -bottom-5 -left-5 rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 shadow-xl">
+              <div className="h-10 w-px bg-slate-200" />
+              <div>
+                <div className="text-2xl font-black text-slate-900">14 days</div>
+                <div className="text-xs text-slate-500">free trial on every plan</div>
+              </div>
+            </div>
+          </div>
+          <div className="relative">
+            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-brand-100/70 to-teal-50" />
+            <div className="relative">
+              <MockDaySheet />
+              <div className="absolute -bottom-6 -left-4 hidden rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg sm:block">
                 <div className="flex items-center gap-2.5">
-                  <Bell className="h-4 w-4 text-emerald-400" />
+                  <Bell className="h-4 w-4 text-brand-600" />
                   <div>
-                    <div className="text-[11px] font-semibold">New booking · BK-00095</div>
+                    <div className="text-[11px] font-bold text-slate-800">New booking · BK-00095</div>
                     <div className="text-[10px] text-slate-400">Agent Rikan · Lunaria · 2 nights</div>
                   </div>
                 </div>
@@ -258,122 +245,150 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-
-        <a href="#stats" className="absolute bottom-8 left-1/2 z-10 -translate-x-1/2 text-slate-500">
-          <ChevronDown className="anim-bounce-soft h-7 w-7" />
-        </a>
       </section>
 
-      {/* ── stats ── */}
-      <section id="stats" className="border-y border-white/5 bg-emerald-950/40 py-14">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-4 md:grid-cols-4">
+      {/* ── trust bar ── */}
+      <section className="border-y border-slate-100 bg-white">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-10 sm:grid-cols-4">
           {STATS.map((s) => (
             <div key={s.l} className="text-center">
-              <div className="bg-gradient-to-b from-white to-emerald-300 bg-clip-text text-4xl font-black text-transparent">{s.n}</div>
-              <div className="mt-1 text-xs uppercase tracking-widest text-slate-400">{s.l}</div>
+              <div className="text-3xl font-black text-slate-900">{s.n}</div>
+              <div className="mt-0.5 text-xs font-medium uppercase tracking-wider text-slate-400">{s.l}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── features ── */}
-      <section id="features" className="bg-slate-950 py-24">
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-14 max-w-2xl">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">Everything included</div>
-            <h2 className="mt-2 text-4xl font-black tracking-tight">One platform. Every part of the resort.</h2>
-            <p className="mt-3 text-slate-400">
-              From the front desk calendar to the kitchen tab to your agents' wallets — Resort Mela keeps the
-              whole business in one place, on the web and on your phone.
-            </p>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f, i) => (
-              <div
-                key={f.title}
-                className="anim-rise group rounded-3xl border border-white/10 bg-white/[0.03] p-7 transition duration-300 hover:-translate-y-1.5 hover:border-emerald-400/30"
-                style={{ animationDelay: `${i * 0.06}s` }}
-              >
-                <div className={`mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${f.grad}`}>
-                  <f.icon className="h-6 w-6 text-white" />
-                </div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400/80">{f.tag}</div>
-                <div className="mt-1.5 text-lg font-bold">{f.title}</div>
-                <p className="mt-2 text-sm leading-relaxed text-slate-400">{f.body}</p>
-                <ul className="mt-4 space-y-1.5">
+      {/* ── feature blocks (alternating, bed-booking style) ── */}
+      <section id="features" className="bg-white py-20">
+        <div className="mx-auto max-w-6xl space-y-20 px-4">
+          {[
+            {
+              tag: "BOOKING CALENDAR",
+              title: "Your channel manager to manage reservations",
+              body: "See every room, every day, on one screen. With one click check availability on any date and make a booking for the calling customer — no overbooking, no register, no spreadsheet.",
+              points: ["Click any open date to book", "Walk-in, phone & agent bookings", "Check-in / check-out & day sheet", "Live availability per room"],
+              mock: <MockDaySheet />,
+            },
+            {
+              tag: "FRONT DESK & PMS",
+              title: "Run the whole resort from one screen",
+              body: "Rooms, rates, extra-person charges, seasonal price plans, discounts and guest history. Everything the front desk touches — without the notebook.",
+              points: ["Room types & seasonal rates", "Extra-person pricing", "Resort-wide or per-room discounts", "Guest database & stay history"],
+              mock: <MockBooking />,
+            },
+            {
+              tag: "RESTAURANT POS",
+              title: "Restaurant billing for walk-ins and room tabs",
+              body: "Counter sales and in-house room charges in one POS. Partial payments, daily F&B revenue and separate resort-vs-restaurant reports — all automatic.",
+              points: ["Walk-in cash counter", "Charge to room tab", "Partial & full payments", "Separate F&B revenue reports"],
+              mock: <MockPos />,
+            },
+          ].map((f, i) => (
+            <div key={f.tag} className={`grid items-center gap-10 lg:grid-cols-2 ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}>
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">{f.tag}</div>
+                <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{f.title}</h2>
+                <p className="mt-4 leading-relaxed text-slate-600">{f.body}</p>
+                <ul className="mt-6 grid gap-2.5 sm:grid-cols-2">
                   {f.points.map((p) => (
-                    <li key={p} className="flex items-center gap-2 text-xs text-slate-300">
-                      <Check className="h-3.5 w-3.5 text-emerald-400" /> {p}
+                    <li key={p} className="flex items-start gap-2 text-sm text-slate-700">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" /> {p}
                     </li>
                   ))}
                 </ul>
+                <Link href="/signup" className="mt-6 inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:text-brand-800">
+                  MORE INFORMATION <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+              <div className="relative">{f.mock}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── solutions ── */}
+      <section id="solutions" className="bg-brand-50/60 py-16">
+        <div className="mx-auto max-w-6xl px-4 text-center">
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Made for every kind of stay</h2>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            {["Resorts", "Eco resorts & cottages", "Guest houses", "Tour agencies", "Multi-property owners"].map((s) => (
+              <span key={s} className="rounded-full border border-brand-200 bg-white px-5 py-2.5 text-sm font-semibold text-brand-800 shadow-sm">
+                {s}
+              </span>
+            ))}
+          </div>
+          <div className="mt-10 grid gap-4 text-left sm:grid-cols-3">
+            {[
+              { icon: Users, t: "Agents with wallets", d: "Activate trusted agents, give them logins and wallets. They book for clients; you track commission and dues." },
+              { icon: ShieldCheck, t: "Roles & activity log", d: "Manager, front desk, housekeeping — least-privilege access with a full who-did-what log." },
+              { icon: BarChart3, t: "Money you can trust", d: "Dues, payments, subscription billing and P&L — resort and restaurant separated." },
+            ].map((c) => (
+              <div key={c.t} className="rounded-2xl border border-brand-100 bg-white p-6 shadow-sm">
+                <c.icon className="h-6 w-6 text-brand-600" />
+                <div className="mt-3 font-bold text-slate-900">{c.t}</div>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{c.d}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── how it works ── */}
-      <section id="how" className="bg-emerald-950/40 py-24">
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-14 text-center">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">How it works</div>
-            <h2 className="mt-2 text-4xl font-black tracking-tight">Live in one afternoon</h2>
-          </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              { n: "1", t: "Create your account", d: "Register, name your resort, add rooms and rates. Import your existing guest data from a spreadsheet." },
-              { n: "2", t: "Put your calendar to work", d: "Click any open date to book a caller, check guests in, and charge dinner to their room — all from one screen." },
-              { n: "3", t: "Grow with agents & API", d: "Activate agents with wallets, embed booking on your website, and watch revenue reports update in real time." },
-            ].map((s, i) => (
-              <div key={s.n} className="anim-rise relative rounded-3xl border border-white/10 bg-white/[0.03] p-8" style={{ animationDelay: `${i * 0.1}s` }}>
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-400 text-lg font-black text-emerald-950">{s.n}</div>
-                <div className="text-lg font-bold">{s.t}</div>
-                <p className="mt-2 text-sm leading-relaxed text-slate-400">{s.d}</p>
-              </div>
-            ))}
-          </div>
+      {/* ── extra capabilities strip ── */}
+      <section className="bg-white py-16">
+        <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: Bell, t: "Notification system", d: "In-app alerts for bookings, dues and agent deadlines." },
+            { icon: FileText, t: "Invoice PDF + email", d: "Auto invoice on checkout, printable and emailed to guests." },
+            { icon: Smartphone, t: "Works on your phone", d: "Full console on mobile — manage from anywhere." },
+            { icon: MessageSquare, t: "Bangla & English", d: "Switch the whole console with one tap." },
+          ].map((c) => (
+            <div key={c.t} className="rounded-2xl border border-slate-200 p-5">
+              <c.icon className="h-5 w-5 text-brand-600" />
+              <div className="mt-2.5 text-sm font-bold text-slate-900">{c.t}</div>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.d}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ── pricing ── */}
-      <section id="pricing" className="bg-slate-950 py-24">
+      <section id="pricing" className="bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-14 text-center">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">Pricing</div>
-            <h2 className="mt-2 text-4xl font-black tracking-tight">Simple monthly plans</h2>
-            <p className="mt-3 text-slate-400">Per resort. Cancel anytime. 14 days free on every plan.</p>
+          <div className="text-center">
+            <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Simple monthly plans</h2>
+            <p className="mt-3 text-slate-500">Per resort. Cancel anytime. 14 days free on every plan.</p>
           </div>
-          <div className="grid gap-6 lg:grid-cols-3">
-            {PLANS.map((p, i) => (
-              <div
-                key={p.name}
-                className={`anim-rise relative rounded-3xl border p-8 ${p.highlight ? "border-emerald-400/50 bg-gradient-to-b from-emerald-500/10 to-transparent shadow-2xl shadow-emerald-500/10" : "border-white/10 bg-white/[0.03]"}`}
-                style={{ animationDelay: `${i * 0.08}s` }}
-              >
+          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+            {[
+              { name: "Starter", price: "৳2,500", tagline: "For small resorts leaving spreadsheets", features: ["Up to 10 rooms", "Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"], highlight: false },
+              { name: "Growth", price: "৳5,000", tagline: "For busy resorts with restaurant & agents", features: ["Up to 40 rooms", "Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"], highlight: true },
+              { name: "Chain", price: "৳12,000", tagline: "For multi-resort owners", features: ["Unlimited rooms & resorts", "Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"], highlight: false },
+            ].map((p) => (
+              <div key={p.name} className={`relative rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
                 {p.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-emerald-400 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-950">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
                     Most popular
                   </div>
                 )}
-                <div className="text-lg font-bold">{p.name}</div>
-                <div className="mt-1 text-xs text-slate-400">{p.tagline}</div>
-                <div className="mt-5 text-4xl font-black">
+                <div className="text-lg font-bold text-slate-900">{p.name}</div>
+                <div className="mt-1 text-xs text-slate-500">{p.tagline}</div>
+                <div className="mt-5 text-4xl font-black text-slate-900">
                   {p.price}
-                  <span className="text-sm font-medium text-slate-400">{p.period}</span>
+                  <span className="text-sm font-medium text-slate-400">/month</span>
                 </div>
                 <ul className="mt-6 space-y-2.5">
                   {p.features.map((f) => (
-                    <li key={f} className="flex items-center gap-2.5 text-sm text-slate-300">
-                      <Check className="h-4 w-4 shrink-0 text-emerald-400" /> {f}
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
+                      <Check className="h-4 w-4 shrink-0 text-brand-600" /> {f}
                     </li>
                   ))}
                 </ul>
                 <Link
                   href="/signup"
-                  className={`mt-8 block rounded-full py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-emerald-400 text-emerald-950 hover:bg-emerald-300" : "border border-white/15 text-white hover:bg-white/5"}`}
+                  className={`mt-8 block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
-                  {p.cta}
+                  Start free trial
                 </Link>
               </div>
             ))}
@@ -381,59 +396,65 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── API band ── */}
-      <section id="api" className="bg-emerald-950/40 py-20">
+      {/* ── API ── */}
+      <section id="api" className="bg-white py-20">
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-2">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">For your website</div>
-            <h2 className="mt-2 text-3xl font-black tracking-tight">Already have a resort website? Keep it.</h2>
-            <p className="mt-3 leading-relaxed text-slate-400">
-              Plug Resort Mela into your existing site — or embed our hosted booking page in five minutes.
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">BOOKING API FOR YOUR WEBSITE</div>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+              Already have a resort website? Keep it.
+            </h2>
+            <p className="mt-4 leading-relaxed text-slate-600">
+              Plug Resort Mela into your existing site — or embed our hosted booking page in minutes.
               Live availability and rates from your console, bookings straight into your calendar. No commission, no middleman.
             </p>
-            <ul className="mt-5 space-y-2 text-sm text-slate-300">
-              <li className="flex items-center gap-2"><Code2 className="h-4 w-4 text-emerald-400" /> REST API with per-resort keys</li>
-              <li className="flex items-center gap-2"><Globe className="h-4 w-4 text-emerald-400" /> Hosted booking page on your domain</li>
-              <li className="flex items-center gap-2"><FileText className="h-4 w-4 text-emerald-400" /> Webhooks for new bookings & payments</li>
+            <ul className="mt-5 space-y-2.5 text-sm text-slate-700">
+              <li className="flex items-center gap-2"><Plug className="h-4 w-4 text-brand-600" /> REST API with per-resort keys</li>
+              <li className="flex items-center gap-2"><Globe className="h-4 w-4 text-brand-600" /> Hosted booking page you can embed</li>
+              <li className="flex items-center gap-2"><FileText className="h-4 w-4 text-brand-600" /> Availability, rates & booking endpoints</li>
             </ul>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900 p-5 font-mono text-xs leading-relaxed shadow-2xl">
+          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5 font-mono text-xs leading-relaxed shadow-xl">
             <div className="mb-3 flex gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
+              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
             </div>
             <div><span className="text-slate-500"># check availability</span></div>
-            <div><span className="text-emerald-300">curl</span> https://api.resortmela.com/v1/availability \</div>
-            <div className="pl-4">-H <span className="text-amber-300">"X-Api-Key: rm_live_…"</span></div>
+            <div><span className="text-emerald-300">curl</span> https://backresort.rootcodebd.com/v1/availability \</div>
+            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_…&quot;</span></div>
             <div className="mt-2 text-slate-500"># response</div>
             <div className="text-sky-300">{"{"}</div>
-            <div className="pl-4 text-slate-300">"roomType": <span className="text-emerald-300">"Lunaria"</span>,</div>
-            <div className="pl-4 text-slate-300">"available": <span className="text-emerald-300">3</span>,</div>
-            <div className="pl-4 text-slate-300">"pricePerNight": <span className="text-emerald-300">7500</span></div>
+            <div className="pl-4 text-slate-300">&quot;roomType&quot;: <span className="text-emerald-300">&quot;Lunaria&quot;</span>,</div>
+            <div className="pl-4 text-slate-300">&quot;available&quot;: <span className="text-emerald-300">3</span>,</div>
+            <div className="pl-4 text-slate-300">&quot;pricePerNight&quot;: <span className="text-emerald-300">7500</span></div>
             <div className="text-sky-300">{"}"}</div>
           </div>
         </div>
       </section>
 
       {/* ── testimonials ── */}
-      <section className="bg-slate-950 py-24">
+      <section className="border-y border-slate-100 bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-12 text-center">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">Loved by resort teams</div>
-            <h2 className="mt-2 text-4xl font-black tracking-tight">They stopped juggling notebooks</h2>
+          <div className="text-center">
+            <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">More than 10,000 bookings handled</h2>
+            <p className="mt-2 text-slate-500">Here&apos;s why resorts switch to Resort Mela</p>
           </div>
-          <div className="grid gap-6 md:grid-cols-3">
-            {TESTIMONIALS.map((t, i) => (
-              <div key={t.name} className="anim-rise rounded-3xl border border-white/10 bg-white/[0.03] p-7" style={{ animationDelay: `${i * 0.08}s` }}>
+          <div className="mt-12 grid gap-5 md:grid-cols-3">
+            {[
+              { quote: "The day sheet used to take my manager an hour every morning. Now it opens with everything already there — bookings, dues, restaurant, expenses.", name: "Resort Manager", meta: "Partner resort · Sylhet" },
+              { quote: "I manage 3 resorts. Before this I had three Excel files and a notebook. Now one login, three resorts, zero confusion.", name: "Resort Owner", meta: "Multi-property owner" },
+              { quote: "My agents used to call for every booking. Now they book from their own accounts and I just approve and track commission.", name: "Owner", meta: "Tour & travel partners" },
+            ].map((t) => (
+              <div key={t.name} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
                 <div className="flex gap-0.5 text-amber-400">
-                  {[...Array(5)].map((_, s) => (
-                    <Star key={s} className="h-4 w-4 fill-current" />
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
-                <p className="mt-4 text-sm leading-relaxed text-slate-300">“{t.quote}”</p>
-                <div className="mt-5 text-sm font-bold">{t.name}</div>
-                <div className="text-xs text-slate-500">{t.meta}</div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-600">“{t.quote}”</p>
+                <div className="mt-5 text-sm font-bold text-slate-900">{t.name}</div>
+                <div className="text-xs text-slate-400">{t.meta}</div>
               </div>
             ))}
           </div>
@@ -441,16 +462,15 @@ export default function HomePage() {
       </section>
 
       {/* ── final CTA ── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-700 py-24">
-        <div className="anim-float absolute -left-20 top-0 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-4xl font-black tracking-tight sm:text-5xl">Start today — free for 14 days</h2>
-          <p className="mt-4 text-lg text-emerald-50/90">
-            No card, no obligation. Bring your rooms, your team and your agents — and see your whole resort on one screen.
+      <section className="bg-gradient-to-br from-brand-700 to-brand-900 py-20 text-white">
+        <div className="mx-auto max-w-3xl px-4 text-center">
+          <h2 className="text-4xl font-black tracking-tight">Start today — free for 14 days</h2>
+          <p className="mt-4 text-lg text-brand-50/90">
+            Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen.
           </p>
           <Link
             href="/signup"
-            className="group mt-9 inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 text-base font-bold text-emerald-700 shadow-xl transition hover:bg-emerald-50"
+            className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-brand-800 shadow-xl transition hover:bg-brand-50"
           >
             Create free account
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
@@ -459,78 +479,42 @@ export default function HomePage() {
       </section>
 
       {/* ── footer ── */}
-      <footer className="border-t border-white/5 bg-slate-950 py-14">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:grid-cols-4">
+      <footer id="contact" className="bg-white py-14">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-400/10 font-bold text-emerald-300">R</div>
-              <div className="text-sm font-bold">Resort Mela</div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">R</div>
+              <div className="text-sm font-bold text-slate-900">Resort Mela</div>
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-500">
               The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
               agents with wallets, and a booking API for your website.
             </p>
+            <div className="mt-4 text-xs text-slate-400">support@resortmela.com · rootcodebd.com</div>
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-emerald-400/70">Product</div>
-            <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-400">
-              <a href="#features" className="hover:text-white">Features</a>
-              <a href="#pricing" className="hover:text-white">Pricing</a>
-              <a href="#api" className="hover:text-white">Booking API</a>
-              <Link href="/book" className="hover:text-white">Guest booking</Link>
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Functionalities</div>
+            <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-600">
+              <a href="#features" className="hover:text-brand-700">Booking calendar</a>
+              <a href="#features" className="hover:text-brand-700">Front desk & PMS</a>
+              <a href="#features" className="hover:text-brand-700">Restaurant POS</a>
+              <a href="#api" className="hover:text-brand-700">Booking API</a>
             </div>
           </div>
           <div>
-            <div className="text-xs font-bold uppercase tracking-widest text-emerald-400/70">Account</div>
-            <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-400">
-              <Link href="/signup" className="hover:text-white">Register</Link>
-              <Link href="/login" className="hover:text-white">Log in</Link>
-              <Link href="/book/trips" className="hover:text-white">My trips</Link>
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Account</div>
+            <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-600">
+              <Link href="/signup" className="hover:text-brand-700">Register</Link>
+              <Link href="/login" className="hover:text-brand-700">Log in</Link>
+              <Link href="/book" className="hover:text-brand-700">Guest booking</Link>
+              <Link href="/book/trips" className="hover:text-brand-700">My trips</Link>
             </div>
           </div>
         </div>
-        <div className="mx-auto mt-12 max-w-6xl border-t border-white/5 px-4 pt-6 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} Resort Mela — resort management platform. All rights reserved.
+        <div className="mx-auto mt-12 max-w-6xl border-t border-slate-100 px-4 pt-6 text-center text-xs text-slate-400">
+          © {new Date().getFullYear()} Resort Mela — reservation calendar & resort management platform. All rights reserved.
         </div>
       </footer>
-    </div>
-  );
-}
-
-function Sparkle() {
-  return <Star className="h-3.5 w-3.5" />;
-}
-
-function MockCalendar() {
-  const cells = [
-    { s: "in", r: "Camellia", g: "Raju" },
-    { s: "stay", r: "Lunaria", g: "shakil" },
-    { s: "free", r: "Snow Drop", g: "" },
-    { s: "stay", r: "Cherry", g: "local" },
-    { s: "out", r: "Margarita", g: "maliha" },
-    { s: "free", r: "Lavender", g: "" },
-    { s: "in", r: "Kath Golap", g: "Rikan" },
-    { s: "stay", r: "Jasmine", g: "Kazi" },
-    { s: "oos", r: "Magnolia", g: "" },
-    { s: "oos", r: "Rose", g: "" },
-  ];
-  const style: Record<string, string> = {
-    in: "bg-emerald-500/20 border-emerald-400/40 text-emerald-200",
-    stay: "bg-sky-500/15 border-sky-400/30 text-sky-200",
-    out: "bg-amber-500/15 border-amber-400/30 text-amber-200",
-    free: "bg-white/[0.03] border-white/10 text-slate-500",
-    oos: "bg-white/[0.02] border-white/5 text-slate-600 line-through",
-  };
-  return (
-    <div className="grid grid-cols-2 gap-1.5">
-      {cells.map((c, i) => (
-        <div key={i} className={`rounded-lg border px-2.5 py-2 ${style[c.s]}`}>
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="font-semibold">{c.r}</span>
-            <span className="truncate opacity-70">{c.g || (c.s === "free" ? "available" : c.s === "oos" ? "oos" : "")}</span>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

@@ -175,7 +175,7 @@ export default function SettingsPage() {
         <div className="max-w-xl space-y-4">
           {usage && (
             <Card title={`Plan — ${usage.planLabel}`}>
-              <div className="grid grid-cols-4 gap-3 text-center">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-center">
                 <Stat label="Resorts" value={`${usage.resorts}/${usage.limits.maxResorts}`} />
                 <Stat label="Rooms" value={String(usage.rooms)} sub={`cap ${usage.limits.maxRoomsPerResort}/resort`} />
                 <Stat label="Staff users" value={String(usage.staffUsers)} />
@@ -211,13 +211,13 @@ export default function SettingsPage() {
                 Show room rates to agents
               </label>
               <div className="mt-2 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">Invoice & stay settings</div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="Invoice prefix"><Input value={d.invoicePrefix} onChange={(e) => setD({ ...d, invoicePrefix: e.target.value })} /></Field>
                 <Field label="Check-in time"><Input value={d.checkInTime} onChange={(e) => setD({ ...d, checkInTime: e.target.value })} placeholder="12:00 PM" /></Field>
                 <Field label="Check-out time"><Input value={d.checkOutTime} onChange={(e) => setD({ ...d, checkOutTime: e.target.value })} placeholder="10:00 AM" /></Field>
               </div>
               <Field label="Address"><Input value={d.address ?? ""} onChange={(e) => setD({ ...d, address: e.target.value })} /></Field>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Website"><Input value={d.website ?? ""} onChange={(e) => setD({ ...d, website: e.target.value })} /></Field>
                 <Field label="Contact phone"><Input value={d.contactPhone ?? ""} onChange={(e) => setD({ ...d, contactPhone: e.target.value })} /></Field>
               </div>
@@ -568,7 +568,7 @@ function DiscountsTab({ rid }: { rid: number }) {
             </Field>
           )}
           <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Opening offer" /></Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Kind">
               <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
                 <option value="PERCENT">Percent</option>
@@ -579,7 +579,7 @@ function DiscountsTab({ rid }: { rid: number }) {
               <Input type="number" min={0} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="From"><Input type="date" value={form.validFrom} onChange={(e) => setForm({ ...form, validFrom: e.target.value })} /></Field>
             <Field label="Until"><Input type="date" value={form.validTo} onChange={(e) => setForm({ ...form, validTo: e.target.value })} /></Field>
           </div>

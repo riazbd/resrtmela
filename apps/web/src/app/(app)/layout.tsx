@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
-  Bell, Mail, MapPin as MapIcon,
+  Bell, Mail, MapPin as MapIcon, Menu,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
@@ -40,6 +40,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const t = (k: DictKey) => (lang === "bn" ? k : k);
   const router = useRouter();
   const pathname = usePathname();
+  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !me) router.replace("/login");
@@ -49,6 +50,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     // guests don't get the console — they use the mobile app
     if (!loading && me?.role === "GUEST") router.replace("/login");
   }, [loading, me, router]);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname]);
 
   if (loading || !me || !activeResort) {
     return (
@@ -75,8 +80,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <div className="flex min-h-screen flex-1">
+      {/* mobile backdrop */}
+      {navOpen && <div className="fixed inset-0 z-30 bg-slate-900/50 lg:hidden" onClick={() => setNavOpen(false)} />}
       {/* sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col bg-brand-900 text-white">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-brand-900 text-white transition-transform duration-200 lg:translate-x-0 ${navOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex items-center gap-2 px-4 py-4">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 font-bold">R</div>
           <div>
@@ -117,12 +124,19 @@ function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* content */}
-      <div className="ml-56 flex min-h-screen flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-6 py-3 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">Resort</span>
+      <div className="flex min-h-screen flex-1 flex-col lg:ml-60">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur sm:px-6">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              onClick={() => setNavOpen(true)}
+              className="rounded-lg border border-slate-300 p-2 text-slate-600 hover:bg-slate-50 lg:hidden"
+              title="Menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span className="hidden text-xs text-slate-400 sm:inline">Resort</span>
             <Select
-              className="!w-56"
+              className="!w-40 max-w-[45vw] sm:!w-56"
               value={activeResort.id}
               onChange={(e) => {
                 const r = me.resorts.map((x) => x.resort).find((x) => x.id === Number(e.target.value));
@@ -136,7 +150,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               ))}
             </Select>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <NotificationBell />
             <button
               onClick={() => setLang(lang === "bn" ? "en" : "bn")}
@@ -144,12 +158,12 @@ function Shell({ children }: { children: React.ReactNode }) {
             >
               {lang === "bn" ? "English" : "বাংলা"}
             </button>
-            <div className="text-xs text-slate-400">
+            <div className="hidden text-xs text-slate-400 xl:block">
               {new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
             </div>
           </div>
         </header>
-        <main className="flex-1 px-6 py-6">{children}</main>
+        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
       </div>
     </div>
