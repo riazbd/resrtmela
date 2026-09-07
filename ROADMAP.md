@@ -8,17 +8,15 @@
 
 ## 🔴 Blockers — break real features today
 
-### 1. SMTP credentials are empty on live
-**Where:** `/opt/resortmela/.env` on the VPS — `SMTP_USER=` and `SMTP_PASS=` are blank (only `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587` are set).
+### 1. ~~SMTP credentials are empty on live~~ ✅ DONE (2026-09-07)
+**Resolved:** own mail server deployed — HestiaCP Exim on the VPS, `no-reply@rootcodebd.com` (port 587 STARTTLS), app sends via `127.0.0.1`. DNS at Namecheap: SPF + DKIM (`mail._domainkey`) + DMARC all live. Verified by Port25 verifier: **SPF pass, DKIM pass**.
 
-**Impact:** every email silently falls back to console logging (`EmailService` dev mode) — booking confirmations, invoice emails, bulk email campaigns all fail to deliver.
+**⚠️ Deployment note:** the API's PM2 process was started with explicit SMTP env vars (`SMTP_HOST/PORT/USER/PASS/FROM`) because stale empty values in the old PM2 env shadowed the `.env`. If you ever recreate the api process, start it with those vars too — the config is saved in `/root/.pm2/dump.pm2`, so `pm2 resurrect` keeps it.
 
-**Fix (~10 min):**
-1. Create a Gmail App Password (or a Brevo/SendGrid account).
-2. On the VPS set `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `/opt/resortmela/.env`.
-3. `pm2 restart api --update-env` and verify with a test invoice email.
-
-**Code refs:** `apps/api/src/notifications/email.service.ts` (dev fallback when `SMTP_USER` empty).
+~~**Fix (~10 min):**~~
+~~1. Create a Gmail App Password (or a Brevo/SendGrid account).~~
+~~2. On the VPS set `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in `/opt/resortmela/.env`.~~
+~~3. `pm2 restart api --update-env` and verify with a test invoice email.~~
 
 ### 2. Guest OTP is generated but never delivered
 **Where:** `apps/api/src/auth/auth.service.ts` — OTP store is an in-memory `Map` (comment: *"dev-only OTP store; replaced by SMS provider + job queue in phase 6"*). No SMS gateway integration exists.
