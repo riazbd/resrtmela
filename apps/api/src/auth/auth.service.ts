@@ -1,9 +1,10 @@
-import { Injectable, UnauthorizedException, Inject } from "@nestjs/common";
+import { Injectable, UnauthorizedException, Inject, Logger } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { signToken } from "../common/auth.guard";
 import { normalizePhone } from "../common/dates";
 import { slugify } from "../common/plans";
+import { SmsService } from "../notifications/sms.service";
 import { ROLE, type Role } from "@rh/shared";
 
 interface OtpEntry {
@@ -17,7 +18,12 @@ export class AuthService {
   /** dev-only OTP store; replaced by SMS provider + job queue in phase 6 */
   private otps = new Map<string, OtpEntry>();
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(SmsService) private readonly sms: SmsService,
+  ) {}
+
+  private readonly logger = new Logger(AuthService.name);
 
   async loginWithPassword(phoneRaw: string, password: string) {
     const phone = normalizePhone(phoneRaw);
@@ -38,9 +44,22 @@ export class AuthService {
       expiresAt: Date.now() + 5 * 60_000,
       attempts: 0,
     });
-    // TODO phase 6: enqueue SMS via notification_jobs + BullMQ worker
+    // deliver the OTP over the SMS gateway (console fallback in dev)
+    const r = await this.sms.send(phone, `Resort Mela: your verification code is ${code}. Valid for 5 minutes.`);
+    if (!r.sent) {
+      this.logger.warn(`OTP SMS not delivered to ${phone}: ${r.error}`);
+      if (process.env.NODE_ENV === "production") {
+        // don't leak codes: only expose devCode when SMS truly cannot be sent AND an override allows it
+        const allowFallback = process.env.SMS_DEV_FALLBACK === "1";
+        return {
+          sent: false,
+          expiresInSeconds: 300,
+          devCode: allowFallback ? code : undefined,
+        };
+      }
+    }
     return {
-      sent: true,
+      sent: r.sent,
       expiresInSeconds: 300,
       devCode: process.env.NODE_ENV === "production" ? undefined : code,
     };
@@ -116,7 +135,7 @@ export class AuthService {
       this.prisma.user.findUnique({ where: { phone } }),
     ]);
     if (slugTaken) throw Object.assign(new Error(`Workspace "${slug}" is already taken`), { status: 409 });
-    if (phoneTaken) throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
+    if (phoneTaken) throw Object.assign(new Error("This phone already has an account ï¿½ sign in instead"), { status: 409 });
 
     const passwordHash = await bcrypt.hash(input.password, 12);
     const result = await this.prisma.$transaction(async (tx) => {

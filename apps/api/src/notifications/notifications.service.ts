@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "./email.service";
+import { SmsService } from "./sms.service";
 import { dedupeKeyFor, renderTemplate, type TemplateName } from "./templates";
 import { today } from "../common/dates";
 
@@ -25,6 +26,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(EmailService) private readonly email: EmailService,
+    @Inject(SmsService) private readonly sms: SmsService,
   ) {}
 
   onModuleInit() {
@@ -186,9 +188,18 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           sentOk = r.sent;
           error = r.error;
         } else {
-          // SMS / WhatsApp: provider adapter (dev: console). Production: gateway HTTP call.
-          this.logger.log(`[${job.channel}] to ${job.toRef}: ${text}`);
-          sentOk = true;
+          // SMS / WhatsApp: real gateway (SSL Wireless), console fallback in dev
+          const r = await this.sms.send(job.toRef, text);
+          if (r.sent) {
+            sentOk = true;
+          } else if (r.error === "sms-not-configured") {
+            this.logger.log(`[${job.channel}] to ${job.toRef}: ${text}`);
+            sentOk = true;
+            error = "console-only (no SMS gateway)";
+          } else {
+            error = r.error;
+            sentOk = false;
+          }
         }
         if (sentOk) {
           await this.prisma.notificationJob.update({
