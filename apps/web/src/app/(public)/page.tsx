@@ -203,7 +203,7 @@ export default function HomePage() {
                 href="/signup"
                 className="group inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-700"
               >
-                Start free — no card
+                Create free account
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </Link>
               <a
@@ -213,6 +213,7 @@ export default function HomePage() {
                 See how it works
               </a>
             </div>
+            <p className="mt-3 text-xs font-medium text-slate-500">14 days free · no card required · cancel anytime</p>
             <div className="mt-10 flex items-center gap-8">
               <div>
                 <div className="flex items-center gap-1 text-amber-400">
