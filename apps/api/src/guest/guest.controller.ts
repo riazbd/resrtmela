@@ -45,7 +45,7 @@ export class GuestController {
     return this.guest.resortDetail(id);
   }
 
-  @UseGuards(AuthGuard)
+  /** public: visitors browse availability before verifying */
   @Get("resorts/:id/availability")
   availability(
     @Req() req: AuthedRequest,

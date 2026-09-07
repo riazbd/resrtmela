@@ -96,8 +96,9 @@ export class GuestService {
   }
 
   /** Availability by room type for [from,to) — count of free rooms + effective price. */
-  async availability(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
-    await this.assertGuest(claims);
+  async availability(claims: JwtClaims | null | undefined, resortId: number, fromStr: string, toStr: string) {
+    // public before login: any visitor may browse availability; guests still get it post-login
+    if (claims?.userId) await this.assertGuest(claims);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("Check-out must be after check-in");

@@ -151,7 +151,7 @@ export default function HomePage() {
             <a href="#solutions" className="hover:text-brand-700">Solutions</a>
             <a href="#pricing" className="hover:text-brand-700">Pricing</a>
             <a href="#api" className="hover:text-brand-700">API</a>
-            <a href="#contact" className="hover:text-brand-700">Contact</a>
+            <Link href="/book" className="font-semibold text-brand-700 hover:text-brand-800">Book a stay</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link href="/login" className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">
@@ -171,7 +171,7 @@ export default function HomePage() {
         {menuOpen && (
           <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
             <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["#api", "API"], ["#contact", "Contact"], ["/login", "Log in"]].map(([h, l]) => (
+              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["#api", "API"], ["/book", "Book a stay"], ["/login", "Log in"]].map(([h, l]) => (
                 <a key={h} href={h} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
                   {l}
                 </a>

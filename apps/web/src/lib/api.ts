@@ -48,7 +48,9 @@ export async function api<T = unknown>(
       (payload as { message?: string })?.message ??
       (payload as { error?: string })?.error ??
       `Request failed (${res.status})`;
-    if (res.status === 401) {
+    // only end the session when we actually HAD one; anonymous 401s (e.g. guest
+    // browsing before verification) must not bounce visitors to /login
+    if (res.status === 401 && token) {
       setToken(null);
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
