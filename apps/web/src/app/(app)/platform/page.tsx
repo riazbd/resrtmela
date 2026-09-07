@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, bdt, dmy } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
-import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet } from "lucide-react";
+import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn } from "lucide-react";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -23,6 +24,7 @@ interface ResortRow {
   tenant: { name: string; plan: string };
   _count: { rooms: number; bookings: number; guests: number };
   subscriptions: { id: string; plan: string; status: string; monthlyFee: string; renewsAt: string | null }[];
+  userResorts?: { user: { id: number; name: string; phone: string } }[];
 }
 interface AgentRow {
   id: number;
@@ -55,6 +57,7 @@ interface CalCell {
 const TABS = ["Overview", "Resorts", "Agents", "Subscriptions", "Dues", "Calendar"] as const;
 
 export default function PlatformPage() {
+  const { impersonate, exitImpersonation, isImpersonating } = useAuth();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [ov, setOv] = useState<Overview | null>(null);
   const [resorts, setResorts] = useState<ResortRow[] | null>(null);
@@ -106,6 +109,18 @@ export default function PlatformPage() {
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loginAs(userId: number) {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await api<{ accessToken: string }>(`/platform/users/${userId}/login-as`, { method: "POST", body: {} });
+      await impersonate(r.accessToken);
+    } catch (e) {
+      setErr(String((e as Error).message ?? e));
       setBusy(false);
     }
   }
@@ -213,6 +228,15 @@ export default function PlatformPage() {
                   <Td>{sub(r)?.renewsAt ? dmy(sub(r)!.renewsAt) : "—"}</Td>
                   <Td>
                     <div className="flex justify-end gap-1.5">
+                      {r.userResorts?.[0] && (
+                        <button
+                          onClick={() => loginAs(r.userResorts![0]!.user.id)}
+                          title={`Log in as ${r.userResorts[0].user.name} (${r.userResorts[0].user.phone})`}
+                          className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                        >
+                          <LogIn className="inline h-3.5 w-3.5" /> Login as
+                        </button>
+                      )}
                       <button
                         onClick={() => { setSubFor(r); setSubPlan("GROWTH"); setSubFee("5000"); }}
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
@@ -273,6 +297,13 @@ export default function PlatformPage() {
                   </Td>
                   <Td>
                     <div className="flex justify-end gap-1.5">
+                      <button
+                        onClick={() => loginAs(a.id)}
+                        title={`Log in as ${a.name}`}
+                        className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                      >
+                        <LogIn className="inline h-3.5 w-3.5" /> Login as
+                      </button>
                       {a.resorts[0] && a.status !== "active" && (
                         <button onClick={() => act(() => api(`/resorts/${a.resorts[0]!.id}/agents/${a.id}/status`, { method: "PATCH", body: { status: "active" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                           <CheckCircle2 className="inline h-3.5 w-3.5" /> Activate

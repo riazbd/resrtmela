@@ -94,6 +94,9 @@ export class PlatformController {
   @Patch("platform/resorts/:id/status") setResortStatus(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ResortStatusDto) {
     return this.platform.setResortStatus(req.user, id, dto.status);
   }
+  @Post("platform/users/:id/login-as") loginAs(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.loginAs(req.user, id);
+  }
 
   // super admin — subscriptions
   @Post("platform/resorts/:id/subscription") setSubscription(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: SubscriptionDto) {

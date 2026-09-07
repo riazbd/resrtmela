@@ -35,7 +35,7 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout } = useAuth();
+  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout, isImpersonating, exitImpersonation } = useAuth();
   const { lang, setLang } = useLang();
   const t = (k: DictKey) => (lang === "bn" ? k : k);
   const router = useRouter();
@@ -65,7 +65,16 @@ function Shell({ children }: { children: React.ReactNode }) {
     (roles.includes("MGMT") && isManagement);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col">
+      {isImpersonating && (
+        <div className="flex items-center justify-center gap-3 bg-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-950">
+          Viewing as <b>{me?.name}</b> ({role.replace(/_/g, " ")}). Actions are audited.
+          <button onClick={exitImpersonation} className="rounded-full bg-amber-950 px-3 py-1 text-[11px] font-bold text-amber-100 hover:bg-amber-900">
+            Exit to Super Admin
+          </button>
+        </div>
+      )}
+      <div className="flex min-h-screen flex-1">
       {/* sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col bg-brand-900 text-white">
         <div className="flex items-center gap-2 px-4 py-4">
@@ -141,6 +150,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="flex-1 px-6 py-6">{children}</main>
+      </div>
       </div>
     </div>
   );

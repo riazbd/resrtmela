@@ -6,6 +6,7 @@ import { requireRoles, requireResortAccess, forbid, badRequest } from "../common
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
+import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 
@@ -78,6 +79,11 @@ export class PlatformService {
         tenant: { select: { name: true, plan: true } },
         _count: { select: { rooms: true, bookings: true, guests: true } },
         subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, monthlyFee: true, renewsAt: true } },
+        userResorts: {
+          where: { user: { role: "RESORT_ADMIN" } },
+          take: 1,
+          select: { user: { select: { id: true, name: true, phone: true } } },
+        },
       },
       orderBy: { id: "asc" },
     });
@@ -113,6 +119,24 @@ export class PlatformService {
     const resort = await this.prisma.resort.update({ where: { id: resortId }, data: { status } });
     await this.audit.log({ actorId: claims.userId, resortId, action: `platform.resort.${status}`, entity: "resort", entityId: resortId });
     return resort;
+  }
+
+  /** super admin impersonation: issue a real token for the target user */
+  async loginAs(claims: JwtClaims, userId: number) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, role: true, status: true },
+    });
+    if (!user) throw badRequest("user not found");
+    if (user.role === "SUPER_ADMIN") throw badRequest("cannot impersonate another super admin");
+    if (user.status !== "active") throw badRequest("user account is not active");
+    const resortIds = (await this.prisma.userResort.findMany({ where: { userId }, select: { resortId: true } })).map((r) => r.resortId);
+    await this.audit.log({ actorId: claims.userId, action: "platform.login_as", entity: "user", entityId: userId, diff: { name: user.name, role: user.role } });
+    return {
+      accessToken: signToken({ userId: user.id, role: user.role, resortIds }),
+      user: { id: user.id, name: user.name, role: user.role, resortIds },
+    };
   }
 
   // ─────────────────── subscriptions ───────────────────
