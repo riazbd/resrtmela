@@ -471,7 +471,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/signup"
-            className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-brand-800 shadow-xl transition hover:bg-brand-50"
+            className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-8 py-4 text-base font-bold text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:bg-emerald-300"
           >
             Create free account
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
