@@ -10,6 +10,9 @@ async function bootstrap() {
     return (this as unknown as bigint).toString();
   };
   const app = await NestFactory.create(AppModule);
+  console.log(
+    `[boot] cwd=${process.cwd()} SMTP_HOST=${process.env.SMTP_HOST ?? "UNDEF"} SMTP_USER=${process.env.SMTP_USER ?? "UNDEF"} SMTP_PASS_len=${(process.env.SMTP_PASS ?? "").length}`,
+  );
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
     origin: [
