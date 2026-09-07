@@ -9,7 +9,9 @@
 ## 🔴 Blockers — break real features today
 
 ### 1. ~~SMTP credentials are empty on live~~ ✅ DONE (2026-09-07)
-**Resolved:** own mail server deployed — HestiaCP Exim on the VPS, `no-reply@rootcodebd.com` (port 587 STARTTLS), app sends via `127.0.0.1`. DNS at Namecheap: SPF + DKIM (`mail._domainkey`) + DMARC all live. Verified by Port25 verifier: **SPF pass, DKIM pass**.
+**Resolved:** own mail server deployed — HestiaCP Exim on the VPS, `no-reply@rootcodebd.com` (port 587 STARTTLS), app sends via `127.0.0.1`. DNS at Namecheap: SPF + DKIM (`mail._domainkey`) + DMARC + MX (`mail.rootcodebd.com`) + `mail` A record — all live. Verified by Port25 verifier: **SPF pass, DKIM pass**. Exim `message_id_header_domain = rootcodebd.com`, hostname = PTR (`vmi2967410.contaboserver.net`), one-click `List-Unsubscribe` on campaigns.
+
+**Reputation warm-up (chosen path A, 2026-09-07):** domain is new — Gmail/Outlook may spam-folder early mail. Placement improves with: recipients marking "Not spam", replies, and regular transactional traffic. Expect inbox placement within 1–3 weeks. If inbox delivery becomes business-critical sooner, wire a Brevo/SendGrid relay (`email.service.ts` swap, ~10 min).
 
 **⚠️ Deployment note:** the API's PM2 process was started with explicit SMTP env vars (`SMTP_HOST/PORT/USER/PASS/FROM`) because stale empty values in the old PM2 env shadowed the `.env`. If you ever recreate the api process, start it with those vars too — the config is saved in `/root/.pm2/dump.pm2`, so `pm2 resurrect` keeps it.
 
