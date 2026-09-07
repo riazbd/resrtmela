@@ -187,7 +187,8 @@ model UserResort {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId       Int
   resort         Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  commissionRate Decimal? @db.Decimal(5, 2) // agents only
+  commissionRate Decimal? @db.Decimal(10, 2) // agents only: percent value (PERCENT) or fixed ৳ (FLAT)
+  commissionKind String   @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (fixed per booking)
 
   @@unique([userId, resortId])
   @@map("user_resorts")

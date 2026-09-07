@@ -222,12 +222,13 @@ export class ReportsService {
       include: { user: { select: { id: true, name: true } } },
     });
 
-    const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; bookings: number; rent: number; due: number }>();
+    const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
     for (const s of staff) {
       byAgent.set(s.userId, {
         agentId: s.userId,
         name: s.user.name,
         commissionRate: Number(s.commissionRate ?? 0),
+        commissionKind: s.commissionKind,
         bookings: 0,
         rent: 0,
         due: 0,
@@ -245,7 +246,8 @@ export class ReportsService {
       ...r,
       rent: round2(r.rent),
       due: round2(r.due),
-      commission: round2((r.rent * r.commissionRate) / 100),
+      // PERCENT: % of rent; FLAT: fixed ৳ per booking
+      commission: round2(r.commissionKind === "FLAT" ? r.commissionRate * r.bookings : (r.rent * r.commissionRate) / 100),
     }));
     return {
       from: from ?? null,

@@ -55,6 +55,7 @@ interface UserRow {
   createdAt: string;
   wallet: { balance: number; active: boolean } | null;
   commissionRate: number | null;
+  commissionKind: string;
 }
 
 interface ActivityRow {
@@ -313,7 +314,7 @@ function AccessTab({ rid }: { rid: number }) {
 function UsersTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5" });
+  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -326,10 +327,14 @@ function UsersTab({ rid }: { rid: number }) {
     try {
       await api(`/resorts/${rid}/users`, {
         method: "POST",
-        body: { name: form.name, phone: form.phone, password: form.password, role: form.role, commissionRate: form.role === "AGENT" ? Number(form.commissionRate) : undefined },
+        body: {
+          name: form.name, phone: form.phone, password: form.password, role: form.role,
+          commissionRate: form.role === "AGENT" ? Number(form.commissionRate) : undefined,
+          commissionKind: form.role === "AGENT" ? form.commissionKind : undefined,
+        },
       });
       push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
-      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5" });
+      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -354,7 +359,7 @@ function UsersTab({ rid }: { rid: number }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Wallet</Th><Th /></tr>
+              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Commission</Th><Th>Wallet</Th><Th /></tr>
             </thead>
             <tbody>
               {(rows ?? []).map((u) => (
@@ -372,6 +377,9 @@ function UsersTab({ rid }: { rid: number }) {
                   </Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
+                  </Td>
+                  <Td>
+                    {u.role === "AGENT" ? <CommissionEditor u={u} rid={rid} onDone={load} /> : <span className="text-xs text-slate-300">—</span>}
                   </Td>
                   <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{bdt(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
                   <Td>
@@ -422,9 +430,23 @@ function UsersTab({ rid }: { rid: number }) {
             </Select>
           </Field>
           {form.role === "AGENT" && (
-            <Field label="Commission (%)">
-              <Input type="number" min={0} max={100} value={form.commissionRate} onChange={(e) => setForm({ ...form, commissionRate: e.target.value })} />
-            </Field>
+            <>
+              <Field label="Commission type">
+                <Select value={form.commissionKind} onChange={(e) => setForm({ ...form, commissionKind: e.target.value })}>
+                  <option value="PERCENT">Percent of rent (%)</option>
+                  <option value="FLAT">Fixed amount (৳ per booking)</option>
+                </Select>
+              </Field>
+              <Field label={form.commissionKind === "FLAT" ? "Commission (৳ / booking)" : "Commission (%)"}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={form.commissionKind === "PERCENT" ? 100 : undefined}
+                  value={form.commissionRate}
+                  onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
+                />
+              </Field>
+            </>
           )}
           {form.role === "AGENT" && (
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -434,6 +456,37 @@ function UsersTab({ rid }: { rid: number }) {
           <Button onClick={create} loading={busy} disabled={!form.name || !form.phone || !form.password}>Create account</Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function CommissionEditor({ u, rid, onDone }: { u: UserRow; rid: number; onDone: () => void }) {
+  const { push } = useToast();
+  const [kind, setKind] = useState(u.commissionKind === "FLAT" ? "FLAT" : "PERCENT");
+  const [value, setValue] = useState(String(u.commissionRate ?? ""));
+  const dirty = kind !== (u.commissionKind ?? "PERCENT") || Number(value) !== Number(u.commissionRate ?? 0);
+  return (
+    <div className="flex items-center gap-1.5">
+      <Select className="!w-24 !py-1" value={kind} onChange={(e) => setKind(e.target.value)}>
+        <option value="PERCENT">%</option>
+        <option value="FLAT">৳ fixed</option>
+      </Select>
+      <Input className="!w-16 !py-1" type="number" min={0} max={kind === "PERCENT" ? 100 : undefined} value={value} onChange={(e) => setValue(e.target.value)} />
+      <button
+        onClick={async () => {
+          try {
+            await api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body: { commissionKind: kind, commissionRate: Number(value) } });
+            push("Commission saved");
+            onDone();
+          } catch (ex) {
+            push((ex as Error).message, "err");
+          }
+        }}
+        disabled={!dirty}
+        className="rounded-lg border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40"
+      >
+        Save
+      </button>
     </div>
   );
 }

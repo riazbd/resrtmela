@@ -316,18 +316,27 @@ export class PlatformService {
         },
       },
     });
-    return rows.map((r) => ({ ...r.user, wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null, commissionRate: r.commissionRate }));
+    return rows.map((r) => ({
+      ...r.user,
+      wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null,
+      commissionRate: r.commissionRate != null ? Number(r.commissionRate) : null,
+      commissionKind: r.commissionKind,
+    }));
   }
 
   async createResortUser(
     claims: JwtClaims,
     resortId: number,
-    input: { name: string; phone: string; password: string; role: string; commissionRate?: number },
+    input: { name: string; phone: string; password: string; role: string; commissionRate?: number; commissionKind?: string },
   ) {
     requireResortAccess(claims, resortId);
     requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN]);
     if (!["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"].includes(input.role)) {
       throw badRequest("role must be MANAGER | FRONT_DESK | AGENT | HOUSEKEEPING");
+    }
+    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
+    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
+      throw badRequest("percent commission 1-100");
     }
     const phone = input.phone.replace(/\D/g, "");
     const exists = await this.prisma.user.findUnique({ where: { phone } });
@@ -342,8 +351,15 @@ export class PlatformService {
         status: isAgent ? "pending" : "active",
       },
     });
-    await this.prisma.userResort.create({ data: { userId: user.id, resortId, commissionRate: input.commissionRate ?? (isAgent ? 5 : null) } });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name } });
+    await this.prisma.userResort.create({
+      data: {
+        userId: user.id,
+        resortId,
+        commissionRate: isAgent ? (input.commissionRate ?? 5) : null,
+        commissionKind: isAgent ? kind : "PERCENT",
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, commissionKind: kind } });
     return { id: user.id, name: user.name, phone: user.phone, role: user.role, status: user.status };
   }
 
@@ -351,7 +367,7 @@ export class PlatformService {
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; commissionRate?: number; name?: string },
+    input: { role?: string; status?: string; password?: string; commissionRate?: number; commissionKind?: string; name?: string },
   ) {
     requireResortAccess(claims, resortId);
     requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN]);
@@ -369,10 +385,20 @@ export class PlatformService {
     if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
     if (input.name) data.name = input.name;
     const user = await this.prisma.user.update({ where: { id: userId }, data });
-    if (input.commissionRate != null) {
-      await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { commissionRate: input.commissionRate } });
+    if (input.commissionRate != null || input.commissionKind != null) {
+      const kind = input.commissionKind === "FLAT" ? "FLAT" : input.commissionKind === "PERCENT" ? "PERCENT" : linked.commissionKind;
+      if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
+        throw badRequest("percent commission 1-100");
+      }
+      await this.prisma.userResort.update({
+        where: { userId_resortId: { userId, resortId } },
+        data: {
+          ...(input.commissionRate != null ? { commissionRate: input.commissionRate } : {}),
+          commissionKind: kind,
+        },
+      });
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, commissionKind: input.commissionKind } });
     return { id: user.id, name: user.name, role: user.role, status: user.status };
   }
 
