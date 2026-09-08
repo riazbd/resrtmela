@@ -4,7 +4,8 @@ import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
 
 class SubscriptionDto {
-  @IsIn(["STARTER", "GROWTH", "CHAIN"]) plan!: string;
+  // validated against the plan table, not a list baked into the build
+  @IsString() @MaxLength(16) plan!: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
 }

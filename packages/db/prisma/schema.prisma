@@ -640,18 +640,13 @@ model Counter {
 
 // ───────────────────────── SaaS platform layer ─────────────────────────
 
-enum SubscriptionPlan {
-  STARTER
-  GROWTH
-  CHAIN
-}
-
 /// A resort's platform subscription ("booking" the resort makes with the platform).
 model Subscription {
   id          BigInt           @id @default(autoincrement())
   resortId    Int
   resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  plan        SubscriptionPlan @default(STARTER)
+  /// PlatformPlan.name — a string, not an enum, so a new plan needs no migration
+  plan        String           @default("STARTER") @db.VarChar(16)
   status      String           @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
   monthlyFee  Decimal          @db.Decimal(10, 2)
   startedAt   DateTime         @default(now())
@@ -844,6 +839,7 @@ model PlatformPlan {
   monthlyFee Decimal @db.Decimal(10, 2)
   maxRooms   Int     @default(10)
   maxResorts Int     @default(1) // multi-resort gate: CHAIN allows several resorts per owner
+  trialDays  Int     @default(14) // free trial length for this plan
   blurb      String? @db.VarChar(200)
   active     Boolean @default(true)
   sortOrder  Int     @default(0)

@@ -13,31 +13,22 @@ import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 
-const PLAN_FEES: Record<string, number> = { STARTER: 2500, GROWTH: 5000, CHAIN: 12000 };
-const PLAN_LIMITS: Record<string, number> = { STARTER: 10, GROWTH: 40, CHAIN: 10000 };
-const PLAN_RESORTS: Record<string, number> = { STARTER: 1, GROWTH: 2, CHAIN: 10 };
-const TRIAL_DAYS = 14;
-
+/**
+ * Starting plans for a brand-new platform. They are a seed, not a definition:
+ * once a row exists it belongs to the super admin, who edits it in
+ * Platform -> Plans. Nothing here ever writes over an existing row again --
+ * the old backfill reset maxResorts on every call, silently undoing edits.
+ */
 const PLAN_SEEDS = [
-  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
-  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, maxResorts: 2, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
-  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, maxResorts: 10, blurb: "For multi-resort owners", sortOrder: 3 },
+  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
+  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, maxResorts: 2, trialDays: 14, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
+  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, maxResorts: 10, trialDays: 14, blurb: "For multi-resort owners", sortOrder: 3 },
 ];
 
-/** ensure the three plans exist (first call seeds them) */
+/** Seeds the starting plans on an empty platform. Never edits existing rows. */
 async function ensurePlans(prisma: PrismaService) {
-  const count = await prisma.platformPlan.count();
-  if (count === 0) {
+  if ((await prisma.platformPlan.count()) === 0) {
     await prisma.platformPlan.createMany({ data: PLAN_SEEDS as never });
-    return;
-  }
-  // backfill maxResorts on rows created before the column existed
-  await prisma.platformPlan.updateMany({
-    where: { name: { in: Object.keys(PLAN_RESORTS) } },
-    data: { maxResorts: 1 },
-  });
-  for (const [name, n] of Object.entries(PLAN_RESORTS)) {
-    if (n > 1) await prisma.platformPlan.updateMany({ where: { name }, data: { maxResorts: n } });
   }
 }
 
@@ -174,19 +165,22 @@ export class PlatformService {
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
-    input: { plan: "STARTER" | "GROWTH" | "CHAIN"; monthlyFee?: number; note?: string },
+    input: { plan: string; monthlyFee?: number; note?: string },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
+    // the plan table is the authority: a plan added there works with no deploy
     const def = await this.prisma.platformPlan.findUnique({ where: { name: input.plan } });
+    if (!def) throw badRequest(`Unknown plan "${input.plan}"`);
+    if (!def.active) throw badRequest(`Plan "${def.label}" is not available`);
     const now = new Date();
-    const trialEndsAt = addDays(now, TRIAL_DAYS);
+    const trialEndsAt = addDays(now, def.trialDays);
     const sub = await this.prisma.subscription.create({
       data: {
         resortId,
         plan: input.plan,
         status: "TRIAL",
-        monthlyFee: input.monthlyFee ?? Number(def?.monthlyFee ?? PLAN_FEES[input.plan] ?? 0),
+        monthlyFee: input.monthlyFee ?? Number(def.monthlyFee),
         trialEndsAt,
         renewsAt: trialEndsAt,
         note: input.note,
