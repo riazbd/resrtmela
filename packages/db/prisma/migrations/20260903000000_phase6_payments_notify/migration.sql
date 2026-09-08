@@ -1,4 +1,4 @@
-﻿CREATE TABLE `payment_intents` (
+CREATE TABLE `payment_intents` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `resortId` INTEGER NOT NULL,
   `bookingId` INTEGER NOT NULL,

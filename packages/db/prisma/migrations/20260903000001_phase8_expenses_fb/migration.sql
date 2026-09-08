@@ -1,4 +1,4 @@
-﻿-- Phase 8: expenses, F&B bills, invoices, resort settings
+-- Phase 8: expenses, F&B bills, invoices, resort settings
 
 ALTER TABLE `resorts` ADD COLUMN `invoicePrefix` VARCHAR(12) NOT NULL DEFAULT 'SER',
   ADD COLUMN `checkInTime` VARCHAR(16) NOT NULL DEFAULT '12:00 PM',
