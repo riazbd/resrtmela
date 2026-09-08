@@ -170,7 +170,7 @@ export class AuthService {
         status: true,
         resorts: {
           select: {
-            resort: { select: { id: true, name: true, tenantId: true } },
+            resort: { select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true } },
             commissionRate: true,
           },
         },

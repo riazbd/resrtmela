@@ -122,6 +122,7 @@ model Resort {
   location           String?        @db.VarChar(255)
   timezone           String         @default("Asia/Dhaka") @db.VarChar(64)
   currency           String         @default("BDT") @db.VarChar(8)
+  locale             String         @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
   showRatesToAgents  Boolean        @default(false)
   taxRatePct         Decimal        @default(0.00) @db.Decimal(5, 2)
   agentPaymentHours  Int            @default(48) // agent bookings must be fully paid this many hours before check-in

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, iso, type CalendarBooking, type Room } from "@/lib/api";
+import { api, iso, type CalendarBooking, type Room, money} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Spinner } from "@/components/ui";
 
@@ -147,7 +147,7 @@ export default function CalendarPage() {
                     <td className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-3 py-1.5">
                       <div className="text-sm font-medium text-slate-700">{room.name}</div>
                       <div className="text-[10px] text-slate-400">
-                        ৳{Number(room.baseRate).toLocaleString("en-IN")}
+                        {money(Number(room.baseRate))}
                       </div>
                     </td>
                     {dayList.map((d) => {

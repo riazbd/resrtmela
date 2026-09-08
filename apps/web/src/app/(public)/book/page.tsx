@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, bdt, type GuestResort } from "@/lib/api";
+import { api, money, type GuestResort } from "@/lib/api";
 import { Card, Empty, Spinner } from "@/components/ui";
 
 export default function DiscoverPage() {
@@ -39,7 +39,7 @@ export default function DiscoverPage() {
                   </div>
                   {min !== null && (
                     <div className="mt-1 text-lg font-bold text-brand-700">
-                      From ৳{min.toLocaleString("en-IN")} <span className="text-xs font-normal text-slate-400">/ night</span>
+                      From {money(min)} <span className="text-xs font-normal text-slate-400">/ night</span>
                     </div>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy } from "@/lib/api";
+import { api, money, dmy, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
@@ -195,7 +195,7 @@ export default function ActivitiesPage() {
                       </button>
                       <div className="text-[11px] text-slate-400">{a.category.replace(/_/g, " ")}</div>
                     </Td>
-                    <Td>{bdt(a.basePrice)}</Td>
+                    <Td>{money(a.basePrice)}</Td>
                     <Td className="text-xs">{a.durationMin}m</Td>
                     <Td className="text-xs">
                       {a.schedules.length === 0
@@ -281,7 +281,7 @@ export default function ActivitiesPage() {
                   {CATEGORIES.map((c) => <option key={c}>{c.replace(/_/g, " ")}</option>)}
                 </Select>
               </Field>
-              <Field label="Price (৳/person)"><Input type="number" min={0} value={editing.basePrice ?? 0} onChange={(e) => setEditing({ ...editing, basePrice: Number(e.target.value) })} /></Field>
+              <Field label={`Price (${cur()}/person)`}><Input type="number" min={0} value={editing.basePrice ?? 0} onChange={(e) => setEditing({ ...editing, basePrice: Number(e.target.value) })} /></Field>
               <Field label="Duration (min)"><Input type="number" min={15} value={editing.durationMin ?? 60} onChange={(e) => setEditing({ ...editing, durationMin: Number(e.target.value) })} /></Field>
               <Field label="Min per slot"><Input type="number" min={1} value={editing.minPerSlot ?? 1} onChange={(e) => setEditing({ ...editing, minPerSlot: Number(e.target.value) })} /></Field>
               <Field label="Max per slot"><Input type="number" min={1} value={editing.maxPerSlot ?? 10} onChange={(e) => setEditing({ ...editing, maxPerSlot: Number(e.target.value) })} /></Field>

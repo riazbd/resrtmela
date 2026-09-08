@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, getToken, setToken, bdt, type GuestResort, type GuestAvailability, type GuestTrip } from "@/lib/api";
+import { api, getToken, setToken, money, type GuestResort, type GuestAvailability, type GuestTrip } from "@/lib/api";
 import { Button, Card, Empty, Field, Input, Spinner, useToast } from "@/components/ui";
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
@@ -108,7 +108,7 @@ export default function ResortBookingPage() {
           fullName: fullName || undefined, remarks: "booked via web — pay at resort",
         },
       });
-      setConfirmed(`${trip.code} · due ৳${trip.due.toLocaleString("en-IN")}`);
+      setConfirmed(`${trip.code} · due ${money(trip.due)}`);
       setAvail(null); setQty({});
     } catch (e) { setErr((e as Error).message); } finally { setBooking(false); }
   }
@@ -150,7 +150,7 @@ export default function ResortBookingPage() {
                   <div key={t.roomTypeId} className="flex items-center justify-between border-b border-slate-100 py-2">
                     <div className="flex-1">
                       <div className="font-medium text-sm">{t.name}</div>
-                      <div className="text-[11px] text-slate-400">৳{t.pricePerNight.toLocaleString("en-IN")}/night · sleeps {t.maxAdults}+{t.maxChildren} · {t.available} left</div>
+                      <div className="text-[11px] text-slate-400">{money(t.pricePerNight)}/night · sleeps {t.maxAdults}+{t.maxChildren} · {t.available} left</div>
                     </div>
                     {t.available === 0 ? <Badge value="CANCELLED" /> : (
                       <div className="flex items-center gap-3">
@@ -206,7 +206,7 @@ export default function ResortBookingPage() {
                   )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-500">
-                      {pickedCount} room(s) × {nights}n = <b>৳{total.toLocaleString("en-IN")}</b>
+                      {pickedCount} room(s) × {nights}n = <b>{money(total)}</b>
                     </span>
                     <Button onClick={book} loading={booking} disabled={!verified}>Book — pay at resort</Button>
                   </div>
@@ -221,7 +221,7 @@ export default function ResortBookingPage() {
               <div className="flex flex-wrap gap-2">
                 {(resort.activities ?? []).map((a) => (
                   <span key={a.id} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs">
-                    {a.name} · {a.durationMin}m · ৳{a.price.toLocaleString("en-IN")}
+                    {a.name} · {a.durationMin}m · {money(a.price)}
                   </span>
                 ))}
               </div>

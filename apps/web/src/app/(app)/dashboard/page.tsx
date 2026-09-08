@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, bdt, dmy, type BookingRow, type Room } from "@/lib/api";
+import { api, money, dmy, type BookingRow, type Room } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
 
@@ -85,7 +85,7 @@ export default function DashboardPage() {
         {dues && (
           <Stat
             label="Outstanding dues"
-            value={bdt(dues.total)}
+            value={money(dues.total)}
             sub={`${dues.count} booking(s)`}
             tone="red"
           />
@@ -124,7 +124,7 @@ export default function DashboardPage() {
                     <Td>
                       <Badge value={b.state} />
                     </Td>
-                    <Td className="text-right font-medium">{bdt(b.due)}</Td>
+                    <Td className="text-right font-medium">{money(b.due)}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -156,7 +156,7 @@ export default function DashboardPage() {
                     <Td>
                       <Badge value={b.state} />
                     </Td>
-                    <Td className="text-right font-medium">{bdt(b.due)}</Td>
+                    <Td className="text-right font-medium">{money(b.due)}</Td>
                   </tr>
                 ))}
               </tbody>

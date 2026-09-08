@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy, type PLReport } from "@/lib/api";
+import { api, money, dmy, type PLReport } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useToast } from "@/components/ui";
 
@@ -48,7 +48,7 @@ function PLRow({ label, value, tone = "default", bold = false, muted = false }: 
   return (
     <div className={`flex items-center justify-between py-0.5 ${bold ? "mt-0.5" : ""}`}>
       <span className={`${muted ? "text-[11px] text-slate-400" : "text-xs text-slate-600"} ${bold ? "font-bold text-slate-900" : ""}`}>{label}</span>
-      <span className={`${bold ? "text-sm font-bold" : "text-xs font-semibold"} ${tones[tone]}`}>{bdt(value)}</span>
+      <span className={`${bold ? "text-sm font-bold" : "text-xs font-semibold"} ${tones[tone]}`}>{money(value)}</span>
     </div>
   );
 }
@@ -155,7 +155,7 @@ export default function ReportsPage() {
               <div key={r.userId ?? "x"} className="rounded-lg border border-slate-200 p-3">
                 <div className="text-sm font-semibold">{r.name}</div>
                 <div className="text-xs text-slate-400">{r.advances} advance(s)</div>
-                <div className="mt-1 text-lg font-bold text-brand-700">{bdt(r.total)}</div>
+                <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
                 <div className="mt-1 text-[10px] text-slate-400">
                   {r.codes.slice(0, 6).join(", ")}{r.codes.length > 6 ? "…" : ""}
                 </div>
@@ -168,13 +168,13 @@ export default function ReportsPage() {
       {metrics && (
         <Card title="P&L summary (management metrics)">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MiniBox label="Resort revenue" value={bdt(metrics.resortRevenue)} />
-            <MiniBox label="Discount" value={bdt(metrics.discount)} />
-            <MiniBox label="Net room revenue" value={bdt(metrics.netRoomRevenue)} />
-            <MiniBox label="Restaurant revenue" value={bdt(metrics.restaurantRevenue)} />
-            <MiniBox label="Gross income" value={bdt(metrics.grossIncome)} tone="green" />
-            <MiniBox label="Expenses" value={bdt(metrics.expenses)} tone="red" />
-            <MiniBox label="NET PROFIT" value={bdt(metrics.netProfit)} tone={metrics.netProfit >= 0 ? "green" : "red"} />
+            <MiniBox label="Resort revenue" value={money(metrics.resortRevenue)} />
+            <MiniBox label="Discount" value={money(metrics.discount)} />
+            <MiniBox label="Net room revenue" value={money(metrics.netRoomRevenue)} />
+            <MiniBox label="Restaurant revenue" value={money(metrics.restaurantRevenue)} />
+            <MiniBox label="Gross income" value={money(metrics.grossIncome)} tone="green" />
+            <MiniBox label="Expenses" value={money(metrics.expenses)} tone="red" />
+            <MiniBox label="NET PROFIT" value={money(metrics.netProfit)} tone={metrics.netProfit >= 0 ? "green" : "red"} />
           </div>
         </Card>
       )}
@@ -241,9 +241,9 @@ export default function ReportsPage() {
                     <Td className="font-medium">{r.name}</Td>
                     <Td className="text-xs">{r.commissionRate}%</Td>
                     <Td>{r.bookings}</Td>
-                    <Td className="text-right">{bdt(r.rent)}</Td>
-                    <Td className="text-right text-red-700">{bdt(r.due)}</Td>
-                    <Td className="text-right font-bold text-green-700">{bdt(r.commission)}</Td>
+                    <Td className="text-right">{money(r.rent)}</Td>
+                    <Td className="text-right text-red-700">{money(r.due)}</Td>
+                    <Td className="text-right font-bold text-green-700">{money(r.commission)}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -266,8 +266,8 @@ export default function ReportsPage() {
                   <tr key={r.source}>
                     <Td><Badge value={r.source} /></Td>
                     <Td>{r.bookings}</Td>
-                    <Td className="text-right">{bdt(r.rent)}</Td>
-                    <Td className="text-right text-red-700">{bdt(r.due)}</Td>
+                    <Td className="text-right">{money(r.rent)}</Td>
+                    <Td className="text-right text-red-700">{money(r.due)}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -287,10 +287,10 @@ export default function ReportsPage() {
                 {daily.map((d) => (
                   <tr key={d.date}>
                     <Td className="text-xs">{d.date}</Td>
-                    <Td className="text-right">{bdt(d.roomRevenue)}</Td>
-                    <Td className="text-right">{bdt(d.fbRevenue)}</Td>
-                    <Td className="text-right text-red-700">{bdt(d.expenses)}</Td>
-                    <Td className="text-right font-semibold">{bdt(d.net)}</Td>
+                    <Td className="text-right">{money(d.roomRevenue)}</Td>
+                    <Td className="text-right">{money(d.fbRevenue)}</Td>
+                    <Td className="text-right text-red-700">{money(d.expenses)}</Td>
+                    <Td className="text-right font-semibold">{money(d.net)}</Td>
                   </tr>
                 ))}
               </tbody>

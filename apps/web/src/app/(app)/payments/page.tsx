@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy, type BookingRow } from "@/lib/api";
+import { api, money, dmy, type BookingRow, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 
@@ -38,7 +38,7 @@ export default function PaymentsPage() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="Total outstanding" value={bdt(data.total)} tone="red" />
+        <Stat label="Total outstanding" value={money(data.total)} tone="red" />
         <Stat label="Bookings with dues" value={String(data.count)} tone="amber" />
       </div>
 
@@ -61,9 +61,9 @@ export default function PaymentsPage() {
                     </Td>
                     <Td className="text-xs">{dmy(b.checkIn)} → {dmy(b.checkOut)}</Td>
                     <Td><Badge value={b.state} /></Td>
-                    <Td className="text-right">{bdt(b.rent)}</Td>
-                    <Td className="text-right text-green-700">{bdt(b.paid)}</Td>
-                    <Td className="text-right font-bold text-red-700">{bdt(b.due)}</Td>
+                    <Td className="text-right">{money(b.rent)}</Td>
+                    <Td className="text-right text-green-700">{money(b.paid)}</Td>
+                    <Td className="text-right font-bold text-red-700">{money(b.due)}</Td>
                     <Td className="text-right"><Button size="sm" variant="ghost" onClick={() => setPayFor(b)}>Collect</Button></Td>
                   </tr>
                 ))}
@@ -97,7 +97,7 @@ function CollectModal({ row, onClose, onDone }: {
     setBusy(true);
     try {
       await api(`/bookings/${row.id}/payments`, { method: "POST", body: { amount, method } });
-      push(`Collected ${bdt(amount)} for ${row.code}`);
+      push(`Collected ${money(amount)} for ${row.code}`);
       onDone();
       onClose();
     } catch (ex) {
@@ -112,10 +112,10 @@ function CollectModal({ row, onClose, onDone }: {
       {row && (
         <div className="space-y-3">
           <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            {row.guest?.fullName} · due <b className="text-red-700">{bdt(row.due)}</b>
+            {row.guest?.fullName} · due <b className="text-red-700">{money(row.due)}</b>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Amount (৳)"><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} /></Field>
+            <Field label={`Amount (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} /></Field>
             <Field label="Method">
               <Select value={method} onChange={(e) => setMethod(e.target.value)}>
                 {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}

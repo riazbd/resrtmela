@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, bdt, dmy, type CmsRow } from "@/lib/api";
+import { api, money, dmy, type CmsRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
@@ -196,8 +196,8 @@ export default function PlatformPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard icon={Building2} label="Resorts" value={`${ov.resorts.active}/${ov.resorts.total}`} sub={`${ov.resorts.suspended} suspended`} />
             <StatCard icon={Users} label="Agents" value={String(ov.agents.total)} sub={`${ov.agents.pending} pending · ${ov.agents.active} active`} />
-            <StatCard icon={Wallet} label="MRR" value={bdt(ov.subscriptions.mrr)} sub={`${ov.subscriptions.active} active · ${ov.subscriptions.trial} trial`} />
-            <StatCard icon={CreditCard} label="Dues outstanding" value={bdt(ov.duesOutstanding)} sub={`${ov.subscriptions.pastDue} past-due subs`} />
+            <StatCard icon={Wallet} label="MRR" value={money(ov.subscriptions.mrr)} sub={`${ov.subscriptions.active} active · ${ov.subscriptions.trial} trial`} />
+            <StatCard icon={CreditCard} label="Dues outstanding" value={money(ov.duesOutstanding)} sub={`${ov.subscriptions.pastDue} past-due subs`} />
           </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card className="p-5">
@@ -320,7 +320,7 @@ export default function PlatformPage() {
                   </Td>
                   <Td className="text-xs text-slate-500">{a.resorts.map((r) => r.name).join(", ") || "—"}</Td>
                   <Td>{a.bookings}</Td>
-                  <Td>{a.wallet ? <span className={a.wallet.active ? "text-emerald-700" : "text-slate-400"}>{bdt(a.wallet.balance)}</span> : "—"}</Td>
+                  <Td>{a.wallet ? <span className={a.wallet.active ? "text-emerald-700" : "text-slate-400"}>{money(a.wallet.balance)}</span> : "—"}</Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${a.status === "active" ? "bg-emerald-50 text-emerald-700" : a.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{a.status}</span>
                   </Td>
@@ -399,7 +399,7 @@ export default function PlatformPage() {
                     {day && <div className="font-bold text-slate-600">{day}</div>}
                     {c && (
                       <div className="mt-0.5 space-y-0.5">
-                        {c.dueCount > 0 && <div className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">{c.dueCount} due · {bdt(c.dues)}</div>}
+                        {c.dueCount > 0 && <div className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">{c.dueCount} due · {money(c.dues)}</div>}
                         {c.renewals > 0 && <div className="rounded bg-sky-100 px-1 py-0.5 text-[10px] font-semibold text-sky-800">{c.renewals} renewal</div>}
                       </div>
                     )}
@@ -426,7 +426,7 @@ export default function PlatformPage() {
                   <Td>{d.subscription.plan}</Td>
                   <Td className="text-xs text-slate-500">{dmy(d.periodStart)} → {dmy(d.periodEnd)}</Td>
                   <Td>{dmy(d.dueDate)}</Td>
-                  <Td className="text-right font-bold">{bdt(d.amount)}</Td>
+                  <Td className="text-right font-bold">{money(d.amount)}</Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${d.status === "PAID" ? "bg-emerald-50 text-emerald-700" : d.status === "OVERDUE" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{d.status}</span>
                   </Td>

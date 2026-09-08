@@ -14,6 +14,7 @@ class CreateResortDto {
   @IsString() @MaxLength(160) name!: string;
   @IsOptional() @IsString() location?: string;
   @IsOptional() @IsString() timezone?: string;
+  @IsOptional() @IsString() @MaxLength(16) locale?: string;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsBoolean() showRatesToAgents?: boolean;
 }
@@ -22,6 +23,7 @@ class UpdateResortDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() location?: string;
   @IsOptional() @IsString() timezone?: string;
+  @IsOptional() @IsString() @MaxLength(16) locale?: string;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsBoolean() showRatesToAgents?: boolean;
   @IsOptional() @IsNumber() taxRatePct?: number;

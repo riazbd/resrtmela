@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, bdt } from "@/lib/api";
+import { api, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
@@ -90,9 +90,9 @@ export default function DaySheetPage() {
 
       {/* day strip */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-        <Stat label={t("ds.balanceDue")} value={bdt(strip.balanceDue)} tone={strip.balanceDue > 0 ? "red" : "default"} />
-        <Stat label={t("ds.nightRevenue")} value={bdt(strip.revenue)} tone="green" />
-        <Stat label={t("ds.expenses")} value={bdt(strip.expenses)} tone="amber" />
+        <Stat label={t("ds.balanceDue")} value={money(strip.balanceDue)} tone={strip.balanceDue > 0 ? "red" : "default"} />
+        <Stat label={t("ds.nightRevenue")} value={money(strip.revenue)} tone="green" />
+        <Stat label={t("ds.expenses")} value={money(strip.expenses)} tone="amber" />
         <Stat label={t("ds.occupancy")} value={`${strip.occupancy}/${strip.totalRooms}`} />
         <Stat label={`${t("ds.arrivals")} / ${t("ds.departures")}`} value={`${strip.arrivals} / ${strip.departures}`} />
       </div>
@@ -157,13 +157,13 @@ export default function DaySheetPage() {
                     <Td>
                       {c.due !== null && c.due !== undefined ? (
                         <span className={`font-bold ${c.due > 0 ? "text-red-700" : "text-green-700"}`}>
-                          {bdt(c.due)}
+                          {money(c.due)}
                         </span>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
                     </Td>
-                    <Td className="text-slate-600">{c.revenue != null ? bdt(c.revenue) : "—"}</Td>
+                    <Td className="text-slate-600">{c.revenue != null ? money(c.revenue) : "—"}</Td>
                     <Td className="text-right">
                       {c.mode === "booked" && (
                         <span className="text-xs text-brand-600">→</span>

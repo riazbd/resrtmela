@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, perNightRevenue, type Money } from "../common/money";
@@ -1088,7 +1088,8 @@ export class BookingsService {
     if (!guestEmail) {
       throw Object.assign(new Error("Guest has no email on record"), { status: 400 });
     }
-    const money = (n: number) => `৳${n.toLocaleString("en-IN")}`;
+    const money = (n: number) =>
+      formatMoney(n, { currency: inv.resort.currency, locale: inv.resort.locale, decimals: 0 });
     const rows = inv.items
       .map(
         (i) =>
@@ -1198,6 +1199,8 @@ export class BookingsService {
         website: b.resort.website,
         checkInTime: b.resort.checkInTime,
         checkOutTime: b.resort.checkOutTime,
+        currency: b.resort.currency,
+        locale: b.resort.locale,
       },
       booking: {
         code: b.code,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, guestCancel, bdt, dmy, type GuestTrip } from "@/lib/api";
+import { api, guestCancel, money, dmy, type GuestTrip } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, Empty, Spinner, useToast } from "@/components/ui";
 
@@ -59,9 +59,9 @@ export default function GuestTripsPage() {
                 <div className="font-semibold text-slate-900">{t.resortName ?? t.resort?.name}</div>
                 <div className="text-xs text-slate-400">{t.code} · {dmy(t.checkIn)} → {dmy(t.checkOut)} · {t.rooms.join(", ")}</div>
                 <div className="mt-1 text-sm">
-                  {t.rent > 0 && <span>Rent ৳{t.rent.toLocaleString("en-IN")} </span>}
-                  {t.discount > 0 && <span className="text-green-600">− ৳{t.discount.toLocaleString("en-IN")} </span>}
-                  <b className={t.due > 0 ? "text-red-600" : "text-green-600"}>Due ৳{t.due.toLocaleString("en-IN")}</b>
+                  {t.rent > 0 && <span>Rent {money(t.rent)} </span>}
+                  {t.discount > 0 && <span className="text-green-600">− {money(t.discount)} </span>}
+                  <b className={t.due > 0 ? "text-red-600" : "text-green-600"}>Due {money(t.due)}</b>
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">

@@ -110,3 +110,74 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Agent: ["agent.book", "agent.wallet.view"],
 };
 
+
+// ───────────────────────── Money formatting ─────────────────────────
+
+/**
+ * Currency and locale belong to the tenant, not to the binary.
+ *
+ * `narrowSymbol` is what keeps ৳ rather than the "BDT" ICU otherwise prints
+ * for Bangla taka, and it gives $ and ₹ for the currencies a second tenant
+ * might use — one rule, no symbol table to maintain.
+ *
+ * The defaults reproduce exactly what the console rendered when the taka sign
+ * was hard-coded, so existing tenants see no change. en-IN rather than en-BD
+ * is deliberate: Bangladesh groups in lakh and crore, and ICU's en-BD does not.
+ */
+export const DEFAULT_CURRENCY = "BDT";
+export const DEFAULT_LOCALE = "en-IN";
+
+export interface MoneyFormat {
+  currency?: string;
+  locale?: string;
+  /** fraction digits; 0 for compact displays like stat tiles */
+  decimals?: number;
+}
+
+export function formatMoney(
+  amount: number | string | null | undefined,
+  format: MoneyFormat = {},
+): string {
+  const n = amount == null || amount === "" ? 0 : Number(amount);
+  const value = Number.isFinite(n) ? n : 0;
+  const currency = format.currency || DEFAULT_CURRENCY;
+  const locale = format.locale || DEFAULT_LOCALE;
+  const decimals = format.decimals ?? 2;
+
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    }).format(value);
+  } catch {
+    // an unknown currency or malformed locale must not blank out a screen
+    try {
+      return `${currency} ${value.toLocaleString(locale, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}`;
+    } catch {
+      return `${currency} ${value.toFixed(decimals)}`;
+    }
+  }
+}
+
+/** Just the symbol — for field labels like "Base rate (৳/night)". */
+export function currencySymbol(format: MoneyFormat = {}): string {
+  try {
+    return (
+      new Intl.NumberFormat(format.locale || DEFAULT_LOCALE, {
+        style: "currency",
+        currency: format.currency || DEFAULT_CURRENCY,
+        currencyDisplay: "narrowSymbol",
+      })
+        .formatToParts(0)
+        .find((p) => p.type === "currency")?.value ?? (format.currency || DEFAULT_CURRENCY)
+    );
+  } catch {
+    return format.currency || DEFAULT_CURRENCY;
+  }
+}

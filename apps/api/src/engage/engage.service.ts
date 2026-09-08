@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims } from "@rh/shared";
+import { ROLE, JwtClaims , formatMoney } from "@rh/shared";
 import { requireRoles, forbid, badRequest, isManagement } from "../common/rbac";
 import { requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
@@ -244,7 +244,7 @@ export class EngageService {
 
   /** sweep: flag agent bookings whose full-payment deadline is near/past; alert resort admins once per booking per day */
   async sweepPaymentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true } });
+    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
     const now = new Date();
     for (const resort of resorts) {
       const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
@@ -285,7 +285,7 @@ export class EngageService {
         const hoursLeft = Math.max(0, Math.round((b.checkIn!.getTime() - now.getTime()) / 3_600_000));
         await this.notify(admins.map((a) => a.userId), {
           title: `${b.code} unpaid — ${hoursLeft}h to check-in`,
-          body: `Agent booking ${b.code}: ${due.toLocaleString("en-IN")} ৳ due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
+          body: `Agent booking ${b.code}: ${formatMoney(due, { currency: resort.currency, locale: resort.locale })} due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
           kind: "alert",
           link: `/bookings?id=${b.id}`,
           resortId: resort.id,

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, getToken, setToken, permissionsFor, type Me, type Resort } from "./api";
+import { api, getToken, setToken, permissionsFor, setMoneyFormat, type Me, type Resort } from "./api";
 
 interface AuthState {
   me: Me | null;
@@ -58,6 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, []);
+
+  // money renders in the active resort's currency and locale
+  useEffect(() => {
+    setMoneyFormat({ currency: activeResort?.currency, locale: activeResort?.locale });
+  }, [activeResort]);
 
   // permission set for the active resort
   useEffect(() => {

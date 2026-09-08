@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, bdt, type Employee, type PayrollSheet } from "@/lib/api";
+import { api, money, type Employee, type PayrollSheet, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Check, Undo2, Pencil, Plus } from "lucide-react";
@@ -118,8 +118,8 @@ export default function PayrollPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Staff" value={String(sheet.totals.headcount)} />
           <Stat label="Paid" value={`${sheet.totals.paidCount}/${sheet.totals.headcount}`} />
-          <Stat label="Expected" value={bdt(sheet.totals.expected)} />
-          <Stat label="Disbursed" value={bdt(sheet.totals.paid)} />
+          <Stat label="Expected" value={money(sheet.totals.expected)} />
+          <Stat label="Disbursed" value={money(sheet.totals.paid)} />
         </div>
       )}
 
@@ -135,14 +135,14 @@ export default function PayrollPage() {
                   <tr key={r.employeeId} className="border-t border-slate-100">
                     <Td className="font-semibold text-slate-800">{r.name}</Td>
                     <Td className="text-xs text-slate-500">{r.designation ?? "—"}</Td>
-                    <Td>{bdt(r.salary)}</Td>
+                    <Td>{money(r.salary)}</Td>
                     <Td>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.paid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                         {r.paid ? "PAID" : "DUE"}
                       </span>
                     </Td>
                     <Td className="text-xs text-slate-500">
-                      {r.paid ? `${bdt(r.amount)} · ${r.method ?? ""} · ${r.paidAt ? new Date(r.paidAt).toLocaleDateString("en-GB") : ""}` : "—"}
+                      {r.paid ? `${money(r.amount)} · ${r.method ?? ""} · ${r.paidAt ? new Date(r.paidAt).toLocaleDateString("en-GB") : ""}` : "—"}
                     </Td>
                     <Td>
                       <div className="flex justify-end gap-1.5">
@@ -182,7 +182,7 @@ export default function PayrollPage() {
                       <div className="text-xs text-slate-400">{e.designation ?? ""} {e.active ? "" : "· inactive"}</div>
                     </Td>
                     <Td className="text-xs">{e.phone ?? "—"}</Td>
-                    <Td>{bdt(e.salary)}</Td>
+                    <Td>{money(e.salary)}</Td>
                     <Td>
                       <div className="flex justify-end gap-1.5">
                         {canManage && (
@@ -215,7 +215,7 @@ export default function PayrollPage() {
                   <Field label="Name"><Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
                   <Field label="Phone"><Input value={editing.phone ?? ""} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} /></Field>
                   <Field label="Designation"><Input value={editing.designation ?? ""} onChange={(e) => setEditing({ ...editing, designation: e.target.value })} placeholder="Manager / Chef / Guard" /></Field>
-                  <Field label="Monthly salary (৳)"><Input type="number" min={0} value={String(editing.salary)} onChange={(e) => setEditing({ ...editing, salary: Number(e.target.value) })} /></Field>
+                  <Field label={`Monthly salary (${cur()})`}><Input type="number" min={0} value={String(editing.salary)} onChange={(e) => setEditing({ ...editing, salary: Number(e.target.value) })} /></Field>
                   <div className="flex gap-2">
                     <Button onClick={saveEmployee} loading={busy}>Save</Button>
                     <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
@@ -226,7 +226,7 @@ export default function PayrollPage() {
                   <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
                   <Field label="Phone"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="optional" /></Field>
                   <Field label="Designation"><Input value={form.designation} onChange={(e) => setForm({ ...form, designation: e.target.value })} placeholder="Manager / Chef / Guard" /></Field>
-                  <Field label="Monthly salary (৳)"><Input type="number" min={0} value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} /></Field>
+                  <Field label={`Monthly salary (${cur()})`}><Input type="number" min={0} value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} /></Field>
                   <Button onClick={saveEmployee} loading={busy} disabled={!form.name}>
                     <Plus className="inline h-4 w-4" /> Add staff
                   </Button>

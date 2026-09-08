@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt } from "@/lib/api";
+import { api, money, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
@@ -85,7 +85,7 @@ export default function ExpensesPage() {
         method: "POST",
         body: { date, category, details: details || undefined, amount: Number(amount), scope },
       });
-      push(`${bdt(Number(amount))} — ${category}`);
+      push(`${money(Number(amount))} — ${category}`);
       setCategory("");
       setDetails("");
       setAmount("");
@@ -126,7 +126,7 @@ export default function ExpensesPage() {
 
       {/* live day total — the sheet's "Daily Total Expense" column */}
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="দিনের মোট খরচ / Day total" value={bdt(dayTotal)} tone="red" sub={`${entryCount} entries`} />
+        <Stat label="দিনের মোট খরচ / Day total" value={money(dayTotal)} tone="red" sub={`${entryCount} entries`} />
       </div>
 
       {/* entry row */}
@@ -150,7 +150,7 @@ export default function ExpensesPage() {
             <Field label="বিবরণ / Details">
               <Input value={details} onChange={(e) => setDetails(e.target.value)} className="!w-48" />
             </Field>
-            <Field label="৳">
+            <Field label={cur()}>
               <Input
                 type="number"
                 min={1}
@@ -187,7 +187,7 @@ export default function ExpensesPage() {
                 <tr key={r.id}>
                   <Td className="font-medium">{r.category}</Td>
                   <Td className="text-xs text-slate-500">{r.details ?? "—"}</Td>
-                  <Td className="text-right font-semibold text-red-700">{bdt(r.amount)}</Td>
+                  <Td className="text-right font-semibold text-red-700">{money(r.amount)}</Td>
                   {canManage && (
                     <Td className="text-right">
                       <Button size="sm" variant="ghost" onClick={() => remove(r.id)}>✕</Button>

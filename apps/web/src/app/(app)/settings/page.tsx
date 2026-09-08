@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, type PermRole } from "@/lib/api";
+import { api, money, type PermRole } from "@/lib/api";
 import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
@@ -441,7 +441,7 @@ function UsersTab({ rid }: { rid: number }) {
                   <Td>
                     {u.role === "AGENT" ? <CommissionEditor u={u} rid={rid} onDone={load} /> : <span className="text-xs text-slate-300">—</span>}
                   </Td>
-                  <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{bdt(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
+                  <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{money(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
                   <Td>
                     <div className="flex justify-end gap-1.5">
                       {u.status !== "active" && (
@@ -837,7 +837,7 @@ function DiscountsTab({ rid }: { rid: number }) {
                 <tr key={o.id} className="border-t border-slate-100">
                   <Td className="font-semibold text-slate-800">{o.name}</Td>
                   <Td className="text-xs">{o.scope === "RESORT" ? "All rooms" : (o.roomType?.name ?? `room type ${o.roomTypeId}`)}</Td>
-                  <Td className="font-bold text-brand-700">{o.kind === "PERCENT" ? `${Number(o.value)}%` : bdt(o.value)}</Td>
+                  <Td className="font-bold text-brand-700">{o.kind === "PERCENT" ? `${Number(o.value)}%` : money(o.value)}</Td>
                   <Td className="text-xs text-slate-500">{o.validFrom ? new Date(o.validFrom).toLocaleDateString("en-GB") : "always"} → {o.validTo ? new Date(o.validTo).toLocaleDateString("en-GB") : "always"}</Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${o.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{o.active ? "active" : "off"}</span>

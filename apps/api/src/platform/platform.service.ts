@@ -1,12 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims, isPermissionKey } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey, formatMoney } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
+import { bookingTotals } from "../common/money";
 import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
@@ -604,13 +605,15 @@ export class PlatformService {
   }
 
   private async recomputePaymentState(bookingId: number) {
-    const b = await this.prisma.booking.findUnique({ where: { id: bookingId }, include: { items: true, payments: true } });
+    const b = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { items: true, payments: true, resort: { select: { taxRatePct: true } } },
+    });
     if (!b) return;
-    const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-    const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
-    const due = Math.max(0, rent - Number(b.discount) - paid);
-    const state = due === 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
-    await this.prisma.booking.update({ where: { id: bookingId }, data: { paymentState: state } });
+    // through the shared money module: this used to multiply nothing by nights
+    // and ignore tax, so a wallet payment could mark a multi-night stay paid
+    const { paymentState } = bookingTotals({ ...b, taxRatePct: b.resort.taxRatePct });
+    await this.prisma.booking.update({ where: { id: bookingId }, data: { paymentState } });
   }
 
   // ─────────────────── discount offers ───────────────────
@@ -787,7 +790,7 @@ export class PlatformService {
       where: { id: bookingId },
       include: {
         guest: { select: { fullName: true, email: true, phone: true } },
-        resort: { select: { name: true, contactPhone: true, address: true, checkInTime: true, checkOutTime: true } },
+        resort: { select: { name: true, contactPhone: true, address: true, checkInTime: true, checkOutTime: true, currency: true, locale: true } },
         items: { include: { room: { select: { name: true } } } },
         payments: true,
       },
@@ -796,11 +799,13 @@ export class PlatformService {
     requireResortAccess(claims, b.resortId);
     const to = b.guest.email?.trim();
     if (!to) throw badRequest("guest has no email on file");
+    const fmt = (n: number) =>
+      formatMoney(n, { currency: b.resort.currency, locale: b.resort.locale, decimals: 0 });
     const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
     const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
     const due = Math.max(0, rent - Number(b.discount) - paid);
     const rows = b.items
-      .map((i) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">${i.room?.name ?? i.itemKind}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">${i.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">৳${Number(i.unitPrice).toLocaleString("en-IN")}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">৳${(Number(i.unitPrice) * i.qty).toLocaleString("en-IN")}</td></tr>`)
+      .map((i) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0">${i.room?.name ?? i.itemKind}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">${i.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">${fmt(Number(i.unitPrice))}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">${fmt((Number(i.unitPrice) * i.qty))}</td></tr>`)
       .join("");
     const html = `
       <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#0f172a;max-width:640px">
@@ -815,10 +820,10 @@ export class PlatformService {
           ${rows}
         </table>
         <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px">
-          <tr><td style="padding:4px 10px">Rent</td><td style="padding:4px 10px;text-align:right">৳${rent.toLocaleString("en-IN")}</td></tr>
-          <tr><td style="padding:4px 10px">Discount</td><td style="padding:4px 10px;text-align:right">− ৳${Number(b.discount).toLocaleString("en-IN")}</td></tr>
-          <tr><td style="padding:4px 10px">Paid</td><td style="padding:4px 10px;text-align:right">৳${paid.toLocaleString("en-IN")}</td></tr>
-          <tr><td style="padding:6px 10px;font-weight:bold;background:#ecfdf5">Due</td><td style="padding:6px 10px;text-align:right;font-weight:bold;background:#ecfdf5">৳${due.toLocaleString("en-IN")}</td></tr>
+          <tr><td style="padding:4px 10px">Rent</td><td style="padding:4px 10px;text-align:right">${fmt(rent)}</td></tr>
+          <tr><td style="padding:4px 10px">Discount</td><td style="padding:4px 10px;text-align:right">− ${fmt(Number(b.discount))}</td></tr>
+          <tr><td style="padding:4px 10px">Paid</td><td style="padding:4px 10px;text-align:right">${fmt(paid)}</td></tr>
+          <tr><td style="padding:6px 10px;font-weight:bold;background:#ecfdf5">Due</td><td style="padding:6px 10px;text-align:right;font-weight:bold;background:#ecfdf5">${fmt(due)}</td></tr>
         </table>
         <div style="margin-top:14px;color:#64748b;font-size:12px">Check-in ${b.resort.checkInTime} · Check-out ${b.resort.checkOutTime}${b.resort.contactPhone ? ` · ${b.resort.contactPhone}` : ""}</div>
       </div>`;

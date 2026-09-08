@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, bdt } from "@/lib/api";
+import { api, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Spinner, useToast } from "@/components/ui";
 import { Building2, MapPin, Send, Check, Clock } from "lucide-react";
@@ -96,7 +96,7 @@ export default function AgentDiscoverPage() {
             </div>
             {r.priceFrom !== null && (
               <div className="mt-1 text-lg font-bold text-brand-700">
-                From {bdt(r.priceFrom)} <span className="text-xs font-normal text-slate-400">/night</span>
+                From {money(r.priceFrom)} <span className="text-xs font-normal text-slate-400">/night</span>
               </div>
             )}
             <div className="mt-auto pt-4">

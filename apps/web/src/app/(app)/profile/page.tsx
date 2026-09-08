@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy, type BookingRow } from "@/lib/api";
+import { api, money, dmy, type BookingRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 
@@ -95,8 +95,8 @@ export default function ProfilePage() {
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Stat label="My bookings" value={String(stats.count)} />
             <Stat label="Active" value={String(stats.active)} tone="green" />
-            <Stat label="Sold rent" value={bdt(stats.rent)} />
-            <Stat label="Est. commission" value={bdt(commission)} tone="green" sub={`${rate}% of rent`} />
+            <Stat label="Sold rent" value={money(stats.rent)} />
+            <Stat label="Est. commission" value={money(commission)} tone="green" sub={`${rate}% of rent`} />
           </div>
 
           <Card title="My recent bookings" className="!p-0">
@@ -115,7 +115,7 @@ export default function ProfilePage() {
                         <Td>{b.guest?.fullName}</Td>
                         <Td className="text-xs">{dmy(b.checkIn)} → {dmy(b.checkOut)}</Td>
                         <Td className="space-x-1"><Badge value={b.state} /><Badge value={b.paymentState} /></Td>
-                        <Td className="text-right font-semibold">{bdt(b.due)}</Td>
+                        <Td className="text-right font-semibold">{money(b.due)}</Td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy, type RatePlan, type Room, type RoomType } from "@/lib/api";
+import { api, money, dmy, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
 
@@ -82,7 +82,7 @@ export default function RoomsPage() {
                 <tr key={r.id}>
                   <Td className="font-medium">{r.name}</Td>
                   <Td className="text-xs">{r.roomType?.name}</Td>
-                  <Td>{bdt(r.baseRate)}</Td>
+                  <Td>{money(r.baseRate)}</Td>
                   <Td><Badge value={r.status === "ACTIVE" ? "CONFIRMED" : "CANCELLED"} /></Td>
                   {canEdit && (
                     <Td className="text-right">
@@ -114,7 +114,7 @@ export default function RoomsPage() {
               <div className="text-sm font-medium">{t.name}</div>
               <div className="text-[11px] text-slate-400">
                 {t.maxAdults}A · {t.maxChildren}C
-                {t.extraPersonAllowed ? ` · +extra ${bdt(Number(t.extraPersonRate))}/n` : ""}
+                {t.extraPersonAllowed ? ` · +extra ${money(Number(t.extraPersonRate))}/n` : ""}
                 {t.amenities?.length ? ` · ${(t.amenities as string[]).join(", ")}` : ""}
               </div>
             </button>
@@ -138,7 +138,7 @@ export default function RoomsPage() {
                   <Td className="text-xs">{p.roomType?.name}</Td>
                   <Td className="text-xs">{dmy(p.dateFrom)}</Td>
                   <Td className="text-xs">{dmy(p.dateTo)}</Td>
-                  <Td className="text-right font-medium">{bdt(p.price)}</Td>
+                  <Td className="text-right font-medium">{money(p.price)}</Td>
                 </tr>
               ))}
             </tbody>
@@ -190,7 +190,7 @@ function AddRoomModal({ open, onClose, onDone, types }: {
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </Select>
         </Field>
-        <Field label="Base rate (৳/night)"><Input type="number" min={0} value={rate || ""} onChange={(e) => setRate(Number(e.target.value))} /></Field>
+        <Field label={`Base rate (${cur()}/night)`}><Input type="number" min={0} value={rate || ""} onChange={(e) => setRate(Number(e.target.value))} /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name || !typeId || rate <= 0}>Add</Button></div>
       </div>
     </Modal>
@@ -247,7 +247,7 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
           Allow extra person (beyond max adults)
         </label>
         {extraAllowed && (
-          <Field label="Extra person rate (৳/night)"><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
+          <Field label={`Extra person rate (${cur()}/night)`}><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
         )}
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Save</Button></div>
       </div>
@@ -303,7 +303,7 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
           Allow extra person (beyond max adults)
         </label>
         {extraAllowed && (
-          <Field label="Extra person rate (৳/night)"><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
+          <Field label={`Extra person rate (${cur()}/night)`}><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
         )}
         <Field label="Amenities" hint="comma separated"><Input value={amen} onChange={(e) => setAmen(e.target.value)} placeholder="AC, WiFi, Balcony" /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Add</Button></div>
@@ -354,7 +354,7 @@ function AddPlanModal({ open, onClose, onDone, types }: {
           <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
-        <Field label="Price (৳/night)"><Input type="number" min={0} value={price || ""} onChange={(e) => setPrice(Number(e.target.value))} /></Field>
+        <Field label={`Price (${cur()}/night)`}><Input type="number" min={0} value={price || ""} onChange={(e) => setPrice(Number(e.target.value))} /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!typeId || !from || !to || price <= 0}>Add</Button></div>
       </div>
     </Modal>

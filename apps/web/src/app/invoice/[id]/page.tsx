@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, bdt, dmy } from "@/lib/api";
+import { api, money, dmy } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { Download } from "lucide-react";
 
@@ -165,8 +165,8 @@ export default function InvoicePage() {
                 {it.nights ? <span className="text-slate-400"> × {it.nights}n</span> : null}
               </td>
               <td className="py-2 text-center">{it.qty}</td>
-              <td className="py-2 text-right">{bdt(it.unitPrice)}</td>
-              <td className="py-2 text-right font-medium">{bdt(it.amount)}</td>
+              <td className="py-2 text-right">{money(it.unitPrice)}</td>
+              <td className="py-2 text-right font-medium">{money(it.amount)}</td>
             </tr>
           ))}
         </tbody>
@@ -174,21 +174,21 @@ export default function InvoicePage() {
 
       {/* totals */}
       <div className="ml-auto mt-4 w-72 space-y-1 text-sm">
-        <Row en="Rent" bn="ভাড়া" value={bdt(inv.rent)} />
-        {inv.discount > 0 && <Row en="Discount" bn="ছাড়" value={`− ${bdt(inv.discount)}`} />}
+        <Row en="Rent" bn="ভাড়া" value={money(inv.rent)} />
+        {inv.discount > 0 && <Row en="Discount" bn="ছাড়" value={`− ${money(inv.discount)}`} />}
         {inv.tax > 0 && (
           <>
-            <Row en="Taxable amount" bn="করযোগ্য" value={bdt(inv.taxable)} />
-            <Row en={`Tax (${inv.taxRatePct}%)`} bn={`কর (${inv.taxRatePct}%)`} value={bdt(inv.tax)} />
-            <Row en="Total" bn="সর্বমোট" value={bdt(inv.total)} />
+            <Row en="Taxable amount" bn="করযোগ্য" value={money(inv.taxable)} />
+            <Row en={`Tax (${inv.taxRatePct}%)`} bn={`কর (${inv.taxRatePct}%)`} value={money(inv.tax)} />
+            <Row en="Total" bn="সর্বমোট" value={money(inv.total)} />
           </>
         )}
-        {inv.paid > 0 && <Row en="Paid" bn="পরিশোধিত" value={`− ${bdt(inv.paid)}`} />}
+        {inv.paid > 0 && <Row en="Paid" bn="পরিশোধিত" value={`− ${money(inv.paid)}`} />}
         <div className="flex justify-between border-t-2 border-slate-800 pt-1 text-base font-bold">
           <span>
             Due · <span lang="bn">বাকি</span>
           </span>
-          <span>{bdt(inv.due)}</span>
+          <span>{money(inv.due)}</span>
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export default function InvoicePage() {
           </div>
           {inv.payments.map((p, i) => (
             <div key={i}>
-              {dmy(p.date)} · {p.method} · {p.type} · {bdt(p.amount)}
+              {dmy(p.date)} · {p.method} · {p.type} · {money(p.amount)}
               {p.receivedBy ? ` (by ${p.receivedBy})` : ""}
             </div>
           ))}

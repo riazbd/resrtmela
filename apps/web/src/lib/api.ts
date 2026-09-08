@@ -1,5 +1,7 @@
 ﻿"use client";
 
+import { formatMoney, currencySymbol, type MoneyFormat } from "@rh/shared";
+
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
 
@@ -68,6 +70,8 @@ export interface Resort {
   name: string;
   tenantId: number;
   status: string;
+  currency?: string;
+  locale?: string;
 }
 
 export interface Me {
@@ -186,10 +190,25 @@ export interface GuestRow {
   lastStay: { code: string; checkIn: string | null; checkOut: string | null; state: string } | null;
 }
 
-export const bdt = (n: number | string | null | undefined) =>
-  n === null || n === undefined
-    ? "—"
-    : `৳${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+/**
+ * Currency and locale come from the active resort, not from this file.
+ *
+ * The console shows one resort at a time, so the format is set once when the
+ * active resort changes rather than threaded through 86 call sites. When the
+ * data layer lands (PLAN-v3 P4) this moves into context with everything else.
+ */
+let moneyFormat: MoneyFormat = {};
+
+export function setMoneyFormat(format: MoneyFormat) {
+  moneyFormat = format;
+}
+
+/** An em dash for "not applicable"; a real zero still prints as zero. */
+export const money = (n: number | string | null | undefined) =>
+  n === null || n === undefined ? "—" : formatMoney(n, moneyFormat);
+
+/** The active resort's currency symbol, for input labels. */
+export const cur = () => currencySymbol(moneyFormat);
 
 export const dmy = (d: string | Date | null | undefined) =>
   !d

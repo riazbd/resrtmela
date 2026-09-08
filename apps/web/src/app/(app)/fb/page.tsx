@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, type FoodPackage } from "@/lib/api";
+import { api, money, type FoodPackage, cur } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -110,7 +110,7 @@ export default function FbPage() {
           method: paidAmount > 0 ? method : undefined,
         },
       });
-      push(`${created.code} — ${bdt(created.total)}${target.bookingId ? " charged to room" : ""}`);
+      push(`${created.code} — ${money(created.total)}${target.bookingId ? " charged to room" : ""}`);
       setTarget(null);
       setTicket([{ name: "Lunch", qty: 1, unitPrice: 300, total: 300 }]);
       setPaidAmount(0);
@@ -127,7 +127,7 @@ export default function FbPage() {
     setBusy(true);
     try {
       await api(`/fb/bills/${payFor.id}/pay`, { method: "POST", body: { amount: payAmt, method: "CASH" } });
-      push(`${bdt(payAmt)} collected on ${payFor.code}`);
+      push(`${money(payAmt)} collected on ${payFor.code}`);
       setPayFor(null);
       await load();
     } catch (ex) {
@@ -229,7 +229,7 @@ export default function FbPage() {
                     onClick={() => setTicket([...ticket, { name: p.name, qty: 1, unitPrice: p.price, total: p.price }])}
                     className="rounded-full border border-slate-300 px-2.5 py-1 text-xs hover:border-brand-400 hover:bg-brand-50"
                   >
-                    {p.name} · {bdt(p.price)}
+                    {p.name} · {money(p.price)}
                   </button>
                 ))}
                 {packages.filter((p) => p.active).map((p) => (
@@ -239,7 +239,7 @@ export default function FbPage() {
                     title={p.items ?? undefined}
                     className="rounded-full border border-brand-300 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
                   >
-                    <PackageIcon className="mr-1 inline h-3 w-3" />{p.name} · {bdt(p.price)}
+                    <PackageIcon className="mr-1 inline h-3 w-3" />{p.name} · {money(p.price)}
                   </button>
                 ))}
               </div>
@@ -250,7 +250,7 @@ export default function FbPage() {
                     <Field label={i === 0 ? "Item" : ""}><Input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} /></Field>
                     <Field label={i === 0 ? "Qty" : ""}><Input type="number" min={1} value={it.qty} onChange={(e) => setItem(i, { qty: Number(e.target.value) })} className="!w-16" /></Field>
                     <Field label={i === 0 ? "Unit ৳" : ""}><Input type="number" min={0} value={it.unitPrice || ""} onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) })} className="!w-24" /></Field>
-                    <div className="w-20 pb-2 text-right text-sm font-medium">{bdt(it.qty * it.unitPrice)}</div>
+                    <div className="w-20 pb-2 text-right text-sm font-medium">{money(it.qty * it.unitPrice)}</div>
                     {ticket.length > 1 && (
                       <Button size="sm" variant="ghost" onClick={() => setTicket(ticket.filter((_, x) => x !== i))}>✕</Button>
                     )}
@@ -260,7 +260,7 @@ export default function FbPage() {
 
               <div className="flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
                 <div className="flex items-end gap-2">
-                  <Field label="Paid now (৳)"><Input type="number" min={0} value={paidAmount || ""} onChange={(e) => setPaidAmount(Number(e.target.value))} className="!w-28" /></Field>
+                  <Field label={`Paid now (${cur()})`}><Input type="number" min={0} value={paidAmount || ""} onChange={(e) => setPaidAmount(Number(e.target.value))} className="!w-28" /></Field>
                   <Field label="Method">
                     <Select value={method} onChange={(e) => setMethod(e.target.value)} className="!w-28">
                       {["CASH", "BKASH", "NAGAD", "CARD"].map((m) => <option key={m}>{m}</option>)}
@@ -270,14 +270,14 @@ export default function FbPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-slate-400">Total</div>
-                  <div className="text-xl font-bold text-slate-900">{bdt(total)}</div>
+                  <div className="text-xl font-bold text-slate-900">{money(total)}</div>
                 </div>
               </div>
               <div className="flex justify-end">
                 <Button onClick={createTicket} loading={busy} disabled={total <= 0}>
                   {target.bookingId
-                    ? `Charge to room (${bdt(Math.max(0, total - paidAmount))} due)`
-                    : `Create bill (${bdt(total)})`}
+                    ? `Charge to room (${money(Math.max(0, total - paidAmount))} due)`
+                    : `Create bill (${money(total)})`}
                 </Button>
               </div>
             </div>
@@ -300,7 +300,7 @@ export default function FbPage() {
             {packages.map((p) => (
               <div key={p.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
                 <span className={`font-semibold ${p.active ? "text-slate-700" : "text-slate-300"}`}>{p.name}</span>
-                <span className="text-xs text-slate-500">{bdt(p.price)}</span>
+                <span className="text-xs text-slate-500">{money(p.price)}</span>
                 {p.items && <span className="max-w-[220px] truncate text-[10px] text-slate-400">{p.items}</span>}
                 <button onClick={() => removePackage(p.id)} title="Delete" className="text-slate-300 hover:text-red-500">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -310,7 +310,7 @@ export default function FbPage() {
           </div>
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <Field label="Package name"><Input className="!w-44" value={pkgForm.name} onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })} placeholder="BBQ Dinner for 2" /></Field>
-            <Field label="Price (৳)"><Input className="!w-28" type="number" min={0} value={pkgForm.price} onChange={(e) => setPkgForm({ ...pkgForm, price: e.target.value })} /></Field>
+            <Field label={`Price (${cur()})`}><Input className="!w-28" type="number" min={0} value={pkgForm.price} onChange={(e) => setPkgForm({ ...pkgForm, price: e.target.value })} /></Field>
             <Field label="Included items"><Input className="!w-64" value={pkgForm.items} onChange={(e) => setPkgForm({ ...pkgForm, items: e.target.value })} placeholder="rice, chicken, salad, borhani" /></Field>
             <Button size="sm" onClick={createPackage} loading={busy} disabled={!pkgForm.name || !pkgForm.price}>Add package</Button>
           </div>
@@ -338,8 +338,8 @@ export default function FbPage() {
                       <Td className="text-xs">{b.items.map((i) => `${i.name}×${i.qty}`).join(", ")}</Td>
                       <Td className="text-xs">{b.guestName ?? (b.bookingId ? `room charge #${b.bookingId}` : "walk-in")}</Td>
                       <Td><Badge value={b.status} /></Td>
-                      <Td className="text-right">{bdt(b.total)}</Td>
-                      <Td className={`text-right font-semibold ${b.due > 0 ? "text-red-700" : ""}`}>{bdt(b.due)}</Td>
+                      <Td className="text-right">{money(b.total)}</Td>
+                      <Td className={`text-right font-semibold ${b.due > 0 ? "text-red-700" : ""}`}>{money(b.due)}</Td>
                       {canManage && (
                         <Td className="text-right">
                           {b.due > 0 && (
@@ -361,10 +361,10 @@ export default function FbPage() {
         {payFor && (
           <div className="space-y-3">
             <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-              due <b className="text-red-700">{bdt(payFor.due)}</b>
+              due <b className="text-red-700">{money(payFor.due)}</b>
               {payFor.bookingId ? " · charged to room" : ""}
             </div>
-            <Field label="Amount (৳)"><Input type="number" min={1} value={payAmt || ""} onChange={(e) => setPayAmt(Number(e.target.value))} /></Field>
+            <Field label={`Amount (${cur()})`}><Input type="number" min={1} value={payAmt || ""} onChange={(e) => setPayAmt(Number(e.target.value))} /></Field>
             <div className="flex justify-end">
               <Button onClick={collect} loading={busy} disabled={payAmt <= 0}>Record</Button>
             </div>

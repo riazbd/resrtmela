@@ -4,8 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileDown } from "lucide-react";
 import {
-  api, bdt, dmy, iso,
-  type BookingDetail, type BookingRow, type RoomAvail,
+  api, money, dmy, iso,
+  type BookingDetail, type BookingRow, type RoomAvail, cur,
 } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -203,12 +203,12 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
                   <div className="text-[11px]">
                     {isAgent && myRate > 0 ? (
                       <>
-                        <span className="text-slate-400 line-through">৳{Number(r.baseRate).toLocaleString("en-IN")}</span>
-                        {" "}<span className="font-bold text-brand-700">৳{(Number(r.baseRate) * (1 - myRate / 100)).toLocaleString("en-IN")}</span>
+                        <span className="text-slate-400 line-through">{money(Number(r.baseRate))}</span>
+                        {" "}<span className="font-bold text-brand-700">{money((Number(r.baseRate) * (1 - myRate / 100)))}</span>
                         <span className="text-slate-400"> your price</span>
                       </>
                     ) : (
-                      <>৳{Number(r.baseRate).toLocaleString("en-IN")}</>
+                      <>{money(Number(r.baseRate))}</>
                     )}
                     {conflict && ` · busy (${r.busyNights.length}n)`}
                   </div>
@@ -241,17 +241,17 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Field label="Adults"><Input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} /></Field>
           <Field label="Children"><Input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} /></Field>
           {extraAllowed && (
-            <Field label="Extra persons" hint={`+৳${extraRate.toLocaleString("en-IN")} / person / night`}>
+            <Field label="Extra persons" hint={`+${money(extraRate)} / person / night`}>
               <Input type="number" min={0} value={extraPersons} onChange={(e) => setExtraPersons(Math.max(0, Number(e.target.value)))} />
             </Field>
           )}
           {isStaff && (
-            <Field label="Discount (৳)"><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></Field>
+            <Field label={`Discount (${cur()})`}><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></Field>
           )}
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Advance (৳)"><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
+          <Field label={`Advance (${cur()})`}><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
           <Field label="Method">
             <Select value={advMethod} onChange={(e) => setAdvMethod(e.target.value)}>
               {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
@@ -301,7 +301,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
 
   return (
     <div className="flex items-end gap-2">
-      <Field label="Record payment (৳)"><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} className="!w-28" /></Field>
+      <Field label={`Record payment (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} className="!w-28" /></Field>
       <Select value={method} onChange={(e) => setMethod(e.target.value)} className="!w-24">
         {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
       </Select>
@@ -463,10 +463,10 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         <div className="rounded-lg bg-slate-50 p-3">
           <div className="text-[11px] font-medium text-slate-400">MONEY</div>
           <div className="grid grid-cols-2 gap-x-3 text-xs">
-            <span className="text-slate-500">Rent</span><span className="font-medium">{bdt(b.rent)}</span>
-            <span className="text-slate-500">Discount</span><span>{bdt(b.discount)}</span>
-            <span className="text-slate-500">Paid</span><span className="text-green-700">{bdt(b.paid)}</span>
-            <span className="text-slate-500">Due</span><span className="font-bold text-red-700">{bdt(b.due)}</span>
+            <span className="text-slate-500">Rent</span><span className="font-medium">{money(b.rent)}</span>
+            <span className="text-slate-500">Discount</span><span>{money(b.discount)}</span>
+            <span className="text-slate-500">Paid</span><span className="text-green-700">{money(b.paid)}</span>
+            <span className="text-slate-500">Due</span><span className="font-bold text-red-700">{money(b.due)}</span>
           </div>
         </div>
       </div>
@@ -476,7 +476,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         <div className="flex flex-wrap gap-1.5">
           {b.items.map((i) => (
             <span key={i.id} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
-              {i.room?.name ?? i.kind} · {bdt(i.unitPrice)}/night
+              {i.room?.name ?? i.kind} · {money(i.unitPrice)}/night
             </span>
           ))}
         </div>
@@ -495,7 +495,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
                   <Td className="!py-1.5 text-xs">{p.type}</Td>
                   <Td className="!py-1.5 text-xs">{p.method}</Td>
                   <Td className="!py-1.5 text-xs text-slate-400">{p.receivedBy}</Td>
-                  <Td className="!py-1.5 text-right text-xs font-medium">{bdt(p.amount)}</Td>
+                  <Td className="!py-1.5 text-right text-xs font-medium">{money(p.amount)}</Td>
                 </tr>
               ))}
             </tbody>
@@ -514,8 +514,8 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         <div className={`rounded-xl px-4 py-3 text-sm ${latePayment.deadlinePassed ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
           <div className="font-bold">
             {latePayment.deadlinePassed
-              ? `Full-payment deadline passed — ${bdt(b.due)} still due`
-              : `Full payment due within ${latePayment.hoursLeft}h (deadline ${bdt(b.due)})`}
+              ? `Full-payment deadline passed — ${money(b.due)} still due`
+              : `Full payment due within ${latePayment.hoursLeft}h (deadline ${money(b.due)})`}
           </div>
           <div className="mt-0.5 text-xs">
             Agent bookings must be fully paid {payHours}h before check-in.
@@ -716,7 +716,7 @@ function BookingsInner() {
                     <Td className="text-xs">{b.source}{b.agent ? <div className="text-[11px] text-slate-400">{b.agent}</div> : null}</Td>
                     <Td><Badge value={b.state} /></Td>
                     <Td><Badge value={b.paymentState} /></Td>
-                    <Td className="text-right font-semibold">{bdt(b.due)}</Td>
+                    <Td className="text-right font-semibold">{money(b.due)}</Td>
                   </tr>
                 ))}
               </tbody>

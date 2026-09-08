@@ -5,6 +5,7 @@ import { SmsService } from "./sms.service";
 import { dedupeKeyFor, renderTemplate, type TemplateName } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
+import { formatMoney } from "@rh/shared";
 
 const TICK_MS = 15_000;
 
@@ -245,7 +246,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   /** flag agent bookings approaching the resort's full-payment deadline (in-app alerts to admins) */
   private async sweepAgentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true } });
+    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
     const now = new Date();
     for (const resort of resorts) {
       const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
@@ -284,7 +285,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
             userId: a.userId,
             resortId: resort.id,
             title: `${b.code} unpaid — ${hoursLeft}h to check-in`,
-            body: `${due.toLocaleString("en-IN")} BDT due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
+            body: `${formatMoney(due, { currency: resort.currency, locale: resort.locale })} due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
             kind: "alert",
             link: `/bookings?id=${b.id}`,
           })),

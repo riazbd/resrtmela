@@ -17,14 +17,14 @@ export class TenancyService {
   mine(claims: JwtClaims) {
     if (claims.role === ROLE.SUPER_ADMIN) {
       return this.prisma.resort.findMany({
-        select: { id: true, name: true, tenantId: true, status: true },
+        select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true },
         orderBy: { id: "asc" },
       });
     }
     return this.prisma.userResort
       .findMany({
         where: { userId: claims.userId },
-        select: { resort: { select: { id: true, name: true, tenantId: true, status: true } } },
+        select: { resort: { select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true } } },
         orderBy: { resortId: "asc" },
       })
       .then((rows) => rows.map((r) => r.resort));
@@ -58,6 +58,7 @@ export class TenancyService {
       name: string;
       location?: string;
       timezone?: string;
+      locale?: string;
       currency?: string;
       showRatesToAgents?: boolean;
     },
