@@ -5,6 +5,7 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { RateLimitMiddleware } from "./common/rate-limit.middleware";
 import { PrismaModule } from "./prisma/prisma.module";
 import { HealthController } from "./modules/health/health.controller";
+import { RequestLogMiddleware } from "./common/request-log.middleware";
 import { AllExceptionsFilter } from "./common/all-exceptions.filter";
 import { AuthModule } from "./auth/auth.module";
 import { CommonModule } from "./common/common.module";
@@ -53,6 +54,8 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // one structured line per request, with an id the caller can quote
+    consumer.apply(RequestLogMiddleware).forRoutes("*");
     // hardened auth surface: 30 req/min per IP (login, OTP, signup)
     consumer.apply(RateLimitMiddleware).forRoutes("auth");
   }
