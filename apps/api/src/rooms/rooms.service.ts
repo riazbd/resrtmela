@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, JwtClaims } from "@rh/shared";
 import { isManagement, requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
-import { checkRoomCap } from "../common/plans";
+import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuditService } from "../common/audit.service";
 
 @Injectable()
@@ -12,6 +12,7 @@ export class RoomsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ── room types ──
@@ -84,12 +85,9 @@ export class RoomsService {
     requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
     // plan cap (soft-SaaS enforcement)
-    const resort = await this.prisma.resort.findUniqueOrThrow({
-      where: { id: resortId },
-      include: { tenant: { select: { plan: true } } },
-    });
+    const limits = await this.planLimits.forResort(resortId);
     const roomCount = await this.prisma.room.count({ where: { resortId } });
-    const capError = checkRoomCap(resort.tenant.plan, roomCount);
+    const capError = PlanLimitsService.roomCapError(limits, roomCount);
     if (capError) {
       throw Object.assign(new Error(capError), { status: 402 });
     }

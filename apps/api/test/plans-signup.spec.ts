@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { slugify, checkRoomCap, PLANS, isPlanName } from "../src/common/plans";
+import { slugify, PLANS, isPlanName } from "../src/common/plans";
+import { PlanLimitsService } from "../src/common/plan-limits.service";
 
 describe("slugify (signup wizard)", () => {
   it("basic names", () => {
@@ -16,14 +17,18 @@ describe("slugify (signup wizard)", () => {
 });
 
 describe("plan limits", () => {
-  it("caps enforced per plan", () => {
-    expect(checkRoomCap("FREE", 9)).toBeNull();
-    expect(checkRoomCap("FREE", 10)).toMatch(/10 rooms/);
-    expect(checkRoomCap("STANDARD", 10)).toBeNull();
-    expect(checkRoomCap("PRO", 499)).toBeNull();
+  const limits = (label: string, maxRooms: number) => ({ label, maxRooms, maxResorts: 1, source: "legacy" as const });
+
+  it("allows a room while there is room in the plan", () => {
+    expect(PlanLimitsService.roomCapError(limits("Free", 10), 9)).toBeNull();
+    expect(PlanLimitsService.roomCapError(limits("Standard", 50), 10)).toBeNull();
   });
-  it("unknown plan falls back to FREE", () => {
-    expect(checkRoomCap("whatever", 10)).toMatch(/10 rooms/);
+  it("explains which plan ran out and how many rooms it allows", () => {
+    expect(PlanLimitsService.roomCapError(limits("Free", 10), 10)).toMatch(/Free allows up to 10 rooms/);
+  });
+  it("caps resorts the same way", () => {
+    expect(PlanLimitsService.resortCapError({ label: "Starter", maxRooms: 10, maxResorts: 1, source: "subscription" }, 1))
+      .toMatch(/Starter plan allows up to 1 resort/);
   });
   it("plan names", () => {
     expect(isPlanName("PRO")).toBe(true);

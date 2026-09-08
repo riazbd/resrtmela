@@ -6,6 +6,7 @@ import { requireRoles, requireResortAccess, forbid, badRequest } from "../common
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
+import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
@@ -56,6 +57,7 @@ export class PlatformService {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(DiscountService) private readonly discounts: DiscountService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ─────────────────── super admin: platform overview ───────────────────
@@ -979,30 +981,11 @@ export class PlatformService {
     if (claims.role !== ROLE.RESORT_ADMIN) throw forbid("only the resort owner can add resorts");
     const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
     const count = await this.prisma.resort.count({ where: { tenantId } });
-    // gate: latest non-cancelled subscription plan, else legacy tenant plan
-    let maxResorts: number;
-    let planLabel: string;
-    const latestSub = await this.prisma.subscription.findFirst({
-      where: { resort: { tenantId }, status: { not: "CANCELLED" } },
-      orderBy: { id: "desc" },
-      include: { resort: { select: { id: true } } },
-    });
-    if (latestSub) {
-      await ensurePlans(this.prisma);
-      const def = await this.prisma.platformPlan.findUnique({ where: { name: latestSub.plan } });
-      maxResorts = def?.maxResorts ?? 1;
-      planLabel = def?.label ?? latestSub.plan;
-    } else {
-      const legacy = tenant.plan.toUpperCase();
-      maxResorts = legacy === "PRO" ? 10 : legacy === "STANDARD" ? 3 : 1;
-      planLabel = tenant.plan;
-    }
-    if (count + 1 > maxResorts) {
-      throw Object.assign(
-        new Error(`Your ${planLabel} plan allows up to ${maxResorts} resort(s). Upgrade the subscription to add more.`),
-        { status: 402 },
-      );
-    }
+    await ensurePlans(this.prisma);
+    const limits = await this.planLimits.forTenant(tenantId);
+    const capError = PlanLimitsService.resortCapError(limits, count);
+    if (capError) throw Object.assign(new Error(capError), { status: 402 });
+    void tenant;
     const resort = await this.prisma.resort.create({
       data: { tenantId, name: input.name, location: input.location, timezone: "Asia/Dhaka", currency: "BDT" },
     });

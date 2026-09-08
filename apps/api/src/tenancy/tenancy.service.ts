@@ -4,12 +4,14 @@ import { ROLE, type Role, JwtClaims } from "@rh/shared";
 import { requireRoles, requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { PLANS, isPlanName } from "../common/plans";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 @Injectable()
 export class TenancyService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   mine(claims: JwtClaims) {
@@ -61,12 +63,13 @@ export class TenancyService {
     },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
-    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: data.tenantId }, select: { plan: true } });
-    const plan = isPlanName(tenant.plan) ? tenant.plan : "FREE";
+    const limits = await this.planLimits.forTenant(data.tenantId);
+
     const resortCount = await this.prisma.resort.count({ where: { tenantId: data.tenantId } });
-    if (resortCount + 1 > PLANS[plan].maxResorts) {
+    const capError = PlanLimitsService.resortCapError(limits, resortCount);
+    if (capError) {
       throw Object.assign(
-        new Error(`Plan ${PLANS[plan].label} allows up to ${PLANS[plan].maxResorts} resorts. Upgrade the plan.`),
+        new Error(capError),
         { status: 402 },
       );
     }
@@ -173,7 +176,7 @@ export class TenancyService {
         },
       },
     });
-    const plan = isPlanName(tenant.plan) ? tenant.plan : "FREE";
+
     const roomCount = tenant.resorts.reduce((s, r) => s + r._count.rooms, 0);
     const guestCount = tenant.resorts.reduce((s, r) => s + r._count.guests, 0);
     const staffUsers = await this.prisma.userResort.findMany({
@@ -183,12 +186,13 @@ export class TenancyService {
     const staffIds = new Set(
       staffUsers.filter((u) => u.user.role !== ROLE.GUEST).map((u) => u.userId),
     );
+    const limits = await this.planLimits.forTenant(tenantId);
     return {
       tenantId,
       name: tenant.name,
-      plan,
-      planLabel: PLANS[plan].label,
-      limits: { maxResorts: PLANS[plan].maxResorts, maxRoomsPerResort: PLANS[plan].maxRoomsPerResort },
+      plan: tenant.plan,
+      planLabel: limits.label,
+      limits: { maxResorts: limits.maxResorts, maxRoomsPerResort: limits.maxRooms },
       resorts: tenant.resorts.length,
       rooms: roomCount,
       staffUsers: staffIds.size,
