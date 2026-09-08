@@ -139,8 +139,13 @@ export class BookingsController {
     @Req() req: AuthedRequest,
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query("search") search?: string,
+    @Query("skip") skip?: string,
+    @Query("take") take?: string,
   ) {
-    return this.bookings.guests(req.user, resortId, search);
+    return this.bookings.guests(req.user, resortId, search, {
+      skip: skip ? Number(skip) : undefined,
+      take: take ? Number(take) : undefined,
+    });
   }
 
   @Post("bookings")

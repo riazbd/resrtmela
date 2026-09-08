@@ -5,6 +5,7 @@ import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, today } from "../common/dates";
 import { bookingTotals, perNightRevenue, type Money } from "../common/money";
+import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { assertTransition } from "./booking-state";
 import { AvailabilityService } from "./availability.service";
@@ -785,46 +786,56 @@ export class BookingsService {
     };
   }
 
-  /** Guest directory w/ booking stats (doc §3.5) */
-  async guests(claims: JwtClaims, resortId: number, search?: string) {
+  /**
+   * Guest directory with booking stats (doc §3.5).
+   *
+   * The last stay used to be one query per guest; it is now a single query for
+   * the page, picked apart in memory.
+   */
+  async guests(claims: JwtClaims, resortId: number, search?: string, page?: PageRequest) {
     requireResortAccess(claims, resortId);
-    const guests = await this.prisma.guest.findMany({
-      where: {
-        resortId,
-        ...(search
-          ? {
-              OR: [
-                { fullName: { contains: search } },
-                { phone: { contains: search.replace(/\D/g, "") || search } },
-              ],
-            }
-          : {}),
-      },
-      include: { _count: { select: { bookings: true } } },
-      orderBy: { fullName: "asc" },
-      take: 200,
-    });
-    const withLast = await Promise.all(
-      guests.map(async (g) => {
-        const last = await this.prisma.booking.findFirst({
-          where: { guestId: g.id, deletedAt: null },
-          orderBy: [{ checkIn: "desc" }, { id: "desc" }],
-          select: { checkIn: true, checkOut: true, code: true, state: true },
-        });
-        return {
-          id: g.id,
-          fullName: g.fullName,
-          phone: g.phone,
-          nidPassportNo: g.nidPassportNo,
-          bookingCount: g._count.bookings,
-          lastStay: last,
-        };
+    const where = {
+      resortId,
+      ...(search
+        ? {
+            OR: [
+              { fullName: { contains: search } },
+              { phone: { contains: search.replace(/\D/g, "") || search } },
+            ],
+          }
+        : {}),
+    };
+    const { skip, take } = pageArgs(page, 100);
+
+    const [guests, total] = await Promise.all([
+      this.prisma.guest.findMany({
+        where,
+        include: { _count: { select: { bookings: true } } },
+        orderBy: { fullName: "asc" },
+        skip,
+        take,
       }),
-    );
-    return withLast;
+      this.prisma.guest.count({ where }),
+    ]);
+
+    const stays = await this.prisma.booking.findMany({
+      where: { guestId: { in: guests.map((g) => g.id) }, deletedAt: null },
+      orderBy: [{ checkIn: "desc" }, { id: "desc" }],
+      select: { guestId: true, checkIn: true, checkOut: true, code: true, state: true },
+    });
+    const lastStay = new Map<number, (typeof stays)[number]>();
+    for (const s of stays) if (!lastStay.has(s.guestId)) lastStay.set(s.guestId, s);
+
+    const rows = guests.map((g) => ({
+      id: g.id,
+      fullName: g.fullName,
+      phone: g.phone,
+      nidPassportNo: g.nidPassportNo,
+      bookingCount: g._count.bookings,
+      lastStay: lastStay.get(g.id) ?? null,
+    }));
+    return toPage(rows, total, skip, take);
   }
-
-
 
   /**
    * THE Day Sheet (sheet tabs 7+8+11 computed): per room, for one night.

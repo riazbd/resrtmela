@@ -15,6 +15,8 @@ class ExpenseRangeQuery {
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @IsIn(["RESORT", "RESTAURANT"]) scope?: string;
+  @IsOptional() @IsString() skip?: string;
+  @IsOptional() @IsString() take?: string;
 }
 
 @Controller()
@@ -28,7 +30,10 @@ export class ExpensesController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query() q: ExpenseRangeQuery,
   ) {
-    return this.expenses.list(req.user, resortId, q.from, q.to, q.scope);
+    return this.expenses.list(req.user, resortId, q.from, q.to, q.scope, {
+      skip: q.skip ? Number(q.skip) : undefined,
+      take: q.take ? Number(q.take) : undefined,
+    });
   }
 
   @Get("resorts/:resortId/expenses/categories")

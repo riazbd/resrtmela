@@ -26,6 +26,8 @@ export default function ExpensesPage() {
   const { push } = useToast();
   const [date, setDate] = useState(iso(new Date()));
   const [rows, setRows] = useState<ExpenseRow[] | null>(null);
+  const [dayTotal, setDayTotal] = useState(0);
+  const [entryCount, setEntryCount] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [details, setDetails] = useState("");
@@ -40,10 +42,19 @@ export default function ExpensesPage() {
     if (!activeResort) return;
     setLoading(true);
     try {
-      const data = await api<{ rows: ExpenseRow[]; total: number }>(
+      const data = await api<{
+        rows: ExpenseRow[];
+        total: number;
+        truncated: boolean;
+        summary: { amount: number };
+      }>(
         `/resorts/${activeResort.id}/expenses?from=${date}&to=${iso(new Date(new Date(date).getTime() + 86400000))}`,
       );
       setRows(data.rows);
+      // the day total is aggregated server-side over every matching row, so a
+      // day with more entries than one page still shows the true figure
+      setDayTotal(data.summary.amount);
+      setEntryCount(data.total);
     } finally {
       setLoading(false);
     }
@@ -96,7 +107,6 @@ export default function ExpensesPage() {
     }
   }
 
-  const dayTotal = (rows ?? []).reduce((s, r) => s + r.amount, 0);
 
   return (
     <div className="space-y-4">
@@ -116,7 +126,7 @@ export default function ExpensesPage() {
 
       {/* live day total — the sheet's "Daily Total Expense" column */}
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="দিনের মোট খরচ / Day total" value={bdt(dayTotal)} tone="red" sub={`${(rows ?? []).length} entries`} />
+        <Stat label="দিনের মোট খরচ / Day total" value={bdt(dayTotal)} tone="red" sub={`${entryCount} entries`} />
       </div>
 
       {/* entry row */}

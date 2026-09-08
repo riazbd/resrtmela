@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
+import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { TenantStateService } from "../common/tenant-state.service";
 import { PermissionsService } from "../common/permissions";
@@ -16,38 +17,47 @@ export class ExpensesService {
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
   ) {}
 
-  async list(claims: JwtClaims, resortId: number, from?: string, to?: string, scope?: string) {
+  async list(
+    claims: JwtClaims,
+    resortId: number,
+    from?: string,
+    to?: string,
+    scope?: string,
+    page?: PageRequest,
+  ) {
     requireResortAccess(claims, resortId);
-    const rows = await this.prisma.expense.findMany({
-      where: {
-        resortId,
-        ...(scope ? { scope: scope as never } : {}),
-        ...(from ? { date: { gte: dateOnly(from) } } : {}),
-        ...(to ? { date: { ...((from ? { gte: dateOnly(from) } : {}) as object), lt: dateOnly(to) } } : {}),
-      },
-      orderBy: [{ date: "desc" }, { id: "desc" }],
-      take: 500,
-    });
-    const total = round2(rows.reduce((s, r) => s + Number(r.amount), 0));
-    // daily + category rollups (sheet tabs 4 & 12)
-    const byDay = new Map<string, number>();
-    const byCat = new Map<string, number>();
-    for (const r of rows) {
-      const d = r.date.toISOString().slice(0, 10);
-      byDay.set(d, round2((byDay.get(d) ?? 0) + Number(r.amount)));
-      byCat.set(r.category, round2((byCat.get(r.category) ?? 0) + Number(r.amount)));
-    }
+    const where = {
+      resortId,
+      ...(scope ? { scope: scope as never } : {}),
+      ...(from ? { date: { gte: dateOnly(from) } } : {}),
+      ...(to ? { date: { ...((from ? { gte: dateOnly(from) } : {}) as object), lt: dateOnly(to) } } : {}),
+    };
+    const { skip, take } = pageArgs(page, 100);
+
+    // the rollups describe the whole selection, not the page being shown, so
+    // they are aggregated in the database rather than summed over `rows`
+    const [rows, total, sum, byDayRows, byCatRows] = await Promise.all([
+      this.prisma.expense.findMany({ where, orderBy: [{ date: "desc" }, { id: "desc" }], skip, take }),
+      this.prisma.expense.count({ where }),
+      this.prisma.expense.aggregate({ where, _sum: { amount: true } }),
+      this.prisma.expense.groupBy({ by: ["date"], where, _sum: { amount: true } }),
+      this.prisma.expense.groupBy({ by: ["category"], where, _sum: { amount: true } }),
+    ]);
+
     return {
-      total,
-      byDay: [...byDay.entries()].sort().map(([date, amount]) => ({ date, amount })),
-      byCategory: [...byCat.entries()]
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount),
-      rows: rows.map((r) => ({ ...r, amount: Number(r.amount) })),
+      ...toPage(rows, total, skip, take),
+      summary: {
+        amount: round2(Number(sum._sum.amount ?? 0)),
+        byDay: byDayRows
+          .map((r) => ({ date: r.date.toISOString().slice(0, 10), amount: round2(Number(r._sum.amount ?? 0)) }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
+        byCategory: byCatRows
+          .map((r) => ({ category: r.category, amount: round2(Number(r._sum.amount ?? 0)) }))
+          .sort((a, b) => b.amount - a.amount),
+      },
     };
   }
 
-  /** Category autocomplete seeded from the resort's own history. */
   async categories(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     const rows = await this.prisma.expense.groupBy({

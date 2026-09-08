@@ -8,6 +8,7 @@ import { Badge, Card, Empty, Input, Spinner, Td, Th } from "@/components/ui";
 export default function GuestsPage() {
   const { activeResort, isStaff } = useAuth();
   const [rows, setRows] = useState<GuestRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -16,7 +17,11 @@ export default function GuestsPage() {
     setLoading(true);
     try {
       const qs = search ? `?search=${encodeURIComponent(search)}` : "";
-      setRows(await api<GuestRow[]>(`/resorts/${activeResort.id}/guests${qs}`));
+      const page = await api<{ rows: GuestRow[]; total: number; truncated: boolean }>(
+        `/resorts/${activeResort.id}/guests${qs}`,
+      );
+      setRows(page.rows);
+      setTotal(page.total);
     } finally {
       setLoading(false);
     }
@@ -30,7 +35,7 @@ export default function GuestsPage() {
 
   return (
     <Card
-      title="Guest directory"
+      title={total > rows.length ? `Guest directory — showing ${rows.length} of ${total}` : "Guest directory"}
       action={
         <Input
           value={search}
