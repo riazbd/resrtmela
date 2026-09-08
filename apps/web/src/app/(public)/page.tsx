@@ -29,7 +29,7 @@ import {
 
 const STATS = [
   { n: "89+", l: "Bookings managed" },
-  { n: "৳1M+", l: "Revenue tracked" },
+  { n: "à§³1M+", l: "Revenue tracked" },
   { n: "10+", l: "Rooms per resort" },
   { n: "99.9%", l: "Uptime" },
 ];
@@ -38,16 +38,16 @@ function MockDaySheet() {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-        <div className="text-xs font-bold text-slate-700">Day Sheet · Today</div>
+        <div className="text-xs font-bold text-slate-700">Day Sheet Â· Today</div>
         <div className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">LIVE</div>
       </div>
       <div className="grid grid-cols-2 gap-1.5 p-3">
         {[
-          { r: "Camellia", g: "Raju · arrives 12 PM", s: "in" },
-          { r: "Lunaria", g: "shakil · staying", s: "stay" },
+          { r: "Camellia", g: "Raju Â· arrives 12 PM", s: "in" },
+          { r: "Lunaria", g: "shakil Â· staying", s: "stay" },
           { r: "Snow Drop", g: "available", s: "free" },
-          { r: "Cherry Blossom", g: "local · staying", s: "stay" },
-          { r: "Margarita", g: "maliha · checkout", s: "out" },
+          { r: "Cherry Blossom", g: "local Â· staying", s: "stay" },
+          { r: "Margarita", g: "maliha Â· checkout", s: "out" },
           { r: "Lavender", g: "available", s: "free" },
         ].map((c) => (
           <div
@@ -71,7 +71,7 @@ function MockDaySheet() {
         {[
           { l: "Arrivals", v: "6", c: "text-emerald-600" },
           { l: "In-house", v: "14", c: "text-sky-600" },
-          { l: "Dues", v: "৳48,200", c: "text-amber-600" },
+          { l: "Dues", v: "à§³48,200", c: "text-amber-600" },
         ].map((s) => (
           <div key={s.l} className="rounded-lg bg-slate-50 p-2.5 text-center">
             <div className={`text-base font-black ${s.c}`}>{s.v}</div>
@@ -86,19 +86,19 @@ function MockDaySheet() {
 function MockBooking() {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">New booking · BK-00095</div>
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">New booking Â· BK-00095</div>
       <div className="space-y-2 p-4 text-[11px]">
         <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
           <span className="text-slate-400">Guest</span><span className="font-semibold text-slate-700">Kazi Abir</span>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-          <span className="text-slate-400">Room</span><span className="font-semibold text-slate-700">Lunaria · 2 nights</span>
+          <span className="text-slate-400">Room</span><span className="font-semibold text-slate-700">Lunaria Â· 2 nights</span>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
-          <span className="text-emerald-600">Advance</span><span className="font-bold text-emerald-700">৳1,000 paid</span>
+          <span className="text-emerald-600">Advance</span><span className="font-bold text-emerald-700">à§³1,000 paid</span>
         </div>
         <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-          <span className="text-slate-400">Source</span><span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">AGENT · Rikan</span>
+          <span className="text-slate-400">Source</span><span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">AGENT Â· Rikan</span>
         </div>
       </div>
     </div>
@@ -108,20 +108,20 @@ function MockBooking() {
 function MockPos() {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">Restaurant · Table order</div>
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">Restaurant Â· Table order</div>
       <div className="space-y-1.5 p-4 text-[11px]">
         {[
-          { i: "Lunch buffet", q: 2, p: "৳1,200" },
-          { i: "Grilled Rui", q: 1, p: "৳450" },
-          { i: "Cold coffee", q: 3, p: "৳360" },
+          { i: "Lunch buffet", q: 2, p: "à§³1,200" },
+          { i: "Grilled Rui", q: 1, p: "à§³450" },
+          { i: "Cold coffee", q: 3, p: "à§³360" },
         ].map((it) => (
           <div key={it.i} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-            <span className="text-slate-600">{it.i} × {it.q}</span>
+            <span className="text-slate-600">{it.i} Ã— {it.q}</span>
             <span className="font-semibold text-slate-700">{it.p}</span>
           </div>
         ))}
         <div className="flex items-center justify-between rounded-lg bg-brand-600 px-3 py-2.5 font-bold text-white">
-          <span>Bill total</span><span>৳2,010 · cash</span>
+          <span>Bill total</span><span>à§³2,010 Â· cash</span>
         </div>
       </div>
     </div>
@@ -133,7 +133,7 @@ export default function HomePage() {
   const [cms, setCms] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // CMS overrides are optional — defaults kick in on any failure
+    // CMS overrides are optional â€” defaults kick in on any failure
     fetch(`${API_URL}/cms`)
       .then((r) => r.json())
       .then((d) => setCms(d ?? {}))
@@ -146,7 +146,7 @@ export default function HomePage() {
 
   return (
     <div className="bg-white text-slate-800">
-      {/* ── nav ── */}
+      {/* â”€â”€ nav â”€â”€ */}
       <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2.5">
@@ -191,7 +191,7 @@ export default function HomePage() {
         )}
       </header>
 
-      {/* ── hero ── */}
+      {/* â”€â”€ hero â”€â”€ */}
       <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white">
         <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-brand-100/60 blur-3xl" />
         <div className="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-teal-100/50 blur-3xl" />
@@ -199,21 +199,21 @@ export default function HomePage() {
           <div>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-sm">
               <Star className="h-3.5 w-3.5 fill-brand-600 text-brand-600" />
-              {cms["hero.badge"] ?? "The all-in-one software for resorts"}
+              {cms["hero.badge"] || "The all-in-one software for resorts"}
             </div>
             <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-slate-900 sm:text-5xl">
-              {cms["hero.title"] ?? "Reservation calendar & front desk for your resort."}
+              {cms["hero.title"] || "Reservation calendar & front desk for your resort."}
             </h1>
             <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
-              {cms["hero.subtitle"] ??
-                "Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see every taka — from your phone or laptop. In Bangla and English."}
+              {cms["hero.subtitle"] ||
+                "Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see every taka â€” from your phone or laptop. In Bangla and English."}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
                 className="group inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-700"
               >
-                {cms["hero.cta"] ?? "Create free account"}
+                {cms["hero.cta"] || "Create free account"}
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </Link>
               <a
@@ -223,7 +223,7 @@ export default function HomePage() {
                 See how it works
               </a>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500">14 days free · no card required · cancel anytime</p>
+            <p className="mt-3 text-xs font-medium text-slate-500">14 days free Â· no card required Â· cancel anytime</p>
             <div className="mt-10 flex items-center gap-8">
               <div>
                 <div className="flex items-center gap-1 text-amber-400">
@@ -248,8 +248,8 @@ export default function HomePage() {
                 <div className="flex items-center gap-2.5">
                   <Bell className="h-4 w-4 text-brand-600" />
                   <div>
-                    <div className="text-[11px] font-bold text-slate-800">New booking · BK-00095</div>
-                    <div className="text-[10px] text-slate-400">Agent Rikan · Lunaria · 2 nights</div>
+                    <div className="text-[11px] font-bold text-slate-800">New booking Â· BK-00095</div>
+                    <div className="text-[10px] text-slate-400">Agent Rikan Â· Lunaria Â· 2 nights</div>
                   </div>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── trust bar ── */}
+      {/* â”€â”€ trust bar â”€â”€ */}
       <section className="border-y border-slate-100 bg-white">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-10 sm:grid-cols-4">
           {STATS.map((s) => (
@@ -270,28 +270,28 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── feature blocks (alternating, bed-booking style) ── */}
+      {/* â”€â”€ feature blocks (alternating, bed-booking style) â”€â”€ */}
       <section id="features" className="bg-white py-20">
         <div className="mx-auto max-w-6xl space-y-20 px-4">
           {[
             {
               tag: "BOOKING CALENDAR",
               title: "Your channel manager to manage reservations",
-              body: "See every room, every day, on one screen. With one click check availability on any date and make a booking for the calling customer — no overbooking, no register, no spreadsheet.",
+              body: "See every room, every day, on one screen. With one click check availability on any date and make a booking for the calling customer â€” no overbooking, no register, no spreadsheet.",
               points: ["Click any open date to book", "Walk-in, phone & agent bookings", "Check-in / check-out & day sheet", "Live availability per room"],
               mock: <MockDaySheet />,
             },
             {
               tag: "FRONT DESK & PMS",
               title: "Run the whole resort from one screen",
-              body: "Rooms, rates, extra-person charges, seasonal price plans, discounts and guest history. Everything the front desk touches — without the notebook.",
+              body: "Rooms, rates, extra-person charges, seasonal price plans, discounts and guest history. Everything the front desk touches â€” without the notebook.",
               points: ["Room types & seasonal rates", "Extra-person pricing", "Resort-wide or per-room discounts", "Guest database & stay history"],
               mock: <MockBooking />,
             },
             {
               tag: "RESTAURANT POS",
               title: "Restaurant billing for walk-ins and room tabs",
-              body: "Counter sales and in-house room charges in one POS. Partial payments, daily F&B revenue and separate resort-vs-restaurant reports — all automatic.",
+              body: "Counter sales and in-house room charges in one POS. Partial payments, daily F&B revenue and separate resort-vs-restaurant reports â€” all automatic.",
               points: ["Walk-in cash counter", "Charge to room tab", "Partial & full payments", "Separate F&B revenue reports"],
               mock: <MockPos />,
             },
@@ -318,7 +318,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── solutions ── */}
+      {/* â”€â”€ solutions â”€â”€ */}
       <section id="solutions" className="bg-brand-50/60 py-16">
         <div className="mx-auto max-w-6xl px-4 text-center">
           <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Made for every kind of stay</h2>
@@ -332,8 +332,8 @@ export default function HomePage() {
           <div className="mt-10 grid gap-4 text-left sm:grid-cols-3">
             {[
               { icon: Users, t: "Agents with wallets", d: "Activate trusted agents, give them logins and wallets. They book for clients; you track commission and dues." },
-              { icon: ShieldCheck, t: "Roles & activity log", d: "Manager, front desk, housekeeping — least-privilege access with a full who-did-what log." },
-              { icon: BarChart3, t: "Money you can trust", d: "Dues, payments, subscription billing and P&L — resort and restaurant separated." },
+              { icon: ShieldCheck, t: "Roles & activity log", d: "Manager, front desk, housekeeping â€” least-privilege access with a full who-did-what log." },
+              { icon: BarChart3, t: "Money you can trust", d: "Dues, payments, subscription billing and P&L â€” resort and restaurant separated." },
             ].map((c) => (
               <div key={c.t} className="rounded-2xl border border-brand-100 bg-white p-6 shadow-sm">
                 <c.icon className="h-6 w-6 text-brand-600" />
@@ -345,13 +345,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── extra capabilities strip ── */}
+      {/* â”€â”€ extra capabilities strip â”€â”€ */}
       <section className="bg-white py-16">
         <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: Bell, t: "Notification system", d: "In-app alerts for bookings, dues and agent deadlines." },
             { icon: FileText, t: "Invoice PDF + email", d: "Auto invoice on checkout, printable and emailed to guests." },
-            { icon: Smartphone, t: "Works on your phone", d: "Full console on mobile — manage from anywhere." },
+            { icon: Smartphone, t: "Works on your phone", d: "Full console on mobile â€” manage from anywhere." },
             { icon: MessageSquare, t: "Bangla & English", d: "Switch the whole console with one tap." },
           ].map((c) => (
             <div key={c.t} className="rounded-2xl border border-slate-200 p-5">
@@ -363,7 +363,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── pricing ── */}
+      {/* â”€â”€ pricing â”€â”€ */}
       <section id="pricing" className="bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
@@ -372,9 +372,9 @@ export default function HomePage() {
           </div>
           <div className="mt-12 grid gap-6 lg:grid-cols-3">
             {[
-              { name: "Starter", price: "৳2,500", tagline: "For small resorts leaving spreadsheets", features: ["Up to 10 rooms", "Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"], highlight: false },
-              { name: "Growth", price: "৳5,000", tagline: "For busy resorts with restaurant & agents", features: ["Up to 40 rooms", "Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"], highlight: true },
-              { name: "Chain", price: "৳12,000", tagline: "For multi-resort owners", features: ["Unlimited rooms & resorts", "Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"], highlight: false },
+              { name: "Starter", price: "à§³2,500", tagline: "For small resorts leaving spreadsheets", features: ["Up to 10 rooms", "Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"], highlight: false },
+              { name: "Growth", price: "à§³5,000", tagline: "For busy resorts with restaurant & agents", features: ["Up to 40 rooms", "Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"], highlight: true },
+              { name: "Chain", price: "à§³12,000", tagline: "For multi-resort owners", features: ["Unlimited rooms & resorts", "Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"], highlight: false },
             ].map((p) => (
               <div key={p.name} className={`relative rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
                 {p.highlight && (
@@ -407,7 +407,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── API ── */}
+      {/* â”€â”€ API â”€â”€ */}
       <section id="api" className="bg-white py-20">
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-2">
           <div>
@@ -416,7 +416,7 @@ export default function HomePage() {
               Already have a resort website? Keep it.
             </h2>
             <p className="mt-4 leading-relaxed text-slate-600">
-              Plug Resort Mela into your existing site — or embed our hosted booking page in minutes.
+              Plug Resort Mela into your existing site â€” or embed our hosted booking page in minutes.
               Live availability and rates from your console, bookings straight into your calendar. No commission, no middleman.
             </p>
             <ul className="mt-5 space-y-2.5 text-sm text-slate-700">
@@ -433,7 +433,7 @@ export default function HomePage() {
             </div>
             <div><span className="text-slate-500"># check availability</span></div>
             <div><span className="text-emerald-300">curl</span> https://backresort.rootcodebd.com/v1/availability \</div>
-            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_…&quot;</span></div>
+            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_â€¦&quot;</span></div>
             <div className="mt-2 text-slate-500"># response</div>
             <div className="text-sky-300">{"{"}</div>
             <div className="pl-4 text-slate-300">&quot;roomType&quot;: <span className="text-emerald-300">&quot;Lunaria&quot;</span>,</div>
@@ -444,7 +444,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── testimonials ── */}
+      {/* â”€â”€ testimonials â”€â”€ */}
       <section className="border-y border-slate-100 bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
@@ -453,7 +453,7 @@ export default function HomePage() {
           </div>
           <div className="mt-12 grid gap-5 md:grid-cols-3">
             {[
-              { quote: "The day sheet used to take my manager an hour every morning. Now it opens with everything already there — bookings, dues, restaurant, expenses.", name: "Resort Manager", meta: "Partner resort · Sylhet" },
+              { quote: "The day sheet used to take my manager an hour every morning. Now it opens with everything already there â€” bookings, dues, restaurant, expenses.", name: "Resort Manager", meta: "Partner resort Â· Sylhet" },
               { quote: "I manage 3 resorts. Before this I had three Excel files and a notebook. Now one login, three resorts, zero confusion.", name: "Resort Owner", meta: "Multi-property owner" },
               { quote: "My agents used to call for every booking. Now they book from their own accounts and I just approve and track commission.", name: "Owner", meta: "Tour & travel partners" },
             ].map((t) => (
@@ -463,7 +463,7 @@ export default function HomePage() {
                     <Star key={i} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
-                <p className="mt-4 text-sm leading-relaxed text-slate-600">“{t.quote}”</p>
+                <p className="mt-4 text-sm leading-relaxed text-slate-600">â€œ{t.quote}â€</p>
                 <div className="mt-5 text-sm font-bold text-slate-900">{t.name}</div>
                 <div className="text-xs text-slate-400">{t.meta}</div>
               </div>
@@ -472,25 +472,25 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── final CTA ── */}
+      {/* â”€â”€ final CTA â”€â”€ */}
       <section className="bg-gradient-to-br from-brand-700 to-brand-900 py-20 text-white">
         <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] ?? "Start today — free for 14 days"}</h2>
+          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] || "Start today â€” free for 14 days"}</h2>
           <p className="mt-4 text-lg text-brand-50/90">
-            {cms["cta.body"] ??
-              "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen."}
+            {cms["cta.body"] ||
+              "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents â€” and run the whole resort from one screen."}
           </p>
           <Link
             href="/signup"
             className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-8 py-4 text-base font-bold text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:bg-emerald-300"
           >
-            {cms["cta.button"] ?? "Create free account"}
+            {cms["cta.button"] || "Create free account"}
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
           </Link>
         </div>
       </section>
 
-      {/* ── footer ── */}
+      {/* â”€â”€ footer â”€â”€ */}
       <footer id="contact" className="bg-white py-14">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
@@ -499,7 +499,7 @@ export default function HomePage() {
               <div className="text-sm font-bold text-slate-900">Resort Mela</div>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-500">
-              The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
+              The all-in-one resort management platform â€” booking calendar, front desk, restaurant POS,
               agents with wallets, and a booking API for your website.
             </p>
             <div className="mt-4 text-xs text-slate-400">support@rootcodebd.com</div>
@@ -524,7 +524,7 @@ export default function HomePage() {
           </div>
         </div>
         <div className="mx-auto mt-12 max-w-6xl border-t border-slate-100 px-4 pt-6 text-center text-xs text-slate-400">
-          © {new Date().getFullYear()} Resort Mela — reservation calendar & resort management platform. All rights reserved.
+          Â© {new Date().getFullYear()} Resort Mela â€” reservation calendar & resort management platform. All rights reserved.
         </div>
       </footer>
     </div>
