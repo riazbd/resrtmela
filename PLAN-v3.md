@@ -91,22 +91,34 @@ Sequenced by one rule: **a platform earns money only when it can onboard a
 tenant without us, enforce its own terms, and never promise what it does not
 do.** Feature depth comes after that.
 
-### P0 — Stop the product lying (days, not weeks)
+### P0 — Stop the product lying — **shipped**
 
-Each of these is a place the interface asserts something untrue. They are cheap
-and they are the difference between a product a stranger trusts and one they
-don't.
+Each of these was a place the interface asserted something untrue.
 
-1. ~~Suspension enforced~~ — **done**, §4.
-2. **Tax**: apply `taxRatePct` to booking totals and invoices, or delete the
-   field and its Settings row. Applying it is the right call — VAT is real for a
-   registered resort — but shipping either is better than the current state.
-3. **Truncation**: every capped list returns `{rows, total}` and the UI says
-   "showing 200 of 431". No silent lies about how much data exists.
-4. **Prefixes**: booking and F&B codes read from resort settings like invoices
-   already do.
+1. **Suspension enforced.** `TenantStateService.assertWritable()` blocks the
+   paths that create obligation and returns 402, not 403, so it reads as a
+   billing matter. Reads stay open by design.
+2. **Tax applied.** `taxRatePct` was editable and used nowhere. Now exclusive,
+   charged on the discounted amount, floored at zero, and carried into booking
+   detail, the list, the Day Sheet, today's arrivals, the dues ledger, a guest's
+   own trip, and both the printed and emailed invoice. Revenue reporting stays
+   net of it — tax is collected, not earned. Default 0, so existing tenants see
+   no change.
+3. **Prefixes are the tenant's.** `bookingPrefix` and `fbPrefix` join
+   `invoicePrefix`. Changing one continues the sequence rather than restarting
+   it, so a number is never reused.
+4. **Lists say what they withheld.** `common/page.ts` gives a clamped
+   skip/take and an envelope with the true total. Guests and expenses are on
+   it; the expenses rollups are now aggregated in the database over the whole
+   selection rather than summed over one page, and the guest directory's
+   per-guest last-stay query is gone.
 
-**Done when:** no screen states a fact the API cannot back.
+**Still capped and returning bare arrays** — same pattern, each needs its web
+caller moved with it: `fb.list` (300), `reports.collectors` (300),
+`activities.list` (200), `platform.listDues` (200), `engage.notifications`
+(100), `walletTxns` (100), `emailCampaigns` (50). Of these only `fb.list` can
+realistically be reached by a working resort inside a year; the rest are recent-
+activity feeds where a cap is honest. Finish `fb.list` first.
 
 ### P1 — Make a tenant a real tenant (~1 week)
 
