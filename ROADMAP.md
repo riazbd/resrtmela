@@ -6,6 +6,27 @@
 
 ---
 
+## ✅ Fixed 2026-09-09 (code audit)
+
+Branch `fix/audit-2026-09-09`. Each fix was written test-first; the suite went
+from 34 unit tests to 67 unit + integration tests against a real database
+(`pnpm -F @rh/api test:setup`, then `pnpm -F @rh/api test`).
+
+| What was wrong | Effect |
+|---|---|
+| **Migrations could not build a database.** Six migration files carried a UTF-8 BOM that MySQL rejects, and history was 16 tables behind the schema — everything after 2026-09-03 had been applied with `db push` | A fresh environment came up broken. With no backups (blocker 3) there was no recovery path at all |
+| **Booking money computed four different ways** | Guests were quoted one night's due for a whole stay; the daily revenue report ignored nights and discounts and double-counted room-charged F&B; a FLAT-commission agent saw ৳75,000 where the owner's report said ৳1,000 |
+| **`POST /v1/bookings` wrote `createdById: 0`**, a foreign key to a user that cannot exist | The public API a resort's own website uses could never have succeeded. It also ran as SUPER_ADMIN, one bug away from reaching other tenants |
+| **OTP codes lived in memory**, in the clear, seeded from `Math.random` | Restarting the API dropped every login in flight, and auth could not run on more than one process |
+| **Two plan tables, only the hard-coded one enforced** | Editing a plan's room limit in Platform → Plans did nothing; resort caps disagreed depending on which route added the resort |
+| **Mojibake in shipped strings** | Invoices printed `Snorkelling <?> 2`; the homepage rendered the taka sign as `a§³` |
+
+Deployment note: live already has the Sept tables via `db push`, so it needs
+`prisma migrate resolve --applied 20260908120000_sept_platform_roles_payroll_cms`
+once, then `prisma migrate deploy` for the new `otp_codes` table.
+
+---
+
 ## 🔴 Blockers — break real features today
 
 ### 1. ~~SMTP credentials are empty on live~~ ✅ DONE (2026-09-07)
@@ -113,4 +134,22 @@ Currently on `resortmela.rootcodebd.com` / `backresort.rootcodebd.com`. When rea
 - Extras: discount engine (per-room/resort-wide, auto-applied), extra-person rates, invoice PDF (print) + email, in-app notification bell, bulk email credits/campaigns, public API keys (`/v1/*`), rate limiting on auth
 - Deploy: VPS Node 20 + MariaDB 11.4, PM2 (`api` :4000, `web` :3000), Nginx + Let's Encrypt SSL, git pull deploys from `github.com/riazbd/resrtmela.git`
 
-**Live logins:** super admin `8801700000000 / Super@ResortMela2026` · manager `8801700000001 / Password123!` · agent `8801700000002 / Password123!` (change the super admin password before going fully public).
+### 🔴 Credentials — rotate now (2026-09-09)
+
+The live super admin, manager and agent passwords were committed here in plain
+text and pushed to `github.com/riazbd/resrtmela.git`. They have been removed
+from this file, but **they remain readable in commit `7ac3ba8`**, so removing
+them changes nothing on its own.
+
+1. **Rotate all three passwords on live** — the committed ones must be treated
+   as public. Start with the super admin, which can impersonate any resort
+   admin or agent.
+2. Decide about history. Purging `7ac3ba8` with `git filter-repo` rewrites
+   every commit after it, so anyone else with a clone has to re-clone. If the
+   passwords are rotated, leaving history alone is reasonable — it then only
+   leaks that those strings were once valid.
+3. Keep credentials out of the repo from here on: the accounts belong in a
+   password manager, and `.env` is already git-ignored.
+
+Live account **identifiers** (safe to record): super admin `8801700000000`,
+manager `8801700000001`, agent `8801700000002`.
