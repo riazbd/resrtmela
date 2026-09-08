@@ -47,6 +47,16 @@ export class ReportsController {
     return this.reports.metrics(req.user, resortId, from, to);
   }
 
+  @Get("resorts/:resortId/reports/idle-inventory")
+  idleInventory(
+    @Req() req: AuthedRequest,
+    @Param("resortId", ParseIntPipe) resortId: number,
+    @Query("from") from: string,
+    @Query("to") to: string,
+  ) {
+    return this.reports.idleInventory(req.user, resortId, from, to);
+  }
+
   @Get("resorts/:resortId/reports/daily")
   daily(
     @Req() req: AuthedRequest,

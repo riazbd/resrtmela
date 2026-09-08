@@ -206,6 +206,69 @@ export class ReportsService {
     };
   }
 
+  /**
+   * What the out-of-service rooms cost the owner, in taka.
+   *
+   * Priced at what the sellable rooms actually earned over the window — net of
+   * discounts, at the occupancy they actually achieved — not at rack rate.
+   * A room parked for a year is the largest silent expense a small resort has,
+   * and nothing in the owner's spreadsheet puts a number on it.
+   */
+  async idleInventory(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
+    requireResortAccess(claims, resortId);
+    const from = dateOnly(fromStr);
+    const to = dateOnly(toStr);
+    if (to <= from) throw badRequest("to must be after from");
+    const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+
+    const rooms = await this.prisma.room.findMany({
+      where: { resortId },
+      select: { id: true, name: true, status: true },
+      orderBy: { name: "asc" },
+    });
+    const idle = rooms.filter((r) => r.status === "OUT_OF_SERVICE");
+    const sellable = rooms.length - idle.length;
+
+    // what the sellable rooms earned, and how full they ran
+    const stays = await this.prisma.booking.findMany({
+      where: {
+        resortId, deletedAt: null, state: { in: COUNTED_STATES },
+        checkIn: { lt: to }, checkOut: { gt: from },
+      },
+      include: { items: true },
+    });
+    let netRevenue = 0;
+    let soldNights = 0;
+    for (const b of stays) {
+      const t = bookingTotals({ ...b, payments: [] });
+      if (t.nights <= 0) continue;
+      const perNight = perNightRevenue(t.roomRent, t.discount, t.nights);
+      // only the nights that fall inside the window
+      for (let n = 0; n < t.nights; n++) {
+        const night = new Date(b.checkIn!.getTime() + n * 86_400_000);
+        if (night >= from && night < to) {
+          netRevenue += perNight;
+          soldNights += b.items.filter((i) => i.itemKind === "ROOM").length;
+        }
+      }
+    }
+
+    const sellableNights = sellable * days;
+    const occupancy = sellableNights > 0 ? soldNights / sellableNights : 0;
+    const netAdr = soldNights > 0 ? round2(netRevenue / soldNights) : 0;
+
+    return {
+      from: fromStr,
+      to: toStr,
+      outOfServiceRooms: idle.map((r) => ({ id: r.id, name: r.name })),
+      sellableRooms: sellable,
+      occupancyPct: Math.round(occupancy * 1000) / 10,
+      netAdr,
+      foregoneInRange: Math.round(idle.length * days * netAdr * occupancy),
+      foregonePerYear: Math.round(idle.length * 365 * netAdr * occupancy),
+    };
+  }
+
   /** Daily revenue rows (sheet tabs 7/11) for a date range. */
   async daily(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
