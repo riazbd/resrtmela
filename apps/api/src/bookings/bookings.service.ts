@@ -3,7 +3,7 @@ import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
-import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, today } from "../common/dates";
+import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, perNightRevenue, type Money } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
@@ -1235,8 +1235,12 @@ export class BookingsService {
   // today dashboard feed
   async today(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
-    const t = today();
-    const taxRatePct = await this.taxRateFor(resortId);
+    const resort = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { timezone: true, taxRatePct: true },
+    });
+    const t = todayIn(resort.timezone);
+    const taxRatePct = Number(resort.taxRatePct);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,

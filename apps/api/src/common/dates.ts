@@ -38,9 +38,36 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function today(): Date {
-  const now = new Date();
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
+/**
+ * The civil date (YYYY-MM-DD) in a timezone.
+ *
+ * Reading UTC components instead means that between midnight and 06:00 in
+ * Dhaka the system believes it is still yesterday — which is what the arrivals
+ * list and the check-in reminder sweep used to do, every night.
+ *
+ * An unrecognised timezone falls back to UTC rather than throwing: a bad
+ * settings value must not take the Day Sheet down.
+ */
+export function civilDateIn(timeZone: string, now: Date = new Date()): string {
+  try {
+    // en-CA formats as YYYY-MM-DD
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
 }
+
+/**
+ * Today in a resort's timezone, as the UTC-midnight Date that `@db.Date`
+ * columns store — so it compares directly against checkIn/checkOut/night.
+ */
+export function todayIn(timeZone: string, now: Date = new Date()): Date {
+  const [y, m, d] = civilDateIn(timeZone, now).split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!));
+}
+

@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
-import { dateOnly, round2 } from "../common/dates";
+import { dateOnly, round2, todayIn } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 
@@ -232,8 +232,11 @@ export class FbService {
   /** In-house rooms right now — the POS room picker. */
   async inHouse(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
-    const now = new Date();
-    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const resort = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { timezone: true },
+    });
+    const date = todayIn(resort.timezone);
     const stays = await this.prisma.booking.findMany({
       where: {
         resortId,

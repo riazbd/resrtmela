@@ -3,7 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { dedupeKeyFor, renderTemplate, type TemplateName } from "./templates";
-import { today } from "../common/dates";
+import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
 
 const TICK_MS = 15_000;
@@ -133,23 +133,34 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`agent deadline sweep failed: ${String(e).slice(0, 200)}`);
       }
     }
-    // D-1 check-in reminder sweep
-    const tomorrow = new Date(today().getTime() + 86_400_000);
-    const arrivals = await this.prisma.booking.findMany({
-      where: {
-        checkIn: tomorrow,
-        state: { in: ["CONFIRMED", "CHECKED_IN"] },
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    for (const b of arrivals) {
-      const before = await this.prisma.notificationJob.count({
-        where: { dedupeKey: dedupeKeyFor("checkin_reminder", `booking:${b.id}`, tomorrow.toISOString().slice(0, 10)) },
+    // D-1 check-in reminder sweep.
+    //
+    // "Tomorrow" is a civil date in the resort's own timezone. Computing it
+    // from UTC meant that between midnight and 06:00 in Dhaka the sweep asked
+    // for the wrong day and reminded guests who were arriving that morning.
+    // Resorts are grouped by timezone so this stays one query per distinct
+    // zone rather than one per resort.
+    const zones = await this.prisma.resort.groupBy({ by: ["timezone"] });
+    for (const { timezone } of zones) {
+      const tomorrow = new Date(todayIn(timezone).getTime() + 86_400_000);
+      const arrivals = await this.prisma.booking.findMany({
+        where: {
+          checkIn: tomorrow,
+          state: { in: ["CONFIRMED", "CHECKED_IN"] },
+          deletedAt: null,
+          resort: { timezone },
+        },
+        select: { id: true },
       });
-      if (before === 0) {
-        await this.notifyBooking(b.id, "checkin_reminder", {}, tomorrow.toISOString().slice(0, 10));
-        swept++;
+      const day = tomorrow.toISOString().slice(0, 10);
+      for (const b of arrivals) {
+        const before = await this.prisma.notificationJob.count({
+          where: { dedupeKey: dedupeKeyFor("checkin_reminder", `booking:${b.id}`, day) },
+        });
+        if (before === 0) {
+          await this.notifyBooking(b.id, "checkin_reminder", {}, day);
+          swept++;
+        }
       }
     }
 

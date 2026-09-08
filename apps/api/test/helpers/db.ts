@@ -78,9 +78,17 @@ export interface Fixture {
   guestId: number;
 }
 
-/** One resort, two rooms at ৳5000, a manager, an agent and a guest. */
+/**
+ * A counter, not the clock: tests that freeze time would otherwise generate
+ * the same slug and phone number twice and collide on the unique index.
+ */
+let fixtureSeq = 0;
+
+/** One resort, two rooms at 5000, a manager, an agent and a guest. */
 export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
-  const tenant = await prisma.tenant.create({ data: { name: "Test Tenant", slug: `t-${Date.now()}` } });
+  const seq = ++fixtureSeq;
+  const uniq = `${seq}-${Math.floor(Math.random() * 1e6)}`;
+  const tenant = await prisma.tenant.create({ data: { name: "Test Tenant", slug: `t-${uniq}` } });
   const resort = await prisma.resort.create({
     data: { tenantId: tenant.id, name: "Test Resort", location: "Cox's Bazar" },
   });
@@ -96,11 +104,11 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
     );
   }
   const manager = await prisma.user.create({
-    data: { name: "Test Manager", phone: `8801${Date.now().toString().slice(-9)}`, role: "MANAGER" },
+    data: { name: "Test Manager", phone: `8801${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`, role: "MANAGER" },
   });
   await prisma.userResort.create({ data: { userId: manager.id, resortId: resort.id } });
   const agent = await prisma.user.create({
-    data: { name: "Test Agent", phone: `8802${Date.now().toString().slice(-9)}`, role: "AGENT", status: "active" },
+    data: { name: "Test Agent", phone: `8802${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`, role: "AGENT", status: "active" },
   });
   await prisma.userResort.create({
     data: { userId: agent.id, resortId: resort.id, commissionRate: 10, commissionKind: "PERCENT" },
@@ -110,7 +118,7 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
       resortId: resort.id,
       fullName: "Test Guest",
       phone: "8801711111111",
-      phoneKey: "test-phone-key",
+      phoneKey: `test-phone-key-${uniq}`,
       email: "guest@example.com",
     },
   });
