@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared";
-import { requireResortAccess, requireRoles, badRequest, forbid } from "../common/rbac";
+import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, today } from "../common/dates";
 import { bookingTotals, perNightRevenue } from "../common/money";
 import { AuditService } from "../common/audit.service";
@@ -289,7 +289,8 @@ export class BookingsService {
         resortId: p.resortId,
         kind: "ROOM",
         guestId: p.guestId,
-        createdById: p.actorUserId,
+        // null for API-key/webhook requests: there is no user row to point at
+        createdById: actorIdOrNull(p.actorUserId),
         agentUserId: p.agentUserId,
         source: p.source,
         checkIn: p.checkIn,
@@ -351,7 +352,7 @@ export class BookingsService {
           amount: p.advancePayment.amount as never,
           method: p.advancePayment.method,
           paymentType: "ADVANCE",
-          receivedById: p.actorUserId,
+          receivedById: actorIdOrNull(p.actorUserId),
         },
       });
     }

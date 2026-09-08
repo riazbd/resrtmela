@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, Inject } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
+import { actorIdOrNull } from "./rbac";
 
 export type Tx = Prisma.TransactionClient;
 
@@ -24,7 +25,7 @@ export class AuditService implements OnModuleDestroy {
     try {
       await client.auditLog.create({
         data: {
-          actorId: entry.actorId ?? null,
+          actorId: actorIdOrNull(entry.actorId),
           resortId: entry.resortId ?? null,
           action: entry.action,
           entity: entry.entity,

@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
-import { requireResortAccess, badRequest } from "../common/rbac";
+import { requireResortAccess, badRequest, apiKeyClaims } from "../common/rbac";
 import { round2 } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -110,7 +110,8 @@ export class IntentsService {
     });
 
     const detail = await this.bookings.detail(
-      { userId: 0, role: ROLE.SUPER_ADMIN, resortIds: [] },
+      // gateway webhook: no human actor, and scoped to the paying booking's resort
+      apiKeyClaims(intent.resortId),
       intent.bookingId,
     );
     await this.notifications.notifyPayment(intent.bookingId, Number(intent.amount), intent.method);

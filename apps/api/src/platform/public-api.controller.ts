@@ -2,8 +2,8 @@ import { Body, Controller, Get, Post, Query, Req, Inject } from "@nestjs/common"
 import { IsArray, IsInt, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { PlatformService } from "./platform.service";
 import { BookingsService, type CreateBookingInput } from "../bookings/bookings.service";
-import { ROLE, type JwtClaims } from "@rh/shared";
-import { badRequest } from "../common/rbac";
+import { type JwtClaims } from "@rh/shared";
+import { apiKeyClaims, badRequest } from "../common/rbac";
 
 interface ApiKeyRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -38,7 +38,7 @@ export class PublicApiController {
   }
 
   private claimsFor(resortId: number): JwtClaims {
-    return { userId: 0, role: ROLE.SUPER_ADMIN, resortIds: [resortId] };
+    return apiKeyClaims(resortId);
   }
 
   @Get("resort")
