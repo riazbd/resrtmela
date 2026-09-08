@@ -121,7 +121,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
                     {(open.activities ?? []).map((a) => (
                       <View key={a.itemId} style={[S.row, S.between, { paddingVertical: 3 }]}>
                         <Text style={S.tiny}>
-                          {a.name} � {a.qty} � {new Date(a.startsAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+                          {a.name} × {a.qty} · {new Date(a.startsAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                         </Text>
                         <Text style={{ fontSize: 11, fontWeight: '600' }}>{bdt(a.unitPrice * a.qty)}</Text>
                       </View>

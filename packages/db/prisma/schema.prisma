@@ -564,7 +564,7 @@ model Expense {
   @@map("expenses")
 }
 
-/// Restaurant / F&B bills (RES-##### sequence) � walk-in or charged to a stay
+/// Restaurant / F&B bills (RES-##### sequence) — walk-in or charged to a stay
 model FbBill {
   id         Int        @id @default(autoincrement())
   resortId   Int

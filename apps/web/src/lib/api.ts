@@ -61,7 +61,7 @@ export async function api<T = unknown>(
   return payload as T;
 }
 
-// â”€â”€ shared shapes (loose, dashboard-side) â”€â”€
+// ── shared shapes (loose, dashboard-side) ──
 
 export interface Resort {
   id: number;

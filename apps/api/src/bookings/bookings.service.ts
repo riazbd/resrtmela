@@ -1183,7 +1183,7 @@ export class BookingsService {
         description:
           i.itemKind === "ROOM"
             ? `${i.room?.name ?? "Room"} (${i.room?.roomType.name ?? ""})`
-            : `${i.activitySlot?.catalog.name ?? "Activity"} � ${i.qty}`,
+            : `${i.activitySlot?.catalog.name ?? "Activity"} × ${i.qty}`,
         nights: i.itemKind === "ROOM" ? totals.nights : null,
         qty: i.qty,
         unitPrice: Number(i.unitPrice),

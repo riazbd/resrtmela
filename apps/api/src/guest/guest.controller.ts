@@ -34,7 +34,7 @@ class GuestAvailQuery {
 export class GuestController {
   constructor(@Inject(GuestService) private readonly guest: GuestService) {}
 
-  /** Marketplace â€” all active resorts (no guest role required to browse). */
+  /** Marketplace — all active resorts (no guest role required to browse). */
   @Get("resorts")
   discover() {
     return this.guest.discover();

@@ -224,7 +224,7 @@ export class FbService {
     };
   }
 
-  /** In-house rooms right now � the POS room picker. */
+  /** In-house rooms right now — the POS room picker. */
   async inHouse(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     const now = new Date();

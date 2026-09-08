@@ -203,7 +203,7 @@ export class AuthService {
       this.prisma.user.findUnique({ where: { phone } }),
     ]);
     if (slugTaken) throw Object.assign(new Error(`Workspace "${slug}" is already taken`), { status: 409 });
-    if (phoneTaken) throw Object.assign(new Error("This phone already has an account � sign in instead"), { status: 409 });
+    if (phoneTaken) throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
 
     const passwordHash = await bcrypt.hash(input.password, 12);
     const result = await this.prisma.$transaction(async (tx) => {

@@ -187,7 +187,7 @@ export class ImportService {
         continue;
       }
 
-      // out-of-service placeholder rows â†’ room status, no booking
+      // out-of-service placeholder rows → room status, no booking
       if (this.isOutOfServiceRow(row)) {
         let room = roomCache.get(row.roomName.toLowerCase());
         if (!room) {
@@ -332,7 +332,7 @@ export class ImportService {
             }
           }
 
-          // advance â†’ ledger
+          // advance → ledger
           if (row.advance > 0) {
             const receiver = row.advanceReceiver
               ? await tx.user.findFirst({ where: { name: { contains: row.advanceReceiver } } })
@@ -358,7 +358,7 @@ export class ImportService {
         report.paymentsCreated += row.advance > 0 ? 1 : 0;
         if (result.conflict) {
           report.conflictNoHold++;
-          report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "conflict_no_hold", detail: "live overlap â€” booking kept, hold dropped" });
+          report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "conflict_no_hold", detail: "live overlap — booking kept, hold dropped" });
         } else {
           report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "imported" });
         }
@@ -420,7 +420,7 @@ export class ImportService {
     return null;
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ R4: expenses + F&B history + grid reconciliation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────── R4: expenses + F&B history + grid reconciliation ───────────────────
 
   /** Expense cashbook import (sheet tab 4). Verifies the sheet's own Daily Total column. */
   async importExpenses(claims: JwtClaims, resortId: number, csvText: string) {
@@ -492,7 +492,7 @@ export class ImportService {
     };
   }
 
-  /** F&B history import (sheet tab 10) â€” keeps RES-##### codes, computes status. */
+  /** F&B history import (sheet tab 10) — keeps RES-##### codes, computes status. */
   async importFb(
     claims: JwtClaims,
     resortId: number,
@@ -550,7 +550,7 @@ export class ImportService {
       const date = parseSheetDate((first[cDate] ?? "").trim());
       if (!date) { skipped++; continue; }
       const rawGuest = (first[cGuest] ?? "").trim();
-      // the sheet's guest column often holds PAX counts â€” keep chaos out of guestName
+      // the sheet's guest column often holds PAX counts — keep chaos out of guestName
       const guestName = rawGuest && !/^[\d.,]+$/.test(rawGuest) ? rawGuest : null;
       const paxNote = rawGuest && /^[\d.,]+$/.test(rawGuest) ? `pax: ${rawGuest}` : null;
       const roomId = resolveRoom(cRoom >= 0 ? (first[cRoom] ?? "") : "");
@@ -570,7 +570,7 @@ export class ImportService {
           ? items.reduce((s, i) => s + (i.sheetTotal > 0 ? i.sheetTotal : i.qty * i.unitPrice), 0)
           : items.reduce((s, i) => s + i.qty * i.unitPrice, 0),
       );
-      // the sheet has explicit Total/Paid/Due columns â€” trust the item sum for
+      // the sheet has explicit Total/Paid/Due columns — trust the item sum for
       // total (it equals the sheet's Total on single-row bills) and Paid for cash
       const paid = round2(rs.reduce((s, r) => s + parseMoney(cPaid >= 0 ? (r[cPaid] ?? "0") : "0"), 0));
       const computedState = paid >= totalFromItems - 0.01 && paid > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
@@ -631,7 +631,7 @@ export class ImportService {
   }
 
   /**
-   * Grid reconciliation (sheet tabs 7 & 11 vs computed Day Sheet) â€” the
+   * Grid reconciliation (sheet tabs 7 & 11 vs computed Day Sheet) — the
    * manager-facing drift report that decides trust.
    */
   async reconcileGrids(
