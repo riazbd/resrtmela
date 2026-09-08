@@ -14,6 +14,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PermissionsService } from "../common/permissions";
+import { TenantStateService } from "../common/tenant-state.service";
 import { BookingSource, type BookingState } from "@rh/db";
 
 export interface CreateBookingInput {
@@ -71,6 +72,7 @@ export class BookingsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TenantStateService) private readonly tenantState: TenantStateService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -84,6 +86,7 @@ export class BookingsService {
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
     requireResortAccess(claims, input.resortId);
+    await this.tenantState.assertWritable(input.resortId);
     const checkIn = dateOnly(input.checkIn);
     const checkOut = dateOnly(input.checkOut);
     const nights = nightsBetween(checkIn, checkOut);

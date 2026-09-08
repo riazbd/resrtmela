@@ -14,13 +14,15 @@ import { SmsService } from "../../src/notifications/sms.service";
 import { DiscountService } from "../../src/common/discount.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
+import { PlanLimitsService } from "../../src/common/plan-limits.service";
+import { TenantStateService } from "../../src/common/tenant-state.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
   return new BookingsService(
     prisma,
     new AvailabilityService(prisma),
-    new RoomsService(prisma, audit),
+    new RoomsService(prisma, audit, new PlanLimitsService(prisma)),
     new ActivitiesService(prisma, audit),
     // EmailService/SmsService fall back to console logging when unconfigured,
     // so nothing leaves the machine during a test run.
@@ -29,5 +31,6 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     audit,
     new EmailService(),
     new PermissionsService(prisma),
+    new TenantStateService(prisma),
   );
 }

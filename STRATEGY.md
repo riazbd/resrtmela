@@ -1,5 +1,11 @@
 # Resort Mela — business decisions
 
+> **Superseded on priorities by [PLAN-v3.md](PLAN-v3.md).** This document set
+> product direction from one tenant's workbook. Those are one resort's facts —
+> useful input, but not a basis for platform priorities, and the ordering here
+> (payments first) was wrong for that reason. The tenant-level observations
+> below stand; the sequencing does not.
+
 > Written 2026-09-09 after reading all 11 tabs of the client's live workbook
 > (`Sky_Eco_Resort_`, owned by bonanjalihouseboat@gmail.com, last edited 8 Sep).
 > Every number below is computed from that workbook, not estimated. Where a

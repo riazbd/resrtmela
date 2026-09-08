@@ -4,6 +4,7 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { TenantStateService } from "../common/tenant-state.service";
 import { PermissionsService } from "../common/permissions";
 
 @Injectable()
@@ -12,6 +13,7 @@ export class ExpensesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TenantStateService) private readonly tenantState: TenantStateService,
   ) {}
 
   async list(claims: JwtClaims, resortId: number, from?: string, to?: string, scope?: string) {
@@ -63,6 +65,7 @@ export class ExpensesService {
     data: { date: string; category: string; details?: string; amount: number; scope?: string },
   ) {
     requireResortAccess(claims, resortId);
+    await this.tenantState.assertWritable(resortId);
     await this.perms.require(claims, resortId, "expenses.create");
     if (data.amount <= 0) throw badRequest("amount must be > 0");
     const exp = await this.prisma.expense.create({

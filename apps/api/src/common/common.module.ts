@@ -3,10 +3,11 @@ import { AuditService } from "./audit.service";
 import { DiscountService } from "./discount.service";
 import { PermissionsService } from "./permissions";
 import { PlanLimitsService } from "./plan-limits.service";
+import { TenantStateService } from "./tenant-state.service";
 
 @Global()
 @Module({
-  providers: [AuditService, DiscountService, PermissionsService, PlanLimitsService],
-  exports: [AuditService, DiscountService, PermissionsService, PlanLimitsService],
+  providers: [AuditService, DiscountService, PermissionsService, PlanLimitsService, TenantStateService],
+  exports: [AuditService, DiscountService, PermissionsService, PlanLimitsService, TenantStateService],
 })
 export class CommonModule {}
