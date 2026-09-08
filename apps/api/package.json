@@ -6,7 +6,8 @@
     "dev": "node --watch -r ts-node/register/transpile-only src/main.ts",
     "start": "node -r ts-node/register/transpile-only src/main.ts",
     "typecheck": "tsc -p tsconfig.build.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:setup": "node scripts/setup-test-db.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.7",

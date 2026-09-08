@@ -4,6 +4,7 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
+import { bookingTotals, perNightRevenue } from "../common/money";
 import { PermissionsService } from "../common/permissions";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
@@ -214,10 +215,11 @@ export class ReportsService {
     if ((to.getTime() - from.getTime()) / 86400000 > 120) {
       throw badRequest("max 120 days per query");
     }
+    // every stay that covers a night in the range, not just those starting in it
     const bookings = await this.prisma.booking.findMany({
       where: {
         resortId, deletedAt: null, state: { in: COUNTED_STATES },
-        checkIn: { gte: from, lt: to },
+        checkIn: { lt: to }, checkOut: { gt: from },
       },
       include: { items: true },
     });
@@ -228,13 +230,26 @@ export class ReportsService {
     const expenses = await this.prisma.expense.findMany({
       where: { resortId, date: { gte: from, lt: to } },
     });
+    // revenue per night of stay (rent - discount), the sheet tab 11 rule — the
+    // same number the Day Sheet shows. F&B is reported in its own column, so a
+    // charged-to-room bill must not also land in room revenue.
+    const nightly = bookings.map((b) => {
+      const t = bookingTotals({ ...b, payments: [] });
+      return {
+        checkIn: b.checkIn,
+        checkOut: b.checkOut,
+        revenue: perNightRevenue(t.roomRent, t.discount, t.nights),
+      };
+    });
+
     const days: { date: string; roomRevenue: number; fbRevenue: number; expenses: number; net: number }[] = [];
     for (let d = new Date(from); d < to; d.setUTCDate(d.getUTCDate() + 1)) {
       const key = d.toISOString().slice(0, 10);
+      const night = new Date(key);
       const room = round2(
-        bookings
-          .filter((b) => b.checkIn && b.checkIn.toISOString().slice(0, 10) === key)
-          .reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0),
+        nightly
+          .filter((n) => n.checkIn && n.checkOut && n.checkIn <= night && night < n.checkOut)
+          .reduce((s, n) => s + n.revenue, 0),
       );
       const fbRev = round2(
         fb.filter((b) => b.billDate.toISOString().slice(0, 10) === key)
@@ -389,6 +404,7 @@ export class ReportsService {
       where: { userId_resortId: { userId: claims.userId, resortId } },
     });
     const rate = Number(link?.commissionRate ?? 0);
+    const kind = link?.commissionKind ?? "PERCENT";
     const bookings = (await this.rangeBookings(resortId, from, to)).filter(
       (b) => b.agentUserId === claims.userId,
     );
@@ -397,10 +413,12 @@ export class ReportsService {
       from: from ?? null,
       to: to ?? null,
       commissionRate: rate,
+      commissionKind: kind,
       bookings: bookings.length,
       rent,
       due: round2(bookings.reduce((s, b) => s + b.due, 0)),
-      commission: round2((rent * rate) / 100),
+      // must agree with agents() above: FLAT is a fee per booking, PERCENT a share of rent
+      commission: round2(kind === "FLAT" ? rate * bookings.length : (rent * rate) / 100),
     };
   }
 }

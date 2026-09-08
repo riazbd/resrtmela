@@ -4,6 +4,7 @@ import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { dedupeKeyFor, renderTemplate, type TemplateName } from "./templates";
 import { today } from "../common/dates";
+import { bookingTotals } from "../common/money";
 
 const TICK_MS = 15_000;
 
@@ -83,11 +84,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!b) return;
-    const paid = b.payments
-      .filter((p) => p.paymentType !== "REFUND")
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-    const due = Math.max(0, Math.round((rent - Number(b.discount) - paid) * 100) / 100);
+    const due = Math.max(0, bookingTotals(b).due);
     const to = b.guest.email?.trim() || b.guest.phone;
     await this.enqueueJob({
       channel: b.guest.email?.trim() ? "EMAIL" : "SMS",

@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, today } from "../common/dates";
+import { bookingTotals, perNightRevenue } from "../common/money";
 import { AuditService } from "../common/audit.service";
 import { assertTransition } from "./booking-state";
 import { AvailabilityService } from "./availability.service";
@@ -72,41 +73,13 @@ export class BookingsService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
-  // ── computed money (never stored — doc §5.2) ──
+  // ── computed money (never stored — doc §5.2), one implementation for all callers ──
   static computeTotals(
     booking: Prisma.BookingGetPayload<{
       include: { items: true; payments: true };
     }>,
   ) {
-    let rent = 0;
-    let nights = 0;
-    for (const item of booking.items) {
-      const itemNights =
-        item.itemKind === "ROOM" && booking.checkIn && booking.checkOut
-          ? nightsBetween(booking.checkIn, booking.checkOut)
-          : 1;
-      rent += Number(item.unitPrice) * item.qty * itemNights;
-      if (item.itemKind === "ROOM") nights = itemNights;
-    }
-    const discount = Number(booking.discount);
-    const paid = booking.payments
-      .filter((p) => p.paymentType !== "REFUND")
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const refunded = booking.payments
-      .filter((p) => p.paymentType === "REFUND")
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const due = round2(rent - discount - paid);
-    const paymentState =
-      due <= 0.001 && paid > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
-    return {
-      nights,
-      rent: round2(rent),
-      discount,
-      paid: round2(paid),
-      refunded: round2(refunded),
-      due,
-      paymentState,
-    };
+    return bookingTotals(booking);
   }
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
@@ -891,16 +864,12 @@ export class BookingsService {
       const b = covering[0];
       let cell: Record<string, unknown> = { mode: room.status === "OUT_OF_SERVICE" ? "oos" : "available" };
       if (b && b.checkIn && b.checkOut) {
-        const nights = nightsBetween(b.checkIn, b.checkOut) || 1;
         const t = BookingsService.computeTotals(b);
         const isFirstNight = b.checkIn.getTime() === date.getTime();
         const isLastNight = nextDay.getTime() === b.checkOut.getTime();
-        const roomRent = b.items
-          .filter((i) => i.itemKind === "ROOM")
-          .reduce((s, i) => s + Number(i.unitPrice) * i.qty * nights, 0);
-        const perNightRevenue = Math.round(((roomRent - t.discount) / nights) * 100) / 100;
+        const nightRevenue = perNightRevenue(t.roomRent, t.discount, t.nights);
         if (isFirstNight) balanceDue += t.due;
-        revenue += perNightRevenue;
+        revenue += nightRevenue;
         if (isFirstNight) arrivals++;
         if (isLastNight) departures++;
         cell = {
@@ -910,7 +879,7 @@ export class BookingsService {
           state: b.state,
           guestName: b.guest.fullName,
           due: isFirstNight ? t.due : null,
-          revenue: perNightRevenue,
+          revenue: nightRevenue,
           arrives: isFirstNight,
           departs: isLastNight,
         };
