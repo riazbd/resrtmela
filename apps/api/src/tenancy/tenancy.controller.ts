@@ -27,6 +27,8 @@ class UpdateResortDto {
   @IsOptional() @IsNumber() taxRatePct?: number;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() @MaxLength(12) invoicePrefix?: string;
+  @IsOptional() @IsString() @MaxLength(12) bookingPrefix?: string;
+  @IsOptional() @IsString() @MaxLength(12) fbPrefix?: string;
   @IsOptional() @IsString() @MaxLength(16) checkInTime?: string;
   @IsOptional() @IsString() @MaxLength(16) checkOutTime?: string;
   @IsOptional() @IsString() @MaxLength(255) address?: string;

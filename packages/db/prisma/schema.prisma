@@ -126,6 +126,8 @@ model Resort {
   taxRatePct         Decimal        @default(0.00) @db.Decimal(5, 2)
   agentPaymentHours  Int            @default(48) // agent bookings must be fully paid this many hours before check-in
   invoicePrefix      String         @default("SER") @db.VarChar(12)
+  bookingPrefix      String         @default("BK") @db.VarChar(12)
+  fbPrefix           String         @default("RES") @db.VarChar(12)
   fyStartMonthDay    String         @default("07-01") @db.VarChar(5) // financial year start MM-DD
   checkInTime        String         @default("12:00 PM") @db.VarChar(16)
   checkOutTime       String         @default("10:00 AM") @db.VarChar(16)

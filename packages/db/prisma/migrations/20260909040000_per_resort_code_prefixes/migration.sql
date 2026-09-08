@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE `resorts` ADD COLUMN `bookingPrefix` VARCHAR(12) NOT NULL DEFAULT 'BK',
+    ADD COLUMN `fbPrefix` VARCHAR(12) NOT NULL DEFAULT 'RES';
+

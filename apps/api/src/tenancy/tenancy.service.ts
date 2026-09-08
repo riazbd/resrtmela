@@ -96,6 +96,8 @@ export class TenancyService {
       taxRatePct: number;
       status: string;
       invoicePrefix: string;
+      bookingPrefix: string;
+      fbPrefix: string;
       checkInTime: string;
       checkOutTime: string;
       address: string;

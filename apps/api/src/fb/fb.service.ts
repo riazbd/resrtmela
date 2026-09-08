@@ -6,6 +6,7 @@ import { dateOnly, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 
+/** Fallback only — the prefix is a per-resort setting. */
 const FB_PREFIX = "RES";
 
 @Injectable()
@@ -64,7 +65,11 @@ export class FbService {
         where: { resortId_kind: { resortId, kind: "FB" } },
         data: { nextVal: { increment: 1 } },
       });
-      const code = `${FB_PREFIX}-${String(counter.nextVal).padStart(5, "0")}`;
+      const resortRow = await tx.resort.findUniqueOrThrow({
+        where: { id: resortId },
+        select: { fbPrefix: true },
+      });
+      const code = `${resortRow.fbPrefix || FB_PREFIX}-${String(counter.nextVal).padStart(5, "0")}`;
       // room: explicit, else derived from the charged booking's first room item
       const roomId = input.roomId
         ? input.roomId

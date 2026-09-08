@@ -294,7 +294,13 @@ export class BookingsService {
       create: { resortId: p.resortId, kind: "BOOKING", nextVal: 0 },
       update: { nextVal: { increment: 1 } },
     });
-    const code = `${BOOKING_CODE_PREFIX}-${String(counter.nextVal).padStart(5, "0")}`;
+    // the prefix is the tenant's; the counter is never reset, so changing the
+    // prefix renames future codes without ever reusing a number
+    const resortRow = await tx.resort.findUniqueOrThrow({
+      where: { id: p.resortId },
+      select: { bookingPrefix: true },
+    });
+    const code = `${resortRow.bookingPrefix || BOOKING_CODE_PREFIX}-${String(counter.nextVal).padStart(5, "0")}`;
 
     const created = await tx.booking.create({
       data: {

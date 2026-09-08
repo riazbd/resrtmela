@@ -16,6 +16,8 @@ interface ResortDetail {
   showRatesToAgents: boolean;
   taxRatePct: string | number;
   invoicePrefix: string;
+  bookingPrefix: string;
+  fbPrefix: string;
   checkInTime: string;
   checkOutTime: string;
   address: string | null;
@@ -128,6 +130,8 @@ export default function SettingsPage() {
           showRatesToAgents: d.showRatesToAgents,
           taxRatePct: Number(d.taxRatePct) || 0,
           invoicePrefix: d.invoicePrefix || undefined,
+          bookingPrefix: d.bookingPrefix || undefined,
+          fbPrefix: d.fbPrefix || undefined,
           checkInTime: d.checkInTime || undefined,
           checkOutTime: d.checkOutTime || undefined,
           address: d.address ?? undefined,
@@ -217,6 +221,8 @@ export default function SettingsPage() {
               <div className="mt-2 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">Invoice & stay settings</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="Invoice prefix"><Input value={d.invoicePrefix} onChange={(e) => setD({ ...d, invoicePrefix: e.target.value })} /></Field>
+                <Field label="Booking prefix"><Input value={d.bookingPrefix} onChange={(e) => setD({ ...d, bookingPrefix: e.target.value })} /></Field>
+                <Field label="Restaurant bill prefix"><Input value={d.fbPrefix} onChange={(e) => setD({ ...d, fbPrefix: e.target.value })} /></Field>
                 <Field label="Check-in time"><Input value={d.checkInTime} onChange={(e) => setD({ ...d, checkInTime: e.target.value })} placeholder="12:00 PM" /></Field>
                 <Field label="Check-out time"><Input value={d.checkOutTime} onChange={(e) => setD({ ...d, checkOutTime: e.target.value })} placeholder="10:00 AM" /></Field>
               </div>
