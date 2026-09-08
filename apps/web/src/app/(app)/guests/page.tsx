@@ -1,37 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, dmy, type GuestRow } from "@/lib/api";
+import { useState } from "react";
+import { client, dmy } from "@/lib/api";
+import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card, Empty, Input, Spinner, Td, Th } from "@/components/ui";
+import { ErrorState } from "@/components/error-state";
+import { useDebounced } from "@/lib/use-debounced";
 
 export default function GuestsPage() {
   const { activeResort, isStaff } = useAuth();
-  const [rows, setRows] = useState<GuestRow[]>([]);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  // typing "rahman" used to be six requests; the last one is the only answer
+  const debounced = useDebounced(search, 300);
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const qs = search ? `?search=${encodeURIComponent(search)}` : "";
-      const page = await api<{ rows: GuestRow[]; total: number; truncated: boolean }>(
-        `/resorts/${activeResort.id}/guests${qs}`,
-      );
-      setRows(page.rows);
-      setTotal(page.total);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, search]);
-
-  useEffect(() => {
-    if (isStaff) void load();
-  }, [load, isStaff]);
+  const { data, isPending, error } = useApi(
+    keys.guests(activeResort?.id, debounced),
+    () => client.guests.list(activeResort!.id, { search: debounced || undefined }),
+    { enabled: isStaff && !!activeResort, placeholderData: (prev) => prev },
+  );
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
 
   if (!isStaff) return <Empty msg="Staff only" />;
+  if (error) return <ErrorState error={error} />;
 
   return (
     <Card
@@ -46,7 +38,7 @@ export default function GuestsPage() {
       }
       className="!p-0"
     >
-      {loading ? (
+      {isPending ? (
         <Spinner />
       ) : rows.length === 0 ? (
         <Empty msg="No guests found" />

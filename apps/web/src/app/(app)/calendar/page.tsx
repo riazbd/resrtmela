@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, iso, type CalendarBooking, type Room, money} from "@/lib/api";
+import { client, iso, type CalendarBooking, money } from "@/lib/api";
+import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Spinner } from "@/components/ui";
+import { ErrorState, Skeleton } from "@/components/error-state";
 
 const CELL_COLORS: Record<string, string> = {
   CONFIRMED: "bg-green-500/90",
@@ -34,9 +36,6 @@ export default function CalendarPage() {
   const { activeResort } = useAuth();
   const router = useRouter();
   const [start, setStart] = useState<Date>(() => new Date());
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [bookings, setBookings] = useState<CalendarBooking[]>([]);
-  const [loading, setLoading] = useState(true);
   const days = 14;
 
   const end = useMemo(() => addDays(start, days), [start]);
@@ -45,26 +44,21 @@ export default function CalendarPage() {
     [start],
   );
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const [roomList, cal] = await Promise.all([
-        api<Room[]>(`/resorts/${activeResort.id}/rooms`),
-        api<{ bookings: CalendarBooking[] }>(
-          `/resorts/${activeResort.id}/calendar?from=${iso(start)}&to=${iso(end)}`,
-        ),
-      ]);
-      setRooms(roomList.filter((r) => r.status === "ACTIVE"));
-      setBookings(cal.bookings);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, start, end]);
+  // the room list is shared with every other screen and cached under one key;
+  // paging the calendar a fortnight at a time only refetches the bookings
+  const roomsQ = useApi(keys.rooms(activeResort?.id), () => client.rooms.list(activeResort!.id), {
+    enabled: !!activeResort,
+  });
+  const calQ = useApi(
+    keys.calendar(activeResort?.id, iso(start), iso(end)),
+    () => client.calendar(activeResort!.id, iso(start), iso(end)),
+    { enabled: !!activeResort, placeholderData: (prev) => prev },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rooms = useMemo(() => (roomsQ.data ?? []).filter((r) => r.status === "ACTIVE"), [roomsQ.data]);
+  const bookings: CalendarBooking[] = useMemo(() => calQ.data?.bookings ?? [], [calQ.data]);
+  const loading = roomsQ.isPending || calQ.isPending;
+  const error = roomsQ.error ?? calQ.error;
 
   // roomId:date -> booking
   const cellMap = useMemo(() => {
@@ -115,8 +109,10 @@ export default function CalendarPage() {
       </div>
 
       <Card className="overflow-hidden !p-0">
-        {loading ? (
-          <Spinner />
+        {error ? (
+          <ErrorState error={error} />
+        ) : loading ? (
+          <Skeleton rows={6} />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse">

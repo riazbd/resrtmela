@@ -1,38 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
+import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
-
-interface Cell {
-  mode: "oos" | "available" | "booked";
-  bookingId?: number;
-  code?: string;
-  state?: string;
-  guestName?: string;
-  due?: number | null;
-  revenue?: number | null;
-  arrives?: boolean;
-  departs?: boolean;
-}
-interface RoomRow {
-  roomId: number;
-  name: string;
-  capacity: number | null;
-  status: string;
-  cell: Cell;
-}
-interface DaySheet {
-  date: string;
-  rooms: RoomRow[];
-  strip: {
-    balanceDue: number; revenue: number; expenses: number;
-    arrivals: number; departures: number; occupancy: number; totalRooms: number;
-  };
-}
+import { ErrorState, Skeleton } from "@/components/error-state";
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -43,22 +18,12 @@ export default function DaySheetPage() {
   const t = useT();
   const router = useRouter();
   const [date, setDate] = useState(() => iso(new Date()));
-  const [sheet, setSheet] = useState<DaySheet | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      setSheet(await api<DaySheet>(`/resorts/${activeResort.id}/day-sheet?date=${date}`));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, date]);
-
-  useEffect(() => {
-    if (isStaff) void load();
-  }, [load, isStaff]);
+  const { data: sheet, isPending, error } = useApi(
+    keys.daySheet(activeResort?.id, date),
+    () => client.daySheet(activeResort!.id, date),
+    { enabled: isStaff && !!activeResort },
+  );
 
   function shift(days: number) {
     const d = new Date(date + "T00:00:00Z");
@@ -67,7 +32,8 @@ export default function DaySheetPage() {
   }
 
   if (!isStaff) return <Spinner />;
-  if (loading || !sheet) return <Spinner />;
+  if (error) return <ErrorState error={error} />;
+  if (isPending || !sheet) return <Skeleton rows={8} />;
 
   const strip = sheet.strip;
 

@@ -1,39 +1,42 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, money, dmy, type BookingRow, cur } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
+import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
+import { ErrorState, Skeleton } from "@/components/error-state";
 
-interface DuesResponse {
-  total: number;
-  count: number;
-  rows: (BookingRow & { state: string })[];
-}
+type DueRow = DuesReport["rows"][number];
 
 export default function PaymentsPage() {
   const { activeResort, isStaff } = useAuth();
   const { push } = useToast();
-  const [data, setData] = useState<DuesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [payFor, setPayFor] = useState<DuesResponse["rows"][number] | null>(null);
+  const qc = useQueryClient();
+  const [payFor, setPayFor] = useState<DueRow | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      setData(await api<DuesResponse>(`/resorts/${activeResort.id}/dues`));
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort]);
+  const { data, isPending, error } = useApi(
+    keys.dues(activeResort?.id),
+    () => client.dues(activeResort!.id),
+    { enabled: isStaff && !!activeResort },
+  );
 
-  useEffect(() => {
-    if (isStaff) void load();
-  }, [load, isStaff]);
+  /**
+   * Collecting money changes the dues list, the day sheet's outstanding strip
+   * and the booking itself. Naming them here is why those screens are correct
+   * the moment the user walks to them, instead of showing yesterday's number
+   * until something happens to refetch.
+   */
+  function afterPayment() {
+    void qc.invalidateQueries({ queryKey: keys.dues(activeResort?.id) });
+    void qc.invalidateQueries({ queryKey: ["day-sheet", activeResort?.id] });
+    void qc.invalidateQueries({ queryKey: ["today", activeResort?.id] });
+    void qc.invalidateQueries({ queryKey: ["bookings", activeResort?.id] });
+  }
 
   if (!isStaff) return <Empty msg="Staff only" />;
-  if (loading || !data) return <Spinner />;
+  if (error) return <ErrorState error={error} />;
+  if (isPending || !data) return <Skeleton rows={6} />;
 
   return (
     <div className="space-y-4">
@@ -73,39 +76,35 @@ export default function PaymentsPage() {
         )}
       </Card>
 
-      <CollectModal row={payFor} onClose={() => setPayFor(null)} onDone={() => void load()} />
+      <CollectModal row={payFor} onClose={() => setPayFor(null)} onDone={afterPayment} />
     </div>
   );
 }
 
 function CollectModal({ row, onClose, onDone }: {
-  row: DuesResponse["rows"][number] | null;
+  row: DueRow | null;
   onClose: () => void;
   onDone: () => void;
 }) {
   const { push } = useToast();
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (row) setAmount(row.due);
   }, [row]);
 
-  async function submit() {
-    if (!row) return;
-    setBusy(true);
-    try {
-      await api(`/bookings/${row.id}/payments`, { method: "POST", body: { amount, method } });
-      push(`Collected ${money(amount)} for ${row.code}`);
+  // A payment is never retried on its own — the clerk pressed the button once,
+  // and a second attempt would be a second receipt in the guest's hand.
+  const collect = useMutation({
+    mutationFn: () => client.bookings.pay(row!.id, { amount, method }),
+    onSuccess: () => {
+      push(`Collected ${money(amount)} for ${row!.code}`);
       onDone();
       onClose();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    } finally {
-      setBusy(false);
-    }
-  }
+    },
+    onError: (ex: Error) => push(ex.message, "err"),
+  });
 
   return (
     <Modal open={!!row} onClose={onClose} title={`Collect payment — ${row?.code ?? ""}`}>
@@ -122,7 +121,7 @@ function CollectModal({ row, onClose, onDone }: {
               </Select>
             </Field>
           </div>
-          <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={amount <= 0}>Record payment</Button></div>
+          <div className="flex justify-end"><Button onClick={() => collect.mutate()} loading={collect.isPending} disabled={amount <= 0}>Record payment</Button></div>
         </div>
       )}
     </Modal>

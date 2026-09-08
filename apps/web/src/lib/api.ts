@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { formatMoney, currencySymbol, type MoneyFormat } from "@rh/shared";
+import { formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
@@ -97,132 +97,32 @@ export async function download(path: string, fallbackName: string): Promise<void
   URL.revokeObjectURL(url);
 }
 
-// ── shared shapes (loose, dashboard-side) ──
+/**
+ * The response shapes live in @rh/shared, so the API, this console and the
+ * mobile app cannot drift apart. They are re-exported here because many files
+ * import them from "@/lib/api", and moving the definition should not mean
+ * touching every one of them.
+ */
+export type {
+  Resort, Me, PermRole,
+  BookingRow, BookingDetail, CalendarBooking,
+  Room, RoomType, RatePlan, RoomAvail,
+  GuestRow, GuestRoomType, GuestResort, GuestAvailability, GuestTrip,
+  Employee, PayrollSheet, FoodPackage, PLReport, ExpenseRow, ExpensePage, DuesReport, DaySheet,
+  CmsRow, PlatformSettings, BillingSweepResult, ExportArchive,
+  Page, PageRequest,
+} from "@rh/shared";
+import type { GuestResort, GuestAvailability, GuestTrip } from "@rh/shared";
 
-export interface Resort {
-  id: number;
-  name: string;
-  tenantId: number;
-  status: string;
-  currency?: string;
-  locale?: string;
-}
 
-export interface Me {
-  id: number;
-  name: string;
-  phone: string;
-  role: string;
-  resorts: { resort: Resort; commissionRate: number | null }[];
-}
 
-export interface BookingRow {
-  id: number;
-  code: string;
-  groupTag?: string | null;
-  state: string;
-  paymentState: string;
-  source: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  guest: { id: number; fullName: string; phone: string };
-  agent: string | null;
-  rooms: (string | null)[];
-  adults: number;
-  children: number;
-  discount: number;
-  nights: number;
-  rent: number;
-  paid: number;
-  due: number;
-}
 
-export interface BookingDetail extends BookingRow {
-  cancelState: string;
-  invoiceNo?: string;
-  remarks: string | null;
-  createdBy: { id: number; name: string } | null;
-  guest: { id: number; fullName: string; phone: string; nidPassportNo: string | null };
-  items: {
-    id: number;
-    kind: string;
-    room: { id: number; name: string; type: string } | null;
-    slot: { id: number; startsAt: string; endsAt: string } | null;
-    qty: number;
-    unitPrice: number | null;
-    nights: number;
-  }[];
-  payments: {
-    id: number;
-    amount: number;
-    method: string;
-    type: string;
-    receivedBy: string | null;
-    receivedAt: string;
-    note: string | null;
-  }[];
-}
 
-export interface RoomAvail {
-  roomId: number;
-  roomName: string;
-  roomTypeId: number;
-  baseRate: number;
-  status: string;
-  busyNights: string[];
-}
 
-export interface CalendarBooking {
-  id: number;
-  code: string;
-  state: string;
-  paymentState: string;
-  guestName: string;
-  agentName: string | null;
-  checkIn: string;
-  checkOut: string;
-  rooms: { id: number | null; name: string }[];
-}
 
-export interface Room {
-  id: number;
-  resortId: number;
-  roomTypeId: number;
-  name: string;
-  baseRate: string | number;
-  status: "ACTIVE" | "OUT_OF_SERVICE";
-  roomType?: RoomType;
-}
 
-export interface RoomType {
-  id: number;
-  name: string;
-  maxAdults: number;
-  maxChildren: number;
-  extraPersonAllowed?: boolean;
-  extraPersonRate?: string | number;
-  amenities?: string[];
-  active: boolean;
-}
 
-export interface RatePlan {
-  id: number;
-  roomTypeId: number;
-  dateFrom: string;
-  dateTo: string;
-  price: string | number;
-  active: boolean;
-  roomType?: { id: number; name: string };
-}
 
-export interface GuestRow {
-  id: number;
-  fullName: string;
-  phone: string;
-  nidPassportNo: string | null;
-  bookingCount: number;
-  lastStay: { code: string; checkIn: string | null; checkOut: string | null; state: string } | null;
-}
 
 /**
  * Currency and locale come from the active resort, not from this file.
@@ -257,57 +157,9 @@ export const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 // ── guest web booking ──
 
-export interface GuestRoomType {
-  id: number;
-  name: string;
-  maxAdults: number;
-  maxChildren: number;
-  amenities?: string[];
-  priceFrom: number | null;
-  totalRooms?: number;
-}
 
-export interface GuestResort {
-  id: number;
-  name: string;
-  location: string | null;
-  roomCount?: number;
-  roomTypes?: GuestRoomType[];
-  activities?: { id: number; name: string; category: string; price: number; durationMin: number }[];
-}
 
-export interface GuestAvailability {
-  roomTypeId: number;
-  name: string;
-  maxAdults: number;
-  maxChildren: number;
-  total: number;
-  available: number;
-  pricePerNight: number;
-}
 
-export interface GuestTrip {
-  id: number;
-  code: string;
-  resortId?: number;
-  resortName?: string;
-  resort?: { id: number; name: string; location: string | null };
-  state: string;
-  paymentState: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  adults?: number;
-  children?: number;
-  rooms: (string | null)[];
-  remarks?: string | null;
-  activities?: { itemId: number; name: string; startsAt: string; endsAt: string; qty: number; unitPrice: number }[];
-  payments?: { id: number; amount: number; method: string; type: string; receivedAt: string }[];
-  nights: number;
-  rent: number;
-  discount: number;
-  paid: number;
-  due: number;
-}
 
 export const guestResorts = () => api<GuestResort[]>("/guest/resorts");
 export const guestResort = (id: number) => api<GuestResort>(`/guest/resorts/${id}`);
@@ -327,77 +179,19 @@ export const guestOtpVerify = (phone: string, code: string) =>
 export const permissionsFor = (resortId?: number) =>
   api<{ permissions: string[] }>(`/auth/permissions${resortId ? `?resortId=${resortId}` : ""}`);
 
-export interface PermRole {
-  id: number;
-  name: string;
-  system: boolean;
-  users: number;
-  permissions: string[];
-}
 
 // ── payroll ──
 
-export interface Employee {
-  id: number;
-  name: string;
-  phone: string | null;
-  designation: string | null;
-  salary: number;
-  joinDate: string | null;
-  active: boolean;
-  payments: { id: number; month: string; amount: number; method: string | null }[];
-}
 
-export interface PayrollSheet {
-  month: string;
-  rows: {
-    employeeId: number;
-    name: string;
-    designation: string | null;
-    salary: number;
-    paid: boolean;
-    amount: number;
-    method: string | null;
-    note: string | null;
-    paidAt: string | null;
-    paymentId: number | null;
-  }[];
-  totals: { expected: number; paid: number; headcount: number; paidCount: number };
-}
 
-export interface FoodPackage {
-  id: number;
-  name: string;
-  price: number;
-  items: string | null;
-  active: boolean;
-}
 
-export interface PLReport {
-  from: string;
-  to: string;
-  resort: {
-    roomRevenue: number;
-    extraPersonRevenue: number;
-    otherRevenue: number;
-    discounts: number;
-    income: number;
-    expenses: number;
-    payroll: number;
-    net: number;
-    expenseCategories: { category: string; amount: number }[];
-  };
-  restaurant: {
-    revenue: number;
-    expenses: number;
-    net: number;
-    expenseCategories: { category: string; amount: number }[];
-  };
-  combined: { income: number; expenses: number; net: number };
-}
 
-export interface CmsRow {
-  key: string;
-  value: string;
-  updatedAt: string;
-}
+
+/**
+ * The typed client, wired to this app's transport.
+ *
+ * `api()` above stays for the calls that are still hand-rolled; new code goes
+ * through `client`, where the route and its response type are written down
+ * once in @rh/shared.
+ */
+export const client = createApiClient(api);

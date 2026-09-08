@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@rh/shared": "workspace:*",
+    "@tanstack/react-query": "^5.102.8",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.41.0",

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, money, dmy, type BookingRow, type Room } from "@/lib/api";
+import { client, money, dmy, type BookingRow } from "@/lib/api";
+import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
+import { ErrorState, Skeleton } from "@/components/error-state";
 
 interface TodayFeed {
   arrivals: BookingRow[];
@@ -14,40 +15,24 @@ interface TodayFeed {
   duesCount: number;
 }
 
-interface Dues {
-  total: number;
-  count: number;
-}
-
 export default function DashboardPage() {
   const { activeResort, isStaff } = useAuth();
-  const [feed, setFeed] = useState<TodayFeed | null>(null);
-  const [dues, setDues] = useState<Dues | null>(null);
-  const [roomCount, setRoomCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const enabled = !!activeResort;
+  // three independent reads, three cache entries: the room list is the same
+  // one the Rooms page just fetched, and it is not fetched again
+  const todayQ = useApi(keys.today(activeResort?.id), () => client.today(activeResort!.id) as Promise<TodayFeed>, { enabled });
+  const roomsQ = useApi(keys.rooms(activeResort?.id), () => client.rooms.list(activeResort!.id), { enabled });
+  const duesQ = useApi(keys.dues(activeResort?.id), () => client.dues(activeResort!.id), {
+    enabled: enabled && isStaff,
+  });
 
-  useEffect(() => {
-    if (!activeResort) return;
-    let alive = true;
-    setLoading(true);
-    Promise.all([
-      api<TodayFeed>(`/resorts/${activeResort.id}/today`),
-      api<Room[]>(`/resorts/${activeResort.id}/rooms`),
-      isStaff ? api<Dues>(`/resorts/${activeResort.id}/dues`) : Promise.resolve(null),
-    ])
-      .then(([f, roomsList, d]) => {
-        if (!alive) return;
-        setFeed(f);
-        setRoomCount(roomsList.length);
-        if (d) setDues({ total: d.total, count: d.count });
-      })
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [activeResort, isStaff]);
+  const feed = todayQ.data;
+  const roomCount = roomsQ.data?.length ?? null;
+  const dues = duesQ.data ?? null;
 
-  if (loading || !feed) return <Spinner />;
+  const error = todayQ.error ?? roomsQ.error;
+  if (error) return <ErrorState error={error} />;
+  if (todayQ.isPending || !feed) return <Skeleton rows={6} />;
 
   const person = (b: BookingRow) => b.guest?.fullName ?? "—";
 

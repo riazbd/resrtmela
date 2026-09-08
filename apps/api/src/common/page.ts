@@ -10,19 +10,13 @@
  * says whether anything was left out.
  */
 
-export interface PageRequest {
-  skip?: number;
-  take?: number;
-}
-
-export interface Page<T> {
-  rows: T[];
-  total: number;
-  skip: number;
-  take: number;
-  /** true when rows beyond this page exist */
-  truncated: boolean;
-}
+/**
+ * The envelope itself is defined in @rh/shared, so the API and both clients
+ * cannot disagree about it. The helpers below stay here — they are server
+ * concerns.
+ */
+export type { Page, PageRequest } from "@rh/shared";
+import type { Page, PageRequest } from "@rh/shared";
 
 /** Clamped skip/take, so a caller cannot ask for the whole table. */
 export function pageArgs(req: PageRequest | undefined, defaultTake: number, maxTake = 500) {
