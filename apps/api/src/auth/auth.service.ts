@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException, Inject, Logger } from "@nestjs/common";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { signToken } from "../common/auth.guard";
@@ -9,19 +10,20 @@ import { SmsService } from "../notifications/sms.service";
 import { EmailService } from "../notifications/email.service";
 import { ROLE, type Role } from "@rh/shared";
 
-interface OtpEntry {
-  code: string;
-  expiresAt: number;
-  attempts: number;
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OTP_TTL_MS = 5 * 60_000;
+const OTP_MAX_ATTEMPTS = 5;
+
+const hashOtp = (code: string): string => createHash("sha256").update(code).digest("hex");
+
+/** Constant-time compare so a wrong code cannot be narrowed by response timing. */
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
 
 @Injectable()
 export class AuthService {
-  /** dev-only OTP store; replaced by SMS provider + job queue in phase 6 */
-  private otps = new Map<string, OtpEntry>();
-
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(SmsService) private readonly sms: SmsService,
@@ -55,12 +57,17 @@ export class AuthService {
     if (isEmail && !EMAIL_RE.test(input.email!)) throw Object.assign(new Error("invalid email"), { status: 400 });
 
     const key = isEmail ? `email:${input.email!.trim().toLowerCase()}` : normalizePhone(input.phone!);
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    this.otps.set(key, {
-      code,
-      expiresAt: Date.now() + 5 * 60_000,
-      attempts: 0,
+    // randomInt is drawn from the CSPRNG; Math.random is predictable enough to
+    // guess a six-digit code from a couple of observed ones.
+    const code = String(randomInt(100000, 1000000));
+    const record = { codeHash: hashOtp(code), expiresAt: new Date(Date.now() + OTP_TTL_MS), attempts: 0 };
+    await this.prisma.otpCode.upsert({
+      where: { identifier: key },
+      create: { identifier: key, ...record },
+      update: record,
     });
+    // opportunistic cleanup so the table cannot grow without bound
+    await this.prisma.otpCode.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
     if (isEmail) {
       const email = input.email!.trim().toLowerCase();
@@ -108,18 +115,22 @@ export class AuthService {
   async verifyOtp(identifier: { phone?: string; email?: string }, code: string) {
     const isEmail = !!identifier.email;
     const key = isEmail ? `email:${identifier.email!.trim().toLowerCase()}` : normalizePhone(identifier.phone!);
-    const entry = this.otps.get(key);
+    const entry = await this.prisma.otpCode.findUnique({ where: { identifier: key } });
     if (!entry) throw new UnauthorizedException("No OTP requested");
-    if (Date.now() > entry.expiresAt) {
-      this.otps.delete(key);
+    if (entry.expiresAt.getTime() < Date.now()) {
+      await this.prisma.otpCode.delete({ where: { identifier: key } });
       throw new UnauthorizedException("OTP expired");
     }
-    if (entry.attempts >= 5) throw new UnauthorizedException("Too many attempts");
-    if (entry.code !== code) {
-      entry.attempts += 1;
+    if (entry.attempts >= OTP_MAX_ATTEMPTS) throw new UnauthorizedException("Too many attempts");
+    if (!timingSafeEqualHex(entry.codeHash, hashOtp(code))) {
+      await this.prisma.otpCode.update({
+        where: { identifier: key },
+        data: { attempts: { increment: 1 } },
+      });
       throw new UnauthorizedException("Wrong code");
     }
-    this.otps.delete(key);
+    // single use: consume before issuing a session so the code cannot be replayed
+    await this.prisma.otpCode.delete({ where: { identifier: key } });
 
     let user: { id: number; role: Role; status: string } | null;
     if (isEmail) {

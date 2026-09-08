@@ -816,6 +816,23 @@ model EmailCampaign {
   @@map("email_campaigns")
 }
 
+/// Pending login codes (guest OTP, email or SMS).
+///
+/// Stored, not held in memory: an API restart must not invalidate every code
+/// in flight, and more than one process may serve /auth. Only the SHA-256 of
+/// the code is kept, so a database read cannot hand anyone a working login.
+model OtpCode {
+  id         Int      @id @default(autoincrement())
+  identifier String   @unique @db.VarChar(191) // "email:someone@example.com" or a normalized phone
+  codeHash   String   @db.Char(64)
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
 /// Editable subscription plan definitions (fees & limits) — super admin manages.
 model PlatformPlan {
   id         BigInt  @id @default(autoincrement())

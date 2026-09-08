@@ -40,7 +40,24 @@ const prismaEntry = resolve(dbPackage, "node_modules", "prisma", "build", "index
 const runPrisma = (args, extra = {}) =>
   execFileSync(process.execPath, [prismaEntry, ...args], { cwd: dbPackage, ...extra });
 
+/** Already there and reachable with the app credentials? Nothing to create. */
+function databaseReachable() {
+  try {
+    runPrisma(["db", "execute", "--url", testUrl.toString(), "--stdin"], {
+      input: "SELECT 1;",
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function ensureDatabase() {
+  if (databaseReachable()) {
+    console.log(`OK  ${TEST_DB} already exists`);
+    return true;
+  }
   // CREATE DATABASE works from any connection, and Prisma refuses to attach to
   // the `mysql` system schema, so default to the app's own database.
   const adminUrl = process.env.ADMIN_DATABASE_URL ?? appDatabaseUrl();
