@@ -268,3 +268,83 @@ export const guestOtpRequest = (phone: string) =>
   api<{ sent: boolean; devCode?: string }>("/auth/otp/request", { method: "POST", body: { phone } });
 export const guestOtpVerify = (phone: string, code: string) =>
   api<{ accessToken: string }>("/auth/otp/verify", { method: "POST", body: { phone, code } });
+
+// ── permissions ──
+
+export const permissionsFor = (resortId?: number) =>
+  api<{ permissions: string[] }>(`/auth/permissions${resortId ? `?resortId=${resortId}` : ""}`);
+
+export interface PermRole {
+  id: number;
+  name: string;
+  system: boolean;
+  users: number;
+  permissions: string[];
+}
+
+// ── payroll ──
+
+export interface Employee {
+  id: number;
+  name: string;
+  phone: string | null;
+  designation: string | null;
+  salary: number;
+  joinDate: string | null;
+  active: boolean;
+  payments: { id: number; month: string; amount: number; method: string | null }[];
+}
+
+export interface PayrollSheet {
+  month: string;
+  rows: {
+    employeeId: number;
+    name: string;
+    designation: string | null;
+    salary: number;
+    paid: boolean;
+    amount: number;
+    method: string | null;
+    note: string | null;
+    paidAt: string | null;
+    paymentId: number | null;
+  }[];
+  totals: { expected: number; paid: number; headcount: number; paidCount: number };
+}
+
+export interface FoodPackage {
+  id: number;
+  name: string;
+  price: number;
+  items: string | null;
+  active: boolean;
+}
+
+export interface PLReport {
+  from: string;
+  to: string;
+  resort: {
+    roomRevenue: number;
+    extraPersonRevenue: number;
+    otherRevenue: number;
+    discounts: number;
+    income: number;
+    expenses: number;
+    payroll: number;
+    net: number;
+    expenseCategories: { category: string; amount: number }[];
+  };
+  restaurant: {
+    revenue: number;
+    expenses: number;
+    net: number;
+    expenseCategories: { category: string; amount: number }[];
+  };
+  combined: { income: number; expenses: number; net: number };
+}
+
+export interface CmsRow {
+  key: string;
+  value: string;
+  updatedAt: string;
+}

@@ -4,19 +4,22 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { PermissionsService } from "../common/permissions";
 
 @Injectable()
 export class ExpensesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
-  async list(claims: JwtClaims, resortId: number, from?: string, to?: string) {
+  async list(claims: JwtClaims, resortId: number, from?: string, to?: string, scope?: string) {
     requireResortAccess(claims, resortId);
     const rows = await this.prisma.expense.findMany({
       where: {
         resortId,
+        ...(scope ? { scope: scope as never } : {}),
         ...(from ? { date: { gte: dateOnly(from) } } : {}),
         ...(to ? { date: { ...((from ? { gte: dateOnly(from) } : {}) as object), lt: dateOnly(to) } } : {}),
       },
@@ -57,10 +60,10 @@ export class ExpensesService {
   async create(
     claims: JwtClaims,
     resortId: number,
-    data: { date: string; category: string; details?: string; amount: number },
+    data: { date: string; category: string; details?: string; amount: number; scope?: string },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "expenses.create");
     if (data.amount <= 0) throw badRequest("amount must be > 0");
     const exp = await this.prisma.expense.create({
       data: {
@@ -69,6 +72,7 @@ export class ExpensesService {
         category: data.category,
         details: data.details,
         amount: data.amount as never,
+        scope: (data.scope === "RESTAURANT" ? "RESTAURANT" : "RESORT") as never,
         createdBy: claims.userId,
       },
     });

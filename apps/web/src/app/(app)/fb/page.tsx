@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt } from "@/lib/api";
+import { api, bdt, type FoodPackage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
+import { Package as PackageIcon, Trash2 } from "lucide-react";
 
 interface BillItem {
   name: string;
@@ -57,6 +58,8 @@ export default function FbPage() {
   const [payAmt, setPayAmt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState<FoodPackage[]>([]);
+  const [pkgForm, setPkgForm] = useState({ name: "", price: "", items: "" });
 
   const canManage = isManagement;
 
@@ -64,12 +67,14 @@ export default function FbPage() {
     if (!activeResort) return;
     setLoading(true);
     try {
-      const [b, ih] = await Promise.all([
+      const [b, ih, pk] = await Promise.all([
         api<Bill[]>(`/resorts/${activeResort.id}/fb/bills?from=${from}&to=${to}`),
         api<InHouse[]>(`/resorts/${activeResort.id}/fb/in-house`),
+        api<FoodPackage[]>(`/resorts/${activeResort.id}/fb/packages`),
       ]);
       setBills(b);
       setInHouse(ih);
+      setPackages(pk);
     } finally {
       setLoading(false);
     }
@@ -129,6 +134,34 @@ export default function FbPage() {
       push((ex as Error).message, "err");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createPackage() {
+    if (!activeResort) return;
+    setBusy(true);
+    try {
+      await api(`/resorts/${activeResort.id}/fb/packages`, {
+        method: "POST",
+        body: { name: pkgForm.name, price: Number(pkgForm.price), items: pkgForm.items || undefined },
+      });
+      push("Food package created");
+      setPkgForm({ name: "", price: "", items: "" });
+      await load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePackage(id: number) {
+    if (!window.confirm("Delete this package?")) return;
+    try {
+      await api(`/fb/packages/${id}`, { method: "DELETE" });
+      await load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
     }
   }
 
@@ -199,6 +232,16 @@ export default function FbPage() {
                     {p.name} · {bdt(p.price)}
                   </button>
                 ))}
+                {packages.filter((p) => p.active).map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setTicket([...ticket, { name: p.name, qty: 1, unitPrice: p.price, total: p.price }])}
+                    title={p.items ?? undefined}
+                    className="rounded-full border border-brand-300 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                  >
+                    <PackageIcon className="mr-1 inline h-3 w-3" />{p.name} · {bdt(p.price)}
+                  </button>
+                ))}
               </div>
 
               <div className="space-y-2">
@@ -249,6 +292,31 @@ export default function FbPage() {
           <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
       </div>
+
+      {canManage && (
+        <Card title="Food packages (items & combos)">
+          <div className="flex flex-wrap items-center gap-2">
+            {packages.length === 0 && <span className="text-xs text-slate-400">No packages yet</span>}
+            {packages.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+                <span className={`font-semibold ${p.active ? "text-slate-700" : "text-slate-300"}`}>{p.name}</span>
+                <span className="text-xs text-slate-500">{bdt(p.price)}</span>
+                {p.items && <span className="max-w-[220px] truncate text-[10px] text-slate-400">{p.items}</span>}
+                <button onClick={() => removePackage(p.id)} title="Delete" className="text-slate-300 hover:text-red-500">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <Field label="Package name"><Input className="!w-44" value={pkgForm.name} onChange={(e) => setPkgForm({ ...pkgForm, name: e.target.value })} placeholder="BBQ Dinner for 2" /></Field>
+            <Field label="Price (৳)"><Input className="!w-28" type="number" min={0} value={pkgForm.price} onChange={(e) => setPkgForm({ ...pkgForm, price: e.target.value })} /></Field>
+            <Field label="Included items"><Input className="!w-64" value={pkgForm.items} onChange={(e) => setPkgForm({ ...pkgForm, items: e.target.value })} placeholder="rice, chicken, salad, borhani" /></Field>
+            <Button size="sm" onClick={createPackage} loading={busy} disabled={!pkgForm.name || !pkgForm.price}>Add package</Button>
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">Packages appear as one-click buttons on every ticket.</p>
+        </Card>
+      )}
 
       {loading || !bills ? (
         <Spinner />

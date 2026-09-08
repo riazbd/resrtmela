@@ -1,23 +1,25 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
+import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 
 const PLAN_FEES: Record<string, number> = { STARTER: 2500, GROWTH: 5000, CHAIN: 12000 };
 const PLAN_LIMITS: Record<string, number> = { STARTER: 10, GROWTH: 40, CHAIN: 10000 };
+const PLAN_RESORTS: Record<string, number> = { STARTER: 1, GROWTH: 2, CHAIN: 10 };
 const TRIAL_DAYS = 14;
 
 const PLAN_SEEDS = [
-  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
-  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
-  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, blurb: "For multi-resort owners", sortOrder: 3 },
+  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
+  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, maxResorts: 2, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
+  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, maxResorts: 10, blurb: "For multi-resort owners", sortOrder: 3 },
 ];
 
 /** ensure the three plans exist (first call seeds them) */
@@ -25,6 +27,15 @@ async function ensurePlans(prisma: PrismaService) {
   const count = await prisma.platformPlan.count();
   if (count === 0) {
     await prisma.platformPlan.createMany({ data: PLAN_SEEDS as never });
+    return;
+  }
+  // backfill maxResorts on rows created before the column existed
+  await prisma.platformPlan.updateMany({
+    where: { name: { in: Object.keys(PLAN_RESORTS) } },
+    data: { maxResorts: 1 },
+  });
+  for (const [name, n] of Object.entries(PLAN_RESORTS)) {
+    if (n > 1) await prisma.platformPlan.updateMany({ where: { name }, data: { maxResorts: n } });
   }
 }
 
@@ -44,6 +55,7 @@ export class PlatformService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(DiscountService) private readonly discounts: DiscountService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   // ─────────────────── super admin: platform overview ───────────────────
@@ -188,7 +200,7 @@ export class PlatformService {
     return this.prisma.platformPlan.findMany({ orderBy: { sortOrder: "asc" } });
   }
 
-  async updatePlan(claims: JwtClaims, name: string, input: { monthlyFee?: number; maxRooms?: number; label?: string; blurb?: string; active?: boolean }) {
+  async updatePlan(claims: JwtClaims, name: string, input: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
     const plan = await this.prisma.platformPlan.update({
@@ -196,6 +208,7 @@ export class PlatformService {
       data: {
         ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
+        ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
         ...(input.label != null ? { label: input.label } : {}),
         ...(input.blurb != null ? { blurb: input.blurb } : {}),
         ...(input.active != null ? { active: input.active } : {}),
@@ -314,6 +327,7 @@ export class PlatformService {
         user: {
           select: { id: true, name: true, phone: true, email: true, role: true, status: true, createdAt: true, wallet: { select: { balance: true, active: true } } },
         },
+        role: { select: { id: true, name: true } },
       },
     });
     return rows.map((r) => ({
@@ -321,18 +335,24 @@ export class PlatformService {
       wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null,
       commissionRate: r.commissionRate != null ? Number(r.commissionRate) : null,
       commissionKind: r.commissionKind,
+      roleId: r.roleId,
+      roleName: r.role?.name ?? null,
     }));
   }
 
   async createResortUser(
     claims: JwtClaims,
     resortId: number,
-    input: { name: string; phone: string; password: string; role: string; commissionRate?: number; commissionKind?: string },
+    input: { name: string; phone: string; password: string; role: string; commissionRate?: number; commissionKind?: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN]);
+    await this.perms.require(claims, resortId, "users.manage");
     if (!["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"].includes(input.role)) {
       throw badRequest("role must be MANAGER | FRONT_DESK | AGENT | HOUSEKEEPING");
+    }
+    if (input.roleId != null) {
+      const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
+      if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
     }
     const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
     if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
@@ -355,11 +375,12 @@ export class PlatformService {
       data: {
         userId: user.id,
         resortId,
+        roleId: input.roleId,
         commissionRate: isAgent ? (input.commissionRate ?? 5) : null,
         commissionKind: isAgent ? kind : "PERCENT",
       },
     });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, commissionKind: kind } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, commissionKind: kind, roleId: input.roleId } });
     return { id: user.id, name: user.name, phone: user.phone, role: user.role, status: user.status };
   }
 
@@ -367,10 +388,10 @@ export class PlatformService {
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; commissionRate?: number; commissionKind?: string; name?: string },
+    input: { role?: string; status?: string; password?: string; commissionRate?: number; commissionKind?: string; name?: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN]);
+    await this.perms.require(claims, resortId, "users.manage");
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId, resortId } } });
     if (!linked) throw badRequest("user not in this resort");
     const data: Prisma.UserUpdateInput = {};
@@ -385,6 +406,15 @@ export class PlatformService {
     if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
     if (input.name) data.name = input.name;
     const user = await this.prisma.user.update({ where: { id: userId }, data });
+    if (input.roleId != null) {
+      if (input.roleId === 0) {
+        await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: null } });
+      } else {
+        const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
+        if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
+        await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: input.roleId } });
+      }
+    }
     if (input.commissionRate != null || input.commissionKind != null) {
       const kind = input.commissionKind === "FLAT" ? "FLAT" : input.commissionKind === "PERCENT" ? "PERCENT" : linked.commissionKind;
       if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
@@ -398,16 +428,30 @@ export class PlatformService {
         },
       });
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, commissionKind: input.commissionKind } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, commissionKind: input.commissionKind, roleId: input.roleId } });
     return { id: user.id, name: user.name, role: user.role, status: user.status };
   }
 
-  async activityLog(claims: JwtClaims, resortId: number, take = 100) {
+  async activityLog(claims: JwtClaims, resortId: number, take = 100, q?: string) {
     requireResortAccess(claims, resortId);
     requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    const search = q?.trim();
     const rows = await this.prisma.auditLog.findMany({
-      where: { resortId },
-      include: { actor: { select: { id: true, name: true, role: true } } },
+      where: {
+        resortId,
+        ...(search
+          ? {
+              OR: [
+                { action: { contains: search } },
+                { entity: { contains: search } },
+                { actor: { name: { contains: search } } },
+                { actor: { phone: { contains: search } } },
+                { actor: { email: { contains: search } } },
+              ],
+            }
+          : {}),
+      },
+      include: { actor: { select: { id: true, name: true, role: true, phone: true } } },
       orderBy: { id: "desc" },
       take: Math.min(take, 300),
     });
@@ -420,6 +464,72 @@ export class PlatformService {
       diff: r.diff,
       createdAt: r.createdAt,
     }));
+  }
+
+  /** owner can delete activity entries (permission: activities.delete) */
+  async deleteActivity(claims: JwtClaims, id: string) {
+    if (!/^\d+$/.test(id)) throw badRequest("bad id");
+    const row = await this.prisma.auditLog.findUnique({ where: { id: BigInt(id) } });
+    if (!row) throw badRequest("activity not found");
+    if (row.resortId != null) requireResortAccess(claims, row.resortId);
+    await this.perms.require(claims, row.resortId ?? undefined, "activities.delete");
+    await this.prisma.auditLog.delete({ where: { id: BigInt(id) } });
+    return { deleted: true };
+  }
+
+  // ─────────────────── permission roles (Paradox-style matrix) ───────────────────
+
+  async listRoles(claims: JwtClaims, resortId: number) {
+    requireResortAccess(claims, resortId);
+    await ensureResortRoles(this.prisma, resortId);
+    const rows = await this.prisma.customRole.findMany({
+      where: { resortId },
+      include: { _count: { select: { users: true } } },
+      orderBy: [{ system: "desc" }, { id: "asc" }],
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      system: r.system,
+      users: r._count.users,
+      permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
+    }));
+  }
+
+  async createRole(claims: JwtClaims, resortId: number, name: string, permissions: string[]) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "roles.manage");
+    const perms = validPermissions(permissions);
+    if (!name.trim()) throw badRequest("role name required");
+    const role = await this.prisma.customRole.create({ data: { resortId, name: name.trim(), permissions: perms } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "role.create", entity: "role", entityId: role.id, diff: { name, perms: perms.length } });
+    return { id: role.id, name: role.name, system: role.system, users: 0, permissions: perms };
+  }
+
+  async updateRole(claims: JwtClaims, id: number, input: { name?: string; permissions?: string[] }) {
+    const role = await this.prisma.customRole.findUnique({ where: { id } });
+    if (!role) throw badRequest("role not found");
+    requireResortAccess(claims, role.resortId);
+    await this.perms.require(claims, role.resortId, "roles.manage");
+    const data: { name?: string; permissions?: string[] } = {};
+    if (input.name?.trim()) data.name = input.name.trim();
+    if (input.permissions != null) data.permissions = validPermissions(input.permissions);
+    const updated = await this.prisma.customRole.update({ where: { id }, data });
+    await this.audit.log({ actorId: claims.userId, resortId: role.resortId, action: "role.update", entity: "role", entityId: id, diff: input });
+    return { id: updated.id, name: updated.name, system: updated.system, permissions: Array.isArray(updated.permissions) ? (updated.permissions as string[]) : [] };
+  }
+
+  async deleteRole(claims: JwtClaims, id: number) {
+    const role = await this.prisma.customRole.findUnique({ where: { id } });
+    if (!role) throw badRequest("role not found");
+    requireResortAccess(claims, role.resortId);
+    await this.perms.require(claims, role.resortId, "roles.manage");
+    if (role.system) throw badRequest("system roles cannot be deleted");
+    const userCount = await this.prisma.userResort.count({ where: { roleId: id } });
+    if (userCount > 0) throw badRequest(`${userCount} user(s) still use this role — reassign them first`);
+    await this.prisma.customRole.delete({ where: { id } });
+    await this.audit.log({ actorId: claims.userId, resortId: role.resortId, action: "role.delete", entity: "role", entityId: id, diff: { name: role.name } });
+    return { deleted: true };
   }
 
   // ─────────────────── agent activation + wallet ───────────────────
@@ -714,5 +824,217 @@ export class PlatformService {
     const r = await this.email.send(to, `${subjectPrefix}: Invoice ${b.code}`, html, b.resort.name);
     await this.audit.log({ actorId: claims.userId, resortId: b.resortId, action: "invoice.email", entity: "booking", entityId: bookingId, diff: { to } });
     return r;
+  }
+
+  // ─────────────────── agent invite by email (verification email) ───────────────────
+
+  async inviteAgentByEmail(
+    claims: JwtClaims,
+    resortId: number,
+    input: { email: string; name?: string; commissionRate?: number; commissionKind?: "PERCENT" | "FLAT" },
+  ) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "agents.manage");
+    const to = input.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw badRequest("valid email required");
+    const existingUser = await this.prisma.user.findFirst({ where: { email: to } });
+    if (existingUser) {
+      const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: existingUser.id, resortId } } });
+      if (linked) throw badRequest("this email already has access to the resort");
+    }
+    const tempPassword = `RM-${randomBytes(5).toString("hex")}`;
+    const user =
+      existingUser ??
+      (await this.prisma.user.create({
+        data: {
+          name: input.name?.trim() || to.split("@")[0]!,
+          email: to,
+          passwordHash: await bcrypt.hash(tempPassword, 12),
+          role: "AGENT",
+          status: "pending",
+        },
+      }));
+    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
+    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
+      throw badRequest("percent commission 1-100");
+    }
+    await this.prisma.userResort.create({
+      data: {
+        userId: user.id,
+        resortId,
+        roleId: (await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" } }))?.id ?? null,
+        commissionRate: input.commissionRate ?? 5,
+        commissionKind: kind,
+      },
+    });
+    const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
+    if (!existingUser) {
+      // fresh agent: email the credentials + verification link
+      const loginUrl = `${process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com"}/login`;
+      const html = `
+        <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
+          <h2 style="margin:0 0 8px">You've been invited to ${resort.name}</h2>
+          <p>${resort.name} added you as a <b>booking agent</b> on Resort Mela. Use the credentials below to sign in and verify your account:</p>
+          <table style="border-collapse:collapse;font-size:14px;margin:12px 0">
+            <tr><td style="padding:4px 12px 4px 0;color:#64748b">Login email</td><td style="padding:4px 0;font-weight:bold">${to}</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;color:#64748b">Temporary password</td><td style="padding:4px 0;font-weight:bold;letter-spacing:1px">${tempPassword}</td></tr>
+          </table>
+          <p style="margin:16px 0">
+            <a href="${loginUrl}" style="background:#047857;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600">Sign in &amp; verify</a>
+          </p>
+          <p style="color:#64748b;font-size:13px">Change your password after the first sign-in (Profile → Set password). Commission terms are set by the resort owner.</p>
+        </div>`;
+      const subjectPrefix = process.env.SMTP_SUBJECT_PREFIX ?? "Resort Mela";
+      const r = await this.email.send(to, `${subjectPrefix}: Agent invitation — ${resort.name}`, html, resort.name);
+      if (!r.sent) throw badRequest(`invitation email could not be sent: ${r.error}`);
+    } else {
+      // existing user (e.g. an agent of another resort): notify them of the new access
+      await this.prisma.notification.create({
+        data: { userId: user.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
+      });
+    }
+    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to, commissionKind: kind, commissionRate: input.commissionRate ?? 5 } });
+    return { id: user.id, name: user.name, email: to, status: user.status, emailed: !existingUser };
+  }
+
+  // ─────────────────── agent agency staff (agent's own users & roles) ───────────────────
+
+  async agentStaffList(claims: JwtClaims) {
+    if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
+    const rows = await this.prisma.user.findMany({
+      where: { role: "AGENT" },
+      select: { id: true, name: true, phone: true, email: true, status: true, createdAt: true },
+      orderBy: { id: "asc" },
+    });
+    // staff = agents that were created by (share resorts with) the caller and are not the caller
+    const myResorts = await this.prisma.userResort.findMany({ where: { userId: claims.userId }, select: { resortId: true } });
+    const mine = new Set(myResorts.map((r) => r.resortId));
+    const out: typeof rows = [];
+    for (const r of rows) {
+      if (r.id === claims.userId) continue;
+      const links = await this.prisma.userResort.findMany({ where: { userId: r.id }, select: { resortId: true } });
+      if (links.some((l) => mine.has(l.resortId))) out.push(r);
+    }
+    return out;
+  }
+
+  async createAgentStaff(claims: JwtClaims, input: { name: string; email?: string; phone?: string; password: string }) {
+    if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
+    if (input.password.length < 8) throw badRequest("password must be at least 8 characters");
+    const email = input.email?.trim().toLowerCase() || null;
+    const phone = input.phone ? input.phone.replace(/\D/g, "") : null;
+    if (!email && !phone) throw badRequest("email or phone required");
+    if (phone) {
+      const exists = await this.prisma.user.findUnique({ where: { phone } });
+      if (exists) throw badRequest("phone already registered");
+    }
+    if (email) {
+      const exists = await this.prisma.user.findFirst({ where: { email } });
+      if (exists) throw badRequest("email already registered");
+    }
+    // copy the agency's approved resort links so staff book at the same resorts
+    const myLinks = await this.prisma.userResort.findMany({ where: { userId: claims.userId } });
+    const user = await this.prisma.user.create({
+      data: {
+        name: input.name,
+        email,
+        phone,
+        passwordHash: await bcrypt.hash(input.password, 12),
+        role: "AGENT",
+        status: "active",
+      },
+    });
+    for (const link of myLinks) {
+      await this.prisma.userResort.create({
+        data: {
+          userId: user.id,
+          resortId: link.resortId,
+          roleId: link.roleId,
+          commissionRate: link.commissionRate,
+          commissionKind: link.commissionKind,
+        },
+      });
+    }
+    await this.audit.log({ actorId: claims.userId, action: "agent.staff.create", entity: "user", entityId: user.id, diff: { name: input.name } });
+    return { id: user.id, name: user.name, email, phone, status: user.status };
+  }
+
+  // ─────────────────── owner self-serve: add another resort (plan-gated) ───────────────────
+
+  async ownerCreateResort(claims: JwtClaims, tenantId: number, input: { name: string; location?: string }) {
+    if (claims.role === ROLE.SUPER_ADMIN) {
+      // super admin bypasses plan gates
+      const resort = await this.prisma.resort.create({
+        data: { tenantId, name: input.name, location: input.location, timezone: "Asia/Dhaka", currency: "BDT" },
+      });
+      await ensureResortRoles(this.prisma, resort.id);
+      await this.audit.log({ actorId: claims.userId, resortId: resort.id, action: "resort.create", entity: "resort", entityId: resort.id, diff: input });
+      return resort;
+    }
+    const membership = await this.prisma.userResort.findFirst({
+      where: { userId: claims.userId, resort: { tenantId } },
+      include: { resort: { select: { tenantId: true } } },
+    });
+    if (!membership) throw forbid("not a member of this tenant");
+    if (claims.role !== ROLE.RESORT_ADMIN) throw forbid("only the resort owner can add resorts");
+    const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
+    const count = await this.prisma.resort.count({ where: { tenantId } });
+    // gate: latest non-cancelled subscription plan, else legacy tenant plan
+    let maxResorts: number;
+    let planLabel: string;
+    const latestSub = await this.prisma.subscription.findFirst({
+      where: { resort: { tenantId }, status: { not: "CANCELLED" } },
+      orderBy: { id: "desc" },
+      include: { resort: { select: { id: true } } },
+    });
+    if (latestSub) {
+      await ensurePlans(this.prisma);
+      const def = await this.prisma.platformPlan.findUnique({ where: { name: latestSub.plan } });
+      maxResorts = def?.maxResorts ?? 1;
+      planLabel = def?.label ?? latestSub.plan;
+    } else {
+      const legacy = tenant.plan.toUpperCase();
+      maxResorts = legacy === "PRO" ? 10 : legacy === "STANDARD" ? 3 : 1;
+      planLabel = tenant.plan;
+    }
+    if (count + 1 > maxResorts) {
+      throw Object.assign(
+        new Error(`Your ${planLabel} plan allows up to ${maxResorts} resort(s). Upgrade the subscription to add more.`),
+        { status: 402 },
+      );
+    }
+    const resort = await this.prisma.resort.create({
+      data: { tenantId, name: input.name, location: input.location, timezone: "Asia/Dhaka", currency: "BDT" },
+    });
+    await this.prisma.userResort.create({ data: { userId: claims.userId, resortId: resort.id } });
+    await ensureResortRoles(this.prisma, resort.id);
+    await this.prisma.counter.create({ data: { resortId: resort.id, kind: "BOOKING", nextVal: 0 } });
+    await this.audit.log({ actorId: claims.userId, resortId: resort.id, action: "resort.create", entity: "resort", entityId: resort.id, diff: input });
+    return resort;
+  }
+
+  // ─────────────────── front-end CMS ───────────────────
+
+  async getCms(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    return this.prisma.cmsSetting.findMany({ orderBy: { key: "asc" } });
+  }
+
+  /** public homepage content map (no auth) */
+  async publicCms(): Promise<Record<string, string>> {
+    const rows = await this.prisma.cmsSetting.findMany();
+    return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  }
+
+  async putCms(claims: JwtClaims, key: string, value: string) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    if (!/^[a-z0-9_.]{2,60}$/.test(key)) throw badRequest("key must be lowercase letters, digits, dot or underscore");
+    const row = await this.prisma.cmsSetting.upsert({
+      where: { key },
+      update: { value },
+      create: { key, value },
+    });
+    await this.audit.log({ actorId: claims.userId, action: "cms.update", entity: "cms_setting", diff: { key } });
+    return row;
   }
 }

@@ -41,3 +41,72 @@ export interface JwtClaims {
   role: RoleKey;
   resortIds: number[];
 }
+
+// ───────────────────────── Permission matrix (Paradox-style) ─────────────────────────
+
+export const PERMISSIONS: { key: string; label: string; group: string }[] = [
+  { key: "bookings.view", label: "View bookings & calendar", group: "Bookings" },
+  { key: "bookings.create", label: "Create bookings", group: "Bookings" },
+  { key: "bookings.edit", label: "Edit / check-in / check-out", group: "Bookings" },
+  { key: "bookings.cancel", label: "Cancel bookings", group: "Bookings" },
+  { key: "bookings.walkin", label: "Walk-in customers", group: "Bookings" },
+  { key: "payments.view", label: "View payments & dues", group: "Money" },
+  { key: "payments.create", label: "Record payments", group: "Money" },
+  { key: "expenses.view", label: "View expenses", group: "Money" },
+  { key: "expenses.create", label: "Record expenses", group: "Money" },
+  { key: "wallet.view", label: "View agent wallets", group: "Money" },
+  { key: "wallet.manage", label: "Top-up / payout wallets", group: "Money" },
+  { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
+  { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
+  { key: "guests.view", label: "View guests", group: "Inventory" },
+  { key: "restaurant.view", label: "View restaurant bills", group: "Restaurant" },
+  { key: "restaurant.create", label: "Create restaurant bills (POS)", group: "Restaurant" },
+  { key: "restaurant.menu", label: "Manage food packages", group: "Restaurant" },
+  { key: "agents.view", label: "View agents", group: "Agents" },
+  { key: "agents.manage", label: "Activate agents, invite, commission", group: "Agents" },
+  { key: "reports.view", label: "View reports", group: "Reports" },
+  { key: "reports.pl", label: "View profit & loss", group: "Reports" },
+  { key: "payroll.view", label: "View payroll", group: "Payroll" },
+  { key: "payroll.manage", label: "Manage staff & salary payments", group: "Payroll" },
+  { key: "activities.view", label: "View activities", group: "Activities" },
+  { key: "activities.delete", label: "Delete activities", group: "Activities" },
+  { key: "discounts.manage", label: "Manage discount offers", group: "Admin" },
+  { key: "users.manage", label: "Manage users", group: "Admin" },
+  { key: "roles.manage", label: "Manage roles & permissions", group: "Admin" },
+  { key: "settings.manage", label: "Resort settings", group: "Admin" },
+  { key: "apikeys.manage", label: "API keys", group: "Admin" },
+  // agent portal
+  { key: "agent.book", label: "Book for guests", group: "Agent portal" },
+  { key: "agent.wallet.view", label: "See wallet balance", group: "Agent portal" },
+];
+
+export const ALL_PERMISSIONS = PERMISSIONS.map((p) => p.key);
+
+const PERMISSION_SET = new Set(ALL_PERMISSIONS);
+
+export function isPermissionKey(key: string): boolean {
+  return PERMISSION_SET.has(key);
+}
+
+export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
+
+/** Defaults for the seeded system roles, keyed by role name */
+export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
+  Administrator: ALL_PERMISSIONS,
+  Manager: [
+    "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
+    "payments.view", "payments.create", "expenses.view", "expenses.create", "wallet.view",
+    "rooms.view", "rooms.manage", "guests.view",
+    "restaurant.view", "restaurant.create", "restaurant.menu",
+    "agents.view", "reports.view", "reports.pl",
+    "payroll.view", "payroll.manage",
+    "activities.view", "activities.delete", "discounts.manage",
+  ],
+  "Front Desk": [
+    "bookings.view", "bookings.create", "bookings.edit", "bookings.walkin",
+    "payments.view", "payments.create", "rooms.view", "guests.view",
+    "restaurant.view", "restaurant.create", "activities.view",
+  ],
+  Agent: ["agent.book", "agent.wallet.view"],
+};
+

@@ -1,14 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, bdt, dmy, type BookingRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 
-/** Agent portal home — doc §3 "Agent Portal": profile, commission, my stats. */
+interface StaffRow {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+}
+
+/** Agent portal home — doc §3 "Agent Portal": profile, commission, my stats, agency staff. */
 export default function ProfilePage() {
   const { me, activeResort, isAgent } = useAuth();
+  const { push } = useToast();
   const [rows, setRows] = useState<BookingRow[] | null>(null);
+  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!activeResort || !isAgent) return;
@@ -16,6 +28,30 @@ export default function ProfilePage() {
       .then((r) => setRows(r.rows))
       .catch(() => setRows([]));
   }, [activeResort, isAgent]);
+
+  const loadStaff = useCallback(() => {
+    api<StaffRow[]>("/agent/staff").then(setStaff).catch(() => setStaff([]));
+  }, []);
+  useEffect(() => {
+    if (isAgent) loadStaff();
+  }, [isAgent, loadStaff]);
+
+  async function addStaff() {
+    setBusy(true);
+    try {
+      await api("/agent/staff", {
+        method: "POST",
+        body: { name: form.name, phone: form.phone || undefined, email: form.email || undefined, password: form.password },
+      });
+      push("Agency user created — they can log in and book for guests");
+      setForm({ name: "", phone: "", email: "", password: "" });
+      loadStaff();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!isAgent) return <Empty msg="Agent portal only" />;
 
@@ -87,6 +123,43 @@ export default function ProfilePage() {
               </div>
             )}
           </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title={`Agency users (${staff.length})`}>
+              <p className="mb-3 text-xs text-slate-500">Your own team — they log in with the same agent powers (book for guests, see resorts).</p>
+              {staff.length === 0 ? (
+                <Empty msg="No agency users yet" />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr><Th>Name</Th><Th>Login</Th><Th>Status</Th></tr>
+                    </thead>
+                    <tbody>
+                      {staff.map((s) => (
+                        <tr key={s.id} className="border-t border-slate-100">
+                          <Td className="font-semibold text-slate-800">{s.name}</Td>
+                          <Td className="text-xs">{s.phone ?? s.email ?? "—"}</Td>
+                          <Td>
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${s.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{s.status}</span>
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+            <Card title="Add agency user">
+              <div className="space-y-3">
+                <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+                <Field label="Phone (login)"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8801XXXXXXXXX" /></Field>
+                <Field label="Email (alternative login)"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="optional" /></Field>
+                <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
+                <Button onClick={addStaff} loading={busy} disabled={!form.name || !form.password || (!form.phone && !form.email)}>Create user</Button>
+              </div>
+            </Card>
+          </div>
         </>
       )}
     </div>

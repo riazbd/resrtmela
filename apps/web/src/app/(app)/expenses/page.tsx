@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, bdt } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
-import { Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
+import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 
 interface ExpenseRow {
   id: number;
@@ -12,6 +12,7 @@ interface ExpenseRow {
   category: string;
   details: string | null;
   amount: number;
+  scope: string;
 }
 
 function iso(d: Date) {
@@ -29,6 +30,7 @@ export default function ExpensesPage() {
   const [category, setCategory] = useState("");
   const [details, setDetails] = useState("");
   const [amount, setAmount] = useState<number | "">("");
+  const [scope, setScope] = useState("RESORT");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +72,7 @@ export default function ExpensesPage() {
     try {
       await api(`/resorts/${activeResort.id}/expenses`, {
         method: "POST",
-        body: { date, category, details: details || undefined, amount: Number(amount) },
+        body: { date, category, details: details || undefined, amount: Number(amount), scope },
       });
       push(`${bdt(Number(amount))} — ${category}`);
       setCategory("");
@@ -147,6 +149,12 @@ export default function ExpensesPage() {
                 className="!w-28"
                 onKeyDown={(e) => e.key === "Enter" && add()}
               />
+            </Field>
+            <Field label="Scope">
+              <Select value={scope} onChange={(e) => setScope(e.target.value)} className="!w-36">
+                <option value="RESORT">Resort</option>
+                <option value="RESTAURANT">Restaurant</option>
+              </Select>
             </Field>
             <Button onClick={add} loading={busy} disabled={!category || !amount}>Add</Button>
           </div>

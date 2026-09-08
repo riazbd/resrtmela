@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt, dmy } from "@/lib/api";
+import { api, bdt, dmy, type PLReport } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useToast } from "@/components/ui";
 
@@ -43,6 +43,16 @@ function MiniBox({ label, value, tone = "default" }: { label: string; value: str
   );
 }
 
+function PLRow({ label, value, tone = "default", bold = false, muted = false }: { label: string; value: number; tone?: "default" | "green" | "red"; bold?: boolean; muted?: boolean }) {
+  const tones = { default: "text-slate-800", green: "text-green-700", red: "text-red-700" };
+  return (
+    <div className={`flex items-center justify-between py-0.5 ${bold ? "mt-0.5" : ""}`}>
+      <span className={`${muted ? "text-[11px] text-slate-400" : "text-xs text-slate-600"} ${bold ? "font-bold text-slate-900" : ""}`}>{label}</span>
+      <span className={`${bold ? "text-sm font-bold" : "text-xs font-semibold"} ${tones[tone]}`}>{bdt(value)}</span>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
   const { push } = useToast();
@@ -57,6 +67,7 @@ export default function ReportsPage() {
   const [fyList, setFyList] = useState<FiscalYear[]>([]);
   const [fy, setFy] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pl, setPl] = useState<PLReport | null>(null);
 
   const load = useCallback(async () => {
     if (!activeResort) return;
@@ -75,6 +86,11 @@ export default function ReportsPage() {
         await api<DailyRow[]>(
           `/resorts/${activeResort.id}/reports/daily?from=${from || isoDays(-7)}&to=${to || isoDays(1)}`,
         ),
+      );
+      setPl(
+        await api<PLReport>(
+          `/resorts/${activeResort.id}/reports/pl?from=${from || isoDays(-90)}&to=${to || isoDays(1)}`,
+        ).catch(() => null),
       );
       if (isManagement) {
         setAudit(await api<AuditRow[]>(`/resorts/${activeResort.id}/audit?take=60`));
@@ -159,6 +175,53 @@ export default function ReportsPage() {
             <MiniBox label="Gross income" value={bdt(metrics.grossIncome)} tone="green" />
             <MiniBox label="Expenses" value={bdt(metrics.expenses)} tone="red" />
             <MiniBox label="NET PROFIT" value={bdt(metrics.netProfit)} tone={metrics.netProfit >= 0 ? "green" : "red"} />
+          </div>
+        </Card>
+      )}
+
+      {pl && (
+        <Card title={`Profit & Loss statement (${pl.from} → ${pl.to})`}>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* resort column */}
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="mb-2 text-sm font-bold text-slate-800">Resort</div>
+              <PLRow label="Room revenue" value={pl.resort.roomRevenue} />
+              <PLRow label="Extra person" value={pl.resort.extraPersonRevenue} />
+              <PLRow label="Activities & other" value={pl.resort.otherRevenue} />
+              <PLRow label="Discounts" value={-pl.resort.discounts} tone="red" />
+              <PLRow label="Income" value={pl.resort.income} bold />
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <PLRow label="Operating expenses" value={-pl.resort.expenses} tone="red" />
+              {pl.resort.expenseCategories.slice(0, 4).map((c) => (
+                <PLRow key={c.category} label={`· ${c.category}`} value={-c.amount} muted />
+              ))}
+              <PLRow label="Payroll" value={-pl.resort.payroll} tone="red" />
+              <div className="my-2 border-t border-slate-300" />
+              <PLRow label="RESORT NET" value={pl.resort.net} bold tone={pl.resort.net >= 0 ? "green" : "red"} />
+            </div>
+
+            {/* restaurant column */}
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="mb-2 text-sm font-bold text-slate-800">Restaurant</div>
+              <PLRow label="F&B sales" value={pl.restaurant.revenue} />
+              <PLRow label="Income" value={pl.restaurant.revenue} bold />
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <PLRow label="Restaurant expenses" value={-pl.restaurant.expenses} tone="red" />
+              {pl.restaurant.expenseCategories.slice(0, 4).map((c) => (
+                <PLRow key={c.category} label={`· ${c.category}`} value={-c.amount} muted />
+              ))}
+              <div className="my-2 border-t border-slate-300" />
+              <PLRow label="RESTAURANT NET" value={pl.restaurant.net} bold tone={pl.restaurant.net >= 0 ? "green" : "red"} />
+            </div>
+
+            {/* combined column */}
+            <div className="rounded-xl border-2 border-brand-200 bg-brand-50/40 p-4">
+              <div className="mb-2 text-sm font-bold text-slate-800">Combined</div>
+              <PLRow label="Total income" value={pl.combined.income} bold />
+              <PLRow label="Total expenses (incl. payroll)" value={-pl.combined.expenses} tone="red" />
+              <div className="my-2 border-t border-slate-300" />
+              <PLRow label="NET PROFIT" value={pl.combined.net} bold tone={pl.combined.net >= 0 ? "green" : "red"} />
+            </div>
           </div>
         </Card>
       )}

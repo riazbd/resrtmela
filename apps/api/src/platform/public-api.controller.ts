@@ -74,3 +74,14 @@ export class PublicApiController {
     return created;
   }
 }
+
+/** Public homepage CMS content (no auth). */
+@Controller("cms")
+export class PublicCmsController {
+  constructor(@Inject(PlatformService) private readonly platform: PlatformService) {}
+
+  @Get()
+  all() {
+    return this.platform.publicCms();
+  }
+}

@@ -4,6 +4,7 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { PermissionsService } from "../common/permissions";
 
 const FB_PREFIX = "RES";
 
@@ -12,6 +13,7 @@ export class FbService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   private computeStatus(paid: number, total: number): "PAID" | "PARTIAL" | "UNPAID" {
@@ -222,7 +224,7 @@ export class FbService {
     };
   }
 
-  /** In-house rooms right now � the POS room picker. */
+  /** In-house rooms right now � the POS room picker. */
   async inHouse(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     const now = new Date();
@@ -247,5 +249,65 @@ export class FbService {
       guestName: b.guest.fullName,
       rooms: b.items.map((i) => i.room?.name).filter(Boolean),
     }));
+  }
+
+  // ─────────────────── food packages ───────────────────
+
+  async listPackages(claims: JwtClaims, resortId: number) {
+    requireResortAccess(claims, resortId);
+    const rows = await this.prisma.foodPackage.findMany({
+      where: { resortId },
+      orderBy: [{ active: "desc" }, { name: "asc" }],
+    });
+    return rows.map((p) => ({ ...p, price: Number(p.price) }));
+  }
+
+  async createPackage(
+    claims: JwtClaims,
+    resortId: number,
+    input: { name: string; price: number; items?: string; active?: boolean },
+  ) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "restaurant.menu");
+    if (!input.name.trim()) throw badRequest("package name required");
+    const pkg = await this.prisma.foodPackage.create({
+      data: {
+        resortId,
+        name: input.name.trim(),
+        price: input.price as never,
+        items: input.items || null,
+        ...(input.active != null ? { active: input.active } : {}),
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "fb.package.create", entity: "food_package", entityId: pkg.id, diff: { name: pkg.name, price: input.price } });
+    return { ...pkg, price: Number(pkg.price) };
+  }
+
+  async updatePackage(claims: JwtClaims, id: number, input: { name?: string; price?: number; items?: string; active?: boolean }) {
+    const pkg = await this.prisma.foodPackage.findUnique({ where: { id } });
+    if (!pkg) throw badRequest("package not found");
+    requireResortAccess(claims, pkg.resortId);
+    await this.perms.require(claims, pkg.resortId, "restaurant.menu");
+    const updated = await this.prisma.foodPackage.update({
+      where: { id },
+      data: {
+        ...(input.name?.trim() ? { name: input.name.trim() } : {}),
+        ...(input.price != null ? { price: input.price as never } : {}),
+        ...(input.items !== undefined ? { items: input.items || null } : {}),
+        ...(input.active != null ? { active: input.active } : {}),
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, resortId: pkg.resortId, action: "fb.package.update", entity: "food_package", entityId: id, diff: input });
+    return { ...updated, price: Number(updated.price) };
+  }
+
+  async deletePackage(claims: JwtClaims, id: number) {
+    const pkg = await this.prisma.foodPackage.findUnique({ where: { id } });
+    if (!pkg) throw badRequest("package not found");
+    requireResortAccess(claims, pkg.resortId);
+    await this.perms.require(claims, pkg.resortId, "restaurant.menu");
+    await this.prisma.foodPackage.delete({ where: { id } });
+    await this.audit.log({ actorId: claims.userId, resortId: pkg.resortId, action: "fb.package.delete", entity: "food_package", entityId: id });
+    return { deleted: true };
   }
 }

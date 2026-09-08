@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, bdt, dmy } from "@/lib/api";
+import { api, bdt, dmy, type CmsRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Card, Empty, Spinner, Th, Td } from "@/components/ui";
+import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
-import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn } from "lucide-react";
+import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe } from "lucide-react";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -41,6 +41,7 @@ interface PlanDef {
   label: string;
   monthlyFee: string;
   maxRooms: number;
+  maxResorts?: number;
   blurb: string | null;
   active: boolean;
   sortOrder: number;
@@ -65,7 +66,7 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar", "Website CMS"] as const;
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -444,6 +445,9 @@ export default function PlatformPage() {
         </Card>
       )}
 
+      {/* ── website CMS ── */}
+      {tab === "Website CMS" && <CmsTab />}
+
       {/* ── subscribe modal ── */}
       {subFor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={() => setSubFor(null)}>
@@ -489,6 +493,9 @@ function PlanCard({ plan, busy, onSave }: { plan: PlanDef; busy: boolean; onSave
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${plan.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{plan.active ? "active" : "hidden"}</span>
       </div>
       <div className="mt-0.5 text-xs text-slate-400">{plan.blurb}</div>
+      {plan.maxResorts != null && plan.maxResorts > 1 && (
+        <div className="mt-1 text-[11px] font-semibold text-brand-600">up to {plan.maxResorts} resorts per owner</div>
+      )}
       <div className="mt-4 space-y-3">
         <label className="block">
           <span className="text-xs font-semibold text-slate-500">Monthly fee (৳)</span>
@@ -507,6 +514,69 @@ function PlanCard({ plan, busy, onSave }: { plan: PlanDef; busy: boolean; onSave
         </button>
       </div>
     </Card>
+  );
+}
+
+const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
+  { key: "hero.title", label: "Hero title", hint: "big headline on the homepage" },
+  { key: "hero.subtitle", label: "Hero subtitle", hint: "one line under the title" },
+  { key: "hero.cta", label: "Hero button text" },
+  { key: "hero.badge", label: "Hero badge", hint: "small pill above the title" },
+  { key: "cta.title", label: "Bottom CTA title" },
+  { key: "cta.body", label: "Bottom CTA text" },
+  { key: "cta.button", label: "Bottom CTA button" },
+];
+
+function CmsTab() {
+  const { push } = useToast();
+  const [rows, setRows] = useState<CmsRow[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<CmsRow[]>("/platform/cms").then((r) => {
+      setRows(r);
+      setValues(Object.fromEntries(r.map((x) => [x.key, x.value])));
+    }).catch(() => setRows([]));
+  }, []);
+  useEffect(() => load(), [load]);
+
+  async function save(key: string) {
+    setBusy(key);
+    try {
+      await api("/platform/cms", { method: "POST", body: { key, value: values[key] ?? "" } });
+      push("Saved — refresh the homepage to see it");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-5 max-w-2xl space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center gap-2 text-lg font-bold text-slate-900"><Globe className="h-5 w-5 text-brand-500" /> Front-end CMS</div>
+        <p className="mt-1 text-xs text-slate-500">Edit the public homepage text without a deploy. Empty fields fall back to the built-in defaults.</p>
+        <div className="mt-4 space-y-3">
+          {CMS_FIELDS.map((f) => (
+            <div key={f.key} className="flex items-end gap-2">
+              <label className="flex-1">
+                <span className="text-xs font-semibold text-slate-500">{f.label} <code className="text-[10px] text-slate-300">{f.key}</code></span>
+                {f.hint && <span className="block text-[10px] text-slate-400">{f.hint}</span>}
+                <input
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </label>
+              <Btn size="sm" loading={busy === f.key} onClick={() => save(f.key)}>Save</Btn>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 

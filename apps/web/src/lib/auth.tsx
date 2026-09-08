@@ -1,13 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { api, getToken, setToken, type Me, type Resort } from "./api";
+import { api, getToken, setToken, permissionsFor, type Me, type Resort } from "./api";
 
 interface AuthState {
   me: Me | null;
   activeResort: Resort | null;
   loading: boolean;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   setActiveResort: (r: Resort) => void;
   role: string;
@@ -17,6 +17,9 @@ interface AuthState {
   isImpersonating: boolean;
   impersonate: (accessToken: string) => Promise<void>;
   exitImpersonation: () => void;
+  perms: string[];
+  can: (perm: string) => boolean;
+  refreshPerms: () => void;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -25,6 +28,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [activeResort, setActive] = useState<Resort | null>(null);
   const [loading, setLoading] = useState(true);
+  const [perms, setPerms] = useState<string[]>([]);
+  const [permTick, setPermTick] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -54,10 +59,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (phone: string, password: string) => {
+  // permission set for the active resort
+  useEffect(() => {
+    let alive = true;
+    if (!me || !activeResort) {
+      setPerms([]);
+      return;
+    }
+    permissionsFor(activeResort.id)
+      .then((r) => {
+        if (alive) setPerms(r.permissions);
+      })
+      .catch(() => {
+        if (alive) setPerms([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [me, activeResort, permTick]);
+
+  const login = useCallback(async (identifier: string, password: string) => {
     const res = await api<{ accessToken: string }>("/auth/login", {
       method: "POST",
-      body: { phone, password },
+      body: { identifier, password },
     });
     setToken(res.accessToken);
     const meData = await api<Me>("/auth/me");
@@ -72,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem("rh.impersonator");
     setMe(null);
     setActive(null);
+    setPerms([]);
   }, []);
 
   const impersonate = useCallback(async (accessToken: string) => {
@@ -104,6 +129,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem("rh.resortId", String(r.id));
   }, []);
 
+  const can = useCallback(
+    (perm: string) => perms.includes("*") || perms.includes(perm),
+    [perms],
+  );
+
   const value = useMemo<AuthState>(
     () => ({
       me,
@@ -119,8 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isImpersonating: typeof window !== "undefined" && !!window.localStorage.getItem("rh.impersonator"),
       impersonate,
       exitImpersonation,
+      perms,
+      can,
+      refreshPerms: () => setPermTick((t) => t + 1),
     }),
-    [me, activeResort, loading, login, logout, setActiveResort, impersonate, exitImpersonation],
+    [me, activeResort, loading, login, logout, setActiveResort, impersonate, exitImpersonation, perms, can],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

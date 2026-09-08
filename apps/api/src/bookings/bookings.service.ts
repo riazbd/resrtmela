@@ -12,6 +12,7 @@ import { ActivitiesService } from "../activities/activities.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
+import { PermissionsService } from "../common/permissions";
 import { BookingSource, type BookingState } from "@rh/db";
 
 export interface CreateBookingInput {
@@ -26,6 +27,8 @@ export interface CreateBookingInput {
   discount?: number;
   remarks?: string;
   source?: BookingSource;
+  walkIn?: boolean;
+  extraPersons?: number;
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
 
@@ -43,6 +46,8 @@ export interface RoomBookingTxParams {
   remarks?: string;
   state: "PENDING" | "CONFIRMED";
   groupTag?: string;
+  extraPersons?: number;
+  extraRate?: number;
   rooms: { id: number; name: string; roomTypeId: number; baseRate: number }[];
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
@@ -64,6 +69,7 @@ export class BookingsService {
     @Inject(DiscountService) private readonly discounts: DiscountService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   // ── computed money (never stored — doc §5.2) ──
@@ -121,7 +127,14 @@ export class BookingsService {
       // live access check (token may be stale after approval)
       const linked = await this.prisma.userResort.findFirst({ where: { userId: claims.userId, resortId: input.resortId } });
       if (!linked) throw forbid("No access to this resort — request access from the resorts page");
+      await this.perms.require(claims, input.resortId, "agent.book");
+    } else {
+      await this.perms.require(claims, input.resortId, "bookings.create");
     }
+    // agents never take walk-in customers (Sept corrections)
+    if (input.walkIn && isAgent) throw forbid("Agents cannot create walk-in bookings");
+    if (input.walkIn) await this.perms.require(claims, input.resortId, "bookings.walkin");
+    const extraPersons = Math.max(0, Math.floor(input.extraPersons ?? 0));
 
     // precheck rooms exist in resort
     const roomRows = await this.prisma.room.findMany({
@@ -129,6 +142,17 @@ export class BookingsService {
     });
     if (roomRows.length !== input.roomIds.length) {
       throw badRequest("One or more rooms missing/inactive for this resort");
+    }
+
+    // extra persons: room type must allow them and have a rate
+    let extraRate = 0;
+    if (extraPersons > 0) {
+      const types = await this.prisma.roomType.findMany({ where: { id: { in: roomRows.map((r) => r.roomTypeId) } } });
+      const allowed = types.filter((t) => t.extraPersonAllowed && Number(t.extraPersonRate) > 0);
+      if (allowed.length === 0) {
+        throw badRequest("The selected room type does not allow extra persons (or rate is not set)");
+      }
+      extraRate = Math.max(...allowed.map((t) => Number(t.extraPersonRate)));
     }
 
     let discount: number;
@@ -219,6 +243,8 @@ export class BookingsService {
         discount,
         remarks: input.remarks,
         state: isAgent ? "PENDING" : "CONFIRMED",
+        extraPersons,
+        extraRate,
         rooms: roomRows.map((r) => ({
           id: r.id,
           name: r.name,
@@ -297,6 +323,7 @@ export class BookingsService {
         checkOut: p.checkOut,
         adults: p.adults,
         children: p.children,
+        extraPersons: p.extraPersons ?? 0,
         discount: p.discount as never,
         remarks: p.remarks,
         ...(p.groupTag ? { groupTag: p.groupTag } : {}),
@@ -331,6 +358,17 @@ export class BookingsService {
         }
         throw e;
       }
+    }
+
+    if (p.extraPersons && p.extraPersons > 0 && (p.extraRate ?? 0) > 0) {
+      await tx.bookingItem.create({
+        data: {
+          bookingId: created.id,
+          itemKind: "EXTRA_PERSON",
+          qty: p.extraPersons * nights,
+          unitPrice: (p.extraRate ?? 0) as never,
+        },
+      });
     }
 
     if (p.advancePayment && p.advancePayment.amount > 0) {
@@ -1008,6 +1046,8 @@ export class BookingsService {
           remarks: input.remarks,
           state: "CONFIRMED",
           groupTag,
+          extraPersons: 0,
+          extraRate: 0,
           rooms: [{ id: room.id, name: room.name, roomTypeId: room.roomTypeId, baseRate: Number(room.baseRate) }],
           advancePayment:
             input.advancePerRoom && input.advancePerRoom > 0

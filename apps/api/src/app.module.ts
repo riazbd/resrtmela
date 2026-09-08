@@ -21,6 +21,7 @@ import { ExpensesModule } from "./expenses/expenses.module";
 import { FbModule } from "./fb/fb.module";
 import { PlatformModule } from "./platform/platform.module";
 import { EngageModule } from "./engage/engage.module";
+import { PayrollModule } from "./payroll/payroll.module";
 
 const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
 
@@ -43,6 +44,7 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     FbModule,
     PlatformModule,
     EngageModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

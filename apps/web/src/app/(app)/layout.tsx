@@ -2,17 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import type { LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
-  Bell, Mail, MapPin as MapIcon, Menu,
+  Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
-import { api } from "@/lib/api";
-import { Select } from "@/components/ui";
+import { api, type Resort } from "@/lib/api";
+import { Select, Button, Input, useToast } from "@/components/ui";
 
 const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[] }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
@@ -26,6 +25,7 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"] },
   { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"] },
   { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"] },
+  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"] },
   { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"] },
   { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"] },
   { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"] },
@@ -35,7 +35,7 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout, isImpersonating, exitImpersonation } = useAuth();
+  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout, isImpersonating, exitImpersonation, can } = useAuth();
   const { lang, setLang } = useLang();
   const t = (k: DictKey) => (lang === "bn" ? k : k);
   const router = useRouter();
@@ -67,7 +67,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     roles.includes("*") ||
     (roles.includes("SUPER") && role === "SUPER_ADMIN") ||
     (roles.includes("STAFF") && isStaff) ||
-    (roles.includes("MGMT") && isManagement);
+    (roles.includes("MGMT") && isManagement) ||
+    (roles.includes("PAYROLL") && isStaff && can("payroll.view"));
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -149,6 +150,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </option>
               ))}
             </Select>
+            {role === "RESORT_ADMIN" && <AddResortButton />}
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell />
@@ -266,6 +268,56 @@ function NotificationBell() {
 }
 
 // nav label maps (kept beside NAV for a zero-abstraction lookup)
+
+function AddResortButton() {
+  const { me, setActiveResort } = useAuth();
+  const { push } = useToast();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  if (!me || me.resorts.length === 0) return null;
+  const tenantId = me.resorts[0]!.resort.tenantId;
+
+  async function create() {
+    setBusy(true);
+    try {
+      const r = await api<Resort>(`/tenants/${tenantId}/resorts`, { method: "POST", body: { name } });
+      // full membership list may lag — add it optimistically from the response
+      setActiveResort({ id: r.id, name: r.name, tenantId: r.tenantId, status: (r as unknown as { status?: string }).status ?? "active" });
+      window.location.href = "/";
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title="Add another resort"
+        className="rounded-lg border border-brand-300 p-1.5 text-brand-700 hover:bg-brand-50"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 text-lg font-bold text-slate-900">Add another resort</div>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New resort name" />
+            <p className="mt-2 text-xs text-slate-500">Allowed by your subscription plan — extra resorts share the same login.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button onClick={create} loading={busy} disabled={!name.trim()}>Create resort</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 const BN_NAV: Record<string, string> = {
   "nav.daySheet": "দিনলিপি",
   "nav.dashboard": "ড্যাশবোর্ড",

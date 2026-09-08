@@ -48,6 +48,8 @@ class CreateBookingDto {
   @IsOptional() @IsNumber() @Min(0) discount?: number;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsBoolean() walkIn?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Type(() => Number) extraPersons?: number;
   @IsOptional() @ValidateNested() @Type(() => AdvancePaymentDto) advancePayment?: AdvancePaymentDto;
 }
 
@@ -155,6 +157,8 @@ export class BookingsController {
       discount: dto.discount,
       remarks: dto.remarks,
       source: dto.source,
+      walkIn: dto.walkIn,
+      extraPersons: dto.extraPersons,
       advancePayment: dto.advancePayment,
     };
     return this.bookings.create(req.user, input);

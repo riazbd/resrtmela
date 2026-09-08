@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, bdt, dmy } from "@/lib/api";
 import { Spinner } from "@/components/ui";
+import { Download } from "lucide-react";
 
 interface InvoiceData {
   invoiceNo: string;
@@ -28,6 +29,8 @@ export default function InvoicePage() {
   const params = useParams<{ id: string }>();
   const [inv, setInv] = useState<InvoiceData | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const paper = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api<InvoiceData>(`/bookings/${params.id}/invoice`)
@@ -42,6 +45,39 @@ export default function InvoicePage() {
     }
   }, [inv]);
 
+  async function downloadPdf() {
+    if (!paper.current || !inv) return;
+    setDownloading(true);
+    try {
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
+      const canvas = await html2canvas(paper.current, { scale: 2, backgroundColor: "#ffffff" });
+      const img = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const w = pw - 12;
+      const h = (canvas.height * w) / canvas.width;
+      let left = h;
+      let pos = 6;
+      pdf.addImage(img, "PNG", 6, pos, w, h);
+      left -= ph - 12;
+      while (left > 0) {
+        pos = left - h + 6; // shift up for the next page
+        pdf.addPage();
+        pdf.addImage(img, "PNG", 6, pos, w, h);
+        left -= ph - 12;
+      }
+      pdf.save(`invoice-${inv.invoiceNo || inv.booking.code}.pdf`);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (err) return <div className="p-10 text-center text-sm text-red-600">{err}</div>;
   if (!inv) return <Spinner />;
 
@@ -49,7 +85,7 @@ export default function InvoicePage() {
     `${dmy(inv.booking.checkIn)} — ${dmy(inv.booking.checkOut)}`;
 
   return (
-    <main className="mx-auto max-w-2xl bg-white p-10 print:p-0">
+    <main className="mx-auto max-w-2xl bg-white p-10 print:p-0" ref={paper}>
       {/* header */}
       <div className="flex items-start justify-between border-b-2 border-brand-700 pb-4">
         <div>
@@ -170,10 +206,18 @@ export default function InvoicePage() {
         {inv.resort.name}-এ অবস্থানের জন্য ধন্যবাদ! · Thank you for staying with {inv.resort.name}! — Resort Mela
       </p>
 
-      <div className="mt-4 text-center print:hidden">
+      <div className="mt-4 flex items-center justify-center gap-2 print:hidden">
+        <button
+          onClick={downloadPdf}
+          disabled={downloading}
+          className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" />
+          {downloading ? "Preparing…" : "Download PDF"}
+        </button>
         <button
           onClick={() => window.print()}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
         >
           Print / Save PDF
         </button>

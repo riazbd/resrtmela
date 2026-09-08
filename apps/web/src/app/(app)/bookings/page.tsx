@@ -33,7 +33,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   open: boolean; onClose: () => void; onCreated: (code: string) => void;
   preset?: { roomId?: number | null; checkIn?: string | null; checkOut?: string | null } | null;
 }) {
-  const { activeResort, isStaff } = useAuth();
+  const { activeResort, isStaff, role, isAgent } = useAuth();
   const { push } = useToast();
   const [checkIn, setCheckIn] = useState(iso(new Date()));
   const [checkOut, setCheckOut] = useState(iso(new Date(Date.now() + 86400000)));
@@ -41,9 +41,12 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const [picked, setPicked] = useState<number[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [nid, setNid] = useState("");
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
+  const [extraPersons, setExtraPersons] = useState(0);
+  const [roomTypes, setRoomTypes] = useState<{ id: number; name: string; extraPersonAllowed?: boolean; extraPersonRate?: string | number }[]>([]);
   const [discount, setDiscount] = useState(0);
   const [remarks, setRemarks] = useState("");
   const [advAmount, setAdvAmount] = useState(0);
@@ -77,6 +80,23 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   useEffect(() => {
     if (open) void loadGrid();
   }, [open, loadGrid]);
+
+  // room types for the extra-person gate
+  useEffect(() => {
+    if (!open || !activeResort) return;
+    api<{ roomTypes?: typeof roomTypes }>(`/resorts/${activeResort.id}`)
+      .then((r) => setRoomTypes(r.roomTypes ?? []))
+      .catch(() => {});
+  }, [open, activeResort]);
+
+  const pickedTypes = grid
+    .filter((r) => picked.includes(r.roomId))
+    .map((r) => roomTypes.find((t) => t.id === r.roomTypeId))
+    .filter(Boolean);
+  const extraAllowed = pickedTypes.some((t) => t?.extraPersonAllowed);
+  const extraRate = Math.max(0, ...pickedTypes.map((t) => Number(t?.extraPersonRate ?? 0)));
+
+  const myRate = useAuth().me?.resorts.find((r) => r.resort.id === activeResort?.id)?.commissionRate ?? 0;
 
   const [walkIn, setWalkIn] = useState(false);
   const [isGroup, setIsGroup] = useState(false);
@@ -127,9 +147,11 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           checkOut,
           adults,
           children,
+          walkIn,
+          extraPersons: extraPersons > 0 ? extraPersons : undefined,
           guest: walkIn
-            ? { fullName: fullName || "local" }
-            : { fullName, phone, nidPassportNo: nid || undefined },
+            ? { fullName: fullName || "local", phone: phone || undefined, email: email || undefined }
+            : { fullName, phone, email: email || undefined, nidPassportNo: nid || undefined },
           discount: isStaff ? discount : undefined,
           remarks: remarks || undefined,
           advancePayment: advAmount > 0 ? { amount: advAmount, method: advMethod } : undefined,
@@ -138,7 +160,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
       push(`Booking ${created.code} created`);
       onCreated(created.code);
       onClose();
-      setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setAdvAmount(0); setRemarks(""); setWalkIn(false);
+      setPicked([]); setFullName(""); setPhone(""); setEmail(""); setNid(""); setDiscount(0); setAdvAmount(0); setRemarks(""); setWalkIn(false); setExtraPersons(0);
     } catch (ex) {
       setErr((ex as Error).message);
     } finally {
@@ -179,7 +201,15 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
                 >
                   <div className="font-medium">{r.roomName}</div>
                   <div className="text-[11px]">
-                    ৳{Number(r.baseRate).toLocaleString("en-IN")}
+                    {isAgent && myRate > 0 ? (
+                      <>
+                        <span className="text-slate-400 line-through">৳{Number(r.baseRate).toLocaleString("en-IN")}</span>
+                        {" "}<span className="font-bold text-brand-700">৳{(Number(r.baseRate) * (1 - myRate / 100)).toLocaleString("en-IN")}</span>
+                        <span className="text-slate-400"> your price</span>
+                      </>
+                    ) : (
+                      <>৳{Number(r.baseRate).toLocaleString("en-IN")}</>
+                    )}
                     {conflict && ` · busy (${r.busyNights.length}n)`}
                   </div>
                 </button>
@@ -189,10 +219,12 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
         </div>
 
           <div className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-3 py-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
-              <input type="checkbox" checked={walkIn} onChange={(e) => { setWalkIn(e.target.checked); if (e.target.checked) setFullName("local"); else setFullName(""); }} className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
-              Walk-in (local)
-            </label>
+            {!isAgent && (
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <input type="checkbox" checked={walkIn} onChange={(e) => { setWalkIn(e.target.checked); if (e.target.checked && !fullName) setFullName("local"); if (!e.target.checked && fullName === "local") setFullName(""); }} className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
+                Walk-in (local)
+              </label>
+            )}
             {picked.length > 1 && (
               <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                 <input type="checkbox" checked={isGroup} onChange={(e) => setIsGroup(e.target.checked)} className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600" />
@@ -202,11 +234,17 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="Guest name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={walkIn ? "local" : "Full name"} disabled={walkIn} /></Field>
-            {!walkIn && <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXX-XXXXXX" /></Field>}
+            <Field label="Guest name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={walkIn ? "local" : "Full name"} /></Field>
+            <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={walkIn ? "optional" : "01XXX-XXXXXX"} /></Field>
+            <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="optional — invoices & OTP" /></Field>
             {!walkIn && <Field label="NID / Passport"><Input value={nid} onChange={(e) => setNid(e.target.value)} placeholder="optional" /></Field>}
           <Field label="Adults"><Input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} /></Field>
           <Field label="Children"><Input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} /></Field>
+          {extraAllowed && (
+            <Field label="Extra persons" hint={`+৳${extraRate.toLocaleString("en-IN")} / person / night`}>
+              <Input type="number" min={0} value={extraPersons} onChange={(e) => setExtraPersons(Math.max(0, Number(e.target.value)))} />
+            </Field>
+          )}
           {isStaff && (
             <Field label="Discount (৳)"><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></Field>
           )}
@@ -228,7 +266,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             loading={busy}
-            disabled={!picked.length || !fullName || !phone}
+            disabled={!picked.length || !fullName}
             onClick={submit}
           >
             Create booking {picked.length ? `(${picked.length} room${picked.length > 1 ? "s" : ""})` : ""}

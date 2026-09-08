@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsDateString, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsDateString, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { ExpensesService } from "./expenses.service";
 
@@ -8,11 +8,13 @@ class CreateExpenseDto {
   @IsString() @MaxLength(120) category!: string;
   @IsOptional() @IsString() @MaxLength(255) details?: string;
   @IsNumber() @Min(1) amount!: number;
+  @IsOptional() @IsIn(["RESORT", "RESTAURANT"]) scope?: string;
 }
 
 class ExpenseRangeQuery {
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @IsIn(["RESORT", "RESTAURANT"]) scope?: string;
 }
 
 @Controller()
@@ -26,7 +28,7 @@ export class ExpensesController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query() q: ExpenseRangeQuery,
   ) {
-    return this.expenses.list(req.user, resortId, q.from, q.to);
+    return this.expenses.list(req.user, resortId, q.from, q.to, q.scope);
   }
 
   @Get("resorts/:resortId/expenses/categories")

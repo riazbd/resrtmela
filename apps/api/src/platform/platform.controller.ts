@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
 
@@ -27,6 +27,7 @@ class CreateUserDto {
   @IsString() @MaxLength(128) password!: string;
   @IsIn(["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"]) role!: string;
   @IsOptional() @IsNumber() commissionRate?: number;
+  @IsOptional() @IsNumber() roleId?: number;
 }
 
 class UpdateUserDto {
@@ -35,6 +36,41 @@ class UpdateUserDto {
   @IsOptional() @IsString() @MaxLength(128) password?: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsNumber() commissionRate?: number;
+  @IsOptional() @IsNumber() roleId?: number;
+}
+
+class RoleDto {
+  @IsString() @MaxLength(60) name!: string;
+  @IsArray() permissions!: string[];
+}
+
+class RolePatchDto {
+  @IsOptional() @IsString() @MaxLength(60) name?: string;
+  @IsOptional() @IsArray() permissions?: string[];
+}
+
+class InviteAgentDto {
+  @IsString() email!: string;
+  @IsOptional() @IsString() @MaxLength(160) name?: string;
+  @IsOptional() @IsNumber() commissionRate?: number;
+  @IsOptional() @IsIn(["PERCENT", "FLAT"]) commissionKind?: "PERCENT" | "FLAT";
+}
+
+class AgentStaffDto {
+  @IsString() @MaxLength(160) name!: string;
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsString() @MaxLength(128) password!: string;
+}
+
+class OwnerResortDto {
+  @IsString() @MaxLength(160) name!: string;
+  @IsOptional() @IsString() @MaxLength(255) location?: string;
+}
+
+class CmsDto {
+  @IsString() @MaxLength(60) key!: string;
+  @IsString() @MaxLength(4000) value!: string;
 }
 
 class AgentStatusDto {
@@ -122,8 +158,16 @@ export class PlatformController {
   @Get("platform/plans") plans(@Req() req: AuthedRequest) {
     return this.platform.listPlans(req.user);
   }
-  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: { monthlyFee?: number; maxRooms?: number; label?: string; blurb?: string; active?: boolean }) {
+  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
     return this.platform.updatePlan(req.user, name, dto);
+  }
+
+  // super admin — front-end CMS
+  @Get("platform/cms") getCms(@Req() req: AuthedRequest) {
+    return this.platform.getCms(req.user);
+  }
+  @Post("platform/cms") putCms(@Req() req: AuthedRequest, @Body() dto: CmsDto) {
+    return this.platform.putCms(req.user, dto.key, dto.value);
   }
 
   // owner — users & roles
@@ -136,8 +180,43 @@ export class PlatformController {
   @Patch("resorts/:id/users/:userId") updateUser(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Param("userId", ParseIntPipe) userId: number, @Body() dto: UpdateUserDto) {
     return this.platform.updateResortUser(req.user, id, userId, dto);
   }
-  @Get("resorts/:id/activity") activity(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Query("take") take?: string) {
-    return this.platform.activityLog(req.user, id, take ? Number(take) : 100);
+  @Get("resorts/:id/activity") activity(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Query("take") take?: string, @Query("q") q?: string) {
+    return this.platform.activityLog(req.user, id, take ? Number(take) : 100, q);
+  }
+  @Delete("activity/:id") deleteActivity(@Req() req: AuthedRequest, @Param("id") id: string) {
+    return this.platform.deleteActivity(req.user, id);
+  }
+
+  // owner — permission roles (Paradox-style matrix)
+  @Get("resorts/:id/roles") roles(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.listRoles(req.user, id);
+  }
+  @Post("resorts/:id/roles") createRole(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: RoleDto) {
+    return this.platform.createRole(req.user, id, dto.name, dto.permissions);
+  }
+  @Patch("roles/:id") updateRole(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: RolePatchDto) {
+    return this.platform.updateRole(req.user, id, dto);
+  }
+  @Delete("roles/:id") deleteRole(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.deleteRole(req.user, id);
+  }
+
+  // owner — invite agent by email
+  @Post("resorts/:id/invite-agent") inviteAgent(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: InviteAgentDto) {
+    return this.platform.inviteAgentByEmail(req.user, id, dto);
+  }
+
+  // agent — agency sub-users
+  @Get("agent/staff") agentStaff(@Req() req: AuthedRequest) {
+    return this.platform.agentStaffList(req.user);
+  }
+  @Post("agent/staff") addAgentStaff(@Req() req: AuthedRequest, @Body() dto: AgentStaffDto) {
+    return this.platform.createAgentStaff(req.user, dto);
+  }
+
+  // owner — add another resort (plan-gated)
+  @Post("tenants/:tenantId/resorts") ownerAddResort(@Req() req: AuthedRequest, @Param("tenantId", ParseIntPipe) tenantId: number, @Body() dto: OwnerResortDto) {
+    return this.platform.ownerCreateResort(req.user, tenantId, dto);
   }
 
   // owner — agent activation

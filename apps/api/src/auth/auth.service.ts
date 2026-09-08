@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { signToken } from "../common/auth.guard";
 import { normalizePhone } from "../common/dates";
 import { slugify } from "../common/plans";
+import { ensureResortRoles } from "../common/permissions";
 import { SmsService } from "../notifications/sms.service";
 import { EmailService } from "../notifications/email.service";
 import { ROLE, type Role } from "@rh/shared";
@@ -29,14 +30,18 @@ export class AuthService {
 
   private readonly logger = new Logger(AuthService.name);
 
-  async loginWithPassword(phoneRaw: string, password: string) {
-    const phone = normalizePhone(phoneRaw);
-    const user = await this.prisma.user.findUnique({ where: { phone } });
+  /** Identifier may be a phone number or an email address. */
+  async loginWithPassword(identifierRaw: string, password: string) {
+    if (!identifierRaw) throw new UnauthorizedException("Invalid identifier or password");
+    const looksEmail = identifierRaw.includes("@");
+    const user = looksEmail
+      ? await this.prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } })
+      : await this.prisma.user.findUnique({ where: { phone: normalizePhone(identifierRaw) } });
     if (!user || !user.passwordHash || user.status !== "active") {
-      throw new UnauthorizedException("Invalid phone or password");
+      throw new UnauthorizedException("Invalid identifier or password");
     }
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException("Invalid phone or password");
+    if (!ok) throw new UnauthorizedException("Invalid identifier or password");
     return this.issueToken(user.id, user.role);
   }
 
@@ -213,6 +218,7 @@ export class AuthService {
       });
       await tx.userResort.create({ data: { userId: user.id, resortId: resort.id } });
       await tx.counter.create({ data: { resortId: resort.id, kind: "BOOKING", nextVal: 0 } });
+      await ensureResortRoles(this.prisma, resort.id);
       await tx.auditLog.create({
         data: {
           actorId: user.id,

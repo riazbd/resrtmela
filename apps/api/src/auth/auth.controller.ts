@@ -1,12 +1,16 @@
-import { Body, Controller, Get, Post, Req, UseGuards, Inject, HttpCode } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req, UseGuards, Inject, HttpCode, Query } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
+import { PermissionsService } from "../common/permissions";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class LoginDto {
-  @IsString() phone!: string;
+  /** phone number OR email — one identifier is enough */
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
+  @IsOptional() @IsString() identifier?: string;
   @IsString() @MinLength(6) password!: string;
 }
 
@@ -43,7 +47,8 @@ export class PublicAuthController {
   @Post("login")
   @HttpCode(200)
   login(@Body() dto: LoginDto) {
-    return this.auth.loginWithPassword(dto.phone, dto.password);
+    const id = dto.identifier ?? dto.phone ?? dto.email;
+    return this.auth.loginWithPassword(id ?? "", dto.password);
   }
 
   @Post("otp/request")
@@ -78,11 +83,19 @@ export class AuthedAuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   @Get("me")
   me(@Req() req: AuthedRequest) {
     return this.auth.me(req.user.userId);
+  }
+
+  /** permission keys for the active resort (UI gating) */
+  @Get("permissions")
+  async permissions(@Req() req: AuthedRequest, @Query("resortId") resortIdRaw?: string) {
+    const resortId = resortIdRaw ? Number(resortIdRaw) : undefined;
+    return { permissions: await this.perms.resolve(req.user, resortId) };
   }
 
   @Post("me/password")

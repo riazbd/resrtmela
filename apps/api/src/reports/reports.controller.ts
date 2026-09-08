@@ -57,6 +57,16 @@ export class ReportsController {
     return this.reports.daily(req.user, resortId, from, to);
   }
 
+  @Get("resorts/:resortId/reports/pl")
+  pl(
+    @Req() req: AuthedRequest,
+    @Param("resortId", ParseIntPipe) resortId: number,
+    @Query("from") from: string,
+    @Query("to") to: string,
+  ) {
+    return this.reports.pl(req.user, resortId, from, to);
+  }
+
   @Get("resorts/:resortId/audit")
   audit(
     @Req() req: AuthedRequest,

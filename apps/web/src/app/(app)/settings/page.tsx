@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, bdt } from "@/lib/api";
+import { api, bdt, type PermRole } from "@/lib/api";
+import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X } from "lucide-react";
@@ -56,6 +57,8 @@ interface UserRow {
   wallet: { balance: number; active: boolean } | null;
   commissionRate: number | null;
   commissionKind: string;
+  roleId: number | null;
+  roleName: string | null;
 }
 
 interface ActivityRow {
@@ -89,7 +92,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Agent access", "Activity log", "Discounts", "API keys"] as const;
+const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "API keys"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, role } = useAuth();
@@ -238,6 +241,7 @@ export default function SettingsPage() {
       )}
 
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
+      {tab === "Permissions" && rid && <RolesTab rid={rid} />}
       {tab === "Agent access" && rid && <AccessTab rid={rid} />}
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
@@ -250,6 +254,8 @@ function AccessTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [invite, setInvite] = useState({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+  const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
     api<AccessRow[]>(`/resorts/${rid}/access-requests`).then(setRows).catch(() => setRows([]));
@@ -269,56 +275,102 @@ function AccessTab({ rid }: { rid: number }) {
     }
   }
 
+  async function sendInvite() {
+    setInviting(true);
+    try {
+      const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agent`, {
+        method: "POST",
+        body: {
+          email: invite.email,
+          name: invite.name || undefined,
+          commissionRate: Number(invite.commissionRate),
+          commissionKind: invite.commissionKind,
+        },
+      });
+      push(r.emailed ? "Invitation email sent — the agent can sign in with the emailed credentials" : "Agent linked — they were notified");
+      setInvite({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setInviting(false);
+    }
+  }
+
   if (!rows) return <Empty msg="Loading…" />;
   return (
-    <Card title={`Agent access requests (${rows.length})`}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr><Th>Agent</Th><Th>Phone</Th><Th>Status</Th><Th>Note</Th><Th>Requested</Th><Th /></tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-slate-100">
-                <Td>
-                  <div className="font-semibold text-slate-800">{r.user.name}</div>
-                  <div className="text-xs text-slate-400">{r.user.role.replace(/_/g, " ")} · {r.user.status}</div>
-                </Td>
-                <Td className="text-xs">{r.user.phone}</Td>
-                <Td>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : r.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
-                </Td>
-                <Td className="text-xs text-slate-500">{r.note ?? "—"}</Td>
-                <Td className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString("en-GB")}</Td>
-                <Td>
-                  <div className="flex justify-end gap-1.5">
-                    {r.status === "PENDING" && (
-                      <>
-                        <button onClick={() => decide(r.id, "APPROVE")} disabled={busy === r.id} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Approve</button>
-                        <button onClick={() => decide(r.id, "REJECT")} disabled={busy === r.id} className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Reject</button>
-                      </>
-                    )}
-                    {r.status === "APPROVED" && <span className="text-xs text-slate-400">has access</span>}
-                  </div>
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <Empty msg="No requests yet — agents find your resort on the Discover page and request access" />}
-      </div>
-    </Card>
+    <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
+      <Card title={`Agent access requests (${rows.length})`}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr><Th>Agent</Th><Th>Phone</Th><Th>Status</Th><Th>Note</Th><Th>Requested</Th><Th /></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-slate-100">
+                  <Td>
+                    <div className="font-semibold text-slate-800">{r.user.name}</div>
+                    <div className="text-xs text-slate-400">{r.user.role.replace(/_/g, " ")} · {r.user.status}</div>
+                  </Td>
+                  <Td className="text-xs">{r.user.phone}</Td>
+                  <Td>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : r.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
+                  </Td>
+                  <Td className="text-xs text-slate-500">{r.note ?? "—"}</Td>
+                  <Td className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString("en-GB")}</Td>
+                  <Td>
+                    <div className="flex justify-end gap-1.5">
+                      {r.status === "PENDING" && (
+                        <>
+                          <button onClick={() => decide(r.id, "APPROVE")} disabled={busy === r.id} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Approve</button>
+                          <button onClick={() => decide(r.id, "REJECT")} disabled={busy === r.id} className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Reject</button>
+                        </>
+                      )}
+                      {r.status === "APPROVED" && <span className="text-xs text-slate-400">has access</span>}
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && <Empty msg="No requests yet" />}
+        </div>
+      </Card>
+
+      <Card title="Invite agent by email">
+        <div className="space-y-3">
+          <Field label="Agent email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agent@email.com" /></Field>
+          <Field label="Name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
+          <Field label="Commission type">
+            <Select value={invite.commissionKind} onChange={(e) => setInvite({ ...invite, commissionKind: e.target.value })}>
+              <option value="PERCENT">Percent of rent (%)</option>
+              <option value="FLAT">Fixed amount (৳ per booking)</option>
+            </Select>
+          </Field>
+          <Field label={invite.commissionKind === "FLAT" ? "Commission (৳ / booking)" : "Commission (%)"}>
+            <Input type="number" min={0} max={invite.commissionKind === "PERCENT" ? 100 : undefined} value={invite.commissionRate} onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })} />
+          </Field>
+          <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+            The agent receives a <b>verification email</b> with login credentials. New agents start pending — activate them below or in Users.
+          </div>
+          <Button onClick={sendInvite} loading={inviting} disabled={!invite.email}>Send invitation</Button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
 function UsersTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT" });
+  const [roles, setRoles] = useState<PermRole[]>([]);
+  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     api<UserRow[]>(`/resorts/${rid}/users`).then(setRows).catch(() => setRows([]));
+    api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -329,12 +381,13 @@ function UsersTab({ rid }: { rid: number }) {
         method: "POST",
         body: {
           name: form.name, phone: form.phone, password: form.password, role: form.role,
+          roleId: form.roleId ? Number(form.roleId) : undefined,
           commissionRate: form.role === "AGENT" ? Number(form.commissionRate) : undefined,
           commissionKind: form.role === "AGENT" ? form.commissionKind : undefined,
         },
       });
       push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
-      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT" });
+      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -374,6 +427,7 @@ function UsersTab({ rid }: { rid: number }) {
                         <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
                       ))}
                     </Select>
+                    <RolePicker u={u} rid={rid} roles={roles} onDone={load} />
                   </Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
@@ -422,11 +476,19 @@ function UsersTab({ rid }: { rid: number }) {
           <Field label="Phone (login)"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8801XXXXXXXXX" /></Field>
           <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
           <Field label="Role">
-            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, roleId: "" })}>
               <option value="MANAGER">Manager</option>
               <option value="FRONT_DESK">Front desk</option>
               <option value="AGENT">Agent</option>
               <option value="HOUSEKEEPING">Housekeeping</option>
+            </Select>
+          </Field>
+          <Field label="Permissions set" hint="create custom permission sets in the Permissions tab">
+            <Select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}>
+              <option value="">Default for role</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>{r.name} ({r.permissions.length} perms)</option>
+              ))}
             </Select>
           </Field>
           {form.role === "AGENT" && (
@@ -456,6 +518,155 @@ function UsersTab({ rid }: { rid: number }) {
           <Button onClick={create} loading={busy} disabled={!form.name || !form.phone || !form.password}>Create account</Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function RolePicker({ u, rid, roles, onDone }: { u: UserRow; rid: number; roles: PermRole[]; onDone: () => void }) {
+  const { push } = useToast();
+  if (roles.length === 0 || u.role === "RESORT_ADMIN") return null;
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <Select
+        className="!w-32 !py-0.5 text-xs"
+        value={u.roleId ? String(u.roleId) : ""}
+        onChange={(e) => {
+          const roleId = e.target.value ? Number(e.target.value) : 0;
+          api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body: { roleId } })
+            .then(() => { push("Permissions set updated"); onDone(); })
+            .catch((ex) => push((ex as Error).message, "err"));
+        }}
+      >
+        <option value="">Default perms</option>
+        {roles.map((r) => (
+          <option key={r.id} value={r.id}>{r.name}</option>
+        ))}
+      </Select>
+      {u.roleName && <span className="text-[10px] text-slate-400">{u.roleName}</span>}
+    </div>
+  );
+}
+
+function RolesTab({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const { refreshPerms } = useAuth();
+  const [roles, setRoles] = useState<PermRole[] | null>(null);
+  const [editing, setEditing] = useState<PermRole | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
+  }, [rid]);
+  useEffect(() => load(), [load]);
+
+  function openEditor(r: PermRole) {
+    setEditing(r);
+    setSelected(r.permissions);
+  }
+
+  function toggle(key: string) {
+    setSelected((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]));
+  }
+
+  async function save() {
+    if (!editing) return;
+    setBusy(true);
+    try {
+      await api(`/roles/${editing.id}`, { method: "PATCH", body: { permissions: selected } });
+      push(`Permissions saved for ${editing.name}`);
+      setEditing(null);
+      load();
+      refreshPerms();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createRole() {
+    setBusy(true);
+    try {
+      await api(`/resorts/${rid}/roles`, { method: "POST", body: { name: newName, permissions: [] } });
+      push("Role created — now tick its permissions");
+      setNewName("");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeRole(r: PermRole) {
+    if (!window.confirm(`Delete role "${r.name}"?`)) return;
+    try {
+      await api(`/roles/${r.id}`, { method: "DELETE" });
+      push("Role deleted");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    }
+  }
+
+  if (!roles) return <Empty msg="Loading…" />;
+  const groups = PERMISSION_GROUPS;
+  return (
+    <div className="space-y-4">
+      <Card title="Permission roles">
+        <p className="mb-3 text-xs text-slate-500">
+          Create a role, then tick exactly what it can do. Assign the set when creating a user (Users &amp; Roles tab). Administrators always have everything.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {roles.map((r) => (
+            <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+              <span className="text-sm font-semibold text-slate-700">{r.name}</span>
+              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                {r.permissions.includes("*") ? "all" : r.permissions.length} perms · {r.users} users
+              </span>
+              <button onClick={() => openEditor(r)} className="text-xs font-semibold text-brand-700 hover:underline">Edit</button>
+              {!r.system && (
+                <button onClick={() => removeRole(r)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <Input className="!w-56" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New role name e.g. Accountant" />
+          <Button size="sm" onClick={createRole} loading={busy} disabled={!newName}>Create role</Button>
+        </div>
+      </Card>
+
+      {editing && (
+        <Card title={`Permissions — ${editing.name}`}>
+          <div className="space-y-4">
+            {groups.map((g) => (
+              <div key={g}>
+                <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">{g}</div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {PERMISSIONS.filter((p) => p.group === g).map((p) => (
+                    <label key={p.key} className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-1.5 text-sm hover:bg-slate-50">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(p.key)}
+                        onChange={() => toggle(p.key)}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                      />
+                      <span className="text-slate-700">{p.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Button onClick={save} loading={busy}>Save permissions</Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -492,17 +703,43 @@ function CommissionEditor({ u, rid, onDone }: { u: UserRow; rid: number; onDone:
 }
 
 function ActivityTab({ rid }: { rid: number }) {
+  const { push } = useToast();
   const [rows, setRows] = useState<ActivityRow[] | null>(null);
+  const [q, setQ] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
   useEffect(() => {
-    api<ActivityRow[]>(`/resorts/${rid}/activity?take=150`).then(setRows).catch(() => setRows([]));
-  }, [rid]);
+    const t = setTimeout(() => {
+      api<ActivityRow[]>(`/resorts/${rid}/activity?take=150${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)
+        .then(setRows)
+        .catch(() => setRows([]));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [rid, q]);
+
+  async function remove(id: string) {
+    if (!window.confirm("Delete this activity entry?")) return;
+    setBusyId(id);
+    try {
+      await api(`/activity/${id}`, { method: "DELETE" });
+      setRows((r) => r?.filter((x) => x.id !== id) ?? null);
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!rows) return <Empty msg="Loading…" />;
   return (
     <Card title="Who did what (role activity log)">
+      <div className="mb-3">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, phone, email or action…" />
+      </div>
       <div className="max-h-[70vh] overflow-y-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr><Th>When</Th><Th>Who</Th><Th>Action</Th><Th>Entity</Th></tr>
+            <tr><Th>When</Th><Th>Who</Th><Th>Action</Th><Th>Entity</Th><Th /></tr>
           </thead>
           <tbody>
             {rows.map((r) => (
@@ -511,11 +748,21 @@ function ActivityTab({ rid }: { rid: number }) {
                 <Td>{r.actor ? `${r.actor.name} (${r.actor.role.replace(/_/g, " ")})` : "system"}</Td>
                 <Td><code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{r.action}</code></Td>
                 <Td className="text-xs text-slate-500">{r.entity}{r.entityId ? ` #${r.entityId}` : ""}</Td>
+                <Td>
+                  <button
+                    onClick={() => remove(r.id)}
+                    disabled={busyId === r.id}
+                    title="Delete activity"
+                    className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40"
+                  >
+                    <X className="inline h-3.5 w-3.5" /> Delete
+                  </button>
+                </Td>
               </tr>
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <Empty msg="No activity recorded yet" />}
+        {rows.length === 0 && <Empty msg={q ? "No matches" : "No activity recorded yet"} />}
       </div>
     </Card>
   );

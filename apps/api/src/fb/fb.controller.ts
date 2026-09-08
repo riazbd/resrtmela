@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { Type } from "class-transformer";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { FbService } from "./fb.service";
@@ -30,6 +30,20 @@ class PayBillDto {
 class BillRangeQuery {
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+}
+
+class PackageDto {
+  @IsString() @MaxLength(120) name!: string;
+  @IsNumber() @Min(0) @Type(() => Number) price!: number;
+  @IsOptional() @IsString() @MaxLength(500) items?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+class PackagePatchDto {
+  @IsOptional() @IsString() @MaxLength(120) name?: string;
+  @IsOptional() @IsNumber() @Min(0) @Type(() => Number) price?: number;
+  @IsOptional() @IsString() @MaxLength(500) items?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
 }
 
 @Controller()
@@ -72,5 +86,23 @@ export class FbController {
   @Delete("fb/bills/:id")
   remove(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.fb.remove(req.user, id);
+  }
+
+  // ── food packages ──
+  @Get("resorts/:resortId/fb/packages")
+  packages(@Req() req: AuthedRequest, @Param("resortId", ParseIntPipe) resortId: number) {
+    return this.fb.listPackages(req.user, resortId);
+  }
+  @Post("resorts/:resortId/fb/packages")
+  createPackage(@Req() req: AuthedRequest, @Param("resortId", ParseIntPipe) resortId: number, @Body() dto: PackageDto) {
+    return this.fb.createPackage(req.user, resortId, dto);
+  }
+  @Patch("fb/packages/:id")
+  patchPackage(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: PackagePatchDto) {
+    return this.fb.updatePackage(req.user, id, dto);
+  }
+  @Delete("fb/packages/:id")
+  removePackage(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.fb.deletePackage(req.user, id);
   }
 }

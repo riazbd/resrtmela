@@ -75,6 +75,7 @@ enum ItemKind {
   ROOM
   ACTIVITY
   FB
+  EXTRA_PERSON
 }
 
 enum PaymentMethod {
@@ -151,6 +152,10 @@ model Resort {
   apiKeys         ApiKey[]
   discountOffers  DiscountOffer[]
   accessRequests  ResortAccess[]
+  roles           CustomRole[]
+  employees       Employee[]
+  foodPackages    FoodPackage[]
+  payrollPayments PayrollPayment[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -189,9 +194,90 @@ model UserResort {
   resort         Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
   commissionRate Decimal? @db.Decimal(10, 2) // agents only: percent value (PERCENT) or fixed ৳ (FLAT)
   commissionKind String   @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (fixed per booking)
+  roleId         Int?     // custom role (permissions matrix); null = legacy fixed role behaviour
+  role           CustomRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   @@unique([userId, resortId])
   @@map("user_resorts")
+}
+
+/// Per-resort role with a permission matrix (Paradox-style: create user → pick role → tick permissions)
+model CustomRole {
+  id          Int      @id @default(autoincrement())
+  resortId    Int
+  resort      Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(60)
+  permissions Json     @default("[]") // string[] of permission keys
+  system      Boolean  @default(false) // system roles cannot be deleted
+  createdAt   DateTime @default(now())
+
+  users UserResort[]
+
+  @@unique([resortId, name])
+  @@map("roles")
+}
+
+// ───────────────────────── Payroll ─────────────────────────
+
+model Employee {
+  id          Int       @id @default(autoincrement())
+  resortId    Int
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name        String    @db.VarChar(120)
+  phone       String?   @db.VarChar(20)
+  designation String?   @db.VarChar(80)
+  salary      Decimal   @default(0) @db.Decimal(10, 2)
+  joinDate    DateTime? @db.Date
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  payments PayrollPayment[]
+
+  @@index([resortId])
+  @@map("employees")
+}
+
+model PayrollPayment {
+  id          Int      @id @default(autoincrement())
+  resortId    Int
+  resort      Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month       String   @db.VarChar(7) // "2026-09"
+  amount      Decimal  @db.Decimal(10, 2)
+  method      PaymentMethod?
+  note        String?  @db.VarChar(255)
+  paidAt      DateTime @default(now())
+  createdById Int?
+
+  @@unique([employeeId, month])
+  @@index([resortId, month])
+  @@map("payroll_payments")
+}
+
+// ───────────────────────── Restaurant packages ─────────────────────────
+
+model FoodPackage {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(120)
+  price     Decimal  @db.Decimal(10, 2)
+  items     String?  @db.VarChar(500) // what's included, comma separated
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([resortId])
+  @@map("food_packages")
+}
+
+/// Front-end CMS overrides (platform homepage text) — super admin edits.
+model CmsSetting {
+  key       String   @id @db.VarChar(60)
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("cms_settings")
 }
 
 // ───────────────────────── Inventory ─────────────────────────
@@ -288,6 +374,7 @@ model Booking {
   checkOut     DateTime?      @db.Date
   adults       Int            @default(2)
   children     Int            @default(0)
+  extraPersons Int            @default(0) // extra guests beyond room capacity, charged at room type rate
   discount     Decimal        @default(0.00) @db.Decimal(10, 2)
   remarks      String?        @db.Text
   state        BookingState   @default(PENDING)
@@ -469,6 +556,7 @@ model Expense {
   category  String   @db.VarChar(120)
   details   String?  @db.VarChar(255)
   amount    Decimal  @db.Decimal(10, 2)
+  scope     String   @default("RESORT") @db.VarChar(10) // RESORT | RESTAURANT
   createdBy Int?
   createdAt DateTime @default(now())
 
@@ -735,6 +823,7 @@ model PlatformPlan {
   label      String  @db.VarChar(40)
   monthlyFee Decimal @db.Decimal(10, 2)
   maxRooms   Int     @default(10)
+  maxResorts Int     @default(1) // multi-resort gate: CHAIN allows several resorts per owner
   blurb      String? @db.VarChar(200)
   active     Boolean @default(true)
   sortOrder  Int     @default(0)

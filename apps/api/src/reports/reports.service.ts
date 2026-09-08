@@ -4,12 +4,16 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
+import { PermissionsService } from "../common/permissions";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
 
 @Injectable()
 export class ReportsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
+  ) {}
 
   private async rangeBookings(resortId: number, from?: string, to?: string) {
     const rows = await this.prisma.booking.findMany({
@@ -96,6 +100,108 @@ export class ReportsService {
       expenses: expenseTotal,
       netProfit: round2(grossIncome - expenseTotal),
       bookings: bookings.length,
+    };
+  }
+
+  /** Profit & Loss statement: separate resort / restaurant columns + payroll, per date range. */
+  async pl(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.pl");
+    const from = dateOnly(fromStr);
+    const to = dateOnly(toStr);
+    if (to <= from) throw badRequest("to must be after from");
+
+    // resort revenue: ROOM + EXTRA_PERSON items on counted bookings
+    const bookings = await this.prisma.booking.findMany({
+      where: { resortId, deletedAt: null, state: { in: COUNTED_STATES }, checkIn: { gte: from, lt: to } },
+      include: { items: true },
+    });
+    let roomRevenue = 0;
+    let extraPersonRevenue = 0;
+    let otherRevenue = 0; // activities etc.
+    let discounts = 0;
+    for (const b of bookings) {
+      const nights = b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 1;
+      for (const i of b.items) {
+        if (i.itemKind === "ROOM") roomRevenue += Number(i.unitPrice) * i.qty * nights;
+        else if (i.itemKind === "EXTRA_PERSON") extraPersonRevenue += Number(i.unitPrice) * i.qty;
+        else if (i.itemKind === "ACTIVITY") otherRevenue += Number(i.unitPrice) * i.qty;
+      }
+      discounts += Number(b.discount);
+    }
+    roomRevenue = round2(roomRevenue);
+    extraPersonRevenue = round2(extraPersonRevenue);
+    otherRevenue = round2(otherRevenue);
+
+    // restaurant revenue: all F&B bills in range (charged-to-room stay in restaurant P&L;
+    // the matching FB booking item is excluded from resort revenue above)
+    const fb = await this.prisma.fbBill.findMany({
+      where: { resortId, deletedAt: null, billDate: { gte: from, lt: to } },
+      include: { items: true },
+    });
+    const restaurantRevenue = round2(fb.reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0));
+
+    // expenses split by scope
+    const expenses = await this.prisma.expense.findMany({
+      where: { resortId, date: { gte: from, lt: to } },
+      select: { amount: true, scope: true, category: true },
+    });
+    let resortExpenses = 0;
+    let restaurantExpenses = 0;
+    const resortByCat = new Map<string, number>();
+    const restByCat = new Map<string, number>();
+    for (const e of expenses) {
+      const amt = Number(e.amount);
+      if (e.scope === "RESTAURANT") {
+        restaurantExpenses += amt;
+        restByCat.set(e.category, round2((restByCat.get(e.category) ?? 0) + amt));
+      } else {
+        resortExpenses += amt;
+        resortByCat.set(e.category, round2((resortByCat.get(e.category) ?? 0) + amt));
+      }
+    }
+    resortExpenses = round2(resortExpenses);
+    restaurantExpenses = round2(restaurantExpenses);
+
+    // payroll for the months overlapping the range (charged to resort)
+    const months: string[] = [];
+    for (let d = new Date(from); d < to; d.setUTCMonth(d.getUTCMonth() + 1)) {
+      months.push(d.toISOString().slice(0, 7));
+    }
+    const payroll = await this.prisma.payrollPayment.findMany({
+      where: { resortId, month: { in: months } },
+      select: { amount: true },
+    });
+    const payrollTotal = round2(payroll.reduce((s, p) => s + Number(p.amount), 0));
+
+    const resortIncome = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
+    const resortNet = round2(resortIncome - resortExpenses - payrollTotal);
+    const restaurantNet = round2(restaurantRevenue - restaurantExpenses);
+    return {
+      from: fromStr,
+      to: toStr,
+      resort: {
+        roomRevenue,
+        extraPersonRevenue,
+        otherRevenue,
+        discounts: round2(discounts),
+        income: resortIncome,
+        expenses: resortExpenses,
+        payroll: payrollTotal,
+        net: resortNet,
+        expenseCategories: [...resortByCat.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
+      },
+      restaurant: {
+        revenue: restaurantRevenue,
+        expenses: restaurantExpenses,
+        net: restaurantNet,
+        expenseCategories: [...restByCat.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
+      },
+      combined: {
+        income: round2(resortIncome + restaurantRevenue),
+        expenses: round2(resortExpenses + restaurantExpenses + payrollTotal),
+        net: round2(resortNet + restaurantNet),
+      },
     };
   }
 

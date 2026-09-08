@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { api, API_URL } from "@/lib/api";
 import {
   CalendarDays,
   BedDouble,
@@ -129,6 +130,15 @@ function MockPos() {
 
 export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [cms, setCms] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    // CMS overrides are optional — defaults kick in on any failure
+    fetch(`${API_URL}/cms`)
+      .then((r) => r.json())
+      .then((d) => setCms(d ?? {}))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     document.documentElement.style.scrollBehavior = "smooth";
@@ -189,21 +199,21 @@ export default function HomePage() {
           <div>
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-sm">
               <Star className="h-3.5 w-3.5 fill-brand-600 text-brand-600" />
-              The all-in-one software for resorts
+              {cms["hero.badge"] ?? "The all-in-one software for resorts"}
             </div>
             <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-slate-900 sm:text-5xl">
-              Reservation calendar & front desk for your resort.
+              {cms["hero.title"] ?? "Reservation calendar & front desk for your resort."}
             </h1>
             <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
-              Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see
-              every taka — from your phone or laptop. In Bangla and English.
+              {cms["hero.subtitle"] ??
+                "Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see every taka — from your phone or laptop. In Bangla and English."}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
                 className="group inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-700"
               >
-                Create free account
+                {cms["hero.cta"] ?? "Create free account"}
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </Link>
               <a
@@ -465,15 +475,16 @@ export default function HomePage() {
       {/* ── final CTA ── */}
       <section className="bg-gradient-to-br from-brand-700 to-brand-900 py-20 text-white">
         <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-4xl font-black tracking-tight">Start today — free for 14 days</h2>
+          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] ?? "Start today — free for 14 days"}</h2>
           <p className="mt-4 text-lg text-brand-50/90">
-            Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen.
+            {cms["cta.body"] ??
+              "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen."}
           </p>
           <Link
             href="/signup"
             className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-8 py-4 text-base font-bold text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:bg-emerald-300"
           >
-            Create free account
+            {cms["cta.button"] ?? "Create free account"}
             <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
           </Link>
         </div>
