@@ -137,6 +137,9 @@ model Resort {
   contactPhone       String?        @db.VarChar(32)
   settings           Json?
   status             String         @default("active") @db.VarChar(16)
+  /// why the resort is not active: "billing" is the sweep's, anything else is a human's
+  suspendedReason    String?        @db.VarChar(32)
+  suspendedAt        DateTime?
   createdAt          DateTime       @default(now())
 
   roomTypes       RoomType[]
@@ -677,6 +680,9 @@ model SubscriptionDue {
   paidAt         DateTime?
   note           String?      @db.VarChar(255)
 
+  /// the billing sweep is idempotent because of this line: a second run on the
+  /// same period cannot raise a second bill, whatever the application does
+  @@unique([subscriptionId, periodStart])
   @@index([status])
   @@index([resortId])
   @@map("subscription_dues")
@@ -845,4 +851,14 @@ model PlatformPlan {
   sortOrder  Int     @default(0)
 
   @@map("platform_plans")
+}
+/// Platform-wide policy the super admin edits: billing windows, notice periods,
+/// the platform's own name on outgoing mail. Key/value because the alternative
+/// is a column per decision and a migration every time one is added.
+model PlatformSetting {
+  key       String   @id @db.VarChar(64)
+  value     String   @db.VarChar(255)
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
 }

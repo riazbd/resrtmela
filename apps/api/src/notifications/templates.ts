@@ -9,6 +9,22 @@ export const TEMPLATES = {
     "{resort}: Reminder - your check-in is tomorrow ({checkin}). Booking {code}. Due at resort Tk {due}.",
   payment_receipt:
     "{resort}: Tk {amount} received for {code} via {method}. Remaining due Tk {due}. Thank you!",
+
+  // ── platform -> tenant, about their own subscription ──
+  // Deliberately not tenant-editable: a resort should not be able to rewrite
+  // its own suspension notice. {platform} comes from platform settings.
+  subscription_trial_ending:
+    "{platform}: your free trial for {resort} ends on {date} ({days} days). Your {plan} plan is Tk {amount}/month after that. Nothing is lost either way.",
+  subscription_invoice:
+    "{platform}: invoice for {resort} — Tk {amount} for {date} to {periodEnd} ({plan} plan). Pay from Billing in your dashboard.",
+  subscription_overdue:
+    "{platform}: the Tk {amount} invoice for {resort}, due {date}, is unpaid. Please settle it to keep the account running.",
+  subscription_suspending:
+    "{platform}: {resort} will be suspended on {date} ({days} days) unless the Tk {amount} invoice is paid. Your data stays safe and readable either way.",
+  subscription_suspended:
+    "{platform}: {resort} is suspended — the Tk {amount} invoice due {date} is unpaid. Your records stay readable and exportable. Pay to resume immediately.",
+  subscription_resumed:
+    "{platform}: payment received — {resort} is active again. Thank you.",
 } as const;
 
 export type TemplateName = keyof typeof TEMPLATES;

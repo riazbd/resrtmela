@@ -63,6 +63,40 @@ export async function api<T = unknown>(
   return payload as T;
 }
 
+/**
+ * Download a file the API produced, with the session's token attached.
+ *
+ * A plain <a href> cannot carry the Authorization header, and putting the
+ * token in the query string would leak it into server logs and browser
+ * history. So the file is fetched, turned into a blob and handed to a
+ * throwaway link.
+ */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    let msg = `Download failed (${res.status})`;
+    try {
+      msg = ((await res.json()) as { message?: string }).message ?? msg;
+    } catch {
+      // non-JSON error body
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const named = /filename="?([^"]+)"?/.exec(disposition)?.[1];
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = named ?? fallbackName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ── shared shapes (loose, dashboard-side) ──
 
 export interface Resort {

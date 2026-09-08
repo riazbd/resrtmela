@@ -52,7 +52,7 @@ const TABLES = [
   "email_campaigns", "email_credits", "notifications", "resort_access",
   "api_keys", "discount_offers", "expenses", "counters", "audit_log",
   "notification_jobs", "user_resorts", "roles", "users",
-  "resorts", "tenants", "platform_plans", "cms_settings",
+  "resorts", "tenants", "platform_plans", "platform_settings", "cms_settings",
 ];
 
 /** Wipes the test database. Refuses to touch anything not named *_test. */

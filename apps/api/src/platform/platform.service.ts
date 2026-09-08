@@ -7,6 +7,8 @@ import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
+import { BillingService } from "./billing.service";
+import { PlatformSettingsService, SETTING_DEFAULTS } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
 import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
@@ -50,6 +52,8 @@ export class PlatformService {
     @Inject(DiscountService) private readonly discounts: DiscountService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
+    @Inject(BillingService) private readonly billing: BillingService,
+    @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
   ) {}
 
   // ─────────────────── super admin: platform overview ───────────────────
@@ -134,12 +138,53 @@ export class PlatformService {
     }));
   }
 
-  async setResortStatus(claims: JwtClaims, resortId: number, status: string) {
+  async setResortStatus(claims: JwtClaims, resortId: number, status: string, reason?: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!["active", "suspended"].includes(status)) throw badRequest("status must be active|suspended");
-    const resort = await this.prisma.resort.update({ where: { id: resortId }, data: { status } });
-    await this.audit.log({ actorId: claims.userId, resortId, action: `platform.resort.${status}`, entity: "resort", entityId: resortId });
+    // A human suspension is recorded as such, so the billing sweep never lifts
+    // it on the next payment -- and a human reactivation clears the mark, which
+    // is how the super admin overrides a billing suspension.
+    const resort = await this.prisma.resort.update({
+      where: { id: resortId },
+      data:
+        status === "active"
+          ? { status, suspendedReason: null, suspendedAt: null }
+          : { status, suspendedReason: (reason ?? "manual").slice(0, 32), suspendedAt: new Date() },
+    });
+    await this.audit.log({ actorId: claims.userId, resortId, action: `platform.resort.${status}`, entity: "resort", entityId: resortId, diff: reason ? { reason } : undefined });
     return resort;
+  }
+
+  // ─────────────────── platform policy ───────────────────
+
+  /** Commercial terms the super admin owns: billing windows, notice periods, platform identity. */
+  async getSettings(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    return this.settings.all();
+  }
+
+  async updateSettings(claims: JwtClaims, patch: Record<string, string>) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const keys = Object.keys(patch);
+    if (keys.length === 0) throw badRequest("nothing to update");
+    for (const key of keys) {
+      if (!(key in SETTING_DEFAULTS)) throw badRequest(`Unknown setting "${key}"`);
+      await this.settings.set(key, String(patch[key] ?? "").slice(0, 255));
+    }
+    await this.audit.log({ actorId: claims.userId, action: "platform.settings.update", entity: "platform_setting", diff: patch });
+    return this.settings.all();
+  }
+
+  /**
+   * Run the billing sweep now. It runs hourly on its own; this exists so the
+   * super admin can see the effect of a policy change immediately instead of
+   * waiting, and so a support call can be answered with a fact.
+   */
+  async runBillingSweep(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const result = await this.billing.sweep();
+    await this.audit.log({ actorId: claims.userId, action: "platform.billing.sweep", entity: "subscription", diff: result });
+    return result;
   }
 
   /** super admin impersonation: issue a real token for the target user */
@@ -279,6 +324,12 @@ export class PlatformService {
       }
       return d;
     });
+    // A tenant who has just paid should be working again before they can close
+    // the receipt -- not at whenever the next sweep happens to run.
+    const openForResort = await this.prisma.subscriptionDue.count({
+      where: { resortId: due.resortId, status: { in: ["DUE", "OVERDUE"] } },
+    });
+    if (openForResort === 0) await this.billing.reactivate(due.resortId);
     await this.audit.log({ actorId: claims.userId, resortId: due.resortId, action: "platform.due.paid", entity: "subscription_due", entityId: Number(due.id), diff: { amount: Number(due.amount), method } });
     return updated;
   }

@@ -6,7 +6,7 @@ import { api, money, dmy, type CmsRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
-import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe } from "lucide-react";
+import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -66,7 +66,7 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar", "Website CMS"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar", "Billing policy", "Website CMS"] as const;
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -446,6 +446,7 @@ export default function PlatformPage() {
       )}
 
       {/* ── website CMS ── */}
+      {tab === "Billing policy" && <PolicyTab />}
       {tab === "Website CMS" && <CmsTab />}
 
       {/* ── subscribe modal ── */}
@@ -526,6 +527,102 @@ const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "cta.body", label: "Bottom CTA text" },
   { key: "cta.button", label: "Bottom CTA button" },
 ];
+
+/**
+ * The commercial terms, as a form.
+ *
+ * These four numbers decide when a paying customer stops being one, so they
+ * belong to whoever owns that decision — not to a constant somebody has to
+ * redeploy. The sweep runs hourly on its own; the button is here so a changed
+ * term can be seen taking effect rather than taken on trust.
+ */
+const POLICY_FIELDS: { key: string; label: string; hint: string; unit?: string }[] = [
+  { key: "billing.graceDays", label: "Grace period", unit: "days", hint: "after the due date before the bill is marked overdue. bKash and bank transfers have a human in the loop — a day is not enough." },
+  { key: "billing.suspendAfterDays", label: "Suspend after", unit: "days", hint: "days past the due date before the resort stops accepting new entries. Reads and exports always stay open." },
+  { key: "billing.noticeDays", label: "Notice before", unit: "days", hint: "warning sent before a trial ends and before a suspension lands." },
+  { key: "platform.name", label: "Platform name", hint: "how the platform signs the mail it sends tenants about their account." },
+  { key: "platform.supportEmail", label: "Support email", hint: "shown to tenants who need to sort out a bill." },
+  { key: "platform.supportPhone", label: "Support phone", hint: "same, for the ones who would rather call." },
+];
+
+function PolicyTab() {
+  const { push } = useToast();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
+  const [last, setLast] = useState<Record<string, number> | null>(null);
+
+  const load = useCallback(() => {
+    api<Record<string, string>>("/platform/settings").then(setValues).catch(() => setValues({}));
+  }, []);
+  useEffect(() => load(), [load]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const patch = Object.fromEntries(POLICY_FIELDS.map((f) => [f.key, values[f.key] ?? ""]));
+      setValues(await api<Record<string, string>>("/platform/settings", { method: "PATCH", body: patch }));
+      push("Policy saved — it applies on the next sweep");
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sweep() {
+    setSweeping(true);
+    try {
+      const r = await api<Record<string, number>>("/platform/billing/sweep", { method: "POST" });
+      setLast(r);
+      push(`Swept: ${r.duesRaised} billed, ${r.suspended} suspended, ${r.resumed} resumed`);
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setSweeping(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 max-w-2xl space-y-4">
+      <Card className="p-5">
+        <div className="flex items-center gap-2 text-lg font-bold text-slate-900"><Gauge className="h-5 w-5 text-brand-500" /> Billing policy</div>
+        <p className="mt-1 text-xs text-slate-500">
+          Trials end, bills are raised and unpaid tenants are suspended automatically, once an hour.
+          These are the windows that decide when.
+        </p>
+        <div className="mt-4 space-y-3">
+          {POLICY_FIELDS.map((f) => (
+            <label key={f.key} className="block">
+              <span className="text-xs font-semibold text-slate-500">{f.label}</span>
+              <span className="block text-[10px] text-slate-400">{f.hint}</span>
+              <span className="mt-1 flex items-center gap-2">
+                <input
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                {f.unit && <span className="text-xs text-slate-400">{f.unit}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <Btn loading={busy} onClick={save}>Save policy</Btn>
+          <Btn size="sm" loading={sweeping} onClick={sweep} className="!bg-slate-100 !text-slate-700">
+            <PlayCircle className="mr-1 h-4 w-4" /> Run the sweep now
+          </Btn>
+        </div>
+        {last && (
+          <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+            Last run — trials ended {last.trialsEnded}, bills raised {last.duesRaised}, overdue {last.duesOverdue},
+            suspended {last.suspended}, resumed {last.resumed}, notices sent {last.notices}.
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
 
 function CmsTab() {
   const { push } = useToast();

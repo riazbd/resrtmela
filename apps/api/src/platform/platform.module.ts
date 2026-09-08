@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { PlatformService } from "./platform.service";
+import { BillingService } from "./billing.service";
 import { PlatformController } from "./platform.controller";
 import { PublicApiController, PublicCmsController } from "./public-api.controller";
 import { CommonModule } from "../common/common.module";
@@ -8,8 +9,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
   imports: [CommonModule, BookingsModule, NotificationsModule],
-  providers: [PlatformService],
+  providers: [PlatformService, BillingService],
   controllers: [PlatformController, PublicApiController, PublicCmsController],
-  exports: [PlatformService],
+  exports: [PlatformService, BillingService],
 })
 export class PlatformModule {}

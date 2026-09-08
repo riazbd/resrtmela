@@ -13,6 +13,7 @@ import { RoomsModule } from "./rooms/rooms.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { ImportModule } from "./import/import.module";
+import { ExportModule } from "./export/export.module";
 import { GuestModule } from "./guest/guest.module";
 import { ActivitiesModule } from "./activities/activities.module";
 import { NotificationsModule } from "./notifications/notifications.module";
@@ -36,6 +37,7 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     BookingsModule,
     PaymentsModule,
     ImportModule,
+    ExportModule,
     GuestModule,
     ActivitiesModule,
     NotificationsModule,

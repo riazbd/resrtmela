@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, money, type PermRole } from "@/lib/api";
+import { api, download, money, type PermRole } from "@/lib/api";
 import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
-import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X } from "lucide-react";
+import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 
 interface ResortDetail {
   id: number;
@@ -94,7 +94,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "API keys"] as const;
+const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "API keys", "Your data"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, role } = useAuth();
@@ -252,6 +252,90 @@ export default function SettingsPage() {
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
       {tab === "API keys" && rid && <ApiKeysTab rid={rid} />}
+      {tab === "Your data" && rid && <ExportTab rid={rid} name={d.name} />}
+    </div>
+  );
+}
+
+/**
+ * Your data, on your terms.
+ *
+ * This tab exists to be found before it is needed. An owner who can see, on an
+ * ordinary Tuesday, that their register downloads in one click is an owner who
+ * never has to wonder what happens to it if they stop paying — and the answer
+ * to that question decides more sales in this market than any feature list.
+ */
+const DATASETS: { key: string; label: string; hint: string }[] = [
+  { key: "bookings", label: "Bookings", hint: "every stay with its full bill" },
+  { key: "guests", label: "Guests", hint: "names, phones, NID/passport" },
+  { key: "payments", label: "Payments", hint: "who paid what, when and how" },
+  { key: "expenses", label: "Expenses", hint: "resort and restaurant" },
+  { key: "restaurant", label: "Restaurant bills", hint: "with line items" },
+  { key: "rooms", label: "Rooms & types", hint: "inventory and rates" },
+  { key: "staff", label: "Staff & agents", hint: "roles and commissions" },
+  { key: "activities", label: "Activities", hint: "the bookable catalogue" },
+];
+
+function ExportTab({ rid, name }: { rid: number; name: string }) {
+  const { push } = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function grab(key: string, label: string) {
+    setBusy(key);
+    try {
+      if (key === "archive") {
+        await download(`/resorts/${rid}/export/archive`, `${name}-everything.json`);
+      } else {
+        await download(`/resorts/${rid}/export/${key}.csv`, `${key}.csv`);
+      }
+      push(`${label} downloaded`);
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="space-y-1 p-4">
+          <h2 className="font-semibold text-slate-900">Your data is yours</h2>
+          <p className="text-sm text-slate-500">
+            Every file below opens in Excel with Bangla intact. Exports keep working even if the
+            subscription lapses — records stay readable and downloadable whatever happens to the account.
+          </p>
+        </div>
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {DATASETS.map((d) => (
+          <button
+            key={d.key}
+            disabled={busy !== null}
+            onClick={() => grab(d.key, d.label)}
+            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50"
+          >
+            <Download className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+            <span>
+              <span className="block text-sm font-medium text-slate-900">{d.label}</span>
+              <span className="block text-xs text-slate-500">{busy === d.key ? "Preparing…" : d.hint}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <div className="text-sm font-medium text-slate-900">Everything, in one file</div>
+            <div className="text-xs text-slate-500">All eight datasets as a single JSON archive.</div>
+          </div>
+          <Button onClick={() => grab("archive", "Full archive")} disabled={busy !== null}>
+            {busy === "archive" ? "Preparing…" : "Download archive"}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

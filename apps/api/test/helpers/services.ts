@@ -16,6 +16,10 @@ import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
 import { TenantStateService } from "../../src/common/tenant-state.service";
+import { PlatformSettingsService } from "../../src/common/platform-settings.service";
+import { BillingService } from "../../src/platform/billing.service";
+import { PlatformService } from "../../src/platform/platform.service";
+import { ExportService } from "../../src/export/export.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
@@ -42,4 +46,29 @@ export function makeRoomsService(prisma: PrismaService): RoomsService {
     new PlanLimitsService(prisma),
     new PermissionsService(prisma),
   );
+}
+
+export function makeBillingService(prisma: PrismaService): BillingService {
+  return new BillingService(
+    prisma,
+    new NotificationsService(prisma, new EmailService(), new SmsService()),
+    new PlatformSettingsService(prisma),
+    new AuditService(prisma),
+  );
+}
+
+export function makePlatformService(prisma: PrismaService): PlatformService {
+  return new PlatformService(
+    prisma,
+    new AuditService(prisma),
+    new EmailService(),
+    new DiscountService(prisma),
+    new PermissionsService(prisma),
+    new PlanLimitsService(prisma),
+    makeBillingService(prisma),
+  );
+}
+
+export function makeExportService(prisma: PrismaService): ExportService {
+  return new ExportService(prisma, new PermissionsService(prisma));
 }

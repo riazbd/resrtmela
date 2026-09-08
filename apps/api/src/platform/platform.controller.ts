@@ -12,6 +12,8 @@ class SubscriptionDto {
 
 class ResortStatusDto {
   @IsIn(["active", "suspended"]) status!: string;
+  /** why, so the billing sweep can tell its own suspensions from a human's */
+  @IsOptional() @IsString() @MaxLength(32) reason?: string;
 }
 
 class RenewDto {
@@ -129,7 +131,7 @@ export class PlatformController {
     return this.platform.allAgents(req.user);
   }
   @Patch("platform/resorts/:id/status") setResortStatus(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ResortStatusDto) {
-    return this.platform.setResortStatus(req.user, id, dto.status);
+    return this.platform.setResortStatus(req.user, id, dto.status, dto.reason);
   }
   @Post("platform/users/:id/login-as") loginAs(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.loginAs(req.user, id);
@@ -153,6 +155,17 @@ export class PlatformController {
   }
   @Get("platform/sub-calendar") subCalendar(@Req() req: AuthedRequest, @Query("from") from: string, @Query("to") to: string) {
     return this.platform.subscriptionCalendar(req.user, from, to);
+  }
+  @Post("platform/billing/sweep") sweepBilling(@Req() req: AuthedRequest) {
+    return this.platform.runBillingSweep(req.user);
+  }
+
+  // platform policy — the commercial terms, editable without a deploy
+  @Get("platform/settings") platformSettings(@Req() req: AuthedRequest) {
+    return this.platform.getSettings(req.user);
+  }
+  @Patch("platform/settings") updatePlatformSettings(@Req() req: AuthedRequest, @Body() dto: Record<string, string>) {
+    return this.platform.updateSettings(req.user, dto);
   }
 
   // plan definitions
