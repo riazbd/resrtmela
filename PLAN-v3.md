@@ -120,14 +120,37 @@ caller moved with it: `fb.list` (300), `reports.collectors` (300),
 realistically be reached by a working resort inside a year; the rest are recent-
 activity feeds where a cap is honest. Finish `fb.list` first.
 
-### P1 — Make a tenant a real tenant (~1 week)
-
-Everything in §2.1. One `Money` and one `Dates` module, both taking the
-resort's currency, locale and timezone; plans read entirely from
-`PlatformPlan`; templates in the database and editable; the constants deleted.
+### P1 — Make a tenant a real tenant — **mostly shipped**
 
 **Done when:** a second resort can be created with a different currency,
 timezone and plan, and nothing in the codebase needs to change.
+*Met — proved by `test/integration/second-tenant.spec.ts`, which stands up a
+USD/Honolulu tenant with its own prefixes, its own tax rate and a plan invented
+after the code was written.*
+
+1. **Timezone (H3).** Was a live bug, not a future one: every day boundary came
+   from UTC, so for six hours each night the arrivals board, the restaurant's
+   in-house list and the D-1 reminder sweep all ran on yesterday. `civilDateIn`
+   / `todayIn` resolve the resort's civil date; the UTC-only `today()` is
+   deleted so the mistake cannot recur.
+2. **Currency and locale (H1, H2).** `formatMoney` in `@rh/shared` is the one
+   implementation for all three apps, via Intl `narrowSymbol`. `Resort.locale`
+   added. `bdt()` — the currency was in the function name — became `money()`,
+   bound to the active resort; 86 call sites, 13 inline renders and the input
+   labels all follow the tenant now.
+3. **Plans and trial length (H4, H5).** `Subscription.plan` was a Prisma enum,
+   which was the real lock. It is a string naming `PlatformPlan.name`; the DTO
+   validates against the table; fee and `trialDays` come from the row. And
+   `ensurePlans` no longer resets `maxResorts` on every call, which had been
+   silently undoing the super admin's edits.
+4. **Prefixes (H6).** Shipped in P0.
+
+**Still open in §2.1:** notification and email templates are in code (H7), so a
+tenant cannot change a word of what is sent under their own name — this needs a
+template table and an editor, and is the largest remaining piece. Phone
+normalisation still assumes +880 (H8), which is correct today and wrong the
+first time this is sold abroad. `Resort.settings` (H9) remains an unread
+column; leave it or drop it, but do not build on it.
 
 ### P2 — Make the permission model real (~4 days)
 
