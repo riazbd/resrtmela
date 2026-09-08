@@ -46,6 +46,22 @@
 - UptimeRobot (or similar) pinging `https://backresort.rootcodebd.com/health` + `https://resortmela.rootcodebd.com` with email/SMS alerts.
 - Optional: Sentry DSN wired into the API for error tracking.
 
+### 4b. Sept 8 corrections batch — ✅ DONE & LIVE (2026-09-08)
+Delivered per client corrections list (commit `bc5d9fa` + `651953c`, deployed & smoke-tested on live):
+
+1. **Permissions matrix (Paradox-style)** — per-resort `roles` table (Administrator/Manager/Front Desk seeded automatically), checkbox permission editor in Settings → Permissions, users get a permission set at creation; server enforcement via `PermissionsService.require()` on the sensitive endpoints. UI nav/actions gate off `/auth/permissions?resortId=`.
+2. **Payroll** — `/payroll` page: staff list (name/phone/designation/salary), monthly salary sheet with Pay / Undo per employee, totals. Employees with history are deactivated, never hard-deleted.
+3. **Multi-resort per owner** — `PlatformPlan.maxResorts` (STARTER 1 / GROWTH 2 / CHAIN 10, editable in Platform → Plans), owner adds resorts from the header `+` button, existing resort dropdown switches (client-side active resort).
+4. **P&L statement** — Reports page: separate **Resort** / **Restaurant** / **Combined** columns with payroll, per-category expense drilldown; expenses now carry a `RESORT|RESTAURANT` scope.
+5. **Food packages** — created/managed in Restaurant page, one-click buttons on every POS ticket.
+6. **Agent invite by email** — Settings → Agent access: email invite with login credentials + commission terms (verified delivered to Gmail).
+7. **Activity log** — search (name/phone/email/action) + owner delete (permission `activities.delete`).
+8. **Agent corrections** — walk-in bookings **blocked** for agents (server + UI), agency sub-users (agent's own staff accounts), actual vs agent price shown on the room grid.
+9. **Walk-in form** — name, phone, email, adults, **extra persons** (charged per night via `EXTRA_PERSON` booking items at the room-type rate; requires the room type's extra-person checkbox + rate).
+10. **Invoice PDF download** — client-side jsPDF+html2canvas button on `/invoice/[id]`.
+11. **Front-end CMS** — Platform → Website CMS tab (hero badge/title/subtitle/CTA, bottom CTA), public `GET /cms`, homepage falls back to defaults for empty values.
+12. **Login** accepts phone **or** email (agents invited by email can log in with their email).
+
 ---
 
 ## 🟠 Important soon
