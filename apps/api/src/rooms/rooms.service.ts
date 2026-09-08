@@ -5,6 +5,7 @@ import { ROLE, type Role, JwtClaims } from "@rh/shared";
 import { isManagement, requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { PlanLimitsService } from "../common/plan-limits.service";
+import { PermissionsService } from "../common/permissions";
 import { AuditService } from "../common/audit.service";
 
 @Injectable()
@@ -13,6 +14,7 @@ export class RoomsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   // ── room types ──
@@ -26,8 +28,8 @@ export class RoomsService {
     resortId: number,
     data: { name: string; maxAdults: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; amenities?: string[] },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "rooms.manage");
     const rt = await this.prisma.roomType.create({
       data: {
         resortId,
@@ -50,8 +52,8 @@ export class RoomsService {
   ) {
     const rt0 = await this.prisma.roomType.findUnique({ where: { id } });
     if (!rt0) throw badRequest("room type not found");
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, rt0.resortId);
+    await this.perms.require(claims, rt0.resortId, "rooms.manage");
     const rt = await this.prisma.roomType.update({
       where: { id },
       data: {
@@ -82,8 +84,8 @@ export class RoomsService {
     resortId: number,
     data: { name: string; roomTypeId: number; baseRate: number },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "rooms.manage");
     // plan cap (soft-SaaS enforcement)
     const limits = await this.planLimits.forResort(resortId);
     const roomCount = await this.prisma.room.count({ where: { resortId } });
@@ -108,7 +110,9 @@ export class RoomsService {
     roomId: number,
     data: { baseRate?: number; status?: "ACTIVE" | "OUT_OF_SERVICE"; name?: string },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    const existing = await this.prisma.room.findUniqueOrThrow({ where: { id: roomId } });
+    requireResortAccess(claims, existing.resortId);
+    await this.perms.require(claims, existing.resortId, "rooms.manage");
     const room = await this.prisma.room.update({
       where: { id: roomId },
       data: {
@@ -137,8 +141,8 @@ export class RoomsService {
     resortId: number,
     data: { roomTypeId: number; dateFrom: string; dateTo: string; price: number },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "rooms.manage");
     if (dateOnly(data.dateFrom) >= dateOnly(data.dateTo)) {
       throw Object.assign(new Error("dateTo must be after dateFrom"), { status: 400 });
     }

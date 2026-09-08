@@ -317,7 +317,7 @@ export class PlatformService {
 
   async resortUsers(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, resortId, "users.manage");
     const rows = await this.prisma.userResort.findMany({
       where: { resortId },
       include: {
@@ -431,7 +431,7 @@ export class PlatformService {
 
   async activityLog(claims: JwtClaims, resortId: number, take = 100, q?: string) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, resortId, "auditlog.view");
     const search = q?.trim();
     const rows = await this.prisma.auditLog.findMany({
       where: {
@@ -533,7 +533,7 @@ export class PlatformService {
 
   async setAgentStatus(claims: JwtClaims, resortId: number, agentUserId: number, status: "active" | "suspended" | "pending") {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, resortId, "agents.manage");
     const agent = await this.prisma.user.findFirst({ where: { id: agentUserId, role: "AGENT" } });
     if (!agent) throw badRequest("not an agent");
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: agentUserId, resortId } } });
@@ -627,7 +627,7 @@ export class PlatformService {
     input: { scope: "RESORT" | "ROOM"; roomTypeId?: number; name: string; kind: "PERCENT" | "FLAT"; value: number; validFrom?: string; validTo?: string },
   ) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, resortId, "discounts.manage");
     if (input.scope === "ROOM" && !input.roomTypeId) throw badRequest("roomTypeId required for ROOM scope");
     if (input.kind === "PERCENT" && (input.value <= 0 || input.value > 100)) throw badRequest("percent 1-100");
     const offer = await this.prisma.discountOffer.create({
@@ -650,7 +650,7 @@ export class PlatformService {
     const offer = await this.prisma.discountOffer.findUnique({ where: { id } });
     if (!offer) throw badRequest("not found");
     requireResortAccess(claims, offer.resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, offer.resortId, "discounts.manage");
     const updated = await this.prisma.discountOffer.update({
       where: { id },
       data: {
@@ -682,7 +682,7 @@ export class PlatformService {
 
   async createApiKey(claims: JwtClaims, resortId: number, name: string) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, resortId, "apikeys.manage");
     const secret = randomBytes(24).toString("hex");
     const prefix = `rm_live_${randomBytes(4).toString("hex")}`;
     const keyHash = createHash("sha256").update(secret).digest("hex");
@@ -696,7 +696,7 @@ export class PlatformService {
     const row = await this.prisma.apiKey.findUnique({ where: { id: BigInt(id) } });
     if (!row) throw badRequest("not found");
     requireResortAccess(claims, row.resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, row.resortId, "apikeys.manage");
     await this.prisma.apiKey.update({ where: { id: BigInt(id) }, data: { active: false } });
     await this.audit.log({ actorId: claims.userId, resortId: row.resortId, action: "apikey.revoke", entity: "api_key", entityId: id });
     return { ok: true };
@@ -757,7 +757,7 @@ export class PlatformService {
     });
     if (!b) throw badRequest("booking not found");
     requireResortAccess(claims, b.resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    await this.perms.require(claims, b.resortId, "agents.manage");
     if (!b.agentUserId) throw badRequest("not an agent booking");
     if (!["PENDING", "CONFIRMED"].includes(b.state)) throw badRequest("booking is not active");
     if (b.paymentState === "PAID") throw badRequest("already fully paid");

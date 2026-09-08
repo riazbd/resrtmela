@@ -37,8 +37,8 @@ export class FbService {
       note?: string;
     },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "restaurant.create");
     if (!input.items?.length) throw badRequest("At least one item required");
 
     // charge-to-room: validate the booking belongs to this resort & is live
@@ -158,10 +158,10 @@ export class FbService {
   }
 
   async addPayment(claims: JwtClaims, billId: number, amount: number, method?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK") {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
     const bill = await this.prisma.fbBill.findUnique({ where: { id: billId }, include: { items: true } });
     if (!bill || bill.deletedAt) throw Object.assign(new Error("Bill not found"), { status: 404 });
     requireResortAccess(claims, bill.resortId);
+    await this.perms.require(claims, bill.resortId, "restaurant.create");
     const total = round2(bill.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
     const paid = round2(Number(bill.paidAmount) + amount);
     if (paid > total + 0.001) throw badRequest(`Total is ${total}; already collected ${Number(bill.paidAmount)}`);
@@ -194,10 +194,10 @@ export class FbService {
   }
 
   async remove(claims: JwtClaims, billId: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const bill = await this.prisma.fbBill.findUnique({ where: { id: billId } });
     if (!bill || bill.deletedAt) throw Object.assign(new Error("Bill not found"), { status: 404 });
     requireResortAccess(claims, bill.resortId);
+    await this.perms.require(claims, bill.resortId, "restaurant.delete");
     if (bill.bookingId) {
       throw badRequest("Bills charged to a room stay on the booking ledger and cannot be deleted");
     }

@@ -5,6 +5,7 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { PermissionsService } from "../common/permissions";
 import { BookingsService } from "../bookings/bookings.service";
 import {
   parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
@@ -62,6 +63,7 @@ export class ImportService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BookingsService) private readonly bookings: BookingsService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   private parseRows(csvText: string): SheetRow[] {
@@ -137,8 +139,8 @@ export class ImportService {
     csvText: string,
     dryRun: boolean,
   ): Promise<ImportReport> {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "import.run");
     if (csvText.length > 2_000_000) throw badRequest("CSV too large (2MB max)");
 
     const rows = this.parseRows(csvText);
@@ -424,8 +426,8 @@ export class ImportService {
 
   /** Expense cashbook import (sheet tab 4). Verifies the sheet's own Daily Total column. */
   async importExpenses(claims: JwtClaims, resortId: number, csvText: string) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "import.run");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());
@@ -499,8 +501,8 @@ export class ImportService {
     csvText: string,
     roomMap?: Record<string, string>,
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "import.run");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());

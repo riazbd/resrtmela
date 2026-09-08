@@ -152,15 +152,37 @@ normalisation still assumes +880 (H8), which is correct today and wrong the
 first time this is sold abroad. `Resort.settings` (H9) remains an unread
 column; leave it or drop it, but do not build on it.
 
-### P2 — Make the permission model real (~4 days)
+### P2 — Make the permission model real — **shipped**
 
-Replace all 59 `requireRoles()` gates with permission checks. Roles become
-named presets over the permission set — which is what the Settings UI already
-tells the owner they are. This is what lets the product fit an org chart it has
-never seen, which is the whole difference between a platform and a bespoke build.
+All 40 resort-scoped `requireRoles()` gates are permission checks now. The 19
+`SUPER_ADMIN`-only gates stay roles on purpose: that is platform authority, and
+a tenant's permission matrix neither can nor should grant it.
+
+Two things surfaced while doing it:
+
+* **"activities" meant two different powers.** `activities.view` and
+  `activities.delete` gated the *audit log*, while the Settings screen labelled
+  them "View activities" and "Delete activities" — next to a bookable-activities
+  feature. An owner ticking that box was granting something else entirely. Split
+  into `auditlog.view` / `auditlog.delete`, with `activities.manage` for the
+  catalogue, and a migration that rewrites existing roles — `validPermissions()`
+  silently drops keys it does not know, so an unmigrated role would have lost
+  access quietly rather than failing loudly.
+* **The nav still gated on fixed roles.** With the API checking permissions, a
+  manager without `rooms.manage` would have seen the link and been refused on
+  arrival. Nav visibility is permission-driven too now; `roles` survives only
+  for the platform team and agents, which no permission describes.
+
+Six new keys were needed, each a power an owner might reasonably withhold:
+`activities.manage`, `bookings.delete`, `expenses.delete`, `restaurant.delete`,
+`import.run`, `marketing.send`. Deleting is kept separate from cancelling
+throughout — one hides history, the other does not.
 
 **Done when:** a custom role with every permission ticked can do everything a
 `RESORT_ADMIN` can, and one with none can do nothing.
+*Met — `test/integration/permissions.spec.ts` proves both directions: a
+front-desk user with `rooms.manage` can manage rooms, and a manager without it
+cannot.*
 
 ### P3 — Run the platform (~1 week)
 

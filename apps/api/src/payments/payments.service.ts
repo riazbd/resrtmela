@@ -5,6 +5,7 @@ import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { BookingsService } from "../bookings/bookings.service";
+import { PermissionsService } from "../common/permissions";
 import { NotificationsService } from "../notifications/notifications.service";
 
 @Injectable()
@@ -14,6 +15,7 @@ export class PaymentsService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   /**
@@ -25,13 +27,13 @@ export class PaymentsService {
     bookingId: number,
     input: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK"; type?: "ADVANCE" | "FINAL" | "REFUND"; note?: string },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { payments: true },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
+    await this.perms.require(claims, b.resortId, "payments.create");
     if (input.amount <= 0) throw badRequest("amount must be > 0");
     if (b.state === "CANCELLED" && input.type !== "REFUND") {
       throw badRequest("Cancelled bookings accept refunds only");

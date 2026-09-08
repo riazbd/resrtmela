@@ -711,12 +711,7 @@ export class BookingsService {
     const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
-    requireRoles(claims, [
-      ROLE.SUPER_ADMIN,
-      ROLE.RESORT_ADMIN,
-      ROLE.MANAGER,
-      ROLE.FRONT_DESK,
-    ]);
+    await this.perms.require(claims, b.resortId, "bookings.cancel");
     if (b.cancelState !== "REQUESTED") throw badRequest("No pending cancel request");
 
     if (!approve) {
@@ -735,10 +730,10 @@ export class BookingsService {
 
   /** Soft-delete (admin only) — never hard delete history. */
   async softDelete(claims: JwtClaims, bookingId: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
     if (!b) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
+    await this.perms.require(claims, b.resortId, "bookings.delete");
     await this.prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: b.id }, data: { deletedAt: new Date() } });
       await tx.bookingNight.deleteMany({ where: { item: { bookingId: b.id } } });
@@ -966,7 +961,7 @@ export class BookingsService {
     },
   ) {
     requireResortAccess(claims, input.resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
+    await this.perms.require(claims, input.resortId, "bookings.create");
     const checkIn = dateOnly(input.checkIn);
     const checkOut = dateOnly(input.checkOut);
     if (nightsBetween(checkIn, checkOut) <= 0) throw badRequest("checkOut must be after checkIn");
@@ -1128,18 +1123,13 @@ export class BookingsService {
   }
   /** Generate the resort invoice for a booking (SER-##### per resort). */
   async generateInvoice(claims: JwtClaims, bookingId: number) {
-    requireRoles(claims, [
-      ROLE.SUPER_ADMIN,
-      ROLE.RESORT_ADMIN,
-      ROLE.MANAGER,
-      ROLE.FRONT_DESK,
-    ]);
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { items: true, payments: true },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
+    await this.perms.require(claims, b.resortId, "payments.create");
     if (b.invoiceNo) return this.invoicePayload(claims, bookingId);
     if (["CANCELLED", "NO_SHOW"].includes(b.state)) {
       throw badRequest("Cannot invoice a cancelled/no-show booking");

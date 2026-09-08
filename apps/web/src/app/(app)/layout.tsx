@@ -13,25 +13,31 @@ import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { Select, Button, Input, useToast } from "@/components/ui";
 
-const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[] }[] = [
+/**
+ * `perm` is what actually decides visibility now that the API checks the
+ * permission matrix rather than the fixed role. Showing a link the server will
+ * refuse is worse than hiding it. `roles` remains only for the two audiences a
+ * permission cannot describe: the platform team and agents.
+ */
+const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
-  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"] },
-  { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"] },
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"] },
-  { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"] },
-  { href: "/bookings", labelKey: "nav.bookings", icon: BedDouble, roles: ["*"] },
-  { href: "/payments", labelKey: "nav.dues", icon: Wallet, roles: ["STAFF"] },
-  { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"] },
-  { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"] },
-  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"] },
-  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"] },
-  { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"] },
-  { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"] },
-  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"] },
-  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"] },
+  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send" },
+  { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"], perm: "bookings.view" },
+  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"], perm: "bookings.view" },
+  { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"], perm: "bookings.view" },
+  { href: "/bookings", labelKey: "nav.bookings", icon: BedDouble, roles: ["*"], perm: "bookings.view" },
+  { href: "/payments", labelKey: "nav.dues", icon: Wallet, roles: ["STAFF"], perm: "payments.view" },
+  { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"], perm: "guests.view" },
+  { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"], perm: "expenses.view" },
+  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"], perm: "restaurant.view" },
+  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"], perm: "payroll.view" },
+  { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"], perm: "reports.view" },
+  { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"], perm: "rooms.view" },
+  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"], perm: "activities.view" },
+  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"], perm: "import.run" },
   { href: "/profile", labelKey: "nav.profile", icon: User, roles: ["AGENT"] },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings, roles: ["MGMT"] },
+  { href: "/settings", labelKey: "nav.settings", icon: Settings, roles: ["MGMT"], perm: "settings.manage" },
 ];
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -63,12 +69,12 @@ function Shell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const allowed = (roles: string[]) =>
-    roles.includes("*") ||
-    (roles.includes("SUPER") && role === "SUPER_ADMIN") ||
-    (roles.includes("STAFF") && isStaff) ||
-    (roles.includes("MGMT") && isManagement) ||
-    (roles.includes("PAYROLL") && isStaff && can("payroll.view"));
+  const allowed = (n: { roles: string[]; perm?: string }) => {
+    if (n.roles.includes("SUPER")) return role === "SUPER_ADMIN";
+    if (n.roles.includes("AGENT") && !n.perm) return role === "AGENT";
+    // a link the server would refuse should not be on screen
+    return n.perm ? can(n.perm) : true;
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -93,7 +99,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
-          {NAV.filter((n) => allowed(n.roles)).map((n) => {
+          {NAV.filter(allowed).map((n) => {
             const active = pathname.startsWith(n.href);
             return (
               <Link

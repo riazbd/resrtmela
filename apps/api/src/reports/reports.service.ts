@@ -330,7 +330,7 @@ export class ReportsService {
   /** Advance collectors (sheet tab 2): who received cash advances. */
   async collectors(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
+    await this.perms.require(claims, resortId, "reports.view");
     const rows = await this.prisma.payment.findMany({
       where: {
         booking: { resortId, deletedAt: null },
@@ -375,8 +375,8 @@ export class ReportsService {
 
   /** Recent audit trail for a resort (mgmt view). */
   async audit(claims: JwtClaims, resortId: number, take = 100) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "auditlog.view");
     const rows = await this.prisma.auditLog.findMany({
       where: { resortId },
       orderBy: { id: "desc" },
@@ -398,7 +398,7 @@ export class ReportsService {
   /** Per-agent performance + commission (staff view). */
   async agents(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
+    await this.perms.require(claims, resortId, "reports.view");
     const bookings = await this.rangeBookings(resortId, from, to);
 
     const staff = await this.prisma.userResort.findMany({
@@ -443,7 +443,7 @@ export class ReportsService {
   /** Per-source performance (staff view). */
   async sources(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
+    await this.perms.require(claims, resortId, "reports.view");
     const bookings = await this.rangeBookings(resortId, from, to);
     const bySource = new Map<string, { source: string; bookings: number; rent: number; due: number }>();
     for (const b of bookings) {

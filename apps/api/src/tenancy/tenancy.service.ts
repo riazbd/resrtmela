@@ -5,6 +5,7 @@ import { requireRoles, requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { PLANS, isPlanName } from "../common/plans";
 import { PlanLimitsService } from "../common/plan-limits.service";
+import { PermissionsService } from "../common/permissions";
 
 @Injectable()
 export class TenancyService {
@@ -12,6 +13,7 @@ export class TenancyService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   mine(claims: JwtClaims) {
@@ -109,10 +111,10 @@ export class TenancyService {
     }>,
   ) {
     if (claims.role !== ROLE.SUPER_ADMIN) {
-      requireRoles(claims, [ROLE.RESORT_ADMIN, ROLE.MANAGER]);
       if (!claims.resortIds.includes(resortId)) {
         throw Object.assign(new Error("No access to this resort"), { status: 403 });
       }
+      await this.perms.require(claims, resortId, "settings.manage");
       // tenants can't flip status/plan themselves
       const { status: _status, ...safe } = data as Record<string, unknown>;
       data = safe as typeof data;

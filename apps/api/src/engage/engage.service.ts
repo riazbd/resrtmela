@@ -4,6 +4,7 @@ import { ROLE, JwtClaims , formatMoney } from "@rh/shared";
 import { requireRoles, forbid, badRequest, isManagement } from "../common/rbac";
 import { requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
+import { PermissionsService } from "../common/permissions";
 import { EmailService } from "../notifications/email.service";
 
 @Injectable()
@@ -12,6 +13,7 @@ export class EngageService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   // ─────────────── in-app notifications ───────────────
@@ -158,7 +160,7 @@ export class EngageService {
   }
 
   async purchaseCredits(claims: JwtClaims, credits: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.AGENT]);
+    await this.perms.require(claims, claims.resortIds[0], "marketing.send");
     if (![500, 2000, 10000].includes(credits)) throw badRequest("choose a pack: 500, 2000 or 10000");
     const row = await this.prisma.emailCredit.upsert({
       where: { userId: claims.userId },
@@ -173,7 +175,7 @@ export class EngageService {
     claims: JwtClaims,
     input: { subject: string; body: string; audience: "RESORT_GUESTS" | "MY_GUESTS" | "AGENTS"; resortId?: number },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.AGENT]);
+    await this.perms.require(claims, claims.resortIds[0], "marketing.send");
     const credit = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
     if (!credit || credit.credits <= 0) throw badRequest("no email credits — buy a pack first");
 

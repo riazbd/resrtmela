@@ -5,6 +5,7 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { PermissionsService } from "../common/permissions";
 import { expandSchedules, slotDateTime, ScheduleRow } from "./schedule";
 
 const LIVE_STATES = ["PENDING", "CONFIRMED", "CHECKED_IN"];
@@ -14,6 +15,7 @@ export class ActivitiesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
   // ── catalog CRUD ──
@@ -57,8 +59,8 @@ export class ActivitiesService {
       minPerSlot?: number; maxPerSlot?: number; description?: string;
     },
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "activities.manage");
     const cat = await this.prisma.activityCatalog.create({
       data: {
         resortId,
@@ -83,7 +85,9 @@ export class ActivitiesService {
       minPerSlot: number; maxPerSlot: number; description: string; active: boolean;
     }>,
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
+    const existing = await this.prisma.activityCatalog.findUniqueOrThrow({ where: { id: catalogId } });
+    requireResortAccess(claims, existing.resortId);
+    await this.perms.require(claims, existing.resortId, "activities.manage");
     const cat = await this.prisma.activityCatalog.update({
       where: { id: catalogId },
       data: {
@@ -108,8 +112,9 @@ export class ActivitiesService {
     catalogId: number,
     rows: ScheduleRow[],
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const cat = await this.prisma.activityCatalog.findUniqueOrThrow({ where: { id: catalogId } });
+    requireResortAccess(claims, cat.resortId);
+    await this.perms.require(claims, cat.resortId, "activities.manage");
     requireResortAccess(claims, cat.resortId);
     for (const r of rows) {
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(r.startTime) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.endTime)) {
@@ -143,8 +148,9 @@ export class ActivitiesService {
     fromStr: string,
     toStr: string,
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const cat = await this.prisma.activityCatalog.findUniqueOrThrow({ where: { id: catalogId } });
+    requireResortAccess(claims, cat.resortId);
+    await this.perms.require(claims, cat.resortId, "activities.manage");
     requireResortAccess(claims, cat.resortId);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
@@ -205,8 +211,8 @@ export class ActivitiesService {
   }
 
   async deleteSlot(claims: JwtClaims, slotId: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const slot = await this.prisma.activitySlot.findUnique({ where: { id: slotId }, include: { catalog: true } });
+    if (slot) await this.perms.require(claims, slot.catalog.resortId, "activities.manage");
     if (!slot) throw Object.assign(new Error("Slot not found"), { status: 404 });
     requireResortAccess(claims, slot.catalog.resortId);
     if (slot.bookedCount > 0) throw badRequest("Slot has bookings");
@@ -254,8 +260,8 @@ export class ActivitiesService {
     slotId: number,
     qty: number,
   ) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
     const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (booking) await this.perms.require(claims, booking.resortId, "bookings.edit");
     if (!booking || booking.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, booking.resortId);
     if (!LIVE_STATES.includes(booking.state)) {
@@ -293,8 +299,8 @@ export class ActivitiesService {
   }
 
   async removeFromBooking(claims: JwtClaims, bookingId: number, itemId: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK]);
     const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (booking) await this.perms.require(claims, booking.resortId, "bookings.edit");
     if (!booking || booking.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, booking.resortId);
 

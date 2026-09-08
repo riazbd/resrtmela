@@ -98,9 +98,9 @@ export class ExpensesService {
   }
 
   async remove(claims: JwtClaims, id: number) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER]);
     const exp = await this.prisma.expense.findUnique({ where: { id } });
     if (!exp) throw Object.assign(new Error("Expense not found"), { status: 404 });
+    await this.perms.require(claims, exp.resortId, "expenses.delete");
     requireResortAccess(claims, exp.resortId);
     await this.prisma.expense.delete({ where: { id } });
     await this.audit.log({

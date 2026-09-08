@@ -22,8 +22,8 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
   return new BookingsService(
     prisma,
     new AvailabilityService(prisma),
-    new RoomsService(prisma, audit, new PlanLimitsService(prisma)),
-    new ActivitiesService(prisma, audit),
+    makeRoomsService(prisma),
+    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
     // EmailService/SmsService fall back to console logging when unconfigured,
     // so nothing leaves the machine during a test run.
     new NotificationsService(prisma, new EmailService(), new SmsService()),
@@ -32,5 +32,14 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new EmailService(),
     new PermissionsService(prisma),
     new TenantStateService(prisma),
+  );
+}
+
+export function makeRoomsService(prisma: PrismaService): RoomsService {
+  return new RoomsService(
+    prisma,
+    new AuditService(prisma),
+    new PlanLimitsService(prisma),
+    new PermissionsService(prisma),
   );
 }
