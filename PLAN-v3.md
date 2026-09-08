@@ -1,3 +1,5 @@
+> **Start with [STATUS.md](STATUS.md)** — it says where the project stands, what is left, and how these documents relate.
+
 # Resort Mela — Replan v3: build the platform, not the resort
 
 > Written 2026-09-09 after a code audit of the whole workspace. Supersedes the

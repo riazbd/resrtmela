@@ -1,3 +1,5 @@
+> **Start with [STATUS.md](STATUS.md)** — it says where the project stands, what is left, and how these documents relate.
+
 # Resort Mela — Production Readiness Roadmap
 
 > Status audit of what the platform needs to be 100% production-ready.
@@ -8,9 +10,9 @@
 
 ## ✅ Fixed 2026-09-09 (code audit)
 
-Branch `fix/audit-2026-09-09`. Each fix was written test-first; the suite went
-from 34 unit tests to 67 unit + integration tests against a real database
-(`pnpm -F @rh/api test:setup`, then `pnpm -F @rh/api test`).
+Branch `fix/audit-2026-09-09`. Each fix was written test-first. This table is a
+summary of the first batch only — **[STATUS.md](STATUS.md) has the full account
+and the current test count**, which this section is not kept in step with.
 
 | What was wrong | Effect |
 |---|---|

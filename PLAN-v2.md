@@ -1,3 +1,5 @@
+> **Start with [STATUS.md](STATUS.md)** — it says where the project stands, what is left, and how these documents relate.
+
 > **EMAIL SYSTEM ADDED (Sep 4, 2026):** SMTP channel via Nodemailer (Gmail app-password or any SMTP) — booking confirmations, payment receipts, D-1 reminders all route EMAIL when the guest has an email on record, SMS-to-phone otherwise; email-invoice endpoint sends the bilingual invoice as HTML; falls back to console in dev. Verified end-to-end.
 >
 > **REBUILD COMPLETE (Sep 4, 2026): R1-R6 all shipped & verified.** R6 = web guest booking. Day Sheet reconciled 6,330/6,331 checks, 0 unexplained. P&L matches workbook with one classified adjustment (cancelled BK-00005, 8,000 BDT). Bangla-first UI, F&B POS charge-to-room, expenses cashbook, tour groups, walk-in path, collector view, FY reports, bilingual invoices, plans, hardening, email system, web guest booking.

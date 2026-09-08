@@ -1,3 +1,5 @@
+> **Start with [STATUS.md](STATUS.md)** — it says where the project stands, what is left, and how these documents relate.
+
 # ResortHub — Multi-Resort Booking & Activities Platform
 
 > SaaS where multiple resorts manage rooms, bookable activities, agents, guests, and payments.

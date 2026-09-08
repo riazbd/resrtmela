@@ -1,3 +1,5 @@
+> **Start with [STATUS.md](STATUS.md)** — it says where the project stands, what is left, and how these documents relate.
+
 # Resort Mela — business decisions
 
 > **Superseded on priorities by [PLAN-v3.md](PLAN-v3.md).** This document set
