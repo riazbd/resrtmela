@@ -98,3 +98,58 @@ describe("perNightRevenue — the Day Sheet / sheet tab 11 rule", () => {
     expect(perNightRevenue(5000, 0, 0)).toBe(5000);
   });
 });
+
+describe("tax", () => {
+  it("charges nothing when the resort has no tax rate set", () => {
+    const t = bookingTotals({ items: [room(5000)], payments: [], discount: 0, checkIn: IN, checkOut: OUT });
+    expect(t.tax).toBe(0);
+    expect(t.total).toBe(15000);
+    expect(t.due).toBe(15000);
+  });
+
+  it("taxes the amount after discount, not the gross rent", () => {
+    const t = bookingTotals({
+      items: [room(5000)], payments: [], discount: 5000,
+      checkIn: IN, checkOut: OUT, taxRatePct: 15,
+    });
+    expect(t.taxable).toBe(10000); // 15000 - 5000
+    expect(t.tax).toBe(1500);
+    expect(t.total).toBe(11500);
+  });
+
+  it("adds tax to what the guest still owes", () => {
+    const t = bookingTotals({
+      items: [room(5000)], payments: [paid(5000)], discount: 0,
+      checkIn: IN, checkOut: OUT, taxRatePct: 15,
+    });
+    expect(t.tax).toBe(2250); // 15% of 15000
+    expect(t.total).toBe(17250);
+    expect(t.due).toBe(12250); // 17250 - 5000
+  });
+
+  it("taxes food and activities along with the room", () => {
+    const t = bookingTotals({
+      items: [room(5000), fb(900), activity(1000, 2)], payments: [], discount: 0,
+      checkIn: IN, checkOut: OUT, taxRatePct: 10,
+    });
+    expect(t.taxable).toBe(17900); // 15000 + 900 + 2000
+    expect(t.tax).toBe(1790);
+  });
+
+  it("rounds tax to paisa", () => {
+    const t = bookingTotals({
+      items: [room(3333)], payments: [], discount: 0,
+      checkIn: IN, checkOut: new Date("2026-08-16T00:00:00Z"), taxRatePct: 7.5,
+    });
+    expect(t.tax).toBe(249.98); // 3333 * 0.075 = 249.975
+  });
+
+  it("never reports a negative taxable amount when the discount exceeds the rent", () => {
+    const t = bookingTotals({
+      items: [room(5000)], payments: [], discount: 99999,
+      checkIn: IN, checkOut: OUT, taxRatePct: 15,
+    });
+    expect(t.taxable).toBe(0);
+    expect(t.tax).toBe(0);
+  });
+});

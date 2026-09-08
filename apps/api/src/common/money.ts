@@ -7,14 +7,16 @@
  *   ROOM          unitPrice × qty × nights   (a rate is per night)
  *   EXTRA_PERSON  unitPrice × qty            (qty already carries the nights)
  *   ACTIVITY / FB unitPrice × qty            (charged once, not per night)
- *   due           rent − discount − paid     (refunds excluded from paid)
+ *   taxable       rent − discount, floored at zero
+ *   total         taxable + tax (exclusive, at the resort's rate)
+ *   due           total − paid              (refunds excluded from paid)
  */
 import { nightsBetween, round2 } from "./dates";
 
 export type MoneyItemKind = "ROOM" | "ACTIVITY" | "FB" | "EXTRA_PERSON";
 
 /** Decimal columns arrive as Prisma.Decimal; Number() handles those and strings. */
-type Money = number | string | { toString(): string };
+export type Money = number | string | { toString(): string };
 
 export interface MoneyItem {
   itemKind: MoneyItemKind;
@@ -33,6 +35,12 @@ export interface BookingMoneyInput {
   discount: Money;
   checkIn?: Date | null;
   checkOut?: Date | null;
+  /**
+   * The resort's tax rate, as a percentage. Exclusive: it is added on top of
+   * the discounted amount rather than assumed to be inside the rates.
+   * Omitted or 0 leaves every figure exactly as it was before tax existed.
+   */
+  taxRatePct?: Money;
 }
 
 export interface BookingTotals {
@@ -40,6 +48,12 @@ export interface BookingTotals {
   rent: number;
   roomRent: number;
   discount: number;
+  /** rent − discount, floored at zero: what tax is charged on */
+  taxable: number;
+  taxRatePct: number;
+  tax: number;
+  /** taxable + tax: the invoice total */
+  total: number;
   paid: number;
   refunded: number;
   due: number;
@@ -73,7 +87,13 @@ export function bookingTotals(input: BookingMoneyInput): BookingTotals {
     else paid += num(p.amount);
   }
 
-  const due = round2(rent - discount - paid);
+  // a discount larger than the rent is a data-entry slip, not a negative bill
+  const taxable = round2(Math.max(0, rent - discount));
+  const taxRatePct = num(input.taxRatePct ?? 0);
+  const tax = round2((taxable * taxRatePct) / 100);
+  const total = round2(taxable + tax);
+
+  const due = round2(total - paid);
   const paymentState = due <= 0.001 && paid > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
 
   return {
@@ -81,6 +101,10 @@ export function bookingTotals(input: BookingMoneyInput): BookingTotals {
     rent: round2(rent),
     roomRent: round2(roomRent),
     discount,
+    taxable,
+    taxRatePct,
+    tax,
+    total,
     paid: round2(paid),
     refunded: round2(refunded),
     due,

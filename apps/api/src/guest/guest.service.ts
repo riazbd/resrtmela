@@ -284,7 +284,7 @@ export class GuestService {
     const rows = await this.prisma.booking.findMany({
       where: { guestId: { in: guestIds }, deletedAt: null },
       include: {
-        resort: { select: { id: true, name: true } },
+        resort: { select: { id: true, name: true, taxRatePct: true } },
         items: { include: { room: { select: { name: true } } } },
         payments: true,
       },
@@ -299,7 +299,7 @@ export class GuestService {
       checkIn: b.checkIn,
       checkOut: b.checkOut,
       rooms: b.items.map((i) => i.room?.name).filter(Boolean),
-      ...BookingsService.computeTotals(b),
+      ...BookingsService.computeTotals(b, Number(b.resort?.taxRatePct ?? 0)),
     }));
   }
 
@@ -309,7 +309,7 @@ export class GuestService {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        resort: { select: { id: true, name: true, location: true } },
+        resort: { select: { id: true, name: true, location: true, taxRatePct: true } },
         items: {
           include: {
             room: { select: { name: true } },
@@ -344,7 +344,7 @@ export class GuestService {
         })),
       remarks: b.remarks,
       payments: b.payments.map((p) => ({ id: p.id, amount: Number(p.amount), method: p.method, type: p.paymentType, receivedAt: p.receivedAt })),
-      ...BookingsService.computeTotals(b),
+      ...BookingsService.computeTotals(b, Number(b.resort?.taxRatePct ?? 0)),
     };
   }
 

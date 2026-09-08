@@ -22,6 +22,7 @@ interface InvoiceData {
   items: { description: string; nights: number | null; qty: number; unitPrice: number; amount: number }[];
   payments: { date: string; method: string; type: string; amount: number; receivedBy: string | null }[];
   rent: number; discount: number; paid: number; due: number;
+  taxable: number; taxRatePct: number; tax: number; total: number;
 }
 
 /** Bilingual (BN/EN) hotel invoice — print-ready A5/A4. */
@@ -175,6 +176,13 @@ export default function InvoicePage() {
       <div className="ml-auto mt-4 w-72 space-y-1 text-sm">
         <Row en="Rent" bn="ভাড়া" value={bdt(inv.rent)} />
         {inv.discount > 0 && <Row en="Discount" bn="ছাড়" value={`− ${bdt(inv.discount)}`} />}
+        {inv.tax > 0 && (
+          <>
+            <Row en="Taxable amount" bn="করযোগ্য" value={bdt(inv.taxable)} />
+            <Row en={`Tax (${inv.taxRatePct}%)`} bn={`কর (${inv.taxRatePct}%)`} value={bdt(inv.tax)} />
+            <Row en="Total" bn="সর্বমোট" value={bdt(inv.total)} />
+          </>
+        )}
         {inv.paid > 0 && <Row en="Paid" bn="পরিশোধিত" value={`− ${bdt(inv.paid)}`} />}
         <div className="flex justify-between border-t-2 border-slate-800 pt-1 text-base font-bold">
           <span>

@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, today } from "../common/dates";
-import { bookingTotals, perNightRevenue } from "../common/money";
+import { bookingTotals, perNightRevenue, type Money } from "../common/money";
 import { AuditService } from "../common/audit.service";
 import { assertTransition } from "./booking-state";
 import { AvailabilityService } from "./availability.service";
@@ -80,8 +80,18 @@ export class BookingsService {
     booking: Prisma.BookingGetPayload<{
       include: { items: true; payments: true };
     }>,
+    taxRatePct: Money = 0,
   ) {
-    return bookingTotals(booking);
+    return bookingTotals({ ...booking, taxRatePct });
+  }
+
+  /** The resort's tax rate — every total shown to anyone must include it. */
+  private async taxRateFor(resortId: number): Promise<number> {
+    const r = await this.prisma.resort.findUnique({
+      where: { id: resortId },
+      select: { taxRatePct: true },
+    });
+    return Number(r?.taxRatePct ?? 0);
   }
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
@@ -395,6 +405,7 @@ export class BookingsService {
         ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }
         : {}),
     };
+    const taxRatePct = await this.taxRateFor(q.resortId);
     const [rows, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -424,7 +435,7 @@ export class BookingsService {
         rooms: b.items.map((i) => i.room?.name).filter(Boolean),
         adults: b.adults,
         children: b.children,
-        ...BookingsService.computeTotals(b),
+        ...BookingsService.computeTotals(b, taxRatePct),
       })),
     };
   }
@@ -443,7 +454,11 @@ export class BookingsService {
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
 
-    const totals = BookingsService.computeTotals(b);
+    const resort = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: b.resortId },
+      select: { showRatesToAgents: true, taxRatePct: true },
+    });
+    const totals = BookingsService.computeTotals(b, Number(resort.taxRatePct));
     // persist paymentState so filtered lists stay consistent
     if (totals.paymentState !== b.paymentState) {
       await this.prisma.booking.update({
@@ -453,10 +468,6 @@ export class BookingsService {
     }
 
     // agents: masked guest PII unless resort allows (doc §1 ⚠)
-    const resort = await this.prisma.resort.findUniqueOrThrow({
-      where: { id: b.resortId },
-      select: { showRatesToAgents: true },
-    });
     const isAgent = claims.role === ROLE.AGENT;
     const maskedGuest = isAgent
       ? {
@@ -821,6 +832,7 @@ export class BookingsService {
     const date = dateOnly(dateStr);
     const nextDay = new Date(date.getTime() + 86_400_000);
 
+    const taxRatePct = await this.taxRateFor(resortId);
     const rooms = await this.prisma.room.findMany({
       where: { resortId },
       include: { roomType: { select: { maxAdults: true, maxChildren: true } } },
@@ -868,7 +880,7 @@ export class BookingsService {
       const b = covering[0];
       let cell: Record<string, unknown> = { mode: room.status === "OUT_OF_SERVICE" ? "oos" : "available" };
       if (b && b.checkIn && b.checkOut) {
-        const t = BookingsService.computeTotals(b);
+        const t = BookingsService.computeTotals(b, taxRatePct);
         const isFirstNight = b.checkIn.getTime() === date.getTime();
         const isLastNight = nextDay.getTime() === b.checkOut.getTime();
         const nightRevenue = perNightRevenue(t.roomRent, t.discount, t.nights);
@@ -1076,7 +1088,7 @@ export class BookingsService {
           <tr style="background:#f0fdf4"><th style="text-align:left;padding:6px 8px">Description</th><th style="padding:6px 8px">Qty</th><th style="text-align:right;padding:6px 8px">Rate</th><th style="text-align:right;padding:6px 8px">Amount</th></tr>
           ${rows}
         </table>
-        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
+        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${inv.tax ? `Tax (${inv.taxRatePct}%) ${money(inv.tax)}<br/>Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
         <p style="color:#64748b;font-size:12px">${inv.resort.location ?? ""} — Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
       </div>`;
     const r = await this.email.send(
@@ -1156,7 +1168,7 @@ export class BookingsService {
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
-    const totals = BookingsService.computeTotals(b);
+    const totals = BookingsService.computeTotals(b, Number(b.resort.taxRatePct));
     return {
       invoiceNo: b.invoiceNo,
       issuedAt: b.invoiceAt,
@@ -1175,7 +1187,7 @@ export class BookingsService {
         state: b.state,
         checkIn: b.checkIn,
         checkOut: b.checkOut,
-        nights: BookingsService.computeTotals(b).nights,
+        nights: totals.nights,
         adults: b.adults,
         children: b.children,
         remarks: b.remarks,
@@ -1207,6 +1219,7 @@ export class BookingsService {
   async today(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     const t = today();
+    const taxRatePct = await this.taxRateFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -1229,7 +1242,7 @@ export class BookingsService {
       agent: b.agentUser?.name,
       rooms: b.items.map((i) => i.room?.name),
       state: b.state,
-      ...BookingsService.computeTotals(b),
+      ...BookingsService.computeTotals(b, taxRatePct),
     }));
     const occupied = await this.prisma.bookingNight.count({
       where: { night: t, item: { booking: { resortId, state: "CHECKED_IN", deletedAt: null } } },

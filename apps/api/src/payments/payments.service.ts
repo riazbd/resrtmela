@@ -81,13 +81,18 @@ export class PaymentsService {
   /** Outstanding dues across a resort (doc §3.6) */
   async dues(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    const resort = await this.prisma.resort.findUnique({
+      where: { id: resortId },
+      select: { taxRatePct: true },
+    });
+    const taxRatePct = Number(resort?.taxRatePct ?? 0);
     const bookings = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null, state: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] } },
       include: { payments: true, guest: { select: { fullName: true, phone: true } }, items: true },
       orderBy: { checkIn: "asc" },
     });
     const rows = bookings
-      .map((b) => ({ b, t: BookingsService.computeTotals(b) }))
+      .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRatePct) }))
       .filter(({ t }) => t.due > 0.001)
       .map(({ b, t }) => ({
         id: b.id,
