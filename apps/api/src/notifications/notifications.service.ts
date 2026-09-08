@@ -2,7 +2,8 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nest
 import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
-import { dedupeKeyFor, renderTemplate, type TemplateName } from "./templates";
+import { PlatformSettingsService } from "../common/platform-settings.service";
+import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
 import { formatMoney } from "@rh/shared";
@@ -29,6 +30,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(SmsService) private readonly sms: SmsService,
+    @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
   ) {}
 
   onModuleInit() {
@@ -109,6 +111,16 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     await this.notifyBooking(bookingId, "payment_receipt", { amount, method }, `pay:${amount}:${Date.now()}`);
   }
 
+  /** Who the platform is, this tick. Cached inside the settings service. */
+  private async platformIdentity(): Promise<PlatformIdentity> {
+    const all = await this.settings.all();
+    return {
+      name: all["platform.name"] ?? "Resort Mela",
+      supportEmail: all["platform.supportEmail"],
+      supportPhone: all["platform.supportPhone"],
+    };
+  }
+
   /**
    * One dispatcher tick: D-1 reminder sweep + send all due jobs.
    * Console "provider" in dev — swap for SMS/WhatsApp gateway in production.
@@ -182,18 +194,14 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         let error: string | undefined;
         let sentOk = false;
         if (job.channel === "EMAIL") {
-          // subject: template name made human
-          const subject = `${process.env.SMTP_SUBJECT_PREFIX ?? "Resort Mela"}: ${job.template.replace(/_/g, " ")}`;
-          const fromName =
-            typeof (job.payload as { resortName?: unknown } | null)?.resortName === "string"
-              ? ((job.payload as { resortName: string }).resortName)
-              : undefined;
-          const r = await this.email.send(
-            job.toRef,
-            subject,
-            `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.6;color:#0f172a">${text}</div>`,
-            fromName,
-          );
+          // A message about a stay goes out as the resort; one about a
+          // subscription as the platform. Both the sender and the subject line
+          // come from the template's own definition rather than from the
+          // template id with its underscores taken out.
+          const platform = await this.platformIdentity();
+          const data = (job.payload ?? {}) as Record<string, string | number | null | undefined>;
+          const { fromName, subject } = emailEnvelope(job.template as TemplateName, data, platform);
+          const r = await this.email.send(job.toRef, subject, emailHtml(text, fromName, platform), fromName);
           sentOk = r.sent;
           error = r.error;
         } else {

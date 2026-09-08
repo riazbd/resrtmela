@@ -8,6 +8,7 @@ import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
 import { SmsService } from "../notifications/sms.service";
 import { EmailService } from "../notifications/email.service";
+import { PlatformSettingsService } from "../common/platform-settings.service";
 import { ROLE, type Role } from "@rh/shared";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,6 +29,7 @@ export class AuthService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(EmailService) private readonly email: EmailService,
+    @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
   ) {}
 
   private readonly logger = new Logger(AuthService.name);
@@ -69,16 +71,19 @@ export class AuthService {
     // opportunistic cleanup so the table cannot grow without bound
     await this.prisma.otpCode.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
+    // The platform's own name, from settings: a rebrand is an edit, not a deploy.
+    const platformName = await this.settings.str("platform.name", "Resort Mela");
     if (isEmail) {
       const email = input.email!.trim().toLowerCase();
       const r = await this.email.send(
         email,
-        `Resort Mela verification code`,
+        `${platformName} verification code`,
         `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a">
-           <p>Your Resort Mela verification code is:</p>
+           <p>Your ${platformName} verification code is:</p>
            <p style="font-size:30px;font-weight:bold;letter-spacing:6px;color:#047857">${code}</p>
            <p style="color:#64748b;font-size:13px">Valid for 5 minutes. If you didn't request this, ignore this email.</p>
          </div>`,
+        platformName,
       );
       if (!r.sent) {
         this.logger.warn(`OTP email not delivered to ${email}: ${r.error}`);
@@ -90,7 +95,7 @@ export class AuthService {
 
     // SMS path (works once the gateway has an approved sender ID)
     const phone = normalizePhone(input.phone!);
-    const r = await this.sms.send(phone, `Resort Mela: your verification code is ${code}. Valid for 5 minutes.`);
+    const r = await this.sms.send(phone, `${platformName}: your verification code is ${code}. Valid for 5 minutes.`);
     if (!r.sent) {
       this.logger.warn(`OTP SMS not delivered to ${phone}: ${r.error}`);
       if (process.env.NODE_ENV === "production") {

@@ -10,12 +10,14 @@ import type { PrismaService } from "../../src/prisma/prisma.service";
 import { AuthService } from "../../src/auth/auth.service";
 import { SmsService } from "../../src/notifications/sms.service";
 import { EmailService } from "../../src/notifications/email.service";
+import { PlatformSettingsService } from "../../src/common/platform-settings.service";
 
 const prisma = testPrisma();
 const asPrismaService = prisma as unknown as PrismaService;
 
 /** A fresh instance stands in for a restarted API process. */
-const newAuthService = () => new AuthService(asPrismaService, new SmsService(), new EmailService());
+const newAuthService = () =>
+  new AuthService(asPrismaService, new SmsService(), new EmailService(), new PlatformSettingsService(asPrismaService));
 
 const PHONE = "8801799999999";
 

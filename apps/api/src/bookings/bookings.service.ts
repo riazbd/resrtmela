@@ -1102,11 +1102,12 @@ export class BookingsService {
           ${rows}
         </table>
         <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${inv.tax ? `Tax (${inv.taxRatePct}%) ${money(inv.tax)}<br/>Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
-        <p style="color:#64748b;font-size:12px">${inv.resort.location ?? ""} — Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
+        <p style="color:#64748b;font-size:12px">${[inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · ")}<br/>Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
       </div>`;
+    // The guest booked a resort, not a platform. Their invoice says so.
     const r = await this.email.send(
       guestEmail,
-      `${process.env.SMTP_SUBJECT_PREFIX ?? "Resort Mela"}: Invoice ${inv.invoiceNo} (${inv.booking.code})`,
+      `Invoice ${inv.invoiceNo ?? inv.booking.code} — ${inv.resort.name}`,
       html,
       inv.resort.name,
     );

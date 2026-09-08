@@ -210,8 +210,15 @@ export default function InvoicePage() {
         <p className="mt-4 text-xs italic text-slate-400">{inv.booking.remarks}</p>
       )}
 
+      {/* The guest is a customer of the resort, not of the platform. The
+          platform's name has no business on the bill they are handed. */}
       <p className="mt-8 border-t border-slate-200 pt-3 text-center text-[10px] text-slate-400" lang="bn">
-        {inv.resort.name}-এ অবস্থানের জন্য ধন্যবাদ! · Thank you for staying with {inv.resort.name}! — Resort Mela
+        {inv.resort.name}-এ অবস্থানের জন্য ধন্যবাদ! · Thank you for staying with {inv.resort.name}!
+        {[inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).length > 0 && (
+          <span className="mt-1 block text-slate-300">
+            {[inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · ")}
+          </span>
+        )}
       </p>
 
       <div className="mt-4 flex items-center justify-center gap-2 print:hidden">

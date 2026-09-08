@@ -872,8 +872,7 @@ export class PlatformService {
         </table>
         <div style="margin-top:14px;color:#64748b;font-size:12px">Check-in ${b.resort.checkInTime} · Check-out ${b.resort.checkOutTime}${b.resort.contactPhone ? ` · ${b.resort.contactPhone}` : ""}</div>
       </div>`;
-    const subjectPrefix = process.env.SMTP_SUBJECT_PREFIX ?? "Resort Mela";
-    const r = await this.email.send(to, `${subjectPrefix}: Invoice ${b.code}`, html, b.resort.name);
+    const r = await this.email.send(to, `Invoice ${b.code} — ${b.resort.name}`, html, b.resort.name);
     await this.audit.log({ actorId: claims.userId, resortId: b.resortId, action: "invoice.email", entity: "booking", entityId: bookingId, diff: { to } });
     return r;
   }
@@ -923,10 +922,11 @@ export class PlatformService {
     if (!existingUser) {
       // fresh agent: email the credentials + verification link
       const loginUrl = `${process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com"}/login`;
+      const platformName = await this.settings.str("platform.name", "Resort Mela");
       const html = `
         <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
           <h2 style="margin:0 0 8px">You've been invited to ${resort.name}</h2>
-          <p>${resort.name} added you as a <b>booking agent</b> on Resort Mela. Use the credentials below to sign in and verify your account:</p>
+          <p>${resort.name} added you as a <b>booking agent</b> on ${platformName}. Use the credentials below to sign in and verify your account:</p>
           <table style="border-collapse:collapse;font-size:14px;margin:12px 0">
             <tr><td style="padding:4px 12px 4px 0;color:#64748b">Login email</td><td style="padding:4px 0;font-weight:bold">${to}</td></tr>
             <tr><td style="padding:4px 12px 4px 0;color:#64748b">Temporary password</td><td style="padding:4px 0;font-weight:bold;letter-spacing:1px">${tempPassword}</td></tr>
@@ -936,8 +936,7 @@ export class PlatformService {
           </p>
           <p style="color:#64748b;font-size:13px">Change your password after the first sign-in (Profile → Set password). Commission terms are set by the resort owner.</p>
         </div>`;
-      const subjectPrefix = process.env.SMTP_SUBJECT_PREFIX ?? "Resort Mela";
-      const r = await this.email.send(to, `${subjectPrefix}: Agent invitation — ${resort.name}`, html, resort.name);
+      const r = await this.email.send(to, `Agent invitation — ${resort.name}`, html, resort.name);
       if (!r.sent) throw badRequest(`invitation email could not be sent: ${r.error}`);
     } else {
       // existing user (e.g. an agent of another resort): notify them of the new access

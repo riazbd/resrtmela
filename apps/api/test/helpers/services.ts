@@ -30,13 +30,20 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
     // EmailService/SmsService fall back to console logging when unconfigured,
     // so nothing leaves the machine during a test run.
-    new NotificationsService(prisma, new EmailService(), new SmsService()),
+    makeNotificationsService(prisma),
     new DiscountService(prisma),
     audit,
     new EmailService(),
     new PermissionsService(prisma),
     new TenantStateService(prisma),
   );
+}
+
+/** Constructing this by hand in a spec is how helpers go stale; go through here. */
+export function makeNotificationsService(prisma: PrismaService): NotificationsService {
+  // EmailService/SmsService fall back to console logging when unconfigured,
+  // so nothing leaves the machine during a test run.
+  return new NotificationsService(prisma, new EmailService(), new SmsService(), new PlatformSettingsService(prisma));
 }
 
 export function makeRoomsService(prisma: PrismaService): RoomsService {
@@ -51,7 +58,7 @@ export function makeRoomsService(prisma: PrismaService): RoomsService {
 export function makeBillingService(prisma: PrismaService): BillingService {
   return new BillingService(
     prisma,
-    new NotificationsService(prisma, new EmailService(), new SmsService()),
+    makeNotificationsService(prisma),
     new PlatformSettingsService(prisma),
     new AuditService(prisma),
   );

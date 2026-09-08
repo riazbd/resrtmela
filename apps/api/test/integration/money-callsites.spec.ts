@@ -7,9 +7,7 @@ import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
 import { PrismaService } from "../../src/prisma/prisma.service";
 import { ReportsService } from "../../src/reports/reports.service";
-import { NotificationsService } from "../../src/notifications/notifications.service";
-import { EmailService } from "../../src/notifications/email.service";
-import { SmsService } from "../../src/notifications/sms.service";
+import { makeNotificationsService } from "../helpers/services";
 import { PermissionsService } from "../../src/common/permissions";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
@@ -19,8 +17,7 @@ let fx: Fixture;
 let claims: JwtClaims;
 
 const reports = () => new ReportsService(asPrismaService, new PermissionsService(asPrismaService));
-const notifications = () =>
-  new NotificationsService(asPrismaService, new EmailService(), new SmsService());
+const notifications = () => makeNotificationsService(asPrismaService);
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
