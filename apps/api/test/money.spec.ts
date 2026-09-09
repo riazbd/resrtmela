@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingTotals, fbBillTotals, perNightRevenue, type TaxRule } from "../src/common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, monthsInRange, payrollShareOfRange, type TaxRule } from "../src/common/money";
 
 const IN = new Date("2026-08-15T00:00:00Z");
 const OUT = new Date("2026-08-18T00:00:00Z"); // 3 nights
@@ -335,5 +335,59 @@ describe("fbBillTotals", () => {
       { code: "FBVAT", label: "Restaurant VAT", ratePct: 5, appliesTo: "ALL", inclusive: false, compound: false, sortOrder: 0 },
     ]);
     expect(t.taxLines).toEqual([{ code: "FBVAT", label: "Restaurant VAT", ratePct: 5, amount: 50 }]);
+  });
+});
+
+/**
+ * Walking a range month by month.
+ *
+ * The P&L collected the months a range touches with
+ * `for (d = from; d < to; d.setUTCMonth(d.getUTCMonth() + 1))`. From a 31st
+ * that overflows: 31 Jan + 1 month is 31 February, which MySQL and JavaScript
+ * both resolve as 3 March — so February was skipped and a whole month's payroll
+ * silently vanished from the statement.
+ */
+describe("monthsInRange", () => {
+  it("does not lose February when the range starts on a 31st", () => {
+    expect(monthsInRange("2026-01-31", "2026-04-01")).toEqual(["2026-01", "2026-02", "2026-03"]);
+  });
+
+  it("walks an ordinary range", () => {
+    expect(monthsInRange("2026-09-01", "2026-11-01")).toEqual(["2026-09", "2026-10"]);
+  });
+
+  it("gives one month for a range inside one month", () => {
+    expect(monthsInRange("2026-09-05", "2026-09-20")).toEqual(["2026-09"]);
+  });
+
+  it("crosses a year end", () => {
+    expect(monthsInRange("2026-12-15", "2027-02-01")).toEqual(["2026-12", "2027-01"]);
+  });
+});
+
+/**
+ * A ten-day report should not carry a whole month's salary.
+ *
+ * The P&L charged every payroll row for any month the range touched, in full.
+ * A range of 1–10 September showed September's entire wage bill against ten
+ * days of revenue, and the resort's profit for that window was nonsense.
+ */
+describe("payrollShareOfRange", () => {
+  it("charges a whole month when the range covers it", () => {
+    expect(payrollShareOfRange("2026-09", "2026-09-01", "2026-10-01")).toBe(1);
+  });
+
+  it("charges a third of the month for ten days of it", () => {
+    // 1–11 September is 10 of September's 30 days
+    expect(payrollShareOfRange("2026-09", "2026-09-01", "2026-09-11")).toBeCloseTo(10 / 30, 5);
+  });
+
+  it("charges nothing for a month the range does not reach", () => {
+    expect(payrollShareOfRange("2026-08", "2026-09-01", "2026-10-01")).toBe(0);
+  });
+
+  it("counts only the overlap when a range starts mid-month", () => {
+    // 21 September to 5 October covers 10 of September's 30 days
+    expect(payrollShareOfRange("2026-09", "2026-09-21", "2026-10-05")).toBeCloseTo(10 / 30, 5);
   });
 });

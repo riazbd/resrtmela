@@ -4,7 +4,7 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
-import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission } from "../common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange } from "../common/money";
 import { PermissionsService } from "../common/permissions";
 import { TaxService } from "../common/tax.service";
 
@@ -123,6 +123,11 @@ export class ReportsService {
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
+    // `daily` has always capped its range; this one pulled a decade of bookings
+    // into memory if asked
+    if ((to.getTime() - from.getTime()) / 86_400_000 > 400) {
+      throw badRequest("max 400 days per query");
+    }
 
     // resort revenue: ROOM + EXTRA_PERSON items on counted bookings
     const bookings = await this.prisma.booking.findMany({
@@ -176,16 +181,24 @@ export class ReportsService {
     resortExpenses = round2(resortExpenses);
     restaurantExpenses = round2(restaurantExpenses);
 
-    // payroll for the months overlapping the range (charged to resort)
-    const months: string[] = [];
-    for (let d = new Date(from); d < to; d.setUTCMonth(d.getUTCMonth() + 1)) {
-      months.push(d.toISOString().slice(0, 7));
-    }
+    /**
+     * Payroll, for the part of each month the range actually covers.
+     *
+     * Two defects here. The month list was walked with
+     * `d.setUTCMonth(d.getUTCMonth() + 1)`, which overflows from a 31st — 31
+     * January plus a month is 3 March — so February was skipped and a whole
+     * month's wages vanished. And every month the range touched was charged in
+     * full, so a report for 1–10 September showed September's entire wage bill
+     * against ten days of revenue.
+     */
+    const months = monthsInRange(fromStr, toStr);
     const payroll = await this.prisma.payrollPayment.findMany({
       where: { resortId, month: { in: months } },
-      select: { amount: true },
+      select: { amount: true, month: true },
     });
-    const payrollTotal = round2(payroll.reduce((s, p) => s + Number(p.amount), 0));
+    const payrollTotal = round2(
+      payroll.reduce((s, p) => s + Number(p.amount) * payrollShareOfRange(p.month, fromStr, toStr), 0),
+    );
 
     const resortIncome = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
     const resortNet = round2(resortIncome - resortExpenses - payrollTotal);
@@ -345,12 +358,36 @@ export class ReportsService {
   async collectors(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
+    const where = {
+      booking: { resortId, deletedAt: null },
+      paymentType: "ADVANCE" as const,
+      ...(from && to ? { receivedAt: { gte: dateOnly(from), lt: dateOnly(to) } } : {}),
+    };
+
+    /**
+     * Who collected what, over everything — not over the last 300 rows.
+     *
+     * The totals were summed in memory from a `take: 300` list and presented as
+     * the answer, so on a busy month the report quietly understated whoever had
+     * been collecting. This is the one report an owner opens to ask where the
+     * cash went; a total that stops at 300 is worse than no total. The database
+     * groups it now, and the list underneath stays capped because a list of
+     * recent receipts is meant to be recent.
+     */
+    const grouped = await this.prisma.payment.groupBy({
+      by: ["receivedById"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const names = await this.prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.receivedById).filter((id): id is number => id != null) } },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(names.map((u) => [u.id, u.name]));
+
     const rows = await this.prisma.payment.findMany({
-      where: {
-        booking: { resortId, deletedAt: null },
-        paymentType: "ADVANCE",
-        ...(from && to ? { receivedAt: { gte: dateOnly(from), lt: dateOnly(to) } } : {}),
-      },
+      where,
       include: {
         receivedBy: { select: { id: true, name: true, role: true } },
         booking: { select: { code: true, guest: { select: { fullName: true } } } },
@@ -358,23 +395,15 @@ export class ReportsService {
       orderBy: { receivedAt: "desc" },
       take: 300,
     });
-    const byUser = new Map<string, { userId: number | null; name: string; advances: number; total: number; codes: string[] }>();
-    for (const p of rows) {
-      const k = p.receivedById ? `u${p.receivedById}` : "unassigned";
-      const entry = byUser.get(k) ?? {
-        userId: p.receivedById,
-        name: p.receivedBy?.name ?? "Unassigned",
-        advances: 0,
-        total: 0,
-        codes: [],
-      };
-      entry.advances++;
-      entry.total = round2(entry.total + Number(p.amount));
-      entry.codes.push(p.booking.code);
-      byUser.set(k, entry);
-    }
     return {
-      rows: [...byUser.values()].sort((a, b) => b.total - a.total),
+      rows: grouped
+        .map((g) => ({
+          userId: g.receivedById,
+          name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
+          advances: g._count._all,
+          total: round2(Number(g._sum.amount ?? 0)),
+        }))
+        .sort((a, b) => b.total - a.total),
       recent: rows.map((p) => ({
         id: p.id,
         at: p.receivedAt,

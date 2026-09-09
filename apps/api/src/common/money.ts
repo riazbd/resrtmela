@@ -304,6 +304,51 @@ export function perNightRevenue(roomRent: number, discount: number, nights: numb
   return round2((roomRent - discount) / (nights || 1));
 }
 
+
+// ─────────────────────────── ranges, month by month ───────────────────────────
+
+/**
+ * Every `YYYY-MM` a range touches.
+ *
+ * The P&L walked this with `d.setUTCMonth(d.getUTCMonth() + 1)` from the range
+ * start. From a 31st that overflows — 31 January plus a month is 31 February,
+ * which resolves to 3 March — so February was skipped and a whole month's
+ * payroll vanished from the statement. Stepping the month number rather than
+ * the date cannot overflow.
+ */
+export function monthsInRange(fromIso: string, toIso: string): string[] {
+  const from = new Date(`${fromIso.slice(0, 10)}T00:00:00Z`);
+  const to = new Date(`${toIso.slice(0, 10)}T00:00:00Z`);
+  const months: string[] = [];
+  let y = from.getUTCFullYear();
+  let m = from.getUTCMonth();
+  while (Date.UTC(y, m, 1) < to.getTime()) {
+    months.push(`${y}-${String(m + 1).padStart(2, "0")}`);
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+  return months;
+}
+
+/**
+ * How much of a month's salary belongs to a range: 0 to 1.
+ *
+ * The P&L charged every payroll row for any month the range touched, in full.
+ * A report for 1–10 September showed September's entire wage bill against ten
+ * days of revenue, so the profit for that window was nonsense — and the shorter
+ * the range, the worse it read.
+ */
+export function payrollShareOfRange(month: string, fromIso: string, toIso: string): number {
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = Date.UTC(y!, m! - 1, 1);
+  const monthEnd = Date.UTC(y!, m!, 1);
+  const from = new Date(`${fromIso.slice(0, 10)}T00:00:00Z`).getTime();
+  const to = new Date(`${toIso.slice(0, 10)}T00:00:00Z`).getTime();
+  const overlap = Math.min(monthEnd, to) - Math.max(monthStart, from);
+  if (overlap <= 0) return 0;
+  return overlap / (monthEnd - monthStart);
+}
+
 // ───────────────────────────── agent commission ─────────────────────────────
 
 export type CommissionKind = "PERCENT" | "FLAT";
