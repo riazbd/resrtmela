@@ -88,7 +88,7 @@ export default function PlatformPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [subFor, setSubFor] = useState<ResortRow | null>(null);
-  const [subPlan, setSubPlan] = useState("GROWTH");
+  const [subPlan, setSubPlan] = useState("");
   const [subFee, setSubFee] = useState("5000");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -272,7 +272,12 @@ export default function PlatformPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => { setSubFor(r); setSubPlan("GROWTH"); setSubFee("5000"); }}
+                        onClick={() => {
+                          const first = (plansQ.data ?? []).find((pl) => pl.active);
+                          setSubFor(r);
+                          setSubPlan(first?.name ?? "");
+                          setSubFee(first ? String(Number(first.monthlyFee)) : "");
+                        }}
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                       >
                         Subscribe
@@ -499,10 +504,21 @@ export default function PlatformPage() {
             <div className="text-lg font-bold">Subscribe {subFor.name}</div>
             <div className="mt-4 space-y-3">
               <label className="block text-xs font-semibold text-slate-500">Plan</label>
-              <select value={subPlan} onChange={(e) => { setSubPlan(e.target.value); const fees: Record<string, string> = { STARTER: "2500", GROWTH: "5000", CHAIN: "12000" }; setSubFee(fees[e.target.value] ?? "5000"); }} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option>STARTER</option>
-                <option>GROWTH</option>
-                <option>CHAIN</option>
+              {/* the plans were already fetched into `plansQ` above and this
+                  carried its own copy of the names and the prices, so editing a
+                  fee in the Plans tab changed nothing here */}
+              <select
+                value={subPlan}
+                onChange={(e) => {
+                  setSubPlan(e.target.value);
+                  const chosen = (plansQ.data ?? []).find((pl) => pl.name === e.target.value);
+                  if (chosen) setSubFee(String(Number(chosen.monthlyFee)));
+                }}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                {(plansQ.data ?? []).filter((pl) => pl.active).map((pl) => (
+                  <option key={pl.name} value={pl.name}>{pl.label} · {pl.name}</option>
+                ))}
               </select>
               <label className="block text-xs font-semibold text-slate-500">Monthly fee ({cur()})</label>
               <input value={subFee} onChange={(e) => setSubFee(e.target.value)} type="number" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />

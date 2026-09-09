@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, download, money, type PermRole, cur } from "@/lib/api";
+import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs } from "@/components/patterns";
@@ -113,6 +113,21 @@ export default function SettingsPage() {
 
   const qc = useQueryClient();
   const infoQ = useApi(["resort", rid], () => api<ResortDetail>(`/resorts/${rid}`), { enabled: !!rid });
+  /**
+   * The plans the platform actually sells.
+   *
+   * These buttons read FREE / STANDARD / PRO — names the plan table does not
+   * contain — while the platform screen offered STARTER / GROWTH / CHAIN. Two
+   * hardcoded vocabularies in one product, neither of them the price list.
+   * Only a super admin sees this block, and only they may read the endpoint.
+   */
+  const plansQ = useApi(
+    ["platform-plans"],
+    () => api<{ name: string; label: string; active: boolean }[]>("/platform/plans"),
+    { enabled: role === "SUPER_ADMIN" },
+  );
+  const planNames = (plansQ.data ?? []).filter((p) => p.active).map((p) => p.name);
+
   const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => api<Usage>(`/tenants/${activeResort!.tenantId}/usage`), {
     enabled: !!activeResort,
   });
@@ -198,8 +213,12 @@ export default function SettingsPage() {
               </div>
               {role === "SUPER_ADMIN" && (
                 <div className="mt-3 flex items-center gap-2">
+                  {/* these buttons read FREE / STANDARD / PRO — names the plan
+                      table does not contain, and a different vocabulary from the
+                      STARTER / GROWTH / CHAIN the platform screen offered. The
+                      price list is the authority. */}
                   <span className="text-xs text-slate-500">Change plan:</span>
-                  {["FREE", "STANDARD", "PRO"].map((p) => (
+                  {planNames.map((p) => (
                     <Button key={p} size="sm" variant={usage.plan === p ? "primary" : "ghost"} onClick={() => changePlan(p)}>
                       {p}
                     </Button>
@@ -214,12 +233,16 @@ export default function SettingsPage() {
               <Field label="Resort name"><Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></Field>
               <Field label="Location"><Input value={d.location ?? ""} onChange={(e) => setD({ ...d, location: e.target.value })} /></Field>
               <Field label="Tax rate (%)"><Input type="number" min={0} max={100} value={String(d.taxRatePct)} onChange={(e) => setD({ ...d, taxRatePct: e.target.value })} /></Field>
+          {/* 24 / 48 / 72 were three numbers somebody liked. A resort that wants
+              its agents paid up 36 hours before arrival can say so. */}
           <Field label="Agent full-payment deadline (hours before check-in)" hint="agent bookings must be fully paid this many hours before check-in">
-            <Select value={String((d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? 48)} onChange={(e) => setD({ ...d, agentPaymentHours: Number(e.target.value) } as ResortDetail)}>
-              <option value="24">24 hours</option>
-              <option value="48">48 hours</option>
-              <option value="72">72 hours</option>
-            </Select>
+            <Input
+              type="number"
+              min={1}
+              max={720}
+              value={String((d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? 48)}
+              onChange={(e) => setD({ ...d, agentPaymentHours: Math.max(1, Number(e.target.value) || 1) } as ResortDetail)}
+            />
           </Field>
               <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
                 <input type="checkbox" checked={d.showRatesToAgents} onChange={(e) => setD({ ...d, showRatesToAgents: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
@@ -1224,10 +1247,10 @@ function ApiKeysTab({ rid }: { rid: number }) {
         <Card title="Use it on your website">
           <div className="overflow-x-auto rounded-lg bg-slate-900 p-4 font-mono text-[11px] leading-relaxed text-slate-300">
             <div><span className="text-slate-500"># availability</span></div>
-            <div><span className="text-emerald-300">curl</span> https://backresort.rootcodebd.com/v1/availability \</div>
+            <div><span className="text-emerald-300">curl</span> {API_URL}/v1/availability \</div>
             <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_xxxx.yoursecret&quot;</span></div>
             <div className="mt-2"><span className="text-slate-500"># create booking</span></div>
-            <div><span className="text-emerald-300">curl</span> -X POST https://backresort.rootcodebd.com/v1/bookings \</div>
+            <div><span className="text-emerald-300">curl</span> -X POST {API_URL}/v1/bookings \</div>
             <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: …&quot;</span> -H <span className="text-amber-300">&quot;Content-Type: application/json&quot;</span> \</div>
             <div className="pl-4">-d <span className="text-amber-300">&apos;{"{"}&quot;roomIds&quot;:[1],&quot;checkIn&quot;:&quot;2026-10-01&quot;,&quot;checkOut&quot;:&quot;2026-10-03&quot;,&quot;adults&quot;:2,&quot;guestName&quot;:&quot;John&quot;{"}"}&apos;</span></div>
           </div>
