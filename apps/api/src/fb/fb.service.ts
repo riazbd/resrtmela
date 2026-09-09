@@ -3,8 +3,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, todayIn } from "../common/dates";
+import { fbBillTotals, type TaxRule } from "../common/money";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
+import { TaxService } from "../common/tax.service";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 
 /** Fallback only — the prefix is a per-resort setting. */
@@ -16,6 +18,7 @@ export class FbService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   private computeStatus(paid: number, total: number): "PAID" | "PARTIAL" | "UNPAID" {
@@ -56,6 +59,7 @@ export class FbService {
       booking = b;
     }
 
+    const rules = await this.tax.rulesFor(resortId);
     const bill = await this.prisma.$transaction(async (tx) => {
       await tx.counter.upsert({
         where: { resortId_kind: { resortId, kind: "FB" } },
@@ -106,7 +110,11 @@ export class FbService {
 
       // charge-to-room: bill total posts into the room booking ledger, and any
       // cash collected at the counter posts as a payment on the same booking
-      const total = round2(created.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+      const money = fbBillTotals(created, rules);
+      const total = money.total;
+      // stored, not only computed: a bill printed last year has to keep saying
+      // what it said even after the resort changes its rules
+      await tx.fbBill.update({ where: { id: created.id }, data: { taxAmount: money.tax as never } });
       if (booking) {
         await tx.bookingItem.create({
           data: {
@@ -133,13 +141,13 @@ export class FbService {
       return created;
     });
 
-    const total = round2(bill.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+    const total = fbBillTotals(bill, rules).total;
     await this.audit.log({
       actorId: claims.userId, resortId,
       action: "fb.bill.create", entity: "fbBill", entityId: bill.id,
       diff: { code: bill.code, total },
     });
-    return this.shape(bill, total);
+    return this.shape(bill, rules);
   }
 
   /**
@@ -180,7 +188,8 @@ export class FbService {
       }),
       this.prisma.fbBill.count({ where }),
     ]);
-    return toPage(rows.map((b) => this.shape(b)), total, skip, take);
+    const rules = await this.tax.rulesFor(resortId);
+    return toPage(rows.map((b) => this.shape(b, rules)), total, skip, take);
   }
 
   async addPayment(claims: JwtClaims, billId: number, amount: number, method?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK") {
@@ -188,7 +197,8 @@ export class FbService {
     if (!bill || bill.deletedAt) throw Object.assign(new Error("Bill not found"), { status: 404 });
     requireResortAccess(claims, bill.resortId);
     await this.perms.require(claims, bill.resortId, "restaurant.create");
-    const total = round2(bill.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+    const rules = await this.tax.rulesFor(bill.resortId);
+    const total = fbBillTotals(bill, rules).total;
     const paid = round2(Number(bill.paidAmount) + amount);
     if (paid > total + 0.001) throw badRequest(`Total is ${total}; already collected ${Number(bill.paidAmount)}`);
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -216,7 +226,7 @@ export class FbService {
       action: "fb.bill.payment", entity: "fbBill", entityId: billId,
       diff: { amount, method },
     });
-    return this.shape(updated, total);
+    return this.shape(updated, rules);
   }
 
   async remove(claims: JwtClaims, billId: number) {
@@ -235,8 +245,19 @@ export class FbService {
     return { deleted: true };
   }
 
-  private shape(bill: { id: number; code: string; billDate: Date; guestName: string | null; roomId: number | null; bookingId: number | null; paidAmount: unknown; method: string | null; note: string | null; items: { name: string; qty: number; unitPrice: unknown }[] }, totalArg?: number) {
-    const total = totalArg ?? round2(bill.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+  private shape(
+    bill: { id: number; code: string; billDate: Date; guestName: string | null; roomId: number | null; bookingId: number | null; paidAmount: unknown; taxAmount?: unknown; method: string | null; note: string | null; items: { name: string; qty: number; unitPrice: unknown }[] },
+    rules: TaxRule[] = [],
+  ) {
+    /**
+     * One arithmetic, not nine.
+     *
+     * This sum was written out by hand here four times and in five more files,
+     * with inconsistent rounding, and no tax anywhere — so a resort charging
+     * VAT charged it on the room and not on the food.
+     */
+    const t = fbBillTotals({ items: bill.items as { unitPrice: number; qty: number }[] }, rules);
+    const total = t.total;
     const paid = Number(bill.paidAmount);
     return {
       id: bill.id,
@@ -248,6 +269,9 @@ export class FbService {
       method: bill.method,
       note: bill.note,
       items: bill.items.map((i) => ({ ...i, unitPrice: Number(i.unitPrice), total: round2(Number(i.unitPrice) * i.qty) })),
+      net: t.net,
+      tax: t.tax,
+      taxLines: t.taxLines,
       total,
       paid,
       due: round2(Math.max(0, total - paid)),

@@ -7,6 +7,8 @@ import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
+import { fbBillTotals } from "../common/money";
 import { BookingsService } from "../bookings/bookings.service";
 import {
   parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
@@ -96,6 +98,7 @@ export class ImportService {
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   private parseRows(csvText: string): SheetRow[] {
@@ -676,7 +679,7 @@ export class ImportService {
         },
         include: { items: true },
       });
-      const total = round2(created.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+      const total = fbBillTotals(created, await this.tax.rulesFor(resortId)).total;
       const paidNow = Number(created.paidAmount);
       imported++;
       out.push({

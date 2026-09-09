@@ -103,7 +103,10 @@ model Resort {
   // agents planning a group need to see which nights are taken; whose
   // booking it is stays the resort's to give away, and starts closed
   showGuestNamesToAgents Boolean @default(false)
+  /// the fallback when a resort has defined no tax rules; see TaxRule
   taxRatePct        Decimal   @default(0.00) @db.Decimal(5, 2)
+  /// Business Identification Number — a VAT invoice in Bangladesh must show it
+  binNumber         String?   @db.VarChar(32)
   agentPaymentHours Int       @default(48) // agent bookings must be fully paid this many hours before check-in
   invoicePrefix     String    @default("SER") @db.VarChar(12)
   bookingPrefix     String    @default("BK") @db.VarChar(12)
@@ -142,6 +145,7 @@ model Resort {
   payrollPayments  PayrollPayment[]
   messageTemplates MessageTemplate[]
   options          ResortOption[]
+  taxRules         TaxRule[]
   platformCharges  PlatformCharge[]
 
   @@index([tenantId])
@@ -638,6 +642,9 @@ model FbBill {
   roomId     Int? // room (optional, charge-to-room)
   room       Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
   paidAmount Decimal        @default(0.00) @db.Decimal(10, 2)
+  /// tax charged on this bill, recomputed from the resort's rules on every read
+  /// and stored so a bill printed last year still says what it said
+  taxAmount  Decimal        @default(0.00) @db.Decimal(10, 2)
   method     String?     @db.VarChar(24)
   note       String?        @db.VarChar(255)
   createdBy  Int?
@@ -697,6 +704,37 @@ model PaymentIntent {
 /// value is only dynamic if the *rules attached to it* are dynamic too;
 /// otherwise the list is editable and the code still only understands the
 /// values it shipped with.
+/// What a resort adds to a bill, and on what.
+///
+/// `Resort.taxRatePct` was a single percentage on the whole booking, which
+/// could not describe this market: Bangladesh charges 15% VAT, hotels here
+/// commonly add a 10% service charge to the room that VAT is then charged on,
+/// the restaurant is taxed at its own rate, and a menu price is usually quoted
+/// with the VAT already inside it. The old column survives as the fallback for
+/// a resort with no rules, and the migration turns a non-zero one into a rule.
+model TaxRule {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  code      String   @db.VarChar(24)
+  label     String   @db.VarChar(60)
+  ratePct   Decimal  @db.Decimal(6, 3)
+  /// ALL | ROOM | EXTRA_PERSON | ACTIVITY | FB
+  appliesTo String   @default("ALL") @db.VarChar(16)
+  /// already inside the listed price rather than added to it
+  inclusive Boolean  @default(false)
+  /// charged on the base plus the exclusive rules before it
+  compound  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([resortId, code])
+  @@index([resortId, active])
+  @@map("tax_rules")
+}
+
 model ResortOption {
   id        Int      @id @default(autoincrement())
   resortId  Int

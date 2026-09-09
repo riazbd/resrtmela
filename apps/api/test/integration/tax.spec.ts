@@ -6,7 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
+import { makeBookingsService, makeReportsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import type { BookingsService } from "../../src/bookings/bookings.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -101,7 +101,7 @@ describe("a resort that charges tax", () => {
 
     const { ReportsService } = await import("../../src/reports/reports.service");
     const { PermissionsService } = await import("../../src/common/permissions");
-    const reports = new ReportsService(asPrismaService, new PermissionsService(asPrismaService));
+    const reports = makeReportsService(asPrismaService);
 
     const metrics = await reports.metrics(claims, fx.resortId, "2026-08-01", "2026-09-01");
     expect(metrics.resortRevenue).toBe(10000); // not 11500

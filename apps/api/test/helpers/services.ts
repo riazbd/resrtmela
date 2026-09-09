@@ -39,6 +39,7 @@ import { FbService } from "../../src/fb/fb.service";
 import { ReportsService } from "../../src/reports/reports.service";
 import { IntentsService } from "../../src/payments/intents.service";
 import { OptionsService } from "../../src/options/options.service";
+import { TaxService } from "../../src/common/tax.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
@@ -57,6 +58,7 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new PermissionsService(prisma),
     new TenantStateService(prisma),
     makeOptionsService(prisma),
+    makeTaxService(prisma),
   );
 }
 
@@ -70,6 +72,7 @@ export function makeNotificationsService(prisma: PrismaService): NotificationsSe
     new SmsService(),
     new PlatformSettingsService(prisma),
     makeTemplatesService(prisma),
+    makeTaxService(prisma),
   );
 }
 
@@ -104,7 +107,7 @@ export function makePlatformService(prisma: PrismaService): PlatformService {
 }
 
 export function makeExportService(prisma: PrismaService): ExportService {
-  return new ExportService(prisma, new PermissionsService(prisma));
+  return new ExportService(prisma, new PermissionsService(prisma), makeTaxService(prisma));
 }
 
 export function makePaymentsService(prisma: PrismaService): PaymentsService {
@@ -115,7 +118,12 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
     makeNotificationsService(prisma),
     new PermissionsService(prisma),
     makeOptionsService(prisma),
+    makeTaxService(prisma),
   );
+}
+
+export function makeTaxService(prisma: PrismaService): TaxService {
+  return new TaxService(prisma, new PermissionsService(prisma), new AuditService(prisma));
 }
 
 export function makeOptionsService(prisma: PrismaService): OptionsService {
@@ -132,11 +140,11 @@ export function makeTemplatesService(prisma: PrismaService): TemplatesService {
 }
 
 export function makeFbService(prisma: PrismaService): FbService {
-  return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma));
+  return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma), makeTaxService(prisma));
 }
 
 export function makeReportsService(prisma: PrismaService): ReportsService {
-  return new ReportsService(prisma, new PermissionsService(prisma));
+  return new ReportsService(prisma, new PermissionsService(prisma), makeTaxService(prisma));
 }
 
 export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
@@ -187,6 +195,7 @@ export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
     prisma,
     new AgencyContextService(prisma),
     new AvailabilityService(prisma),
+    makeTaxService(prisma),
   );
 }
 
@@ -217,6 +226,7 @@ export function makeGuestService(prisma: PrismaService): GuestService {
     new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
     makeNotificationsService(prisma),
     audit,
+    makeTaxService(prisma),
   );
 }
 

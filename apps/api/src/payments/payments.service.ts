@@ -8,6 +8,7 @@ import { BookingsService } from "../bookings/bookings.service";
 import { PermissionsService } from "../common/permissions";
 import { NotificationsService } from "../notifications/notifications.service";
 import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
 
 @Injectable()
 export class PaymentsService {
@@ -18,6 +19,7 @@ export class PaymentsService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   /**
@@ -123,18 +125,14 @@ export class PaymentsService {
     // the matrix showed this box and nothing asked for it: hiding the menu
     // link is not access control, and a token plus curl was the whole gap
     await this.perms.require(claims, resortId, "payments.view");
-    const resort = await this.prisma.resort.findUnique({
-      where: { id: resortId },
-      select: { taxRatePct: true },
-    });
-    const taxRatePct = Number(resort?.taxRatePct ?? 0);
+    const taxRules = await this.tax.rulesFor(resortId);
     const bookings = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null, state: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] } },
       include: { payments: true, guest: { select: { fullName: true, phone: true } }, items: true },
       orderBy: { checkIn: "asc" },
     });
     const rows = bookings
-      .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRatePct) }))
+      .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRules) }))
       .filter(({ t }) => t.due > 0.001)
       .map(({ b, t }) => ({
         id: b.id,

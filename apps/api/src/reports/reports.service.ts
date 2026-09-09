@@ -4,8 +4,9 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
-import { bookingTotals, perNightRevenue, agentCommission } from "../common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission } from "../common/money";
 import { PermissionsService } from "../common/permissions";
+import { TaxService } from "../common/tax.service";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
 
@@ -17,6 +18,7 @@ export class ReportsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   /**
@@ -30,10 +32,7 @@ export class ReportsService {
    * stops being true.
    */
   private async rangeBookings(resortId: number, from?: string, to?: string) {
-    const resort = await this.prisma.resort.findUniqueOrThrow({
-      where: { id: resortId },
-      select: { taxRatePct: true },
-    });
+    const taxRules = await this.tax.rulesFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -50,7 +49,7 @@ export class ReportsService {
       },
     });
     return rows.map((b) => {
-      const t = bookingTotals({ ...b, taxRatePct: resort.taxRatePct });
+      const t = bookingTotals({ ...b, taxRules });
       return {
         id: b.id,
         state: b.state,
@@ -70,6 +69,7 @@ export class ReportsService {
   async metrics(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
+    const taxRules = await this.tax.rulesFor(resortId);
     const bookings = await this.rangeBookings(resortId, from, to);
     const gross = round2(bookings.reduce((s, b) => s + (b.roomRent ?? b.rent), 0));
     const discounts = await this.prisma.booking.aggregate({
@@ -88,7 +88,10 @@ export class ReportsService {
       include: { items: true },
     });
     const fbRevenue = round2(
-      fb.reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0),
+      // net of tax: what the resort earned, not what it collected for the
+      // government. The room side has always reported net; the restaurant
+      // could not, because a restaurant bill had nowhere to put tax.
+      fb.reduce((s, b) => s + fbBillTotals(b, taxRules).net, 0),
     );
     const expenses = await this.prisma.expense.aggregate({
       _sum: { amount: true },
@@ -116,6 +119,7 @@ export class ReportsService {
   async pl(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.pl");
+    const taxRules = await this.tax.rulesFor(resortId);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
@@ -148,7 +152,7 @@ export class ReportsService {
       where: { resortId, deletedAt: null, billDate: { gte: from, lt: to } },
       include: { items: true },
     });
-    const restaurantRevenue = round2(fb.reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0));
+    const restaurantRevenue = round2(fb.reduce((s, b) => s + fbBillTotals(b, taxRules).net, 0));
 
     // expenses split by scope
     const expenses = await this.prisma.expense.findMany({

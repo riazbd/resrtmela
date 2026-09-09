@@ -51,6 +51,7 @@ import type {
   TourPackageDetail,
   TourPackageRow,
   ResortOption,
+  TaxRuleRow,
 } from "./api-types";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -162,6 +163,17 @@ export function createApiClient(http: Fetcher) {
           { method: "DELETE" },
         ),
       lists: () => http<{ name: string; label: string }[]>(`/option-lists`),
+    },
+
+    /** What a resort charges on top of its rates — VAT, service charge, whatever it has. */
+    taxRules: {
+      list: (resortId: number) => http<TaxRuleRow[]>(`/resorts/${resortId}/tax-rules`),
+      create: (resortId: number, body: { code: string; label: string; ratePct: number; appliesTo?: string; inclusive?: boolean; compound?: boolean }) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules`, { method: "POST", body }),
+      update: (resortId: number, id: number, body: Record<string, unknown>) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "PATCH", body }),
+      deactivate: (resortId: number, id: number) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "DELETE" }),
     },
 
     // ── the desk ──

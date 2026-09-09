@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookingTotals, perNightRevenue } from "../src/common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, type TaxRule } from "../src/common/money";
 
 const IN = new Date("2026-08-15T00:00:00Z");
 const OUT = new Date("2026-08-18T00:00:00Z"); // 3 nights
@@ -184,5 +184,156 @@ describe("tax", () => {
     });
     expect(t.taxable).toBe(0);
     expect(t.tax).toBe(0);
+  });
+});
+
+/**
+ * Tax stops being one number.
+ *
+ * `taxRatePct` was a single rate on the whole bill. Bangladesh charges 15% VAT,
+ * hotels here commonly add a 10% service charge on top of the room, and the
+ * restaurant is taxed at its own rate — none of which one percentage can say.
+ * Worse, a menu price is often quoted with VAT already inside it, so the number
+ * on the board is gross and the net has to be worked back out.
+ *
+ * So a resort has tax *rules*: what each one is charged on, whether it is
+ * already inside the price, and whether it stacks on the ones before it. A
+ * single flat rate is still just one rule, which is what every existing caller
+ * passes and what the migration turns the old column into.
+ */
+describe("bookingTotals — tax rules", () => {
+  const vat = (over: Partial<TaxRule> = {}): TaxRule => ({
+    code: "VAT", label: "VAT", ratePct: 15, appliesTo: "ALL",
+    inclusive: false, compound: false, sortOrder: 0, ...over,
+  });
+
+  it("charges one exclusive rule exactly like the old single rate", () => {
+    const rules = bookingTotals({
+      items: [room(5000)], payments: [], discount: 0, checkIn: IN, checkOut: OUT,
+      taxRules: [vat()],
+    });
+    const flat = bookingTotals({
+      items: [room(5000)], payments: [], discount: 0, checkIn: IN, checkOut: OUT,
+      taxRatePct: 15,
+    });
+    expect(rules.tax).toBe(flat.tax);
+    expect(rules.total).toBe(flat.total);
+    expect(rules.total).toBe(17250);
+  });
+
+  it("charges a rule only on what it applies to", () => {
+    // 3 nights × 5000 room + one 1000 restaurant line; VAT on the food alone
+    const t = bookingTotals({
+      items: [room(5000), fb(1000)], payments: [], discount: 0, checkIn: IN, checkOut: OUT,
+      taxRules: [vat({ appliesTo: "FB" })],
+    });
+    expect(t.rent).toBe(16000);
+    expect(t.tax).toBe(150);
+    expect(t.total).toBe(16150);
+  });
+
+  it("stacks a service charge and VAT the way a hotel bill does", () => {
+    // service charge 10% on the room, then VAT 15% on room + service charge
+    const t = bookingTotals({
+      items: [room(1000)], payments: [], discount: 0,
+      checkIn: IN, checkOut: new Date("2026-08-16T00:00:00Z"), // one night
+      taxRules: [
+        { code: "SC", label: "Service charge", ratePct: 10, appliesTo: "ROOM", inclusive: false, compound: false, sortOrder: 0 },
+        { code: "VAT", label: "VAT", ratePct: 15, appliesTo: "ROOM", inclusive: false, compound: true, sortOrder: 1 },
+      ],
+    });
+    expect(t.rent).toBe(1000);
+    // 100 service charge, then 15% of 1100 = 165
+    expect(t.tax).toBe(265);
+    expect(t.total).toBe(1265);
+  });
+
+  it("works the net back out of a price that already includes the tax", () => {
+    // a menu board saying 115 with 15% VAT inside it is 100 of food and 15 of tax
+    const t = bookingTotals({
+      items: [fb(115)], payments: [], discount: 0, checkIn: IN, checkOut: OUT,
+      taxRules: [vat({ appliesTo: "FB", inclusive: true })],
+    });
+    expect(t.taxable).toBe(100);
+    expect(t.tax).toBe(15);
+    expect(t.total).toBe(115);
+  });
+
+  it("spreads a discount across what is taxed, so nothing is taxed twice over", () => {
+    // 1000 of room and 1000 of food, 200 off the bill: 100 comes off each
+    const t = bookingTotals({
+      items: [room(1000), fb(1000)], payments: [], discount: 200,
+      checkIn: IN, checkOut: new Date("2026-08-16T00:00:00Z"),
+      taxRules: [vat({ appliesTo: "FB" })],
+    });
+    expect(t.taxable).toBe(1800);
+    expect(t.tax).toBe(135); // 15% of the 900 of food that survives the discount
+  });
+
+  it("names what each tax was, so an invoice can print the lines", () => {
+    const t = bookingTotals({
+      items: [room(1000)], payments: [], discount: 0,
+      checkIn: IN, checkOut: new Date("2026-08-16T00:00:00Z"),
+      taxRules: [
+        { code: "SC", label: "Service charge", ratePct: 10, appliesTo: "ROOM", inclusive: false, compound: false, sortOrder: 0 },
+        { code: "VAT", label: "VAT", ratePct: 15, appliesTo: "ROOM", inclusive: false, compound: true, sortOrder: 1 },
+      ],
+    });
+    expect(t.taxLines).toEqual([
+      { code: "SC", label: "Service charge", ratePct: 10, amount: 100 },
+      { code: "VAT", label: "VAT", ratePct: 15, amount: 165 },
+    ]);
+  });
+
+  it("charges nothing when a resort has no rules", () => {
+    const t = bookingTotals({ items: [room(5000)], payments: [], discount: 0, checkIn: IN, checkOut: OUT, taxRules: [] });
+    expect(t.tax).toBe(0);
+    expect(t.total).toBe(15000);
+    expect(t.taxLines).toEqual([]);
+  });
+});
+
+/**
+ * A restaurant bill is a bill too.
+ *
+ * `Σ unitPrice × qty` was written out by hand in nine places — the restaurant
+ * service four times, reports twice, the exporter, the importer and the
+ * platform's invoice mail — with inconsistent rounding between them, and
+ * `fb_bills` had no tax column at all. So a resort charging VAT charged it on
+ * the room and not on the food, and nothing anywhere could have noticed.
+ */
+describe("fbBillTotals", () => {
+  const line = (unitPrice: number, qty = 1) => ({ unitPrice, qty });
+
+  it("sums the lines", () => {
+    const t = fbBillTotals({ items: [line(300, 2), line(450)] }, []);
+    expect(t.net).toBe(1050);
+    expect(t.tax).toBe(0);
+    expect(t.total).toBe(1050);
+  });
+
+  it("charges the resort's restaurant rate, not its room rate", () => {
+    const t = fbBillTotals({ items: [line(1000)] }, [
+      { code: "VAT", label: "VAT", ratePct: 15, appliesTo: "ROOM", inclusive: false, compound: false, sortOrder: 0 },
+      { code: "FBVAT", label: "Restaurant VAT", ratePct: 5, appliesTo: "FB", inclusive: false, compound: false, sortOrder: 1 },
+    ]);
+    expect(t.tax).toBe(50);
+    expect(t.total).toBe(1050);
+  });
+
+  it("works the tax back out of a menu price that already includes it", () => {
+    const t = fbBillTotals({ items: [line(115)] }, [
+      { code: "VAT", label: "VAT", ratePct: 15, appliesTo: "FB", inclusive: true, compound: false, sortOrder: 0 },
+    ]);
+    expect(t.net).toBe(100);
+    expect(t.tax).toBe(15);
+    expect(t.total).toBe(115);
+  });
+
+  it("names the lines so a bill can print them", () => {
+    const t = fbBillTotals({ items: [line(1000)] }, [
+      { code: "FBVAT", label: "Restaurant VAT", ratePct: 5, appliesTo: "ALL", inclusive: false, compound: false, sortOrder: 0 },
+    ]);
+    expect(t.taxLines).toEqual([{ code: "FBVAT", label: "Restaurant VAT", ratePct: 5, amount: 50 }]);
   });
 });

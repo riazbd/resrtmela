@@ -618,3 +618,30 @@ export interface ResortOption {
   active: boolean;
   meta?: Record<string, unknown> | null;
 }
+
+/**
+ * One charge a resort adds to a bill. `Resort.taxRatePct` was a single
+ * percentage, which could not describe 15% VAT plus a 10% service charge that
+ * VAT is then charged on, nor a restaurant taxed at its own rate, nor a menu
+ * price quoted with the tax already inside it.
+ */
+export interface TaxRuleRow {
+  id: number;
+  resortId: number;
+  code: string;
+  label: string;
+  ratePct: number | string;
+  appliesTo: string;
+  inclusive: boolean;
+  compound: boolean;
+  sortOrder: number;
+  active: boolean;
+}
+
+/** One tax as an invoice prints it. */
+export interface TaxLineRow {
+  code: string;
+  label: string;
+  ratePct: number;
+  amount: number;
+}

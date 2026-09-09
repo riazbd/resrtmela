@@ -20,8 +20,9 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "../common/permissions";
+import { TaxService } from "../common/tax.service";
 import { requireResortAccess, badRequest } from "../common/rbac";
-import { bookingTotals } from "../common/money";
+import { bookingTotals, fbBillTotals } from "../common/money";
 import { toCsv, type CsvValue } from "./csv-writer";
 import type { JwtClaims } from "@rh/shared";
 
@@ -58,6 +59,7 @@ export class ExportService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   /** One dataset as a CSV file body, BOM and all. */
@@ -119,8 +121,9 @@ export class ExportService {
   private async bookings(resortId: number): Promise<Dataset> {
     const resort = await this.prisma.resort.findUnique({
       where: { id: resortId },
-      select: { taxRatePct: true },
+      select: { id: true },
     });
+    const taxRules = await this.tax.rulesFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null },
       include: {
@@ -139,7 +142,7 @@ export class ExportService {
         "rent", "discount", "tax", "total", "paid", "due", "bookedAt", "remarks",
       ],
       rows: rows.map((b) => {
-        const money = bookingTotals({ ...b, taxRatePct: resort?.taxRatePct ?? 0 });
+        const money = bookingTotals({ ...b, taxRules });
         return [
           b.code, b.invoiceNo ?? "", b.guest.fullName, b.guest.phone,
           iso(b.checkIn), iso(b.checkOut), money.nights,
@@ -207,11 +210,12 @@ export class ExportService {
       },
       orderBy: { id: "asc" },
     });
+    const taxRules = await this.tax.rulesFor(resortId);
     return {
       name: "restaurant",
       headers: ["code", "date", "guest", "room", "booking", "items", "total", "paid", "method", "note"],
       rows: rows.map((b) => {
-        const total = b.items.reduce((sum, i) => sum + Number(i.unitPrice) * i.qty, 0);
+        const total = fbBillTotals(b, taxRules).total;
         return [
           b.code, iso(b.billDate), b.guestName ?? "", b.room?.name ?? "", b.booking?.code ?? "",
           b.items.map((i) => `${i.name} x${i.qty}`).join("; "),

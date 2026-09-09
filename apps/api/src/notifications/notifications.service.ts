@@ -4,6 +4,7 @@ import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
 import { TemplatesService } from "./templates.service";
+import { TaxService } from "../common/tax.service";
 import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
@@ -33,6 +34,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
     @Inject(TemplatesService) private readonly templates: TemplatesService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   onModuleInit() {
@@ -101,7 +103,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
      * nothing on either side could notice — no test in the suite sets a
      * non-zero tax rate on this path.
      */
-    const due = Math.max(0, bookingTotals({ ...b, taxRatePct: b.resort.taxRatePct }).due);
+    const due = Math.max(0, bookingTotals({ ...b, taxRules: await this.tax.rulesFor(b.resortId) }).due);
     const to = b.guest.email?.trim() || b.guest.phone;
     await this.enqueueJob({
       channel: b.guest.email?.trim() ? "EMAIL" : "SMS",
@@ -290,6 +292,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true, taxRatePct: true } });
     const now = new Date();
     for (const resort of resorts) {
+      const taxRules = await this.tax.rulesFor(resort.id);
       const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
       const bookings = await this.prisma.booking.findMany({
         where: {
@@ -315,7 +318,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
          * "this agent owes ৳5,000" on a ৳25,000 booking, in the alert whose
          * whole job is to say how much is outstanding before the deadline.
          */
-        const due = Math.max(0, bookingTotals({ ...b, taxRatePct: resort.taxRatePct }).due);
+        const due = Math.max(0, bookingTotals({ ...b, taxRules }).due);
         if (due <= 0 || !b.checkIn) continue;
         const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const existing = await this.prisma.notification.findFirst({

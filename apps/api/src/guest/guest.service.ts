@@ -4,6 +4,7 @@ import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { badRequest, forbid } from "../common/rbac";
 import { dateOnly, nightsBetween, normalizePhone, phoneKey, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
+import { TaxService } from "../common/tax.service";
 import { BookingsService } from "../bookings/bookings.service";
 import { RoomsService } from "../rooms/rooms.service";
 import { ActivitiesService } from "../activities/activities.service";
@@ -18,6 +19,7 @@ export class GuestService {
     @Inject(ActivitiesService) private readonly activities: ActivitiesService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   private async assertGuest(claims: JwtClaims) {
@@ -295,6 +297,16 @@ export class GuestService {
     return this.tripDetail(claims, booking.id);
   }
 
+
+  /** Tax rules for several resorts at once — a guest's trips can span them. */
+  private async taxRulesByResort(resortIds: number[]) {
+    const unique = [...new Set(resortIds)];
+    const pairs = await Promise.all(
+      unique.map(async (id) => [id, await this.tax.rulesFor(id)] as const),
+    );
+    return new Map(pairs);
+  }
+
   async trips(claims: JwtClaims) {
     await this.assertGuest(claims);
     const guestIds = await this.myGuestIds(claims);
@@ -307,6 +319,8 @@ export class GuestService {
       },
       orderBy: [{ checkIn: "desc" }, { id: "desc" }],
     });
+    // one lookup per resort, not one per stay: a guest's trips can span resorts
+    const rulesByResort = await this.taxRulesByResort(rows.map((b) => b.resortId));
     return rows.map((b) => ({
       id: b.id,
       code: b.code,
@@ -317,7 +331,7 @@ export class GuestService {
       checkIn: b.checkIn,
       checkOut: b.checkOut,
       rooms: b.items.map((i) => i.room?.name).filter(Boolean),
-      ...BookingsService.computeTotals(b, Number(b.resort?.taxRatePct ?? 0)),
+      ...BookingsService.computeTotals(b, rulesByResort.get(b.resortId) ?? []),
     }));
   }
 
@@ -362,7 +376,7 @@ export class GuestService {
         })),
       remarks: b.remarks,
       payments: b.payments.map((p) => ({ id: p.id, amount: Number(p.amount), method: p.method, type: p.paymentType, receivedAt: p.receivedAt })),
-      ...BookingsService.computeTotals(b, Number(b.resort?.taxRatePct ?? 0)),
+      ...BookingsService.computeTotals(b, await this.tax.rulesFor(b.resortId)),
     };
   }
 

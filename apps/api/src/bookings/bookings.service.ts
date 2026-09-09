@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
-import { bookingTotals, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
+import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { assertTransition } from "./booking-state";
@@ -16,6 +16,8 @@ import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PermissionsService } from "../common/permissions";
 import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
+import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
 
@@ -76,6 +78,7 @@ export class BookingsService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
     @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -83,9 +86,16 @@ export class BookingsService {
     booking: Prisma.BookingGetPayload<{
       include: { items: true; payments: true };
     }>,
-    taxRatePct: Money = 0,
+    /**
+     * The resort's tax rules, or its single legacy rate. Both shapes are
+     * accepted because a resort that has never opened the tax screen still
+     * has only a percentage, and its bill must not move.
+     */
+    tax: TaxRule[] | Money = 0,
   ) {
-    return bookingTotals({ ...booking, taxRatePct });
+    return Array.isArray(tax)
+      ? bookingTotals({ ...booking, taxRules: tax })
+      : bookingTotals({ ...booking, taxRatePct: tax });
   }
 
   /**
@@ -129,13 +139,9 @@ export class BookingsService {
     }
   }
 
-  /** The resort's tax rate — every total shown to anyone must include it. */
-  private async taxRateFor(resortId: number): Promise<number> {
-    const r = await this.prisma.resort.findUnique({
-      where: { id: resortId },
-      select: { taxRatePct: true },
-    });
-    return Number(r?.taxRatePct ?? 0);
+  /** The resort's tax rules — every total shown to anyone must include them. */
+  private taxRulesFor(resortId: number): Promise<TaxRule[]> {
+    return this.tax.rulesFor(resortId);
   }
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
@@ -480,7 +486,7 @@ export class BookingsService {
         ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }
         : {}),
     };
-    const taxRatePct = await this.taxRateFor(q.resortId);
+    const taxRules = await this.taxRulesFor(q.resortId);
     const [rows, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -510,7 +516,7 @@ export class BookingsService {
         rooms: b.items.map((i) => i.room?.name).filter(Boolean),
         adults: b.adults,
         children: b.children,
-        ...BookingsService.computeTotals(b, taxRatePct),
+        ...BookingsService.computeTotals(b, taxRules),
       })),
     };
   }
@@ -533,7 +539,7 @@ export class BookingsService {
       where: { id: b.resortId },
       select: { showRatesToAgents: true, taxRatePct: true },
     });
-    const totals = BookingsService.computeTotals(b, Number(resort.taxRatePct));
+    const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
     // persist paymentState so filtered lists stay consistent
     if (totals.paymentState !== b.paymentState) {
       await this.prisma.booking.update({
@@ -993,7 +999,7 @@ export class BookingsService {
     const date = dateOnly(dateStr);
     const nextDay = new Date(date.getTime() + 86_400_000);
 
-    const taxRatePct = await this.taxRateFor(resortId);
+    const taxRules = await this.taxRulesFor(resortId);
     const rooms = await this.prisma.room.findMany({
       where: { resortId },
       include: { roomType: { select: { maxAdults: true, maxChildren: true } } },
@@ -1041,7 +1047,7 @@ export class BookingsService {
       const b = covering[0];
       let cell: Record<string, unknown> = { mode: room.status === "OUT_OF_SERVICE" ? "oos" : "available" };
       if (b && b.checkIn && b.checkOut) {
-        const t = BookingsService.computeTotals(b, taxRatePct);
+        const t = BookingsService.computeTotals(b, taxRules);
         const isFirstNight = b.checkIn.getTime() === date.getTime();
         const isLastNight = nextDay.getTime() === b.checkOut.getTime();
         const nightRevenue = perNightRevenue(t.roomRent, t.discount, t.nights);
@@ -1240,18 +1246,23 @@ export class BookingsService {
           `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${i.description}${i.nights ? ` × ${i.nights}n` : ""}</td><td style="padding:6px 8px;text-align:center;border-bottom:1px solid #eee">${i.qty}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eee">${money(i.unitPrice)}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eee">${money(i.amount)}</td></tr>`,
       )
       .join("");
+    /**
+     * A guest picks their own name and it ends up inside HTML we send. The
+     * resort's own fields are no safer — an owner types them too.
+     */
+    const esc = escapeHtml;
     const html = `
       <div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a">
-        <h2 style="color:#166534">${inv.resort.name}</h2>
-        <p>Invoice <b>${inv.invoiceNo}</b> · ${inv.booking.code}<br/>
-        ${inv.guest.fullName} · ${stayDates(inv)}<br/>
-        Check-in ${inv.resort.checkInTime} · Check-out ${inv.resort.checkOutTime}</p>
+        <h2 style="color:#166534">${esc(inv.resort.name)}</h2>
+        <p>Invoice <b>${esc(inv.invoiceNo)}</b> · ${esc(inv.booking.code)}<br/>
+        ${esc(inv.guest.fullName)} · ${stayDates(inv)}<br/>
+        Check-in ${esc(inv.resort.checkInTime)} · Check-out ${esc(inv.resort.checkOutTime)}</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px">
           <tr style="background:#f0fdf4"><th style="text-align:left;padding:6px 8px">Description</th><th style="padding:6px 8px">Qty</th><th style="text-align:right;padding:6px 8px">Rate</th><th style="text-align:right;padding:6px 8px">Amount</th></tr>
           ${rows}
         </table>
-        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${inv.tax ? `Tax (${inv.taxRatePct}%) ${money(inv.tax)}<br/>Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
-        <p style="color:#64748b;font-size:12px">${[inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · ")}<br/>Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
+        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${(inv.taxLines ?? []).map((l) => `${esc(l.label)} (${l.ratePct}%) ${money(l.amount)}<br/>`).join("")}${inv.tax ? `Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
+        <p style="color:#64748b;font-size:12px">${esc([inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · "))}<br/>Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
       </div>`;
     // The guest booked a resort, not a platform. Their invoice says so.
     const r = await this.email.send(
@@ -1326,7 +1337,7 @@ export class BookingsService {
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     await this.requireOwnBooking(claims, b);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
-    const totals = BookingsService.computeTotals(b, Number(b.resort.taxRatePct));
+    const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
     return {
       invoiceNo: b.invoiceNo,
       issuedAt: b.invoiceAt,
@@ -1337,6 +1348,8 @@ export class BookingsService {
         address: b.resort.address,
         phone: b.resort.contactPhone,
         website: b.resort.website,
+        // a VAT invoice in Bangladesh has to show the seller's BIN
+        binNumber: b.resort.binNumber,
         checkInTime: b.resort.checkInTime,
         checkOutTime: b.resort.checkOutTime,
         currency: b.resort.currency,
@@ -1383,10 +1396,10 @@ export class BookingsService {
     await this.perms.require(claims, resortId, "bookings.view");
     const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
-      select: { timezone: true, taxRatePct: true },
+      select: { timezone: true },
     });
     const t = todayIn(resort.timezone);
-    const taxRatePct = Number(resort.taxRatePct);
+    const taxRules = await this.taxRulesFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -1409,7 +1422,7 @@ export class BookingsService {
       agent: b.agentUser?.name,
       rooms: b.items.map((i) => i.room?.name),
       state: b.state,
-      ...BookingsService.computeTotals(b, taxRatePct),
+      ...BookingsService.computeTotals(b, taxRules),
     }));
     const occupied = await this.prisma.bookingNight.count({
       where: { night: t, item: { booking: { resortId, state: "CHECKED_IN", deletedAt: null } } },
