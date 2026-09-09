@@ -53,6 +53,7 @@ const TABLES = [
   "api_keys", "discount_offers", "expenses", "expense_heads", "counters", "audit_log",
   "sales_doc_items", "sales_docs", "tour_package_items", "tour_packages", "tour_categories",
   "notification_jobs", "message_templates", "user_resorts", "roles", "users", "agent_roles",
+  "platform_charges",
   "resorts", "tenants", "platform_plans", "platform_settings", "cms_settings",
 ];
 
@@ -67,6 +68,32 @@ export async function resetDb(prisma: PrismaClient): Promise<void> {
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
   }
   await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+  await seedPlatformPlans(prisma);
+}
+
+/**
+ * The plan catalogue, restored after every wipe.
+ *
+ * `platform_plans` is never empty in a real database — a migration seeds it and
+ * the super admin edits it from there. Leaving it empty in tests would be
+ * testing a state that cannot happen, and it is the state that used to send
+ * every limit lookup into a hard-coded constant instead.
+ *
+ * These are the same rows as migration 20260909250000_one_plan_vocabulary.
+ */
+export async function seedPlatformPlans(prisma: PrismaClient): Promise<void> {
+  await prisma.platformPlan.createMany({
+    data: [
+      { name: "STARTER", label: "Starter", monthlyFee: 2500 as never, maxRooms: 10, maxResorts: 1, sortOrder: 1 },
+      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2 },
+      { name: "CHAIN", label: "Chain", monthlyFee: 12000 as never, maxRooms: 10000, maxResorts: 10, sortOrder: 3 },
+      // retired names existing tenants still carry, with the limits they had
+      { name: "FREE", label: "Free (legacy)", monthlyFee: 0 as never, maxRooms: 10, maxResorts: 1, active: false, sortOrder: 90 },
+      { name: "STANDARD", label: "Standard (legacy)", monthlyFee: 0 as never, maxRooms: 50, maxResorts: 3, active: false, sortOrder: 91 },
+      { name: "PRO", label: "Pro (legacy)", monthlyFee: 0 as never, maxRooms: 500, maxResorts: 10, active: false, sortOrder: 92 },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 export interface Fixture {

@@ -3,7 +3,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, JwtClaims } from "@rh/shared";
 import { requireRoles, requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
-import { PLANS, isPlanName } from "../common/plans";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService } from "../common/permissions";
 
@@ -205,19 +204,36 @@ export class TenancyService {
     };
   }
 
-  /** Plan change — platform team only. */
+  /**
+   * Plan change — platform team only.
+   *
+   * This used to check the name against a list in the code, which had never
+   * heard of the plans the platform actually sells: a super admin could not
+   * move a tenant onto STARTER, GROWTH or CHAIN through this route at all. The
+   * plan table decides now, and a refusal names the plans that exist.
+   */
   async updatePlan(claims: JwtClaims, tenantId: number, plan: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
-    if (!isPlanName(plan)) {
-      throw Object.assign(new Error("plan must be FREE, STANDARD or PRO"), { status: 400 });
+    const name = plan.trim().toUpperCase();
+    const known = await this.prisma.platformPlan.findUnique({ where: { name } });
+    if (!known) {
+      const onSale = await this.prisma.platformPlan.findMany({
+        where: { active: true },
+        orderBy: { sortOrder: "asc" },
+        select: { name: true },
+      });
+      throw Object.assign(
+        new Error(`No such plan "${plan}". On sale: ${onSale.map((p) => p.name).join(", ")}`),
+        { status: 400 },
+      );
     }
-    const tenant = await this.prisma.tenant.update({ where: { id: tenantId }, data: { plan } });
+    const tenant = await this.prisma.tenant.update({ where: { id: tenantId }, data: { plan: name } });
     await this.audit.log({
       actorId: claims.userId,
       action: "tenant.plan.change",
       entity: "tenant",
       entityId: tenantId,
-      diff: { plan },
+      diff: { plan: name },
     });
     return tenant;
   }

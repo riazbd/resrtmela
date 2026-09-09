@@ -211,9 +211,27 @@ export class AuthService {
     if (phoneTaken) throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
 
     const passwordHash = await bcrypt.hash(input.password, 12);
+
+    /**
+     * The entry plan, taken from the price list rather than named here.
+     *
+     * Signup used to write "FREE" — a plan that existed only in a code constant
+     * and not in the plan table at all, so every new customer's limits sat
+     * somewhere the super admin could not reach.
+     */
+    const entryPlan = await this.prisma.platformPlan.findFirst({
+      where: { active: true },
+      orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
+      select: { name: true },
+    });
+
     const result = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { name: input.companyName || input.resortName, slug, plan: "FREE" },
+        data: {
+          name: input.companyName || input.resortName,
+          slug,
+          ...(entryPlan ? { plan: entryPlan.name } : {}),
+        },
       });
       const resort = await tx.resort.create({
         data: {

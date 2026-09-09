@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { slugify, PLANS, isPlanName } from "../src/common/plans";
+import { slugify } from "../src/common/plans";
 import { PlanLimitsService } from "../src/common/plan-limits.service";
 
 describe("slugify (signup wizard)", () => {
@@ -17,7 +17,7 @@ describe("slugify (signup wizard)", () => {
 });
 
 describe("plan limits", () => {
-  const limits = (label: string, maxRooms: number) => ({ label, maxRooms, maxResorts: 1, source: "legacy" as const });
+  const limits = (label: string, maxRooms: number) => ({ label, maxRooms, maxResorts: 1, source: "tenant" as const });
 
   it("allows a room while there is room in the plan", () => {
     expect(PlanLimitsService.roomCapError(limits("Free", 10), 9)).toBeNull();
@@ -30,9 +30,7 @@ describe("plan limits", () => {
     expect(PlanLimitsService.resortCapError({ label: "Starter", maxRooms: 10, maxResorts: 1, source: "subscription" }, 1))
       .toMatch(/Starter plan allows up to 1 resort/);
   });
-  it("plan names", () => {
-    expect(isPlanName("PRO")).toBe(true);
-    expect(isPlanName("pro")).toBe(false);
-    expect(PLANS.FREE.maxResorts).toBe(1);
-  });
+  // The FREE/STANDARD/PRO constant this used to guard is gone: those names are
+  // rows in platform_plans now, and which names exist is a question for the
+  // database, answered in plan-vocabulary.spec.ts.
 });

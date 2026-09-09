@@ -32,8 +32,12 @@ beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
   fx = await seedResort(prisma as unknown as PrismaClient);
   superAdmin = { userId: fx.managerId, role: ROLE.SUPER_ADMIN, resortIds: [] };
-  await prisma.platformPlan.create({
-    data: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14 },
+  // the plan catalogue is part of the reset baseline now, the way it is in any
+  // real database; this pins the numbers this file's arithmetic depends on
+  await prisma.platformPlan.upsert({
+    where: { name: "STARTER" },
+    create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14 },
+    update: { monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14 },
   });
 });
 

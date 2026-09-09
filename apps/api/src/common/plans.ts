@@ -1,8 +1,10 @@
 /**
- * Signup-wizard helpers and the legacy plan table.
+ * Signup-wizard helpers.
  *
- * These limits now apply only to tenants with no subscription; PlanLimitsService
- * is the single place that decides which numbers a tenant actually gets.
+ * The plan table that used to live here is gone: FREE / STANDARD / PRO were a
+ * second vocabulary competing with the `platform_plans` rows the super admin
+ * edits, and only one of them could be right. They are rows now — see migration
+ * 20260909250000_one_plan_vocabulary — and PlanLimitsService reads the table.
  */
 
 export function slugify(raw: string): string {
@@ -13,16 +15,4 @@ export function slugify(raw: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
-}
-
-export const PLANS = {
-  FREE: { label: "Free", maxRoomsPerResort: 10, maxResorts: 1 },
-  STANDARD: { label: "Standard", maxRoomsPerResort: 50, maxResorts: 3 },
-  PRO: { label: "Pro", maxRoomsPerResort: 500, maxResorts: 10 },
-} as const;
-
-export type PlanName = keyof typeof PLANS;
-
-export function isPlanName(v: string): v is PlanName {
-  return v === "FREE" || v === "STANDARD" || v === "PRO";
 }
