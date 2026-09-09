@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Badge, Button, Card, Empty, Spinner, Td, Th, useToast } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Spinner, Td, Th, useToast } from "@/components/ui";
 
 interface ImportReport {
   dryRun: boolean;
@@ -15,6 +15,7 @@ interface ImportReport {
   roomsCreated: string[];
   guestsCreated: number;
   paymentsCreated: number;
+  roomTypeCreated: { name: string; assumed: boolean } | null;
   rows: {
     rowNo: number;
     code: string;
@@ -59,6 +60,15 @@ export default function ImportPage() {
   const [report, setReport] = useState<ImportReport | null>(null);
   const [rec, setRec] = useState<RecResult | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * What to call the room type, for a resort that has none yet.
+   *
+   * The importer used to decide this on its own — "Standard", two adults, no
+   * children — so a resort importing family cottages got its whole inventory
+   * typed as a double and nothing said where that had come from. The suggestion
+   * is prefilled, so the fast path is unchanged; the answer is the owner's.
+   */
+  const [roomType, setRoomType] = useState({ name: "Standard", maxAdults: 2, maxChildren: 0 });
   const fileRef = useRef<HTMLInputElement>(null);
   const csv2Ref = useRef<HTMLInputElement>(null);
 
@@ -122,7 +132,10 @@ export default function ImportPage() {
           statusMismatches: { code: string; sheet: string; computed: string }[];
         }>(`/resorts/${activeResort.id}/import/fb`, {
           method: "POST",
-          body: { csv, roomMap: { "3": "Snow Drop" } },
+          // the sheet's own room names are matched directly; a map is only for
+          // registers that write something else, and one resort's map is not
+          // something to ship to every other resort
+          body: { csv },
         });
         push(
           `F&B bills imported: ${r.imported} · status mismatches vs sheet: ${r.statusMismatches.length}`,
@@ -132,7 +145,7 @@ export default function ImportPage() {
       }
       const r = await api<ImportReport>(`/resorts/${activeResort.id}/import/bookings`, {
         method: "POST",
-        body: { csv, dryRun },
+        body: { csv, dryRun, roomType },
       });
       setReport(r);
       push(
@@ -246,6 +259,42 @@ export default function ImportPage() {
               )}
             </>
           )}
+          {tab === "bookings" && (
+            <div className="flex w-full flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                If this resort has no room types yet
+              </span>
+              <Field label="Call them">
+                <Input
+                  value={roomType.name}
+                  onChange={(e) => setRoomType({ ...roomType, name: e.target.value })}
+                  className="!w-44"
+                />
+              </Field>
+              <Field label="Adults">
+                <Input
+                  type="number"
+                  min={1}
+                  value={roomType.maxAdults}
+                  onChange={(e) => setRoomType({ ...roomType, maxAdults: Number(e.target.value) })}
+                  className="!w-20"
+                />
+              </Field>
+              <Field label="Children">
+                <Input
+                  type="number"
+                  min={0}
+                  value={roomType.maxChildren}
+                  onChange={(e) => setRoomType({ ...roomType, maxChildren: Number(e.target.value) })}
+                  className="!w-20"
+                />
+              </Field>
+              <span className="text-[11px] text-slate-400">
+                Ignored when the resort already has room types.
+              </span>
+            </div>
+          )}
+
           <div className="ml-auto flex gap-2">
             {tab === "reconcile" ? (
               <Button disabled={!csv || !csv2 || busy} loading={busy} onClick={runReconcile}>
@@ -324,6 +373,14 @@ export default function ImportPage() {
             <MiniStat label="Skipped" value={String(report.skipped)} tone={report.skipped ? "red" : "default"} />
             <MiniStat label="Out-of-service → room status" value={String(report.outOfService)} tone="amber" />
           </div>
+          {report.roomTypeCreated?.assumed && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              This resort had no room types, so the rooms were filed under{" "}
+              <b>{report.roomTypeCreated.name}</b> — the suggestion, not your answer. Rename it and
+              set its occupancy under Rooms whenever you like.
+            </div>
+          )}
+
           {report.roomsCreated.length > 0 && (
             <Card title={`Rooms auto-created (${report.roomsCreated.length})`}>
               <div className="flex flex-wrap gap-1.5">

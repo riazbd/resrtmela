@@ -52,8 +52,31 @@ export interface ImportReport {
   roomsCreated: string[];
   guestsCreated: number;
   paymentsCreated: number;
+  /**
+   * Set when the import had to create a room type for a resort that had none.
+   * `assumed` is true when the importer picked the name itself, so the screen
+   * can point at something the owner may want to go back and correct — the old
+   * importer did this silently and nobody knew there was anything to fix.
+   */
+  roomTypeCreated: { name: string; assumed: boolean } | null;
   rows: ImportRowResult[];
 }
+
+/** What to call the room type, when a resort has none yet. */
+export interface RoomTypeChoice {
+  name?: string;
+  maxAdults?: number;
+  maxChildren?: number;
+}
+
+/**
+ * The suggestion the import screen prefills.
+ *
+ * It is a suggestion, not a decision: a resort importing family cottages had
+ * its whole inventory typed as a double because this used to be applied without
+ * asking.
+ */
+export const SUGGESTED_ROOM_TYPE = { name: "Standard", maxAdults: 2, maxChildren: 0 };
 
 const LIVE_STATES = new Set(["PENDING", "CONFIRMED", "CHECKED_IN"]);
 
@@ -138,6 +161,7 @@ export class ImportService {
     resortId: number,
     csvText: string,
     dryRun: boolean,
+    roomType?: RoomTypeChoice,
   ): Promise<ImportReport> {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
@@ -147,7 +171,7 @@ export class ImportService {
     const report: ImportReport = {
       dryRun, totalRows: rows.length, imported: 0, skipped: 0,
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
-      paymentsCreated: 0, rows: [],
+      paymentsCreated: 0, roomTypeCreated: null, rows: [],
     };
 
     if (dryRun) {
@@ -175,10 +199,27 @@ export class ImportService {
     for (const r of existingRooms) roomCache.set(r.name.toLowerCase(), { id: r.id, baseRate: Number(r.baseRate), roomTypeId: r.roomTypeId });
     let defaultRoomTypeId = existingRooms[0]?.roomTypeId ?? null;
     if (!defaultRoomTypeId) {
-      const rt = await this.prisma.roomType.create({
-        data: { resortId, name: "Standard", maxAdults: 2, maxChildren: 0 },
-      });
-      defaultRoomTypeId = rt.id;
+      // a resort with no rooms at all: the import must attach them to a type,
+      // and which one is the owner's answer, not the importer's
+      const existingType = await this.prisma.roomType.findFirst({ where: { resortId } });
+      if (existingType) {
+        defaultRoomTypeId = existingType.id;
+      } else {
+        const chosenName = roomType?.name?.trim();
+        const name = chosenName || SUGGESTED_ROOM_TYPE.name;
+        report.roomTypeCreated = { name, assumed: !chosenName };
+        if (!dryRun) {
+          const rt = await this.prisma.roomType.create({
+            data: {
+              resortId,
+              name,
+              maxAdults: roomType?.maxAdults ?? SUGGESTED_ROOM_TYPE.maxAdults,
+              maxChildren: roomType?.maxChildren ?? SUGGESTED_ROOM_TYPE.maxChildren,
+            },
+          });
+          defaultRoomTypeId = rt.id;
+        }
+      }
     }
 
     for (const row of rows) {
@@ -532,12 +573,19 @@ export class ImportService {
     for (const r of await this.prisma.room.findMany({ where: { resortId }, select: { id: true, name: true } })) {
       roomsByName.set(r.name.toLowerCase(), { id: r.id });
     }
+    /**
+     * The map is an escape hatch for registers that write "3" where the
+     * property calls the room "Snow Drop". A sheet that already writes the
+     * room's own name needs no map, and that path did not work at all: the
+     * console covered for it by shipping one resort's map hardcoded, which
+     * every other customer then sent on every import.
+     */
     const resolveRoom = (rawId: string): number | null => {
       const key = (rawId ?? "").trim();
       if (!key) return null;
       const mapped = roomMap?.[key];
       if (mapped) return roomsByName.get(mapped.toLowerCase())?.id ?? null;
-      return null;
+      return roomsByName.get(key.toLowerCase())?.id ?? null;
     };
 
     let imported = 0;

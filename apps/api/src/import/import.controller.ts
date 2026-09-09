@@ -1,11 +1,20 @@
 import { Body, Controller, Param, ParseIntPipe, Post, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { Type } from "class-transformer";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { ImportService } from "./import.service";
+
+class RoomTypeChoiceDto {
+  @IsOptional() @IsString() @MaxLength(80) name?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(30) maxAdults?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(30) maxChildren?: number;
+}
 
 class ImportDto {
   @IsString() @MaxLength(2_000_000) csv!: string;
   @IsOptional() @IsBoolean() dryRun?: boolean;
+  /** what to call the room type, when the resort has none yet */
+  @IsOptional() @ValidateNested() @Type(() => RoomTypeChoiceDto) roomType?: RoomTypeChoiceDto;
 }
 
 @Controller()
@@ -46,6 +55,6 @@ export class ImportController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Body() dto: ImportDto,
   ) {
-    return this.importer.import(req.user, resortId, dto.csv, dto.dryRun ?? false);
+    return this.importer.import(req.user, resortId, dto.csv, dto.dryRun ?? false, dto.roomType);
   }
 }
