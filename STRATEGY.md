@@ -150,7 +150,7 @@ not down — and the software should be making that obvious.
 ### D10 — Target customer, stated plainly
 
 Owner-operators of single properties, 5–25 rooms, in the domestic destinations:
-Sajek, Cox's Bazar, Sylhet, Bandarban. Bangla-first, cash-first, agent-mediated,
+Sajek, Cox's Bazar, Sylhet, Bandarban. Cash-first, agent-mediated,
 Facebook-marketed. Not chains, not international inventory, not OTA-first.
 
 ## 3. What this changes in the backlog

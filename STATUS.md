@@ -254,7 +254,7 @@ thrown error rendered a blank white page. Now `error.tsx`, `loading.tsx`,
 `not-found.tsx` and `global-error.tsx`, in the reader's language, showing the
 request id the API returns.
 
-### "Bangla-first" was 68 keys on four screens out of twenty-five
+### The words that mattered were still in English (and see the note below)
 
 The words still in English were the ones that matter most: the state of a
 booking -- rendered as the raw enum with its underscore swapped for a hyphen,
@@ -263,10 +263,13 @@ when something breaks at 11pm in Sajek. 108 keys now, and the dictionary is
 typed so a key added in English and forgotten in Bangla fails the build rather
 than falling back silently in front of a customer.
 
-**Still not "Bangla-first."** Eighteen of the twenty-seven console screens use
-no translation key at all, and the dashboard and the reports page do not import
-the dictionary. The keys that exist are good; the coverage claim was not. It is
-listed honestly in §4 now.
+**Withdrawn, 10 Sep.** The owner's direction is that **English is the default
+and Bangla is the translation**, not the other way round — which the code has
+always done (`DEFAULT_LANG = "en"`). So "eighteen screens carry no translation
+key" is not a defect: those screens are in the default language. Bangla
+coverage is a feature to extend when it is wanted, not a gap to close, and the
+"Bangla-first" framing in PLAN-v2 §56 and STRATEGY §D10 no longer describes
+this product.
 
 Five missing primitives landed with it -- Tabs, Table, DateNav, Pagination,
 Drawer -- which is why the biggest pages had grown past a thousand lines: every
@@ -840,6 +843,9 @@ whole month's payroll to any overlapping range, and skips February outright:
 `setUTCMonth(+1)` from a 31st lands on 3 March. `metrics` counts revenue by
 check-in date while `daily` spreads it over nights, and both render on one
 screen.
+
+**Not a gap:** language coverage. English is the default by decision (10 Sep);
+Bangla is a translation to extend on request.
 
 **Also standing**: eleven bare `Int` tenancy columns with no foreign key;
 `Payment` has no `resortId`, which is the index the cash-accountability feature

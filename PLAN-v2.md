@@ -53,7 +53,9 @@ per night; tab 7 = same, per guest, with OOS placeholders). Zero ambiguity.
    guest, due, revenue, BOOKED/AVAILABLE, OOS — with a day strip (balance due,
    revenue, expenses). This IS their current workflow; adoption means meeting
    it, then making it trusted. Drill into any cell → booking → actions.
-2. **Bangla-first bilingual UI (bn default, en toggle).**
+2. **Bilingual UI — English default, Bangla toggle.** *(Corrected 10 Sep 2026:
+   this originally read "Bangla-first ... bn default". The owner's direction is
+   English by default; the code has always done that.)*
    Guest names, 48 expense categories, remarks are Bangla. Staff think in
    Bangla. English-only labels would corrupt data entry quality.
 3. **Front desk = 3-tap phone flows.**
