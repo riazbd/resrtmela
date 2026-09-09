@@ -648,6 +648,18 @@ export class BookingsService {
     const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     requireResortAccess(claims, b.resortId);
+
+    /**
+     * Already there is done, not a conflict.
+     *
+     * Two ways this happens, and neither is a mistake worth an error: a clerk
+     * double-taps Check in on a slow connection, or the offline outbox replays
+     * a request whose response was lost on the way back. Answering 409 to
+     * either one tells the desk something went wrong when nothing did — and
+     * for the replay it would leave a write stuck in the outbox forever.
+     */
+    if (b.state === to) return this.detail(claims, bookingId);
+
     assertTransition(b.state, to, claims.role);
 
     await this.prisma.$transaction(async (tx) => {

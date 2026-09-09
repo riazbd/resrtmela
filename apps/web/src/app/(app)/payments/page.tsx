@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
+import { useOutbox } from "@/lib/outbox";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
@@ -96,12 +97,28 @@ function CollectModal({ row, onClose, onDone }: {
     if (row) setAmount(row.due);
   }, [row]);
 
-  // A payment is never retried on its own — the clerk pressed the button once,
-  // and a second attempt would be a second receipt in the guest's hand.
+  const { submit } = useOutbox();
+
+  /**
+   * A payment is never retried on its own — the clerk pressed the button once,
+   * and a second attempt would be a second receipt in the guest's hand. When
+   * the network is down it goes to the outbox instead, carrying a reference
+   * the server treats as its identity, so the replay cannot double-charge.
+   */
   const collect = useMutation({
-    mutationFn: () => client.bookings.pay(row!.id, { amount, method }),
-    onSuccess: () => {
-      push(`Collected ${money(amount)} for ${row!.code}`);
+    mutationFn: () =>
+      submit({
+        kind: "payment",
+        label: `${money(amount)} · ${row!.code}`,
+        path: `/bookings/${row!.id}/payments`,
+        body: { amount, method },
+      }),
+    onSuccess: ({ queued }) => {
+      push(
+        queued
+          ? `${money(amount)} saved on this device — it will sync when the connection returns`
+          : `Collected ${money(amount)} for ${row!.code}`,
+      );
       onDone();
       onClose();
     },

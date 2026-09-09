@@ -510,7 +510,12 @@ model Payment {
   receivedBy   User?         @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
   receivedAt   DateTime      @default(now())
   note         String?       @db.VarChar(255)
+  /// client-generated id for a write that may be replayed (offline front desk)
+  clientRef    String?       @db.VarChar(64)
 
+  /// the guard against a replayed payment becoming a second receipt: scoped to
+  /// the booking, so two devices cannot collide across different stays
+  @@unique([bookingId, clientRef])
   @@index([bookingId])
   @@index([receivedAt])
   @@map("payments")

@@ -8,6 +8,8 @@ class AddPaymentDto {
   @IsEnum(["CASH", "BKASH", "NAGAD", "CARD", "BANK"]) method!: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
   @IsOptional() @IsEnum(["ADVANCE", "FINAL", "REFUND"]) type?: "ADVANCE" | "FINAL" | "REFUND";
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+  /** identity of the write, so an offline replay cannot become a second receipt */
+  @IsOptional() @IsString() @MaxLength(64) clientRef?: string;
 }
 
 @Controller()

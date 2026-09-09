@@ -8,6 +8,7 @@ import {
   type BookingDetail, type BookingRow, type RoomAvail, cur,
 } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { useOutbox } from "@/lib/outbox";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import {
@@ -315,6 +316,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
+  const { submit } = useOutbox();
 
   const detailQ = useApi(keys.booking(id), () => client.bookings.get(id));
   const b: BookingDetail | null = detailQ.data ?? null;
@@ -359,7 +361,28 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   async function transition(to: string) {
     setBusy(true);
     try {
-      await api(`/bookings/${id}/transition`, { method: "POST", body: { to } });
+      /**
+       * Check-in and check-out cannot wait for a connection: a guest is
+       * standing at the counter. When the network is down these go to the
+       * outbox and the desk keeps moving; everything else on this screen still
+       * requires a connection, because it can wait.
+       */
+      const queueable = to === "CHECKED_IN" || to === "CHECKED_OUT";
+      const { queued } = queueable
+        ? await submit({
+            kind: to === "CHECKED_IN" ? "checkin" : "checkout",
+            label: `${to === "CHECKED_IN" ? "Check in" : "Check out"} ${b?.code ?? `#${id}`}`,
+            path: `/bookings/${id}/transition`,
+            body: { to },
+          })
+        : (await api(`/bookings/${id}/transition`, { method: "POST", body: { to } }), { queued: false });
+
+      if (queued) {
+        push(`Saved on this device — it will sync when the connection returns`);
+        await load();
+        onChanged();
+        return;
+      }
       push(`Booking ${to.replace(/_/g, " ").toLowerCase()}`);
       if (to === "CHECKED_OUT" && !b?.invoiceNo) {
         try {

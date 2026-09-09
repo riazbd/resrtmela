@@ -13,6 +13,8 @@ import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { OutboxProvider } from "@/lib/outbox";
+import { OutboxBar } from "@/components/outbox-bar";
 import { Select, Button, Input, useToast } from "@/components/ui";
 
 /**
@@ -173,6 +175,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        <OutboxBar />
         <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
       </div>
       </div>
@@ -183,7 +186,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <LangProvider>
-      <Shell>{children}</Shell>
+      <OutboxProvider>
+        <Shell>{children}</Shell>
+      </OutboxProvider>
     </LangProvider>
   );
 }
