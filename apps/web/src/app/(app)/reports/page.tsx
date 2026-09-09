@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, money, dmy, type PLReport } from "@/lib/api";
+import { useState } from "react";
+import { client, money, dmy, type PLReport } from "@/lib/api";
+import { useApi, keys } from "@/lib/query";
+import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
-import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useToast } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
 
 interface AgentRow {
   agentId: number; name: string; commissionRate: number;
@@ -55,66 +57,62 @@ function PLRow({ label, value, tone = "default", bold = false, muted = false }: 
 
 export default function ReportsPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
-  const { push } = useToast();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [agents, setAgents] = useState<AgentRow[] | null>(null);
-  const [sources, setSources] = useState<SourceRow[] | null>(null);
-  const [audit, setAudit] = useState<AuditRow[] | null>(null);
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [daily, setDaily] = useState<DailyRow[] | null>(null);
-  const [collectors, setCollectors] = useState<Collectors | null>(null);
-  const [fyList, setFyList] = useState<FiscalYear[]>([]);
   const [fy, setFy] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [pl, setPl] = useState<PLReport | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const qs = from && to ? `&from=${from}&to=${to}` : "";
-      const [a, s] = await Promise.all([
-        api<{ rows: AgentRow[] }>(`/resorts/${activeResort.id}/reports/agents?1=1${qs}`),
-        api<{ rows: SourceRow[] }>(`/resorts/${activeResort.id}/reports/sources?1=1${qs}`),
-      ]);
-      setAgents(a.rows);
-      setSources(s.rows);
-      setCollectors(await api<Collectors>(`/resorts/${activeResort.id}/reports/collectors?1=1${qs}`));
-      setMetrics(await api<Metrics>(`/resorts/${activeResort.id}/metrics?1=1${qs}`));
-      setDaily(
-        await api<DailyRow[]>(
-          `/resorts/${activeResort.id}/reports/daily?from=${from || isoDays(-7)}&to=${to || isoDays(1)}`,
-        ),
-      );
-      setPl(
-        await api<PLReport>(
-          `/resorts/${activeResort.id}/reports/pl?from=${from || isoDays(-90)}&to=${to || isoDays(1)}`,
-        ).catch(() => null),
-      );
-      if (isManagement) {
-        setAudit(await api<AuditRow[]>(`/resorts/${activeResort.id}/audit?take=60`));
-      }
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, from, to, isManagement, push]);
+  /**
+   * Seven reports, seven independent queries.
+   *
+   * They used to run one after another inside a single loader — agents and
+   * sources in parallel, then collectors, then metrics, then the daily grid,
+   * then the P&L, then the audit log, each waiting on the one before it. On
+   * the connection a hill resort actually has, that is seven round trips
+   * stacked end to end before anything appears. Now they run together, each
+   * arrives when it arrives, and each is cached under its own period.
+   */
+  const rid = activeResort?.id;
+  const enabled = isStaff && !!activeResort;
+  const range = { from: from || undefined, to: to || undefined };
+  const period = `${from}:${to}`;
 
-  useEffect(() => {
-    if (!activeResort) return;
-    api<{ years: FiscalYear[] }>(`/resorts/${activeResort.id}/fiscal-years`)
-      .then((r) => setFyList(r.years))
-      .catch(() => {});
-  }, [activeResort]);
+  const agentsQ = useApi(keys.reports(rid, "agents", period), () => client.reports.agents(rid!, range) as Promise<{ rows: AgentRow[] }>, { enabled, placeholderData: (prev) => prev });
+  const sourcesQ = useApi(keys.reports(rid, "sources", period), () => client.reports.sources(rid!, range) as Promise<{ rows: SourceRow[] }>, { enabled, placeholderData: (prev) => prev });
+  const collectorsQ = useApi(keys.reports(rid, "collectors", period), () => client.reports.collectors(rid!, range) as Promise<Collectors>, { enabled, placeholderData: (prev) => prev });
+  const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range) as Promise<Metrics>, { enabled, placeholderData: (prev) => prev });
+  const dailyQ = useApi(
+    keys.reports(rid, "daily", period),
+    () => client.reports.daily(rid!, from || isoDays(-7), to || isoDays(1)) as Promise<DailyRow[]>,
+    { enabled, placeholderData: (prev) => prev },
+  );
+  const plQ = useApi(
+    keys.reports(rid, "pl", period),
+    () => client.reports.pl(rid!, from || isoDays(-90), to || isoDays(1)),
+    { enabled, placeholderData: (prev) => prev },
+  );
+  const auditQ = useApi(keys.reports(rid, "audit"), () => client.reports.audit(rid!, 60) as Promise<AuditRow[]>, {
+    enabled: enabled && isManagement,
+  });
+  // the financial-year list is a property of the resort, not of the period
+  const fyQ = useApi(keys.reports(rid, "fiscal-years"), () => client.resort.fiscalYears(rid!) as Promise<{ years: FiscalYear[] }>, {
+    enabled,
+    staleTime: 3_600_000,
+  });
 
-  useEffect(() => {
-    if (isStaff) void load();
-  }, [load, isStaff]);
+  const agents: AgentRow[] | null = agentsQ.data?.rows ?? null;
+  const sources: SourceRow[] | null = sourcesQ.data?.rows ?? null;
+  const collectors: Collectors | null = collectorsQ.data ?? null;
+  const metrics: Metrics | null = metricsQ.data ?? null;
+  const daily: DailyRow[] | null = dailyQ.data ?? null;
+  const pl: PLReport | null = plQ.data ?? null;
+  const audit: AuditRow[] | null = auditQ.data ?? null;
+  const fyList: FiscalYear[] = fyQ.data?.years ?? [];
+  const loading = agentsQ.isPending || sourcesQ.isPending || metricsQ.isPending;
+  const error = agentsQ.error ?? sourcesQ.error ?? metricsQ.error ?? collectorsQ.error;
 
   if (!isStaff) return <Empty msg="Staff only" />;
-  if (loading) return <Spinner />;
+  if (error) return <ErrorState error={error} />;
+  if (loading) return <Skeleton rows={6} />;
 
   return (
     <div className="space-y-6">

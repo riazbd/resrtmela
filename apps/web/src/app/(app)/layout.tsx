@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";import type { LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
@@ -11,6 +12,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Select, Button, Input, useToast } from "@/components/ui";
 
 /**
@@ -198,33 +200,38 @@ interface NotificationRow {
 
 function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [rows, setRows] = useState<NotificationRow[]>([]);
-  const [unread, setUnread] = useState(0);
+  const qc = useQueryClient();
+
+  /**
+   * The bell polls, but only while someone is looking.
+   *
+   * The old setInterval kept firing in a tab left open overnight on a metered
+   * connection — 1,440 requests to tell a closed laptop nothing happened.
+   * refetchIntervalInBackground defaults to false, so a hidden tab stops.
+   */
+  const notifQ = useApi(
+    keys.notifications(),
+    () => api<{ unread: number; rows: NotificationRow[] }>("/notifications"),
+    { refetchInterval: 60_000, staleTime: 30_000 },
+  );
+  const rows: NotificationRow[] = notifQ.data?.rows ?? [];
+  const unread = notifQ.data?.unread ?? 0;
 
   const load = useCallback(async () => {
-    try {
-      const d = await api<{ unread: number; rows: NotificationRow[] }>("/notifications");
-      setRows(d.rows);
-      setUnread(d.unread);
-    } catch {
-      // not fatal
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-  }, [load]);
+    await qc.invalidateQueries({ queryKey: keys.notifications() });
+  }, [qc]);
 
   async function openPanel() {
     setOpen((o) => !o);
     if (!open) {
-      load();
+      void load();
       if (unread > 0) {
+        // clear the badge straight away, then let the refetch confirm it
+        qc.setQueryData(keys.notifications(), (prev: { unread: number; rows: NotificationRow[] } | undefined) =>
+          prev ? { ...prev, unread: 0 } : prev,
+        );
         await api("/notifications/read", { method: "POST", body: {} }).catch(() => {});
-        setUnread(0);
-        load();
+        void load();
       }
     }
   }

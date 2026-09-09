@@ -4,13 +4,23 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileDown } from "lucide-react";
 import {
-  api, money, dmy, iso,
+  api, client, money, dmy, iso,
   type BookingDetail, type BookingRow, type RoomAvail, cur,
 } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
+import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
+
+/** Just enough of a room type to decide whether extra persons are allowed. */
+interface RoomTypeLite {
+  id: number;
+  name: string;
+  extraPersonAllowed?: boolean;
+  extraPersonRate?: string | number;
+}
 
 const STATES = ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"];
 const SOURCES = ["DIRECT", "AGENT", "FACEBOOK", "WHATSAPP", "PHONE", "APP"];
@@ -37,7 +47,6 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const { push } = useToast();
   const [checkIn, setCheckIn] = useState(iso(new Date()));
   const [checkOut, setCheckOut] = useState(iso(new Date(Date.now() + 86400000)));
-  const [grid, setGrid] = useState<RoomAvail[]>([]);
   const [picked, setPicked] = useState<number[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -46,13 +55,11 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
   const [extraPersons, setExtraPersons] = useState(0);
-  const [roomTypes, setRoomTypes] = useState<{ id: number; name: string; extraPersonAllowed?: boolean; extraPersonRate?: string | number }[]>([]);
   const [discount, setDiscount] = useState(0);
   const [remarks, setRemarks] = useState("");
   const [advAmount, setAdvAmount] = useState(0);
   const [advMethod, setAdvMethod] = useState("CASH");
   const [busy, setBusy] = useState(false);
-  const [loadingGrid, setLoadingGrid] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -64,30 +71,23 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
     else setPicked([]);
   }, [open, preset]);
 
-  const loadGrid = useCallback(async () => {
-    if (!activeResort) return;
-    setLoadingGrid(true);
-    try {
-      const g = await api<RoomAvail[]>(
-        `/resorts/${activeResort.id}/availability?from=${checkIn}&to=${checkOut}`,
-      );
-      setGrid(g);
-    } finally {
-      setLoadingGrid(false);
-    }
-  }, [activeResort, checkIn, checkOut]);
+  // availability is asked for on every date change while the clerk is picking
+  // a room, so the same fortnight is not fetched twice
+  const gridQ = useApi(
+    keys.availability(activeResort?.id, checkIn, checkOut),
+    () => client.rooms.availability(activeResort!.id, checkIn, checkOut),
+    { enabled: open && !!activeResort && !!checkIn && !!checkOut, placeholderData: (prev) => prev },
+  );
+  const grid: RoomAvail[] = gridQ.data ?? [];
+  const loadingGrid = gridQ.isFetching;
 
-  useEffect(() => {
-    if (open) void loadGrid();
-  }, [open, loadGrid]);
-
-  // room types for the extra-person gate
-  useEffect(() => {
-    if (!open || !activeResort) return;
-    api<{ roomTypes?: typeof roomTypes }>(`/resorts/${activeResort.id}`)
-      .then((r) => setRoomTypes(r.roomTypes ?? []))
-      .catch(() => {});
-  }, [open, activeResort]);
+  // room types for the extra-person gate — a property of the resort, cached
+  const typesQ = useApi(
+    keys.resort(activeResort?.id),
+    () => api<{ roomTypes?: RoomTypeLite[] }>(`/resorts/${activeResort!.id}`),
+    { enabled: open && !!activeResort, staleTime: 3_600_000 },
+  );
+  const roomTypes: RoomTypeLite[] = typesQ.data?.roomTypes ?? [];
 
   const pickedTypes = grid
     .filter((r) => picked.includes(r.roomId))
@@ -313,22 +313,24 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
 function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
   const { isStaff, isAgent, isManagement, activeResort } = useAuth();
   const { push } = useToast();
-  const [b, setB] = useState<BookingDetail | null>(null);
   const [busy, setBusy] = useState(false);
-  const [payHours, setPayHours] = useState<number | null>(null);
+  const qc = useQueryClient();
+
+  const detailQ = useApi(keys.booking(id), () => client.bookings.get(id));
+  const b: BookingDetail | null = detailQ.data ?? null;
+
+  // the resort's own settings barely change; caching them for an hour means
+  // opening ten bookings in a row is ten requests, not twenty
+  const settingsQ = useApi(
+    keys.resort(activeResort?.id),
+    () => api<{ agentPaymentHours?: number }>(`/resorts/${activeResort!.id}`),
+    { enabled: !!activeResort, staleTime: 3_600_000 },
+  );
+  const payHours = settingsQ.data ? (settingsQ.data.agentPaymentHours ?? 48) : null;
 
   const load = useCallback(async () => {
-    setB(await api<BookingDetail>(`/bookings/${id}`));
-  }, [id]);
-
-  useEffect(() => {
-    void load();
-    if (activeResort) {
-      api<{ agentPaymentHours?: number }>(`/resorts/${activeResort.id}`)
-        .then((r) => setPayHours(r.agentPaymentHours ?? 48))
-        .catch(() => setPayHours(48));
-    }
-  }, [load, activeResort]);
+    await qc.invalidateQueries({ queryKey: keys.booking(id) });
+  }, [qc, id]);
 
   // agent payment deadline flag
   const latePayment =
@@ -596,6 +598,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
 
 function BookingsInner() {
   const { activeResort } = useAuth();
+  const qc = useQueryClient();
   const params = useSearchParams();
   const focusId = params.get("id");
   const preset = {
@@ -603,15 +606,12 @@ function BookingsInner() {
     checkIn: params.get("checkIn"),
     checkOut: params.get("checkOut"),
   };
-  const [rows, setRows] = useState<BookingRow[]>([]);
-  const [total, setTotal] = useState(0);
   const [state, setState] = useState("");
   const [source, setSource] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
   const [group, setGroup] = useState("");
-  const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [presetOn, setPresetOn] = useState(false);
   useEffect(() => {
@@ -622,27 +622,43 @@ function BookingsInner() {
   }, [params]);
   const [openId, setOpenId] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const qs = new URLSearchParams({ resortId: String(activeResort.id), take: "100" });
-      if (state) qs.set("state", state);
-      if (source) qs.set("source", source);
-      if (group) qs.set("group", group);
-      if (from) qs.set("from", from);
-      if (to) qs.set("to", to);
-      const res = await api<{ rows: BookingRow[]; total: number }>(`/bookings?${qs}`);
-      setRows(res.rows);
-      setTotal(res.total);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, state, source, from, to, group]);
+  const filters = { state, source, group, from, to };
+  const listQ = useApi(
+    keys.bookings(activeResort?.id, filters),
+    () =>
+      client.bookings.list({
+        resortId: activeResort!.id,
+        take: 100,
+        state: state || undefined,
+        source: source || undefined,
+        group: group || undefined,
+        from: from || undefined,
+        to: to || undefined,
+      }),
+    // the previous filter's rows stay on screen while the next set loads, so
+    // changing a filter does not blank the table the clerk is reading from
+    { enabled: !!activeResort, placeholderData: (prev) => prev },
+  );
+  const rows: BookingRow[] = listQ.data?.rows ?? [];
+  const total = listQ.data?.total ?? 0;
+  const loading = listQ.isPending;
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  /**
+   * Anything that changes a booking changes what the desk sees elsewhere: the
+   * day sheet's grid, today's arrivals, the outstanding dues. Naming them once
+   * here is why those screens are right when the clerk walks to them.
+   */
+  const load = useCallback(async () => {
+    const rid = activeResort?.id;
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["bookings", rid] }),
+      qc.invalidateQueries({ queryKey: ["day-sheet", rid] }),
+      qc.invalidateQueries({ queryKey: ["today", rid] }),
+      qc.invalidateQueries({ queryKey: ["dues", rid] }),
+      qc.invalidateQueries({ queryKey: ["calendar", rid] }),
+      qc.invalidateQueries({ queryKey: ["availability", rid] }),
+    ]);
+  }, [qc, activeResort]);
 
   useEffect(() => {
     if (focusId) setOpenId(Number(focusId));
@@ -686,8 +702,10 @@ function BookingsInner() {
       </div>
 
       <Card className="!p-0">
-        {loading ? (
-          <Spinner />
+        {listQ.error ? (
+          <ErrorState error={listQ.error} />
+        ) : loading ? (
+          <Skeleton rows={8} />
         ) : filtered.length === 0 ? (
           <Empty msg="No bookings match" />
         ) : (

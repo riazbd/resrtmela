@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, money, type FoodPackage, cur } from "@/lib/api";
+import { api, client, money, type FoodPackage, cur } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
+import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -45,8 +47,6 @@ export default function FbPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
   const t = useT();
   const { push } = useToast();
-  const [bills, setBills] = useState<Bill[] | null>(null);
-  const [inHouse, setInHouse] = useState<InHouse[] | null>(null);
   const [target, setTarget] = useState<{ bookingId: number | null; label: string } | null>(null);
   const [ticket, setTicket] = useState<BillItem[]>([{ name: "Lunch", qty: 1, unitPrice: 300, total: 300 }]);
   const [paidAmount, setPaidAmount] = useState(0);
@@ -57,32 +57,39 @@ export default function FbPage() {
   const [payFor, setPayFor] = useState<Bill | null>(null);
   const [payAmt, setPayAmt] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [packages, setPackages] = useState<FoodPackage[]>([]);
   const [pkgForm, setPkgForm] = useState({ name: "", price: "", items: "" });
+  const qc = useQueryClient();
 
   const canManage = isManagement;
+  const enabled = isStaff && !!activeResort;
+
+  const billsQ = useApi(
+    keys.fbBills(activeResort?.id, `${from}:${to}`),
+    () => api<Bill[]>(`/resorts/${activeResort!.id}/fb/bills?from=${from}&to=${to}`),
+    { enabled, placeholderData: (prev) => prev },
+  );
+  // the in-house list is what the kitchen charges a room against, so it is
+  // read on every ticket — and it changes only at check-in and check-out
+  const inHouseQ = useApi(keys.fbInHouse(activeResort?.id), () => api<InHouse[]>(`/resorts/${activeResort!.id}/fb/in-house`), { enabled });
+  const packagesQ = useApi(keys.fbPackages(activeResort?.id), () => client.fb.packages(activeResort!.id), { enabled, staleTime: 3_600_000 });
+
+  const bills: Bill[] = billsQ.data ?? [];
+  const inHouse: InHouse[] = inHouseQ.data ?? [];
+  const packages: FoodPackage[] = packagesQ.data ?? [];
+  const loading = billsQ.isPending;
+  const loadError = billsQ.error ?? inHouseQ.error ?? packagesQ.error;
 
   const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const [b, ih, pk] = await Promise.all([
-        api<Bill[]>(`/resorts/${activeResort.id}/fb/bills?from=${from}&to=${to}`),
-        api<InHouse[]>(`/resorts/${activeResort.id}/fb/in-house`),
-        api<FoodPackage[]>(`/resorts/${activeResort.id}/fb/packages`),
-      ]);
-      setBills(b);
-      setInHouse(ih);
-      setPackages(pk);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, from, to]);
-
-  useEffect(() => {
-    if (isStaff) void load();
-  }, [load, isStaff]);
+    const rid = activeResort?.id;
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["fb-bills", rid] }),
+      qc.invalidateQueries({ queryKey: ["fb-in-house", rid] }),
+      qc.invalidateQueries({ queryKey: ["fb-packages", rid] }),
+      // a bill charged to a stay changes that booking's due
+      qc.invalidateQueries({ queryKey: ["dues", rid] }),
+      qc.invalidateQueries({ queryKey: ["bookings", rid] }),
+    ]);
+  }, [qc, activeResort]);
 
   const total = ticket.reduce((s, i) => s + i.qty * i.unitPrice, 0);
 
@@ -172,7 +179,7 @@ export default function FbPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         {/* room tabs */}
         <Card title="In-house / walk-in" className="lg:col-span-2">
-          {inHouse === null ? (
+          {inHouseQ.isPending ? (
             <Spinner />
           ) : (
             <div className="space-y-1.5">
@@ -318,8 +325,10 @@ export default function FbPage() {
         </Card>
       )}
 
-      {loading || !bills ? (
-        <Spinner />
+      {loadError ? (
+        <ErrorState error={loadError} />
+      ) : loading ? (
+        <Skeleton rows={4} />
       ) : (
         <Card title={`Bills (${bills.length})`} className="!p-0">
           {bills.length === 0 ? (

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, money, dmy, cur } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
+import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
@@ -48,9 +50,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 export default function ActivitiesPage() {
   const { activeResort, isManagement, isStaff } = useAuth();
   const { push } = useToast();
-  const [rows, setRows] = useState<Activity[] | null>(null);
   const [selected, setSelected] = useState<Activity | null>(null);
-  const [slots, setSlots] = useState<Slot[] | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Activity> & { schedules: Schedule[] } | null>(null);
   const [genFrom, setGenFrom] = useState(iso(new Date()));
@@ -59,26 +59,38 @@ export default function ActivitiesPage() {
 
   const canManage = isManagement;
 
+  const qc = useQueryClient();
+  const catalogQ = useApi(
+    keys.activities(activeResort?.id),
+    () => api<Activity[]>(`/resorts/${activeResort!.id}/activities`),
+    { enabled: !!activeResort },
+  );
+  const rows: Activity[] | null = catalogQ.data ?? null;
+
+  // slots are per activity, so each one caches separately: clicking between
+  // two activities to compare their schedules is now two requests, not four
+  const slotRange = { from: iso(new Date()), to: iso(new Date(Date.now() + 14 * 86400000)) };
+  const slotsQ = useApi(
+    ["activity-slots", activeResort?.id, selected?.id] as const,
+    () =>
+      api<Slot[]>(
+        `/resorts/${activeResort!.id}/activities/${selected!.id}/slots?from=${slotRange.from}&to=${slotRange.to}&futureOnly=true`,
+      ),
+    { enabled: !!activeResort && !!selected },
+  );
+  const slots: Slot[] | null = slotsQ.data ?? null;
+
   const load = useCallback(async () => {
-    if (!activeResort) return;
-    setRows(null);
-    setRows(await api<Activity[]>(`/resorts/${activeResort.id}/activities`));
-  }, [activeResort]);
+    await qc.invalidateQueries({ queryKey: keys.activities(activeResort?.id) });
+    await qc.invalidateQueries({ queryKey: ["activity-slots", activeResort?.id] });
+  }, [qc, activeResort]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const loadSlots = useCallback(async (a: Activity) => {
-    setSlots(null);
-    const from = iso(new Date());
-    const to = iso(new Date(Date.now() + 14 * 86400000));
-    setSlots(await api<Slot[]>(`/resorts/${activeResort!.id}/activities/${a.id}/slots?from=${from}&to=${to}&futureOnly=true`));
-  }, [activeResort]);
-
-  useEffect(() => {
-    if (selected) void loadSlots(selected);
-  }, [selected, loadSlots]);
+  const loadSlots = useCallback(
+    async (_a: Activity) => {
+      await qc.invalidateQueries({ queryKey: ["activity-slots", activeResort?.id] });
+    },
+    [qc, activeResort],
+  );
 
   async function saveActivity() {
     if (!activeResort || !editing) return;
@@ -170,6 +182,8 @@ export default function ActivitiesPage() {
 
   if (!isStaff && !canManage) return <Empty msg="Staff only" />;
   if (rows === null) return <Spinner />;
+
+  if (catalogQ.error) return <ErrorState error={catalogQ.error} />;
 
   return (
     <div className="space-y-4">

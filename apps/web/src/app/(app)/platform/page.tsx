@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, money, dmy, type CmsRow } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
@@ -70,13 +71,8 @@ const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues",
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
-  const [ov, setOv] = useState<Overview | null>(null);
-  const [resorts, setResorts] = useState<ResortRow[] | null>(null);
-  const [agents, setAgents] = useState<AgentRow[] | null>(null);
-  const [dues, setDues] = useState<DueRow[] | null>(null);
-  const [cal, setCal] = useState<CalCell[] | null>(null);
-  const [plans, setPlans] = useState<PlanDef[] | null>(null);
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [subFor, setSubFor] = useState<ResortRow | null>(null);
   const [subPlan, setSubPlan] = useState("GROWTH");
@@ -84,25 +80,23 @@ export default function PlatformPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const loadAll = useCallback(async () => {
-    setErr("");
-    const [o, r, a, d, p] = await Promise.all([
-      api<Overview>("/platform/overview").catch(() => null),
-      api<ResortRow[]>("/platform/resorts").catch(() => null),
-      api<AgentRow[]>("/platform/agents").catch(() => null),
-      api<DueRow[]>("/platform/dues").catch(() => null),
-      api<PlanDef[]>("/platform/plans").catch(() => null),
-    ]);
-    setOv(o);
-    setResorts(r);
-    setAgents(a);
-    setDues(d);
-    setPlans(p);
-  }, []);
+  // five independent reads: the overview lands first and the tables fill in
+  // behind it, instead of every tab waiting on the slowest query
+  const ovQ = useApi(keys.platform("overview"), () => api<Overview>("/platform/overview"));
+  const resortsQ = useApi(keys.platform("resorts"), () => api<ResortRow[]>("/platform/resorts"));
+  const agentsQ = useApi(keys.platform("agents"), () => api<AgentRow[]>("/platform/agents"));
+  const duesQ = useApi(keys.platform("dues"), () => api<DueRow[]>("/platform/dues"));
+  const plansQ = useApi(keys.platform("plans"), () => api<PlanDef[]>("/platform/plans"));
 
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+  const ov = ovQ.data ?? null;
+  const resorts = resortsQ.data ?? null;
+  const agents = agentsQ.data ?? null;
+  const dues = duesQ.data ?? null;
+  const plans = plansQ.data ?? null;
+
+  const loadAll = useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: ["platform"] });
+  }, [qc]);
 
   async function savePlan(name: string, monthlyFee: number, maxRooms: number) {
     setBusy(true);
@@ -118,16 +112,17 @@ export default function PlatformPage() {
     }
   }
 
-  const loadCal = useCallback(async () => {
-    const [y, m] = month.split("-").map(Number);
-    const from = `${month}-01`;
-    const to = new Date(y!, m!, 0).toISOString().slice(0, 10);
-    setCal(await api<CalCell[]>(`/platform/sub-calendar?from=${from}&to=${to}`).catch(() => []));
-  }, [month]);
-
-  useEffect(() => {
-    if (tab === "Calendar") loadCal();
-  }, [tab, loadCal]);
+  const [calYear, calMonth] = month.split("-").map(Number);
+  const calQ = useApi(
+    keys.platform("sub-calendar", month),
+    () =>
+      api<CalCell[]>(
+        `/platform/sub-calendar?from=${month}-01&to=${new Date(calYear!, calMonth!, 0).toISOString().slice(0, 10)}`,
+      ),
+    // only fetched once the tab is actually open
+    { enabled: tab === "Calendar" },
+  );
+  const cal = calQ.data ?? null;
 
   async function act(fn: () => Promise<unknown>, reload = true) {
     setBusy(true);

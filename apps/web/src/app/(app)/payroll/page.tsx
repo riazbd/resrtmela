@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, money, type Employee, type PayrollSheet, cur } from "@/lib/api";
+import { useCallback, useMemo, useState } from "react";
+import { api, client, money, type Employee, cur } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
+import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Check, Undo2, Pencil, Plus } from "lucide-react";
@@ -20,8 +22,7 @@ export default function PayrollPage() {
   const { activeResort, isStaff, can } = useAuth();
   const { push } = useToast();
   const rid = activeResort?.id;
-  const [employees, setEmployees] = useState<Employee[] | null>(null);
-  const [sheet, setSheet] = useState<PayrollSheet | null>(null);
+  const qc = useQueryClient();
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -32,14 +33,25 @@ export default function PayrollPage() {
   const canManage = isStaff && can("payroll.manage");
   const months = useMemo(() => monthOptions(), []);
 
+  const employeesQ = useApi(keys.employees(rid), () => client.payroll.employees(rid!), { enabled: !!rid });
+  // paging back through months keeps each month's sheet in the cache, so the
+  // usual "check last month, come back" round trip is one request, not two
+  const sheetQ = useApi(keys.payroll(rid, month), () => client.payroll.sheet(rid!, month), {
+    enabled: !!rid,
+    placeholderData: (prev) => prev,
+  });
+  const employees = employeesQ.data ?? [];
+  const sheet = sheetQ.data ?? null;
+
   const load = useCallback(() => {
-    if (!rid) return;
-    api<Employee[]>(`/resorts/${rid}/payroll/employees`).then(setEmployees).catch(() => setEmployees([]));
-    api<PayrollSheet>(`/resorts/${rid}/payroll?month=${month}`).then(setSheet).catch(() => setSheet(null));
-  }, [rid, month]);
-  useEffect(() => load(), [load]);
+    void qc.invalidateQueries({ queryKey: ["employees", rid] });
+    void qc.invalidateQueries({ queryKey: ["payroll", rid] });
+    // payroll is an expense line in the P&L
+    void qc.invalidateQueries({ queryKey: ["reports", rid] });
+  }, [qc, rid]);
 
   if (!isStaff) return <Empty msg="Staff only" />;
+  if (employeesQ.error ?? sheetQ.error) return <ErrorState error={(employeesQ.error ?? sheetQ.error)!} />;
 
   async function saveEmployee() {
     if (!rid) return;

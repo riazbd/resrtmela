@@ -1,17 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, money, dmy, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
+import { api, client, money, dmy, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
+import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
+import { ErrorState, Skeleton } from "@/components/error-state";
 
 export default function RoomsPage() {
   const { activeResort, isManagement } = useAuth();
   const { push } = useToast();
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [types, setTypes] = useState<RoomType[]>([]);
-  const [plans, setPlans] = useState<RatePlan[]>([]);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
   const [addRoom, setAddRoom] = useState(false);
   const [addType, setAddType] = useState(false);
   const [editType, setEditType] = useState<RoomType | null>(null);
@@ -19,26 +18,33 @@ export default function RoomsPage() {
 
   const canEdit = isManagement;
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const [r, t, p] = await Promise.all([
-        api<Room[]>(`/resorts/${activeResort.id}/rooms`),
-        api<RoomType[]>(`/resorts/${activeResort.id}/room-types`),
-        api<RatePlan[]>(`/resorts/${activeResort.id}/rate-plans`),
-      ]);
-      setRooms(r);
-      setTypes(t);
-      setPlans(p);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort]);
+  const enabled = !!activeResort;
+  const roomsQ = useApi(keys.rooms(activeResort?.id), () => client.rooms.list(activeResort!.id), { enabled });
+  const typesQ = useApi(keys.roomTypes(activeResort?.id), () => client.rooms.types(activeResort!.id), { enabled });
+  const plansQ = useApi(keys.ratePlans(activeResort?.id), () => client.rooms.ratePlans(activeResort!.id), { enabled });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rooms = roomsQ.data ?? [];
+  const types = typesQ.data ?? [];
+  const plans = plansQ.data ?? [];
+  const loading = roomsQ.isPending || typesQ.isPending || plansQ.isPending;
+  const error = roomsQ.error ?? typesQ.error ?? plansQ.error;
+
+  /**
+   * Inventory is read by the calendar, the day sheet and the booking form, so
+   * a change here has to reach all of them. Invalidating by key does that;
+   * re-fetching into local state would have left the other screens stale.
+   */
+  const load = useCallback(async () => {
+    const rid = activeResort?.id;
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: keys.rooms(rid) }),
+      qc.invalidateQueries({ queryKey: keys.roomTypes(rid) }),
+      qc.invalidateQueries({ queryKey: keys.ratePlans(rid) }),
+      qc.invalidateQueries({ queryKey: ["availability", rid] }),
+      qc.invalidateQueries({ queryKey: ["calendar", rid] }),
+      qc.invalidateQueries({ queryKey: ["day-sheet", rid] }),
+    ]);
+  }, [qc, activeResort]);
 
   async function toggleRoom(room: Room) {
     try {
@@ -65,7 +71,8 @@ export default function RoomsPage() {
     }
   }
 
-  if (loading) return <Spinner />;
+  if (error) return <ErrorState error={error} />;
+  if (loading) return <Skeleton rows={6} />;
 
   return (
     <div className="space-y-6">

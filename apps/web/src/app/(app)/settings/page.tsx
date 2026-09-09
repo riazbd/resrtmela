@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, download, money, type PermRole } from "@/lib/api";
+import { useApi, useQueryClient } from "@/lib/query";
+import { ErrorState } from "@/components/error-state";
 import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
@@ -105,17 +107,27 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const rid = activeResort?.id;
 
-  const loadInfo = useCallback(async () => {
-    if (!rid) return;
-    api<ResortDetail>(`/resorts/${rid}`).then(setD);
-    api<Usage>(`/tenants/${activeResort!.tenantId}/usage`).then(setUsage).catch(() => {});
-  }, [rid, activeResort]);
+  const qc = useQueryClient();
+  const infoQ = useApi(["resort", rid], () => api<ResortDetail>(`/resorts/${rid}`), { enabled: !!rid });
+  const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => api<Usage>(`/tenants/${activeResort!.tenantId}/usage`), {
+    enabled: !!activeResort,
+  });
 
+  const loadInfo = useCallback(async () => {
+    await qc.invalidateQueries({ queryKey: ["resort", rid] });
+    await qc.invalidateQueries({ queryKey: ["tenant-usage", activeResort?.tenantId] });
+  }, [qc, rid, activeResort]);
+
+  // the form edits a local copy; the query is the source it starts from
   useEffect(() => {
-    loadInfo();
-  }, [loadInfo]);
+    if (infoQ.data) setD(infoQ.data);
+  }, [infoQ.data]);
+  useEffect(() => {
+    if (usageQ.data) setUsage(usageQ.data);
+  }, [usageQ.data]);
 
   if (!isManagement) return <Empty msg="Managers & admins only" />;
+  if (infoQ.error) return <ErrorState error={infoQ.error} />;
   if (!d) return <Empty msg="Loading…" />;
 
   async function save() {
@@ -459,6 +471,7 @@ function UsersTab({ rid }: { rid: number }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
+    // the roles list is shared with the Permissions tab and cached under one key
     api<UserRow[]>(`/resorts/${rid}/users`).then(setRows).catch(() => setRows([]));
     api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
   }, [rid]);

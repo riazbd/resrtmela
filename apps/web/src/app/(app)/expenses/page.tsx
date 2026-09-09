@@ -1,19 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, money, cur } from "@/lib/api";
+import { useState } from "react";
+import { client, money, cur } from "@/lib/api";
+import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
-
-interface ExpenseRow {
-  id: number;
-  date: string;
-  category: string;
-  details: string | null;
-  amount: number;
-  scope: string;
-}
+import { ErrorState, Skeleton } from "@/components/error-state";
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -25,51 +18,42 @@ export default function ExpensesPage() {
   const t = useT();
   const { push } = useToast();
   const [date, setDate] = useState(iso(new Date()));
-  const [rows, setRows] = useState<ExpenseRow[] | null>(null);
-  const [dayTotal, setDayTotal] = useState(0);
-  const [entryCount, setEntryCount] = useState(0);
-  const [categories, setCategories] = useState<string[]>([]);
   const [category, setCategory] = useState("");
   const [details, setDetails] = useState("");
   const [amount, setAmount] = useState<number | "">("");
   const [scope, setScope] = useState("RESORT");
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const qc = useQueryClient();
 
   const canManage = isManagement;
+  const to = iso(new Date(new Date(date).getTime() + 86400000));
 
-  const load = useCallback(async () => {
-    if (!activeResort) return;
-    setLoading(true);
-    try {
-      const data = await api<{
-        rows: ExpenseRow[];
-        total: number;
-        truncated: boolean;
-        summary: { amount: number };
-      }>(
-        `/resorts/${activeResort.id}/expenses?from=${date}&to=${iso(new Date(new Date(date).getTime() + 86400000))}`,
-      );
-      setRows(data.rows);
-      // the day total is aggregated server-side over every matching row, so a
-      // day with more entries than one page still shows the true figure
-      setDayTotal(data.summary.amount);
-      setEntryCount(data.total);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeResort, date]);
+  const listQ = useApi(
+    keys.expenses(activeResort?.id, date),
+    () => client.expenses.list(activeResort!.id, { from: date, to }),
+    { enabled: !!activeResort, placeholderData: (prev) => prev },
+  );
+  // the category list barely changes; an hour of staleness saves a request on
+  // every day the user pages through
+  const categoriesQ = useApi(
+    keys.expenseCategories(activeResort?.id),
+    () => client.expenses.categories(activeResort!.id) as unknown as Promise<{ category: string }[]>,
+    { enabled: !!activeResort, staleTime: 3_600_000 },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rows = listQ.data?.rows ?? null;
+  // the day total is aggregated server-side over every matching row, so a day
+  // with more entries than one page still shows the true figure
+  const dayTotal = listQ.data?.summary.amount ?? 0;
+  const entryCount = listQ.data?.total ?? 0;
+  const categories = (categoriesQ.data ?? []).map((x) => x.category);
+  const loading = listQ.isPending;
 
-  useEffect(() => {
-    if (!activeResort) return;
-    api<{ category: string }[]>(`/resorts/${activeResort.id}/expenses/categories`)
-      .then((r) => setCategories(r.map((x) => x.category)))
-      .catch(() => {});
-  }, [activeResort]);
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["expenses", activeResort?.id] });
+    void qc.invalidateQueries({ queryKey: ["expense-categories", activeResort?.id] });
+    // the day sheet's expense figure comes from the same entries
+    void qc.invalidateQueries({ queryKey: ["day-sheet", activeResort?.id] });
+  };
 
   function shift(days: number) {
     const d = new Date(date + "T00:00:00Z");
@@ -77,34 +61,40 @@ export default function ExpensesPage() {
     setDate(iso(d));
   }
 
-  async function add() {
-    if (!activeResort || !category || !amount) return;
-    setBusy(true);
-    try {
-      await api(`/resorts/${activeResort.id}/expenses`, {
-        method: "POST",
-        body: { date, category, details: details || undefined, amount: Number(amount), scope },
-      });
+  const addExpense = useMutation({
+    mutationFn: () =>
+      client.expenses.create(activeResort!.id, {
+        date,
+        category,
+        details: details || undefined,
+        amount: Number(amount),
+        scope,
+      }),
+    onSuccess: () => {
       push(`${money(Number(amount))} — ${category}`);
       setCategory("");
       setDetails("");
       setAmount("");
-      await load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    } finally {
-      setBusy(false);
-    }
+      refresh();
+    },
+    onError: (ex: Error) => push(ex.message, "err"),
+  });
+  const busy = addExpense.isPending;
+
+  function add() {
+    if (!activeResort || !category || !amount) return;
+    addExpense.mutate();
   }
 
-  async function remove(id: number) {
+  const removeExpense = useMutation({
+    mutationFn: (id: number) => client.expenses.remove(id),
+    onSuccess: refresh,
+    onError: (ex: Error) => push(ex.message, "err"),
+  });
+
+  function remove(id: number) {
     if (!window.confirm("Delete this entry?")) return;
-    try {
-      await api(`/expenses/${id}`, { method: "DELETE" });
-      await load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
+    removeExpense.mutate(id);
   }
 
 
@@ -173,8 +163,10 @@ export default function ExpensesPage() {
 
       {/* register */}
       <Card title={`${date} — register`} className="!p-0">
-        {loading || rows === null ? (
-          <Spinner />
+        {listQ.error ? (
+          <ErrorState error={listQ.error} />
+        ) : loading || rows === null ? (
+          <Skeleton rows={4} />
         ) : rows.length === 0 ? (
           <Empty msg="No entries for this day" />
         ) : (
