@@ -7,7 +7,7 @@ import { round2 } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { bookingTotals } from "../common/money";
-import { gatewayFromEnv, type PaymentGateway } from "./gateway";
+import { type PaymentGateway, PAYMENT_GATEWAY } from "./gateway";
 
 const ONLINE_METHODS = ["BKASH", "NAGAD"] as const;
 type OnlineMethod = (typeof ONLINE_METHODS)[number];
@@ -23,7 +23,7 @@ export class IntentsService {
      * switching from the mock to SSLCommerz is configuration rather than a
      * change anywhere in the booking code.
      */
-    private readonly gateway: PaymentGateway = gatewayFromEnv(),
+    @Inject(PAYMENT_GATEWAY) private readonly gateway: PaymentGateway,
   ) {}
 
   /**

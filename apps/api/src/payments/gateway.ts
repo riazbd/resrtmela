@@ -189,6 +189,18 @@ export class SslCommerzGateway implements PaymentGateway {
  * account should still take bookings, and a resort should still be able to
  * walk through the payment flow before the account exists.
  */
+/**
+ * Nest injection token for the gateway.
+ *
+ * `PaymentGateway` is an interface, so it does not exist at runtime and Nest
+ * has nothing to resolve a constructor parameter typed with it — it injects
+ * `undefined` and the whole application fails to boot. A default parameter
+ * value does not save it: Nest resolves every parameter itself and never falls
+ * back to the default. The tests build this service by hand, so nothing caught
+ * it until the API booted on a real server.
+ */
+export const PAYMENT_GATEWAY = "PAYMENT_GATEWAY";
+
 export function gatewayFromEnv(env: NodeJS.ProcessEnv = process.env): PaymentGateway {
   const ssl = new SslCommerzGateway(
     env.SSLCOMMERZ_STORE_ID ?? "",
