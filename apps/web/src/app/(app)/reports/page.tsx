@@ -6,6 +6,7 @@ import { useApi, keys } from "@/lib/query";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
+import { Tabs } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 interface AgentRow {
@@ -54,8 +55,24 @@ function PLRow({ label, value, tone = "default", bold = false, muted = false }: 
   );
 }
 
+/**
+ * Seven reports, one scroll.
+ *
+ * They were stacked down a single page: the P&L summary, the statement, agents,
+ * sources, the daily grid and the audit trail, one after another, so reading
+ * the third meant scrolling past the first two every time. They are not a
+ * sequence — nobody reads a booking-source table on the way to a P&L — so a
+ * tab per report is what the page always wanted.
+ *
+ * The period picker stays above the tabs, because it is the one control that
+ * belongs to all of them.
+ */
+const REPORT_TABS = ["Summary", "Profit & loss", "Agents", "Sources", "Daily", "Audit trail"] as const;
+type ReportTab = (typeof REPORT_TABS)[number];
+
 export default function ReportsPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
+  const [tab, setTab] = useState<ReportTab>("Summary");
   // the resort's day, not the browser's: after 18:00 in Dhaka these differ
   const today = todayIn(activeResort?.timezone);
   const [from, setFrom] = useState("");
@@ -81,18 +98,20 @@ export default function ReportsPage() {
   const sourcesQ = useApi(keys.reports(rid, "sources", period), () => client.reports.sources(rid!, range) as Promise<{ rows: SourceRow[] }>, { enabled, placeholderData: (prev) => prev });
   const collectorsQ = useApi(keys.reports(rid, "collectors", period), () => client.reports.collectors(rid!, range) as Promise<Collectors>, { enabled, placeholderData: (prev) => prev });
   const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range) as Promise<Metrics>, { enabled, placeholderData: (prev) => prev });
+  // the three heavy reads wait until their tab is open; the four light ones
+  // stay eager because the page's own loading and error states read them
   const dailyQ = useApi(
     keys.reports(rid, "daily", period),
     () => client.reports.daily(rid!, from || addDaysIso(today, -7), to || addDaysIso(today, 1)) as Promise<DailyRow[]>,
-    { enabled, placeholderData: (prev) => prev },
+    { enabled: enabled && tab === "Daily", placeholderData: (prev) => prev },
   );
   const plQ = useApi(
     keys.reports(rid, "pl", period),
     () => client.reports.pl(rid!, from || addDaysIso(today, -90), to || addDaysIso(today, 1)),
-    { enabled, placeholderData: (prev) => prev },
+    { enabled: enabled && tab === "Profit & loss", placeholderData: (prev) => prev },
   );
   const auditQ = useApi(keys.reports(rid, "audit"), () => client.reports.audit(rid!, 60) as Promise<AuditRow[]>, {
-    enabled: enabled && isManagement,
+    enabled: enabled && isManagement && tab === "Audit trail",
   });
   // the financial-year list is a property of the resort, not of the period
   const fyQ = useApi(keys.reports(rid, "fiscal-years"), () => client.resort.fiscalYears(rid!) as Promise<{ years: FiscalYear[] }>, {
@@ -108,6 +127,7 @@ export default function ReportsPage() {
   const pl: PLReport | null = plQ.data ?? null;
   const audit: AuditRow[] | null = auditQ.data ?? null;
   const fyList: FiscalYear[] = fyQ.data?.years ?? [];
+  const visibleTabs = REPORT_TABS.filter((t) => t !== "Audit trail" || isManagement);
   const loading = agentsQ.isPending || sourcesQ.isPending || metricsQ.isPending;
   const error = agentsQ.error ?? sourcesQ.error ?? metricsQ.error ?? collectorsQ.error;
 
@@ -150,7 +170,9 @@ export default function ReportsPage() {
         </div>
       </Card>
 
-      {collectors && collectors.rows.length > 0 && (
+      <Tabs tabs={visibleTabs} value={tab} onChange={setTab} />
+
+      {tab === "Summary" && collectors && collectors.rows.length > 0 && (
         <Card title="Advance collectors (who received cash)">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {collectors.rows.map((r) => (
@@ -167,7 +189,7 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      {metrics && (
+      {tab === "Summary" && metrics && (
         <Card title="P&L summary (management metrics)">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MiniBox label="Resort revenue" value={money(metrics.resortRevenue)} />
@@ -181,7 +203,8 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      {pl && (
+      {tab === "Profit & loss" && !pl && <Card title="Profit & Loss statement"><Empty msg="Loading…" /></Card>}
+      {tab === "Profit & loss" && pl && (
         <Card title={`Profit & Loss statement (${pl.from} → ${pl.to})`}>
           <div className="grid gap-4 lg:grid-cols-3">
             {/* resort column */}
@@ -228,6 +251,7 @@ export default function ReportsPage() {
         </Card>
       )}
 
+      {tab === "Agents" && (
       <Card title="Agent performance & commission" className="!p-0">
         {!agents || agents.length === 0 ? (
           <Empty msg="No agent bookings in this period" />
@@ -253,7 +277,9 @@ export default function ReportsPage() {
           </div>
         )}
       </Card>
+      )}
 
+      {tab === "Sources" && (
       <Card title="Booking sources" className="!p-0">
         {!sources || sources.length === 0 ? (
           <Empty msg="No bookings in this period" />
@@ -277,8 +303,12 @@ export default function ReportsPage() {
           </div>
         )}
       </Card>
+      )}
 
-      {daily && daily.length > 0 && (
+      {tab === "Daily" && (!daily || daily.length === 0) && (
+        <Card title="Daily revenue"><Empty msg="Nothing in this period" /></Card>
+      )}
+      {tab === "Daily" && daily && daily.length > 0 && (
         <Card title="Daily revenue" className="!p-0">
           <div className="max-h-64 overflow-auto">
             <table className="w-full min-w-[520px]">
@@ -301,7 +331,7 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      {isManagement && (
+      {tab === "Audit trail" && isManagement && (
         <Card title="Audit trail" className="!p-0">
           {!audit || audit.length === 0 ? (
             <Empty msg="No audit entries yet" />
