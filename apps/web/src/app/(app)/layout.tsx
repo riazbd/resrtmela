@@ -26,6 +26,8 @@ import { Select, Button, Input, useToast } from "@/components/ui";
 const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
+  { href: "/agent/wallet", label: "Wallet", icon: Wallet, roles: ["AGENT"], perm: "agent.wallet.view" },
+  { href: "/agent/team", label: "My team", icon: Users, roles: ["AGENT"], perm: "agent.staff.manage" },
   { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send" },
   { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"], perm: "bookings.view" },
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"], perm: "bookings.view" },
@@ -75,6 +77,11 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   const allowed = (n: { roles: string[]; perm?: string }) => {
     if (n.roles.includes("SUPER")) return role === "SUPER_ADMIN";
+    // agent-only links are gated by the agency's own permission set, so a
+    // junior who may only book does not see the wallet or the team screen
+    if (n.roles.length === 1 && n.roles[0] === "AGENT") {
+      return role === "AGENT" && (n.perm ? can(n.perm) : true);
+    }
     if (n.roles.includes("AGENT") && !n.perm) return role === "AGENT";
     // a link the server would refuse should not be on screen
     return n.perm ? can(n.perm) : true;

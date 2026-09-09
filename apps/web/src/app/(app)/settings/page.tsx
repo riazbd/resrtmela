@@ -80,6 +80,8 @@ interface DiscountRow {
   scope: string;
   roomTypeId: number | null;
   roomType?: { id: number; name: string } | null;
+  roomId: number | null;
+  room?: { id: number; name: string } | null;
   name: string;
   kind: string;
   value: string;
@@ -979,12 +981,14 @@ function DiscountsTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<DiscountRow[] | null>(null);
   const [roomTypes, setRoomTypes] = useState<{ id: number; name: string }[]>([]);
-  const [form, setForm] = useState({ scope: "RESORT", roomTypeId: "", name: "", kind: "PERCENT", value: "5", validFrom: "", validTo: "" });
+  const [rooms, setRooms] = useState<{ id: number; name: string }[]>([]);
+  const [form, setForm] = useState({ scope: "RESORT", roomTypeId: "", roomId: "", name: "", kind: "PERCENT", value: "5", validFrom: "", validTo: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     api<DiscountRow[]>(`/resorts/${rid}/discounts`).then(setRows).catch(() => setRows([]));
-    api<{ id: number; name: string }[]>(`/resorts/${rid}/rooms`, { method: "GET" }).catch(() => {});
+    // the room list is what "one particular room" is chosen from
+    api<{ id: number; name: string }[]>(`/resorts/${rid}/rooms`).then(setRooms).catch(() => setRooms([]));
   }, [rid]);
   useEffect(() => {
     load();
@@ -998,7 +1002,8 @@ function DiscountsTab({ rid }: { rid: number }) {
         method: "POST",
         body: {
           scope: form.scope,
-          roomTypeId: form.scope === "ROOM" ? Number(form.roomTypeId) : undefined,
+          roomTypeId: form.scope === "ROOM_TYPE" ? Number(form.roomTypeId) : undefined,
+          roomId: form.scope === "ROOM" ? Number(form.roomId) : undefined,
           name: form.name,
           kind: form.kind,
           value: Number(form.value),
@@ -1007,7 +1012,7 @@ function DiscountsTab({ rid }: { rid: number }) {
         },
       });
       push("Discount offer created");
-      setForm({ scope: form.scope, roomTypeId: "", name: "", kind: form.kind, value: "5", validFrom: "", validTo: "" });
+      setForm({ scope: form.scope, roomTypeId: "", roomId: "", name: "", kind: form.kind, value: "5", validFrom: "", validTo: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -1037,7 +1042,13 @@ function DiscountsTab({ rid }: { rid: number }) {
               {(rows ?? []).map((o) => (
                 <tr key={o.id} className="border-t border-slate-100">
                   <Td className="font-semibold text-slate-800">{o.name}</Td>
-                  <Td className="text-xs">{o.scope === "RESORT" ? "All rooms" : (o.roomType?.name ?? `room type ${o.roomTypeId}`)}</Td>
+                  <Td className="text-xs">
+                    {o.scope === "RESORT"
+                      ? "All rooms"
+                      : o.scope === "ROOM"
+                        ? `Room ${o.room?.name ?? o.roomId}`
+                        : (o.roomType?.name ?? `room type ${o.roomTypeId}`)}
+                  </Td>
                   <Td className="font-bold text-brand-700">{o.kind === "PERCENT" ? `${Number(o.value)}%` : money(o.value)}</Td>
                   <Td className="text-xs text-slate-500">{o.validFrom ? new Date(o.validFrom).toLocaleDateString("en-GB") : "always"} → {o.validTo ? new Date(o.validTo).toLocaleDateString("en-GB") : "always"}</Td>
                   <Td>
@@ -1061,15 +1072,26 @@ function DiscountsTab({ rid }: { rid: number }) {
           <Field label="Applies to">
             <Select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
               <option value="RESORT">Whole resort (all rooms)</option>
-              <option value="ROOM">One room type</option>
+              <option value="ROOM_TYPE">One room type</option>
+              <option value="ROOM">One particular room</option>
             </Select>
           </Field>
-          {form.scope === "ROOM" && (
+          {form.scope === "ROOM_TYPE" && (
             <Field label="Room type">
               <Select value={form.roomTypeId} onChange={(e) => setForm({ ...form, roomTypeId: e.target.value })}>
                 <option value="">Choose…</option>
                 {roomTypes.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {form.scope === "ROOM" && (
+            <Field label="Room" hint="only this room — its identical neighbour keeps its own price">
+              <Select value={form.roomId} onChange={(e) => setForm({ ...form, roomId: e.target.value })}>
+                <option value="">Choose…</option>
+                {rooms.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </Select>
             </Field>

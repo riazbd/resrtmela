@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { JwtClaims, Role } from "@rh/shared";
+import { JwtClaims, Role, ROLE } from "@rh/shared";
+import { agentPricing } from "../common/money";
 import { requireResortAccess } from "../common/rbac";
 import { dateOnly, eachNight } from "../common/dates";
 import { LIVE_STATES } from "./booking-state";
@@ -11,6 +12,8 @@ export interface RoomAvailability {
   roomName: string;
   roomTypeId: number;
   baseRate: number;
+  /** what this agent would owe the resort per night; absent for resort staff */
+  agentRate?: number;
   status: string;
   busyNights: string[]; // ISO yyyy-mm-dd within requested range
 }
@@ -58,14 +61,36 @@ export class AvailabilityService {
       busyByRoom.set(n.roomId, list);
     }
 
-    return rooms.map((r) => ({
-      roomId: r.id,
-      roomName: r.name,
-      roomTypeId: r.roomTypeId,
-      baseRate: Number(r.baseRate),
-      status: r.status,
-      busyNights: busyByRoom.get(r.id) ?? [],
-    }));
+    /**
+     * An agent picking a room needs their own price beside the published one,
+     * at the moment they are quoting a guest — not in a commission report at
+     * the end of the month.
+     */
+    const terms =
+      claims.role === ROLE.AGENT
+        ? await this.prisma.userResort.findUnique({
+            where: { userId_resortId: { userId: claims.userId, resortId } },
+            select: { commissionKind: true, commissionRate: true },
+          })
+        : null;
+    const showRates =
+      terms == null
+        ? true
+        : ((await this.prisma.resort.findUnique({ where: { id: resortId }, select: { showRatesToAgents: true } }))
+            ?.showRatesToAgents ?? false);
+
+    return rooms.map((r) => {
+      const baseRate = Number(r.baseRate);
+      return {
+        roomId: r.id,
+        roomName: r.name,
+        roomTypeId: r.roomTypeId,
+        baseRate,
+        ...(terms && showRates ? { agentRate: agentPricing(terms, baseRate).agentPrice } : {}),
+        status: r.status,
+        busyNights: busyByRoom.get(r.id) ?? [],
+      };
+    });
   }
 
   /** Conflicting live nights for a room inside a range — used for 409 payloads. */

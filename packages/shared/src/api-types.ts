@@ -88,6 +88,8 @@ export interface BookingRow {
 
 export interface BookingDetail extends BookingRow {
   cancelState: string;
+  /** present only for the agent who owns this booking, and only when the resort shows rates */
+  agentPricing?: AgentPricing | null;
   invoiceNo?: string;
   remarks: string | null;
   createdBy: { id: number; name: string } | null;
@@ -162,8 +164,22 @@ export interface RoomAvail {
   roomName: string;
   roomTypeId: number;
   baseRate: number;
+  /** what this agent would owe the resort per night; absent for resort staff */
+  agentRate?: number;
   status: string;
   busyNights: string[];
+}
+
+/**
+ * The two numbers an agent needs while quoting a guest: what the guest pays,
+ * and what the agent will owe the resort once commission is taken off.
+ */
+export interface AgentPricing {
+  actual: number;
+  commissionKind: "PERCENT" | "FLAT";
+  commissionRate: number;
+  commission: number;
+  agentPrice: number;
 }
 
 // ───────────────────────────── guests ─────────────────────────────

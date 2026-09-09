@@ -22,6 +22,7 @@ import { PlatformService } from "../../src/platform/platform.service";
 import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
+import { AgentService } from "../../src/agent/agent.service";
 import { FbService } from "../../src/fb/fb.service";
 import { IntentsService } from "../../src/payments/intents.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
@@ -116,4 +117,8 @@ export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGatew
     makeNotificationsService(prisma),
     gateway ?? new MockGateway(),
   );
+}
+
+export function makeAgentService(prisma: PrismaService): AgentService {
+  return new AgentService(prisma);
 }

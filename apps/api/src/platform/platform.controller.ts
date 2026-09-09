@@ -91,8 +91,10 @@ class WalletPayDto {
 }
 
 class DiscountDto {
-  @IsIn(["RESORT", "ROOM"]) scope!: string;
+  @IsIn(["RESORT", "ROOM_TYPE", "ROOM"]) scope!: string;
   @IsOptional() @IsInt() roomTypeId?: number;
+  /** one particular room, for ROOM scope */
+  @IsOptional() @IsInt() roomId?: number;
   @IsString() @MaxLength(120) name!: string;
   @IsIn(["PERCENT", "FLAT"]) kind!: string;
   @IsNumber() value!: number;

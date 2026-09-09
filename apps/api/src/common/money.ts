@@ -119,3 +119,42 @@ export function bookingTotals(input: BookingMoneyInput): BookingTotals {
 export function perNightRevenue(roomRent: number, discount: number, nights: number): number {
   return round2((roomRent - discount) / (nights || 1));
 }
+
+// ───────────────────────────── agent commission ─────────────────────────────
+
+export type CommissionKind = "PERCENT" | "FLAT";
+
+export interface AgentTerms {
+  commissionKind: CommissionKind | string;
+  commissionRate: Money | null | undefined;
+}
+
+/**
+ * What an agent earns on some rent.
+ *
+ * PERCENT is a share of the rent; FLAT is a fixed fee per booking. That rule
+ * lived in three places — the owner's agent report, the agent's own report,
+ * and now the booking screen — and three copies of a money rule is exactly
+ * how an agent on flat terms came to see ৳75,000 where the owner's report
+ * said ৳1,000. One copy.
+ */
+export function agentCommission(terms: AgentTerms, rent: Money, bookings = 1): number {
+  const rate = num(terms.commissionRate ?? 0);
+  const amount = terms.commissionKind === "FLAT" ? rate * bookings : (num(rent) * rate) / 100;
+  // never more than the rent it is taken from: a flat fee larger than a cheap
+  // booking would otherwise hand the resort a negative night
+  return round2(Math.min(Math.max(0, amount), Math.max(0, num(rent))));
+}
+
+/** The two numbers an agent needs on screen: what the guest pays, what they owe. */
+export function agentPricing(terms: AgentTerms, rent: Money, bookings = 1) {
+  const actual = round2(num(rent));
+  const commission = agentCommission(terms, actual, bookings);
+  return {
+    actual,
+    commissionKind: (terms.commissionKind === "FLAT" ? "FLAT" : "PERCENT") as CommissionKind,
+    commissionRate: num(terms.commissionRate ?? 0),
+    commission,
+    agentPrice: round2(actual - commission),
+  };
+}

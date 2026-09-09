@@ -667,7 +667,10 @@ export class PlatformService {
     requireResortAccess(claims, resortId);
     return this.prisma.discountOffer.findMany({
       where: { resortId },
-      include: { roomType: { select: { id: true, name: true } } },
+      include: {
+        roomType: { select: { id: true, name: true } },
+        room: { select: { id: true, name: true } },
+      },
       orderBy: { id: "desc" },
     });
   }
@@ -675,17 +678,28 @@ export class PlatformService {
   async createDiscount(
     claims: JwtClaims,
     resortId: number,
-    input: { scope: "RESORT" | "ROOM"; roomTypeId?: number; name: string; kind: "PERCENT" | "FLAT"; value: number; validFrom?: string; validTo?: string },
+    input: { scope: "RESORT" | "ROOM_TYPE" | "ROOM"; roomTypeId?: number; roomId?: number; name: string; kind: "PERCENT" | "FLAT"; value: number; validFrom?: string; validTo?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "discounts.manage");
-    if (input.scope === "ROOM" && !input.roomTypeId) throw badRequest("roomTypeId required for ROOM scope");
+    if (input.scope === "ROOM_TYPE" && !input.roomTypeId) throw badRequest("Pick a room type for this offer");
+    if (input.scope === "ROOM" && !input.roomId) throw badRequest("Pick a room for this offer");
     if (input.kind === "PERCENT" && (input.value <= 0 || input.value > 100)) throw badRequest("percent 1-100");
+    // a room or type from another resort would silently never match
+    if (input.scope === "ROOM") {
+      const room = await this.prisma.room.findFirst({ where: { id: input.roomId, resortId }, select: { id: true } });
+      if (!room) throw badRequest("That room is not in this resort");
+    }
+    if (input.scope === "ROOM_TYPE") {
+      const type = await this.prisma.roomType.findFirst({ where: { id: input.roomTypeId, resortId }, select: { id: true } });
+      if (!type) throw badRequest("That room type is not in this resort");
+    }
     const offer = await this.prisma.discountOffer.create({
       data: {
         resortId,
         scope: input.scope,
-        roomTypeId: input.scope === "ROOM" ? input.roomTypeId : null,
+        roomTypeId: input.scope === "ROOM_TYPE" ? input.roomTypeId : null,
+        roomId: input.scope === "ROOM" ? input.roomId : null,
         name: input.name,
         kind: input.kind,
         value: input.value,
@@ -715,9 +729,15 @@ export class PlatformService {
     return updated;
   }
 
-  /** best active discount (absolute BDT) for a rent on a room type, at a date */
-  bestDiscountFor(resortId: number, roomTypeId: number | null, rent: number, at: Date): Promise<number> {
-    return this.discounts.bestFor(resortId, roomTypeId, rent, at);
+  /** best active discount (absolute, resort currency) for a rent on a room, at a date */
+  bestDiscountFor(
+    resortId: number,
+    roomTypeId: number | null,
+    rent: number,
+    at: Date,
+    roomId?: number | null,
+  ): Promise<number> {
+    return this.discounts.bestFor(resortId, roomTypeId, rent, at, roomId);
   }
 
   // ─────────────────── api keys + public api ───────────────────
@@ -962,7 +982,7 @@ export class PlatformService {
     if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
     return this.prisma.user.findMany({
       where: { role: "AGENT", parentAgentId: claims.userId },
-      select: { id: true, name: true, phone: true, email: true, status: true, createdAt: true },
+      select: { id: true, name: true, phone: true, email: true, status: true, agentRoleId: true, createdAt: true },
       orderBy: { id: "asc" },
     });
   }

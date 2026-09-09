@@ -88,8 +88,30 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "marketing.send", label: "Buy email credits & send campaigns", group: "Admin" },
   // agent portal
   { key: "agent.book", label: "Book for guests", group: "Agent portal" },
-  { key: "agent.wallet.view", label: "See wallet balance", group: "Agent portal" },
+  { key: "agent.wallet.view", label: "See the agency wallet", group: "Agent portal" },
+  { key: "agent.staff.manage", label: "Add & manage agency staff", group: "Agent portal" },
+  { key: "agent.auditlog.view", label: "See the agency activity log", group: "Agent portal" },
 ];
+
+/**
+ * What an agency may hand to its own staff.
+ *
+ * Deliberately a short list. An agency is a customer of the platform, not an
+ * administrator of it, so nothing here reaches a resort's own settings, money
+ * or people — an agency role that could grant `payroll.manage` would be a
+ * privilege escalation dressed as a feature.
+ */
+export const AGENT_PERMISSIONS = [
+  "agent.book",
+  "agent.wallet.view",
+  "agent.staff.manage",
+  "agent.auditlog.view",
+  "marketing.send",
+] as const;
+
+export function isAgentPermission(key: string): boolean {
+  return (AGENT_PERMISSIONS as readonly string[]).includes(key);
+}
 
 export const ALL_PERMISSIONS = PERMISSIONS.map((p) => p.key);
 
@@ -122,6 +144,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "restaurant.view", "restaurant.create", "activities.view",
   ],
   Agent: ["agent.book", "agent.wallet.view"],
+  "Agency owner": [...AGENT_PERMISSIONS],
 };
 
 

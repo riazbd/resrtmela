@@ -97,7 +97,6 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const extraAllowed = pickedTypes.some((t) => t?.extraPersonAllowed);
   const extraRate = Math.max(0, ...pickedTypes.map((t) => Number(t?.extraPersonRate ?? 0)));
 
-  const myRate = useAuth().me?.resorts.find((r) => r.resort.id === activeResort?.id)?.commissionRate ?? 0;
 
   const [walkIn, setWalkIn] = useState(false);
   const [isGroup, setIsGroup] = useState(false);
@@ -201,11 +200,15 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
                   }`}
                 >
                   <div className="font-medium">{r.roomName}</div>
+                  {/* The agent's own rate comes from the server, which knows
+                      whether their terms are a percentage or a flat fee. This
+                      used to be worked out here as `rate × (1 − pct/100)`,
+                      which quietly showed a flat-fee agent the wrong price. */}
                   <div className="text-[11px]">
-                    {isAgent && myRate > 0 ? (
+                    {r.agentRate != null ? (
                       <>
                         <span className="text-slate-400 line-through">{money(Number(r.baseRate))}</span>
-                        {" "}<span className="font-bold text-brand-700">{money((Number(r.baseRate) * (1 - myRate / 100)))}</span>
+                        {" "}<span className="font-bold text-brand-700">{money(r.agentRate)}</span>
                         <span className="text-slate-400"> your price</span>
                       </>
                     ) : (
@@ -495,6 +498,31 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
           </div>
         </div>
       </div>
+
+      {b.agentPricing && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3">
+          <div className="mb-1 text-xs font-medium text-brand-900">Your price</div>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+            <span className="text-slate-600">
+              Guest pays <b className="text-slate-900">{money(b.agentPricing.actual)}</b>
+            </span>
+            <span className="text-slate-600">
+              Your commission{" "}
+              <b className="text-slate-900">
+                {money(b.agentPricing.commission)}
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  {b.agentPricing.commissionKind === "FLAT"
+                    ? "flat"
+                    : `${b.agentPricing.commissionRate}%`}
+                </span>
+              </b>
+            </span>
+            <span className="text-brand-900">
+              You owe the resort <b>{money(b.agentPricing.agentPrice)}</b>
+            </span>
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="mb-1 text-xs font-medium text-slate-500">Rooms</div>

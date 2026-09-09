@@ -4,7 +4,7 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
-import { bookingTotals, perNightRevenue } from "../common/money";
+import { bookingTotals, perNightRevenue, agentCommission } from "../common/money";
 import { PermissionsService } from "../common/permissions";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
@@ -430,8 +430,7 @@ export class ReportsService {
       ...r,
       rent: round2(r.rent),
       due: round2(r.due),
-      // PERCENT: % of rent; FLAT: fixed ৳ per booking
-      commission: round2(r.commissionKind === "FLAT" ? r.commissionRate * r.bookings : (r.rent * r.commissionRate) / 100),
+      commission: agentCommission(r, r.rent, r.bookings),
     }));
     return {
       from: from ?? null,
@@ -480,8 +479,7 @@ export class ReportsService {
       bookings: bookings.length,
       rent,
       due: round2(bookings.reduce((s, b) => s + b.due, 0)),
-      // must agree with agents() above: FLAT is a fee per booking, PERCENT a share of rent
-      commission: round2(kind === "FLAT" ? rate * bookings.length : (rent * rate) / 100),
+      commission: agentCommission({ commissionKind: kind, commissionRate: rate }, rent, bookings.length),
     };
   }
 }

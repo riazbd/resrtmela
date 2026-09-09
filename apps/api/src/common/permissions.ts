@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
+import { ALL_PERMISSIONS, AGENT_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { forbid } from "./rbac";
 
@@ -28,6 +28,27 @@ export class PermissionsService {
    */
   async resolve(claims: JwtClaims, resortId?: number): Promise<string[]> {
     if (claims.role === ROLE.SUPER_ADMIN || claims.role === ROLE.RESORT_ADMIN) return ["*"];
+
+    /**
+     * Agents are scoped to their agency, not to a resort.
+     *
+     * An agency's staff work across every resort the agency has been approved
+     * for, so a resort-scoped role cannot describe them. An agency owner holds
+     * every agent permission by being the owner; staff hold what their role
+     * says, or the default set when they have none — which is what every agent
+     * that existed before roles has.
+     */
+    if (claims.role === ROLE.AGENT) {
+      const me = await this.prisma.user.findUnique({
+        where: { id: claims.userId },
+        select: { parentAgentId: true, agentRole: { select: { permissions: true } } },
+      });
+      if (!me) return [];
+      if (me.parentAgentId == null) return [...AGENT_PERMISSIONS];
+      const perms = me.agentRole?.permissions;
+      return Array.isArray(perms) ? (perms as string[]) : (DEFAULT_ROLE_PERMISSIONS.Agent ?? []);
+    }
+
     const rid = resortId ?? claims.resortIds[0];
     if (rid == null) return [];
     const linked = await this.prisma.userResort.findUnique({
@@ -38,7 +59,6 @@ export class PermissionsService {
       const perms = linked.role.permissions;
       return Array.isArray(perms) ? (perms as string[]) : [];
     }
-    if (claims.role === ROLE.AGENT) return DEFAULT_ROLE_PERMISSIONS.Agent ?? [];
     if (claims.role === ROLE.MANAGER) return DEFAULT_ROLE_PERMISSIONS.Manager ?? [];
     if (claims.role === ROLE.FRONT_DESK) return DEFAULT_ROLE_PERMISSIONS["Front Desk"] ?? [];
     if (claims.role === ROLE.HOUSEKEEPING) return [];

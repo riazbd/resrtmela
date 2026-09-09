@@ -281,8 +281,19 @@ void _completeness;
 
 const Ctx = createContext<{ lang: Lang; setLang: (l: Lang) => void } | null>(null);
 
+/**
+ * The console opens in English.
+ *
+ * It opened in Bangla for everyone, including the platform team, and the
+ * September correction list asked for English. The Bangla is not going
+ * anywhere — every key is still there and the toggle is one click — but the
+ * first screen a new user sees is English, and whatever they choose after
+ * that is what they get next time.
+ */
+export const DEFAULT_LANG: Lang = "en";
+
 export function LangProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("bn");
+  const [lang, setLangState] = useState<Lang>(DEFAULT_LANG);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("rh.lang");

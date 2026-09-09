@@ -51,7 +51,7 @@ const TABLES = [
   "wallet_txns", "wallets", "subscription_dues", "subscriptions",
   "email_campaigns", "email_credits", "notifications", "resort_access",
   "api_keys", "discount_offers", "expenses", "counters", "audit_log",
-  "notification_jobs", "message_templates", "user_resorts", "roles", "users",
+  "notification_jobs", "message_templates", "user_resorts", "roles", "users", "agent_roles",
   "resorts", "tenants", "platform_plans", "platform_settings", "cms_settings",
 ];
 

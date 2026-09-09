@@ -185,6 +185,10 @@ model User {
   parentAgentId Int?
   parentAgent  User?     @relation("AgencyStaff", fields: [parentAgentId], references: [id], onDelete: SetNull)
   agencyStaff  User[]    @relation("AgencyStaff")
+  /// Permission set for an agency's staff. Null on an agency itself, which
+  /// holds every agent permission by being the agency.
+  agentRoleId  Int?
+  agentRole    AgentRole? @relation(fields: [agentRoleId], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
 
   resorts        UserResort[]
@@ -197,6 +201,7 @@ model User {
   accessRequests  ResortAccess[]
   emailCredits    EmailCredit?
   campaigns       EmailCampaign[]
+  agentRoles      AgentRole[]    @relation("AgencyRoles")
 
   @@map("users")
 }
@@ -330,6 +335,7 @@ model Room {
   items BookingItem[]
   nights BookingNight[]
   fbBills FbBill[]
+  discountOffers DiscountOffer[]
 
   @@unique([resortId, name])
   @@index([resortId])
@@ -764,9 +770,14 @@ model DiscountOffer {
   id         Int       @id @default(autoincrement())
   resortId   Int
   resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  scope      String    @default("RESORT") @db.VarChar(8) // RESORT | ROOM
+  /// RESORT = every room · ROOM_TYPE = one category · ROOM = one particular room
+  scope      String    @default("RESORT") @db.VarChar(10)
   roomTypeId Int?
   roomType   RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  /// One specific room: the noisy one, the one facing the generator, the last
+  /// one left on a slow Tuesday. Its identical neighbour keeps its own price.
+  roomId     Int?
+  room       Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   name       String    @db.VarChar(120)
   kind       String    @default("PERCENT") @db.VarChar(8) // PERCENT | FLAT
   value      Decimal   @db.Decimal(10, 2)
@@ -896,4 +907,24 @@ model MessageTemplate {
 
   @@unique([resortId, name])
   @@map("message_templates")
+}
+
+/// A permission set inside one agency.
+///
+/// Separate from CustomRole because that one is scoped to a resort, and an
+/// agency's staff work across every resort the agency has been approved for —
+/// a role scoped to a resort could not describe them.
+model AgentRole {
+  id          Int      @id @default(autoincrement())
+  /// the agency that owns this role: an AGENT user with no parent
+  agencyId    Int
+  agency      User     @relation("AgencyRoles", fields: [agencyId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(60)
+  permissions Json     @default("[]") // string[] of agent permission keys
+  createdAt   DateTime @default(now())
+
+  staff User[]
+
+  @@unique([agencyId, name])
+  @@map("agent_roles")
 }

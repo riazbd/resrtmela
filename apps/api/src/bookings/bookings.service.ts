@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
-import { bookingTotals, perNightRevenue, type Money } from "../common/money";
+import { bookingTotals, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { assertTransition } from "./booking-state";
@@ -146,9 +146,20 @@ export class BookingsService {
     if (isAgent) {
       discount = 0;
     } else if (input.discount == null) {
-      // no manual discount → apply best active offer (per-room or resort-wide)
-      const rent0 = roomRows.reduce((s, r) => s + Number(r.baseRate), 0) * nights;
-      discount = await this.discounts.bestFor(input.resortId, roomRows[0]?.roomTypeId ?? null, rent0, checkIn);
+      /**
+       * No manual discount → the best standing offer.
+       *
+       * Priced per room and summed, not once for the booking: a room-level
+       * offer is about one room, so a two-room booking where only one room is
+       * discounted must not have that offer applied to both, nor lose it
+       * because the other room has none.
+       */
+      let offered = 0;
+      for (const r of roomRows) {
+        const roomRent = Number(r.baseRate) * nights;
+        offered += await this.discounts.bestFor(input.resortId, r.roomTypeId, roomRent, checkIn, r.id);
+      }
+      discount = offered;
     } else {
       discount = Number(input.discount);
     }
@@ -476,6 +487,23 @@ export class BookingsService {
 
     // agents: masked guest PII unless resort allows (doc §1 ⚠)
     const isAgent = claims.role === ROLE.AGENT;
+
+    /**
+     * An agent sells at the resort's price and keeps a commission, so two
+     * numbers matter to them: what the guest pays, and what they will owe the
+     * resort. Only the first was ever shown, with the commission appearing in
+     * a report at the end of the month — no use at the moment of quoting a
+     * guest. Absent for the resort's own staff, for whom there is one price,
+     * and absent when the resort hides its rates from agents at all.
+     */
+    let agentPricing: ReturnType<typeof agentPrices> | null = null;
+    if (isAgent && resort.showRatesToAgents && b.agentUserId === claims.userId) {
+      const terms = await this.prisma.userResort.findUnique({
+        where: { userId_resortId: { userId: claims.userId, resortId: b.resortId } },
+        select: { commissionKind: true, commissionRate: true },
+      });
+      if (terms) agentPricing = agentPrices(terms, totals.roomRent);
+    }
     const maskedGuest = isAgent
       ? {
           id: b.guest.id,
@@ -501,6 +529,7 @@ export class BookingsService {
       children: b.children,
       remarks: b.remarks,
       guest: maskedGuest,
+      agentPricing,
       items: b.items.map((i) => ({
         id: i.id,
         kind: i.itemKind,
