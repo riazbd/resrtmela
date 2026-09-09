@@ -473,6 +473,50 @@ credits with no charge behind them is the platform giving its product away and
 never knowing. Platform → Dues shows both, and "what does this tenant owe" is
 one number again.
 
+### What a real server found that 360 tests did not
+
+This branch was deployed to the live server on 9 Sep. Four things only a real
+deployment could have found, in the order they bit.
+
+**The database had never had a migration run against it.** It was built with
+`db push`: 38 tables, no `_prisma_migrations` table at all. `migrate deploy`
+would have started at `init` and tried to `CREATE TABLE` things that already
+existed. `db:baseline` is exactly the tool for that — it marked nine migrations
+applied without running them and left nineteen to run.
+
+**A migration that only drops things.** `db:baseline` classified every
+migration that creates nothing as "data-only, so it must run" — but
+`20260827163511_guest_phonekey_index` only drops a unique index, and `db push`
+had never created that index. The DROP failed, and a failed migration blocks
+every migration behind it. The tool asks the mirror question now: for a
+migration that only drops, are those things already gone? If so the database is
+already where the migration was trying to get to.
+
+**The server is MariaDB, not MySQL 8.** `CAST(... AS JSON)` is a syntax error
+there — MariaDB has no JSON type, and Prisma maps `Json` to `longtext` — so
+`split_activity_permissions` failed six migrations in. The cast bought nothing
+even on MySQL, which parses a valid JSON string on assignment to a json column.
+Local development runs MySQL, which is why every migration passed here and one
+failed there.
+
+**The API would not boot.** `IntentsService` declared its payment gateway as a
+constructor parameter typed with an *interface* and gave it a default value.
+Interfaces do not exist at runtime and Nest resolves every parameter itself
+rather than falling back to a default, so it injected `undefined` and the whole
+application refused to start. 360 passing tests, a clean typecheck and a
+successful build, and the API was dead — because every test in this suite
+builds its services by hand and nothing had ever asked Nest to wire the real
+module graph.
+
+`test/integration/app-boots.spec.ts` asks it now. It builds the real
+`AppModule`, closes it, and fails in about four seconds when a provider is
+missing — verified by removing the provider again and watching it reproduce the
+production error exactly. **Run it before any deployment.**
+
+Live state after all that: 97 bookings, 33 guests and 25 payments unchanged,
+38 tables became 50, all 28 migrations applied, `migrate status` reports the
+schema up to date. A verified dump was taken first and sits in `/root/backups`.
+
 ### Smaller, but shipped
 
 Per-tenant document prefixes · the guest directory's per-guest N+1 removed ·
@@ -564,6 +608,25 @@ These are not code problems and cannot be fixed from the repository.
    `SMS_SENDER_ID` is missing.
 
 ## 6. Deploying this branch
+
+**It is deployed.** §3 records what went wrong on the way and what now guards
+against it. The sequence that worked, for next time:
+
+```
+pnpm -F @rh/api test            # app-boots.spec.ts is the gate
+git pull --ff-only
+pnpm install --frozen-lockfile
+pnpm -F @rh/api db:baseline     # look first
+pnpm -F @rh/api db:baseline -- --apply
+cd packages/db && npx prisma migrate deploy && npx prisma generate
+cd ../.. && pnpm -F @rh/web build
+pm2 restart api web
+```
+
+Take a `mariadb-dump` before the migration step and check it ends with
+"Dump completed". The notes below predate the first deployment and are kept for
+the reasoning.
+
 
 The live database was built with `db push` before migrations existed, so it
 already has tables and columns that later migrations try to add, and
