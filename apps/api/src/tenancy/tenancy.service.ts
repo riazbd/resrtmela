@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, JwtClaims } from "@rh/shared";
-import { requireRoles, requireResortAccess } from "../common/rbac";
+import { requireRoles, requireResortAccess, requireSellingAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService } from "../common/permissions";
@@ -95,6 +95,7 @@ export class TenancyService {
       timezone: string;
       currency: string;
       showRatesToAgents: boolean;
+      showGuestNamesToAgents: boolean;
       taxRatePct: number;
       status: string;
       invoicePrefix: string;
@@ -239,9 +240,10 @@ export class TenancyService {
   }
 
   detail(claims: JwtClaims, resortId: number) {
-    if (claims.role !== ROLE.SUPER_ADMIN && !claims.resortIds.includes(resortId)) {
-      throw Object.assign(new Error("No access to this resort"), { status: 403 });
-    }
+    // an agency sells this resort, so it may read the shop window: rooms,
+    // room types, activities. Everything behind the counter goes through
+    // `requireResortAccess`, which agents do not pass.
+    requireSellingAccess(claims, resortId);
     return this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       include: {

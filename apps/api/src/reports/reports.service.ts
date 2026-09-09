@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
-import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
+import { requireResortAccess, requireSellingAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
 import { bookingTotals, perNightRevenue, agentCommission } from "../common/money";
 import { PermissionsService } from "../common/permissions";
@@ -458,10 +458,17 @@ export class ReportsService {
     return { from: from ?? null, to: to ?? null, rows };
   }
 
-  /** Agent's own commission report. */
+  /**
+   * Agent's own commission report.
+   *
+   * The one report an agency is entitled to, and the only reason this file
+   * needs selling access at all: every row below is filtered to the caller's
+   * own bookings, so what it adds up is money the agency earned. Everything
+   * else in this service is the resort's own trading figures.
+   */
   async myReport(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     if (claims.role !== ROLE.AGENT) throw badRequest("Agents only");
-    requireResortAccess(claims, resortId);
+    requireSellingAccess(claims, resortId);
     const link = await this.prisma.userResort.findUnique({
       where: { userId_resortId: { userId: claims.userId, resortId } },
     });
