@@ -9,6 +9,9 @@ import { PermissionsService } from "../common/permissions";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
 
+/** The bucket for stays nobody said anything about. Not a source; the absence of one. */
+export const UNRECORDED_SOURCE = "__UNRECORDED__";
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -453,11 +456,14 @@ export class ReportsService {
     const bookings = await this.rangeBookings(resortId, from, to);
     const bySource = new Map<string, { source: string; bookings: number; rent: number; due: number }>();
     for (const b of bookings) {
-      const entry = bySource.get(b.source) ?? { source: b.source, bookings: 0, rent: 0, due: 0 };
+      // a booking nobody recorded a source for is its own row, not Direct's.
+      // It used to be Direct's, because the column defaulted to DIRECT.
+      const key = b.source ?? UNRECORDED_SOURCE;
+      const entry = bySource.get(key) ?? { source: key, bookings: 0, rent: 0, due: 0 };
       entry.bookings++;
       entry.rent += b.roomRent ?? b.rent;
       entry.due += b.due;
-      bySource.set(b.source, entry);
+      bySource.set(key, entry);
     }
     const rows = [...bySource.values()]
       .map((r) => ({ ...r, rent: round2(r.rent), due: round2(r.due) }))

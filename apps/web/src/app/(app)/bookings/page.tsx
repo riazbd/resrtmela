@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
+import { usePaymentMethods } from "@/lib/resort-options";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
 interface RoomTypeLite {
@@ -45,6 +46,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   open: boolean; onClose: () => void; onCreated: (code: string) => void;
   preset?: { roomId?: number | null; checkIn?: string | null; checkOut?: string | null } | null;
 }) {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { activeResort, isStaff, role, isAgent } = useAuth();
   const { push } = useToast();
   const [checkIn, setCheckIn] = useState(iso(new Date()));
@@ -259,7 +261,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Field label={`Advance (${cur()})`}><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
           <Field label="Method">
             <Select value={advMethod} onChange={(e) => setAdvMethod(e.target.value)}>
-              {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
+              {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
             </Select>
           </Field>
           <Field label="Remarks"><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></Field>
@@ -283,6 +285,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
 }
 
 function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => void }) {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { push } = useToast();
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
@@ -308,7 +311,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
     <div className="flex items-end gap-2">
       <Field label={`Record payment (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} className="!w-28" /></Field>
       <Select value={method} onChange={(e) => setMethod(e.target.value)} className="!w-24">
-        {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
+        {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
       </Select>
       <Button size="sm" onClick={pay} loading={busy} disabled={amount <= 0}>Add</Button>
     </div>

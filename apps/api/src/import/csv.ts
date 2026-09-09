@@ -107,14 +107,34 @@ export function mapSheetStatus(raw: string | undefined | null): BookingState {
   return "CONFIRMED"; // junk tolerance — sheet has stray "0"s here
 }
 
-export type BookingSource = "DIRECT" | "AGENT" | "FACEBOOK" | "WHATSAPP" | "PHONE" | "APP";
-
-export function mapSheetSource(raw: string | undefined | null): BookingSource {
+/**
+ * The sheet's Source column, matched against codes the resort actually has.
+ *
+ * This used to end `return "DIRECT"` — so an empty cell, or anything it did not
+ * recognise, was filed as a direct booking. In the client's own workbook that
+ * is 79 rows out of 96: 76 empty and 3 carrying junk from a shifted row, every
+ * one of them claimed as Direct, and the source-mix report then told the owner
+ * that is where their business comes from. An unreadable cell is not evidence
+ * of anything, so it now returns null and the booking says nothing.
+ *
+ * `codes` is the resort's own BOOKING_SOURCE list, so a resort that adds a
+ * channel can import a sheet naming it without anyone touching this function.
+ */
+export function mapSheetSource(
+  raw: string | undefined | null,
+  codes: string[] = [],
+): string | null {
   const s = (raw ?? "").trim().toLowerCase();
-  if (s.startsWith("agent")) return "AGENT";
-  if (s.includes("facebook") || s === "fb") return "FACEBOOK";
-  if (s.includes("whatsapp")) return "WHATSAPP";
-  if (s.includes("phone")) return "PHONE";
-  if (s === "app") return "APP";
-  return "DIRECT";
+  if (!s) return null;
+  // an exact match on the resort's own codes wins over any guess below
+  const exact = codes.find((c) => c.toLowerCase() === s || c.toLowerCase().replace(/_/g, " ") === s);
+  if (exact) return exact;
+  const has = (code: string) => (codes.length === 0 || codes.includes(code) ? code : null);
+  if (s.startsWith("agent")) return has("AGENT");
+  if (s.includes("facebook") || s === "fb") return has("FACEBOOK");
+  if (s.includes("whatsapp")) return has("WHATSAPP");
+  if (s.includes("phone")) return has("PHONE");
+  if (s === "app") return has("APP");
+  if (s.includes("direct") || s.includes("walk")) return has("DIRECT");
+  return null;
 }

@@ -38,6 +38,7 @@ import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
 import { ReportsService } from "../../src/reports/reports.service";
 import { IntentsService } from "../../src/payments/intents.service";
+import { OptionsService } from "../../src/options/options.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
@@ -55,6 +56,7 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new EmailService(),
     new PermissionsService(prisma),
     new TenantStateService(prisma),
+    makeOptionsService(prisma),
   );
 }
 
@@ -112,6 +114,16 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
     makeBookingsService(prisma),
     makeNotificationsService(prisma),
     new PermissionsService(prisma),
+    makeOptionsService(prisma),
+  );
+}
+
+export function makeOptionsService(prisma: PrismaService): OptionsService {
+  return new OptionsService(
+    prisma,
+    new PlatformSettingsService(prisma),
+    new PermissionsService(prisma),
+    new AuditService(prisma),
   );
 }
 
@@ -227,5 +239,6 @@ export function makeImportService(prisma: PrismaService): ImportService {
     new AuditService(prisma),
     makeBookingsService(prisma),
     new PermissionsService(prisma),
+    makeOptionsService(prisma),
   );
 }

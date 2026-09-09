@@ -15,8 +15,9 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PermissionsService } from "../common/permissions";
+import { OptionsService } from "../options/options.service";
 import { TenantStateService } from "../common/tenant-state.service";
-import { BookingSource, type BookingState } from "@rh/db";
+import type { BookingState } from "@rh/db";
 
 export interface CreateBookingInput {
   resortId: number;
@@ -29,7 +30,7 @@ export interface CreateBookingInput {
   children: number;
   discount?: number;
   remarks?: string;
-  source?: BookingSource;
+  source?: string;
   walkIn?: boolean;
   extraPersons?: number;
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
@@ -40,7 +41,7 @@ export interface RoomBookingTxParams {
   guestId: number;
   actorUserId: number;
   agentUserId: number | null;
-  source: BookingSource;
+  source: string | null;
   checkIn: Date;
   checkOut: Date;
   adults: number;
@@ -74,6 +75,7 @@ export class BookingsService {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
+    @Inject(OptionsService) private readonly options: OptionsService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -204,12 +206,23 @@ export class BookingsService {
     } else {
       discount = Number(input.discount);
     }
-    let source = input.source ?? BookingSource.DIRECT;
+    /**
+     * Nothing recorded is nothing recorded.
+     *
+     * This defaulted to DIRECT, so a booking taken without anybody saying where
+     * it came from was filed as a direct booking — and the source-mix report
+     * repeated that back to the owner as fact. In the client's own workbook 79
+     * of 96 rows had an empty Source column. An agent booking is different: it
+     * *is* known, because an agent made it.
+     */
+    let source: string | null = input.source ?? null;
     let agentUserId: number | null = null;
     if (isAgent) {
-      source = BookingSource.AGENT;
+      source = "AGENT";
       agentUserId = claims.userId;
     }
+    // a source the resort offers, or none — the list is theirs, so is the check
+    if (source) await this.options.assertAccepted(input.resortId, "BOOKING_SOURCE", source);
 
     // resolve guest
     let guestId = input.guestId;
@@ -443,7 +456,7 @@ export class BookingsService {
       from?: string;
       to?: string;
       guestId?: number;
-      source?: BookingSource;
+      source?: string;
       group?: string;
       mine?: boolean;
       skip?: number;
@@ -1093,7 +1106,7 @@ export class BookingsService {
       advancePerRoom?: number;
       advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
       remarks?: string;
-      source?: BookingSource;
+      source?: string;
     },
   ) {
     requireResortAccess(claims, input.resortId);
@@ -1170,7 +1183,7 @@ export class BookingsService {
           guestId: guest.id,
           actorUserId: claims.userId,
           agentUserId: null,
-          source: input.source ?? BookingSource.DIRECT,
+          source: input.source ?? null,
           checkIn,
           checkOut,
           adults: input.adults,

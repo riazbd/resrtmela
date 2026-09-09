@@ -7,7 +7,7 @@ import {
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BookingsService, CreateBookingInput } from "./bookings.service";
 import { AvailabilityService } from "./availability.service";
-import { BookingSource, type BookingState } from "@rh/db";
+import type { BookingState } from "@rh/db";
 
 class GuestInlineDto {
   @IsString() @MaxLength(160) fullName!: string;
@@ -29,7 +29,7 @@ class CreateGroupDto {
   @IsOptional() @IsNumber() @Min(0) advancePerRoom?: number;
   @IsOptional() @IsEnum(["CASH", "BKASH", "NAGAD", "CARD", "BANK"]) advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
 }
 class AdvancePaymentDto {
   @IsNumber() @Min(1) amount!: number;
@@ -47,7 +47,7 @@ class CreateBookingDto {
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsNumber() @Min(0) discount?: number;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
   @IsOptional() @IsBoolean() walkIn?: boolean;
   @IsOptional() @IsInt() @Min(0) @Type(() => Number) extraPersons?: number;
   @IsOptional() @ValidateNested() @Type(() => AdvancePaymentDto) advancePayment?: AdvancePaymentDto;
@@ -56,7 +56,7 @@ class CreateBookingDto {
 class ListBookingsQuery {
   @IsOptional() @IsString() @MaxLength(24) group?: string;
   @Type(() => Number) @IsInt() resortId!: number;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @Type(() => Number) @IsInt() guestId?: number;
   @IsOptional() @IsDateString() from?: string;

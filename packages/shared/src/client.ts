@@ -50,6 +50,7 @@ import type {
   TourCategoryNode,
   TourPackageDetail,
   TourPackageRow,
+  ResortOption,
 } from "./api-types";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -137,6 +138,30 @@ export function createApiClient(http: Fetcher) {
         http<RatePlan>(`/resorts/${resortId}/rate-plans`, { method: "POST", body }),
       availability: (resortId: number, from: string, to: string) =>
         http<RoomAvail[]>(`/resorts/${resortId}/availability${qs({ from, to })}`),
+    },
+
+    /**
+     * The lists a resort owns — payment methods, booking sources, activity
+     * categories. Addressed by name, so making the next thing dynamic costs a
+     * registry entry rather than four more client methods.
+     */
+    options: {
+      list: (resortId: number, list: string) =>
+        http<ResortOption[]>(`/resorts/${resortId}/options/${list}`),
+      create: (resortId: number, list: string, body: { code: string; label: string; meta?: Record<string, unknown> }) =>
+        http<ResortOption>(`/resorts/${resortId}/options/${list}`, { method: "POST", body }),
+      update: (
+        resortId: number,
+        list: string,
+        id: number,
+        body: { label?: string; active?: boolean; sortOrder?: number; meta?: Record<string, unknown> },
+      ) => http<ResortOption>(`/resorts/${resortId}/options/${list}/${id}`, { method: "PATCH", body }),
+      remove: (resortId: number, list: string, id: number) =>
+        http<{ removed: boolean; deactivated: boolean; used: number }>(
+          `/resorts/${resortId}/options/${list}/${id}`,
+          { method: "DELETE" },
+        ),
+      lists: () => http<{ name: string; label: string }[]>(`/option-lists`),
     },
 
     // ── the desk ──

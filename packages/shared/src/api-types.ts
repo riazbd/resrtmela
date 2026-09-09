@@ -602,3 +602,19 @@ export interface AgencyRoomOffer {
     agentRate?: number;
   }[];
 }
+
+/**
+ * One value on a list a resort owns: how it takes money, where a booking came
+ * from, what kind of thing an activity is. These were Prisma enums, which made
+ * each set a fact about the software rather than about the business.
+ */
+export interface ResortOption {
+  id: number;
+  resortId: number;
+  list: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  active: boolean;
+  meta?: Record<string, unknown> | null;
+}

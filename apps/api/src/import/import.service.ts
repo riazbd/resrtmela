@@ -6,6 +6,7 @@ import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
+import { OptionsService } from "../options/options.service";
 import { BookingsService } from "../bookings/bookings.service";
 import {
   parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
@@ -94,6 +95,7 @@ export class ImportService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(OptionsService) private readonly options: OptionsService,
   ) {}
 
   private parseRows(csvText: string): SheetRow[] {
@@ -180,6 +182,9 @@ export class ImportService {
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
       paymentsCreated: 0, roomTypeCreated: null, rows: [], unmatchedAgents: [],
     };
+
+    // the resort's own channel list, so an import can name one it invented
+    const sourceCodes = (await this.options.active(resortId, "BOOKING_SOURCE")).map((o) => o.code);
 
     if (dryRun) {
       for (const row of rows) {
@@ -305,7 +310,7 @@ export class ImportService {
           const payable = round2(rent - row.discount);
           const paymentState = row.advance >= payable - 0.01 ? "PAID" : row.advance > 0 ? "PARTIAL" : "UNPAID";
           const state = mapSheetStatus(row.statusRaw);
-          const source = mapSheetSource(row.sourceRaw);
+          const source = mapSheetSource(row.sourceRaw, sourceCodes);
           const flags: string[] = [];
           if (row.sheetRent > 0 && Math.abs(row.sheetRent - rent) > 1) {
             flags.push(`rent-adjusted (sheet said ${row.sheetRent})`);

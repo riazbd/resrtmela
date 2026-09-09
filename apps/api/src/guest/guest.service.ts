@@ -6,7 +6,6 @@ import { dateOnly, nightsBetween, normalizePhone, phoneKey, round2 } from "../co
 import { AuditService } from "../common/audit.service";
 import { BookingsService } from "../bookings/bookings.service";
 import { RoomsService } from "../rooms/rooms.service";
-import { BookingSource } from "@rh/db";
 import { ActivitiesService } from "../activities/activities.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
@@ -271,7 +270,7 @@ export class GuestService {
         guestId: guest.id,
         actorUserId: user.id,
         agentUserId: null,
-        source: BookingSource.APP,
+        source: "APP",
         checkIn,
         checkOut,
         adults: input.adults,

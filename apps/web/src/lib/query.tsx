@@ -151,6 +151,7 @@ export const keys = {
   rooms: (rid: number | undefined) => ["rooms", rid] as const,
   roomTypes: (rid: number | undefined) => ["room-types", rid] as const,
   ratePlans: (rid: number | undefined) => ["rate-plans", rid] as const,
+  options: (rid: number | undefined, list: string) => ["resort-options", rid, list] as const,
   availability: (rid: number | undefined, from: string, to: string) => ["availability", rid, from, to] as const,
   expenses: (rid: number | undefined, q?: unknown) => ["expenses", rid, q] as const,
   expenseCategories: (rid: number | undefined) => ["expense-categories", rid] as const,

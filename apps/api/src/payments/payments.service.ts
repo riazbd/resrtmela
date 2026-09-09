@@ -7,6 +7,7 @@ import { AuditService } from "../common/audit.service";
 import { BookingsService } from "../bookings/bookings.service";
 import { PermissionsService } from "../common/permissions";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OptionsService } from "../options/options.service";
 
 @Injectable()
 export class PaymentsService {
@@ -16,6 +17,7 @@ export class PaymentsService {
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(OptionsService) private readonly options: OptionsService,
   ) {}
 
   /**
@@ -27,7 +29,8 @@ export class PaymentsService {
     bookingId: number,
     input: {
       amount: number;
-      method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
+      /** a code from this resort's own list — see methods.service.ts */
+      method: string;
       type?: "ADVANCE" | "FINAL" | "REFUND";
       note?: string;
       /**
@@ -50,6 +53,10 @@ export class PaymentsService {
     requireResortAccess(claims, b.resortId);
     await this.perms.require(claims, b.resortId, "payments.create");
     if (input.amount <= 0) throw badRequest("amount must be > 0");
+    // the method has to be one this resort actually takes. `@IsEnum` used to
+    // accept BKASH for a resort that has never taken bKash, because the enum
+    // was global; the question is per resort, so the check is too.
+    await this.options.assertAccepted(b.resortId, "PAYMENT_METHOD", input.method);
     if (b.state === "CANCELLED" && input.type !== "REFUND") {
       throw badRequest("Cancelled bookings accept refunds only");
     }

@@ -48,10 +48,26 @@ describe("money + enums", () => {
     expect(mapSheetStatus("Cancelled")).toBe("CANCELLED");
   });
   it("source mapping", () => {
-    expect(mapSheetSource("")).toBe("DIRECT");
+    /**
+     * This line used to read `expect(mapSheetSource("")).toBe("DIRECT")`.
+     *
+     * The test was not wrong about what the code did — it was wrong about what
+     * the code should do, and having it written down is part of why the defect
+     * lasted. An empty Source cell is not evidence that a guest came direct. In
+     * the client's own workbook 76 of 96 rows are empty and 3 more carry junk
+     * from a shifted row, so 82% of their bookings were being reported as
+     * Direct on the strength of nothing at all.
+     */
+    expect(mapSheetSource("")).toBeNull();
+    expect(mapSheetSource("   ")).toBeNull();
+    expect(mapSheetSource("4")).toBeNull();
     expect(mapSheetSource("Agent")).toBe("AGENT");
     expect(mapSheetSource("WhatsApp")).toBe("WHATSAPP");
     expect(mapSheetSource("Phone Call")).toBe("PHONE");
+    expect(mapSheetSource("Direct")).toBe("DIRECT");
+    // and a channel the resort invented, matched off its own list
+    expect(mapSheetSource("Instagram", ["DIRECT", "INSTAGRAM"])).toBe("INSTAGRAM");
+    expect(mapSheetSource("Facebook", ["DIRECT"])).toBeNull();
   });
 });
 

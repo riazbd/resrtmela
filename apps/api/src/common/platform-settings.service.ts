@@ -14,6 +14,7 @@
  */
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { OPTION_LISTS, OPTION_LIST_NAMES, defaultsSettingKey } from "../options/registry";
 
 export interface BillingPolicy {
   /** days after the due date before the bill is overdue and the subscription past due */
@@ -24,7 +25,26 @@ export interface BillingPolicy {
   noticeDays: number;
 }
 
+/**
+ * What a new resort starts each of its own lists with.
+ *
+ * Not constants and not Prisma enums: which payment rails exist, and which
+ * channels a resort sells through, are facts about a market — this platform
+ * sells into one where bKash and Nagad matter and a platform selling elsewhere
+ * would want neither. The super admin edits these; each resort then owns its
+ * copy and can add anything without a migration.
+ */
+function listDefaults(): Record<string, string> {
+  return Object.fromEntries(
+    OPTION_LIST_NAMES.map((name) => [
+      defaultsSettingKey(name),
+      JSON.stringify(OPTION_LISTS[name].defaults),
+    ]),
+  );
+}
+
 export const SETTING_DEFAULTS: Record<string, string> = {
+  ...listDefaults(),
   "billing.graceDays": "7",
   "billing.suspendAfterDays": "15",
   "billing.noticeDays": "3",

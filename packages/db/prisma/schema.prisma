@@ -26,14 +26,6 @@ enum BookingKind {
   PACKAGE
 }
 
-enum BookingSource {
-  DIRECT
-  AGENT
-  FACEBOOK
-  WHATSAPP
-  PHONE
-  APP
-}
 
 enum BookingState {
   PENDING
@@ -62,14 +54,6 @@ enum RoomStatus {
   OUT_OF_SERVICE
 }
 
-enum ActivityCategory {
-  TOUR
-  WATER_SPORTS
-  WELLNESS
-  DINING
-  ENTERTAINMENT
-  OTHER
-}
 
 enum ItemKind {
   ROOM
@@ -78,14 +62,6 @@ enum ItemKind {
   EXTRA_PERSON
 }
 
-enum PaymentMethod {
-  CASH
-  BKASH
-  NAGAD
-  CARD
-  BANK
-  WALLET_CREDIT
-}
 
 enum PaymentType {
   ADVANCE
@@ -165,6 +141,7 @@ model Resort {
   foodPackages     FoodPackage[]
   payrollPayments  PayrollPayment[]
   messageTemplates MessageTemplate[]
+  options          ResortOption[]
   platformCharges  PlatformCharge[]
 
   @@index([tenantId])
@@ -286,7 +263,7 @@ model PayrollPayment {
   employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   month       String         @db.VarChar(7) // "2026-09"
   amount      Decimal        @db.Decimal(10, 2)
-  method      PaymentMethod?
+  method      String?       @db.VarChar(24)
   note        String?        @db.VarChar(255)
   paidAt      DateTime       @default(now())
   createdById Int?
@@ -413,7 +390,8 @@ model Booking {
   createdBy    User?         @relation("BookingCreatedBy", fields: [createdById], references: [id])
   agentUserId  Int?
   agentUser    User?         @relation("BookingAgent", fields: [agentUserId], references: [id])
-  source       BookingSource @default(DIRECT)
+  /// a code from this resort's BOOKING_SOURCE list; null means nobody recorded one
+  source       String?       @db.VarChar(32)
   checkIn      DateTime?     @db.Date
   checkOut     DateTime?     @db.Date
   adults       Int           @default(2)
@@ -488,7 +466,8 @@ model ActivityCatalog {
   resortId    Int
   resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
   name        String           @db.VarChar(160)
-  category    ActivityCategory @default(TOUR)
+  /// a code from this resort's ACTIVITY_CATEGORY list
+  category    String?          @db.VarChar(32)
   basePrice   Decimal          @db.Decimal(10, 2)
   durationMin Int              @default(60)
   minPerSlot  Int              @default(1)
@@ -542,7 +521,7 @@ model Payment {
   bookingId    Int
   booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   amount       Decimal       @db.Decimal(10, 2)
-  method       PaymentMethod @default(CASH)
+  method       String        @default("CASH") @db.VarChar(24)
   paymentType  PaymentType   @default(ADVANCE)
   receivedById Int?
   receivedBy   User?         @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
@@ -659,7 +638,7 @@ model FbBill {
   roomId     Int? // room (optional, charge-to-room)
   room       Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
   paidAmount Decimal        @default(0.00) @db.Decimal(10, 2)
-  method     PaymentMethod?
+  method     String?     @db.VarChar(24)
   note       String?        @db.VarChar(255)
   createdBy  Int?
   createdAt  DateTime       @default(now())
@@ -694,7 +673,7 @@ model PaymentIntent {
   provider    String        @db.VarChar(24) // mock | bkash | nagad
   providerRef String        @unique @db.VarChar(64)
   amount      Decimal       @db.Decimal(10, 2)
-  method      PaymentMethod
+  method      String      @db.VarChar(24)
   status      String        @default("pending") @db.VarChar(16) // pending | paid | failed | cancelled
   trxId       String?       @db.VarChar(64)
   createdAt   DateTime      @default(now())
@@ -706,6 +685,37 @@ model PaymentIntent {
 }
 
 /// Per-resort sequence generator for booking codes (avoids MAX race).
+/// Every list a resort owns rather than the schema deciding for it: how it
+/// takes money, where a booking came from, what kind of thing an activity is.
+///
+/// One table rather than one per list, because "make this dynamic" is a thing
+/// that keeps happening — a bespoke table, service, controller and screen for
+/// each would mean paying the same cost six times and getting six slightly
+/// different behaviours. `list` names which list a row belongs to.
+///
+/// `meta` is where behaviour that used to be a `switch` over an enum goes. A
+/// value is only dynamic if the *rules attached to it* are dynamic too;
+/// otherwise the list is editable and the code still only understands the
+/// values it shipped with.
+model ResortOption {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  list      String   @db.VarChar(32)
+  code      String   @db.VarChar(32)
+  label     String   @db.VarChar(60)
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  /// per-value rules, shaped by the list — see options/registry.ts
+  meta      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([resortId, list, code])
+  @@index([resortId, list, active])
+  @@map("resort_options")
+}
+
 model Counter {
   id       Int     @id @default(autoincrement())
   resortId Int?
