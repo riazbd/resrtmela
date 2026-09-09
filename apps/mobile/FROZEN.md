@@ -1,8 +1,9 @@
 # This app is frozen
 
-It is not built, not published, and not in the `turbo` pipelines. `pnpm
-typecheck` at the repository root no longer walks it; run `pnpm -F @rh/mobile
-typecheck:frozen` if you want to check it by hand.
+It is not built, not published, and not in the `turbo` pipelines. Neither
+`pnpm typecheck` nor `pnpm dev` at the repository root walks it — `pnpm dev`
+was still starting an Expo server that fought the web app for a port. Run
+`pnpm -F @rh/mobile typecheck:frozen` or `dev:frozen` to use it by hand.
 
 ## Why
 
