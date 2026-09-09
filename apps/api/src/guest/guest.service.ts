@@ -28,8 +28,22 @@ export class GuestService {
   /** Guest rows tied to this user's phone (incl. sheet-imported history). */
   private async myGuestIds(claims: JwtClaims): Promise<number[]> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-    const key = phoneKey(normalizePhone(user.phone ?? ""));
-    const rows = await this.prisma.guest.findMany({ where: { phoneKey: key }, select: { id: true } });
+    /**
+     * No phone number is not an identity.
+     *
+     * `phoneKey("")` is a constant — sha256 of the empty string — and the desk
+     * writes exactly that key for any walk-in taken without a number. So a user
+     * who signed up by email, whose `phone` is null, used to match every
+     * phone-less guest row on the platform and was handed all of their stays.
+     * The match is deliberately cross-resort (one guest, many resorts); it must
+     * therefore be a real number or nothing.
+     */
+    const normalized = normalizePhone(user.phone ?? "");
+    if (!normalized) return [];
+    const rows = await this.prisma.guest.findMany({
+      where: { phoneKey: phoneKey(normalized) },
+      select: { id: true },
+    });
     return rows.map((r) => r.id);
   }
 

@@ -239,7 +239,19 @@ export class EngageService {
     claims: JwtClaims,
     input: { subject: string; body: string; audience: "RESORT_GUESTS" | "MY_GUESTS" | "AGENTS"; resortId?: number },
   ) {
-    await this.perms.require(claims, claims.resortIds[0], "marketing.send");
+    /**
+     * The permission is checked against the resort being mailed, not the
+     * caller's first one.
+     *
+     * It used to be `claims.resortIds[0]`, while the audience below was read
+     * from `input.resortId` and never compared to anything the caller holds.
+     * A manager of one resort could therefore name another tenant's id and mail
+     * that tenant's entire guest list, From-named as them. The two questions —
+     * "may you send" and "send to whom" — have to be asked about the same
+     * resort or they are not asking anything.
+     */
+    if (input.resortId != null) requireResortAccess(claims, input.resortId);
+    await this.perms.require(claims, input.resortId ?? claims.resortIds[0], "marketing.send");
     const credit = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
     if (!credit || credit.credits <= 0) throw badRequest("no email credits — buy a pack first");
 

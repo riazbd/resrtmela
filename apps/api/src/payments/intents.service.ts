@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, badRequest, apiKeyClaims } from "../common/rbac";
-import { round2 } from "../common/dates";
+import { normalizePhone, phoneKey, round2 } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { bookingTotals } from "../common/money";
@@ -49,7 +49,15 @@ export class IntentsService {
     const isGuest = claims.role === ROLE.GUEST;
     if (isGuest) {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-      const guestRows = await this.prisma.guest.findMany({ where: { phone: user.phone ?? "" }, select: { id: true } });
+      // the same rule the guest app uses, and by the same key: a raw `phone`
+      // compare let `""` match every phone-less guest row, so anyone who
+      // signed up by email passed the ownership check on someone else's stay
+      const normalized = normalizePhone(user.phone ?? "");
+      if (!normalized) throw Object.assign(new Error("Not your booking"), { status: 403 });
+      const guestRows = await this.prisma.guest.findMany({
+        where: { phoneKey: phoneKey(normalized) },
+        select: { id: true },
+      });
       if (!guestRows.some((g) => g.id === b.guestId)) {
         throw Object.assign(new Error("Not your booking"), { status: 403 });
       }

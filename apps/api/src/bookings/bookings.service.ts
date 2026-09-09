@@ -638,6 +638,26 @@ export class BookingsService {
     const nights = newCheckIn && newCheckOut ? nightsBetween(newCheckIn, newCheckOut) : 0;
     if (nights <= 0) throw badRequest("Invalid date range");
 
+    /**
+     * Every room named must belong to this booking's resort.
+     *
+     * `patch.roomIds` arrives from the request body and used to be looked up
+     * with a bare `findUniqueOrThrow`, so a clerk could attach a room from
+     * another tenant: that resort's name and rate came back on the booking,
+     * and — worse — `booking_nights` rows were written against their room, so
+     * the UNIQUE(roomId, night) guard that stops double-selling was used to
+     * block a competitor's inventory instead. `create()` has always scoped
+     * this; the edit path never did.
+     */
+    if (patch.roomIds?.length) {
+      const mine = await this.prisma.room.count({
+        where: { id: { in: patch.roomIds }, resortId: b.resortId },
+      });
+      if (mine !== new Set(patch.roomIds).size) {
+        throw badRequest("Room does not belong to this resort");
+      }
+    }
+
     const datesChanged =
       (newCheckIn?.getTime() ?? 0) !== (b.checkIn?.getTime() ?? 0) ||
       (newCheckOut?.getTime() ?? 0) !== (b.checkOut?.getTime() ?? 0);

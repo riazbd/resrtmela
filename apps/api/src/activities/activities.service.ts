@@ -271,9 +271,14 @@ export class ActivitiesService {
     const result = await this.prisma.$transaction(async (tx) => {
       const slot = await tx.activitySlot.findUnique({
         where: { id: slotId },
-        include: { catalog: { select: { id: true, name: true, basePrice: true, active: true } } },
+        include: { catalog: { select: { id: true, name: true, basePrice: true, active: true, resortId: true } } },
       });
-      if (!slot || !slot.catalog.active) throw badRequest("Activity slot not found");
+      // the slot has to belong to this booking's resort. The guest app has
+      // always asked; the staff path took the id on trust, so a slot id from
+      // another tenant consumed their capacity and returned their catalogue.
+      if (!slot || !slot.catalog.active || slot.catalog.resortId !== booking.resortId) {
+        throw badRequest("Activity slot not found at this resort");
+      }
       if (slot.startsAt <= new Date()) throw badRequest("Slot already started");
       await this.takeSeats(tx, slotId, qty);
       const item = await tx.bookingItem.create({

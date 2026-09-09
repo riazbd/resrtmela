@@ -7,7 +7,7 @@ import { TemplatesService } from "./templates.service";
 import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
-import { formatMoney } from "@rh/shared";
+import { formatMoney, ROLE, type JwtClaims } from "@rh/shared";
 
 const TICK_MS = 15_000;
 
@@ -256,8 +256,21 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return { sent, swept, failed };
   }
 
-  recent(take = 50) {
+  /**
+   * The messages this caller's resorts sent.
+   *
+   * This used to be every message on the platform. `NotificationJob.payload`
+   * carries the guest's name, what they owe and their booking code, and the
+   * only gate was the caller's role — so any resort admin could read every
+   * other tenant's guest correspondence. A job with no resort is the
+   * platform's own mail (subscription notices), which belongs to the super
+   * admin alone.
+   */
+  recent(claims: JwtClaims, take = 50) {
+    const mine =
+      claims.role === ROLE.SUPER_ADMIN ? {} : { resortId: { in: claims.resortIds } };
     return this.prisma.notificationJob.findMany({
+      where: mine,
       orderBy: { id: "desc" },
       take: Math.min(take, 200),
     });
