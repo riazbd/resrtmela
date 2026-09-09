@@ -5,6 +5,7 @@ import { api, dmy, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
 import { Mail, ShoppingCart, Send } from "lucide-react";
+import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 
 interface CampaignRow {
   id: string;
@@ -28,6 +29,8 @@ interface CreditPack {
 }
 
 export default function MailboxPage() {
+  // a failed load used to render as an empty campaign history
+  const fail = useLoadFailure();
   const { activeResort, isManagement, role } = useAuth();
   const { push } = useToast();
   const [credits, setCredits] = useState<number | null>(null);
@@ -43,7 +46,7 @@ export default function MailboxPage() {
     const c = await api<{ credits: number }>("/email-credits").catch(() => null);
     setCredits(c?.credits ?? 0);
     api<CreditPack[]>("/email-credits/packs").then(setPacks).catch(() => setPacks([]));
-    api<CampaignRow[]>("/email-campaigns").then(setHistory).catch(() => setHistory([]));
+    api<CampaignRow[]>("/email-campaigns").then((r) => { setHistory(r); fail.clear(); }).catch(fail.onFail(() => setHistory([])));
   }, []);
   useEffect(() => {
     load();
@@ -70,6 +73,10 @@ export default function MailboxPage() {
   }
 
   async function send() {
+    // an irreversible bulk send, with no preview and no recipient count, on one
+    // click. The audience is named so the sender can see what they are about to do.
+    const who = audience === "AGENTS" ? "every agent at this resort" : audience === "RESORT_GUESTS" ? "every guest of this resort with an email address" : "every guest you have booked";
+    if (!window.confirm(`Send "${subject}" to ${who}? This cannot be undone.`)) return;
     setBusy(true);
     try {
       const r = await api<{ sent: number; failed: number }>("/email-campaigns", {
@@ -135,7 +142,8 @@ export default function MailboxPage() {
           </Card>
 
           <Card title="Sent history">
-            {!history ? <Empty msg="Loading…" /> : history.length === 0 ? (
+            <LoadFailed error={fail.error} />
+            {fail.error ? null : !history ? <Empty msg="Loading…" /> : history.length === 0 ? (
               <Empty msg="No campaigns yet" />
             ) : (
               <div className="overflow-x-auto"><table className="w-full text-sm">

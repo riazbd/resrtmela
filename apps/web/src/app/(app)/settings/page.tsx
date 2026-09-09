@@ -9,6 +9,7 @@ import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
+import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 
 interface ResortDetail {
   id: number;
@@ -496,13 +497,15 @@ function ExportTab({ rid, name }: { rid: number; name: string }) {
 
 function AccessTab({ rid }: { rid: number }) {
   const { push } = useToast();
+  // a failed load used to render as "No requests yet"
+  const fail = useLoadFailure();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [invite, setInvite] = useState({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
-    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then(setRows).catch(() => setRows([]));
+    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -578,7 +581,8 @@ function AccessTab({ rid }: { rid: number }) {
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <Empty msg="No requests yet" />}
+          <LoadFailed error={fail.error} onRetry={load} />
+          {!fail.error && rows.length === 0 && <Empty msg="No requests yet" />}
         </div>
       </Card>
 
@@ -606,6 +610,8 @@ function AccessTab({ rid }: { rid: number }) {
 }
 
 function UsersTab({ rid }: { rid: number }) {
+  // a failed load used to render as "No team members yet", on a resort with staff
+  const fail = useLoadFailure();
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
@@ -614,7 +620,7 @@ function UsersTab({ rid }: { rid: number }) {
 
   const load = useCallback(() => {
     // the roles list is shared with the Permissions tab and cached under one key
-    api<UserRow[]>(`/resorts/${rid}/users`).then(setRows).catch(() => setRows([]));
+    api<UserRow[]>(`/resorts/${rid}/users`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
     api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
   }, [rid]);
   useEffect(() => load(), [load]);
@@ -712,7 +718,8 @@ function UsersTab({ rid }: { rid: number }) {
               ))}
             </tbody>
           </table>
-          {rows?.length === 0 && <Empty msg="No team members yet" />}
+          <LoadFailed error={fail.error} onRetry={load} />
+          {!fail.error && rows?.length === 0 && <Empty msg="No team members yet" />}
         </div>
       </Card>
 
@@ -1187,6 +1194,9 @@ function ApiKeysTab({ rid }: { rid: number }) {
   }
 
   async function revoke(id: string) {
+    // this key is a customer's own website talking to us; revoking it takes
+    // their booking form offline until they paste a new one in
+    if (!window.confirm("Revoke this API key? Anything using it stops working immediately.")) return;
     try {
       await api(`/api-keys/${id}`, { method: "DELETE" });
       load();
