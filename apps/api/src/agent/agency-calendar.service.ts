@@ -97,7 +97,7 @@ export class AgencyCalendarService {
 
     const [rooms, bookings] = await Promise.all([
       this.prisma.room.findMany({
-        where: { resortId: { in: resortIds }, status: "ACTIVE" },
+        where: { resortId: { in: resortIds }, status: "ACTIVE", deletedAt: null },
         select: {
           id: true,
           name: true,

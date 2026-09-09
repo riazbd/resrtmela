@@ -249,7 +249,9 @@ export class ExportService {
     });
     return {
       name: "staff",
-      headers: ["name", "phone", "email", "role", "customRole", "status", "commission", "commissionKind"],
+      // the commission columns are the agent's *former* per-agent terms, kept
+      // as a record; what an agent is actually paid is the resort's one rate
+      headers: ["name", "phone", "email", "role", "customRole", "status", "formerCommission", "formerCommissionKind"],
       rows: rows.map((l) => [
         l.user.name, l.user.phone ?? "", l.user.email ?? "", l.user.role, l.role?.name ?? "",
         l.user.status, l.commissionRate == null ? "" : Number(l.commissionRate), l.commissionKind,

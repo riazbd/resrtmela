@@ -123,7 +123,7 @@ export class GuestService {
     if (to <= from) throw badRequest("Check-out must be after check-in");
 
     const rooms = await this.prisma.room.findMany({
-      where: { resortId, status: "ACTIVE" },
+      where: { resortId, status: "ACTIVE", deletedAt: null },
       include: { roomType: { select: { id: true, name: true, maxAdults: true, maxChildren: true } } },
     });
     if (rooms.length === 0) return [];
@@ -242,7 +242,7 @@ export class GuestService {
     for (const item of input.items) {
       if (item.qty <= 0) continue;
       const typeRooms = await this.prisma.room.findMany({
-        where: { resortId: input.resortId, roomTypeId: item.roomTypeId, status: "ACTIVE" },
+        where: { resortId: input.resortId, roomTypeId: item.roomTypeId, status: "ACTIVE", deletedAt: null },
         orderBy: { id: "asc" },
       });
       if (typeRooms.length === 0) throw badRequest("Room type not available");

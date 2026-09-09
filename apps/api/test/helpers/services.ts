@@ -15,6 +15,7 @@ import { DiscountService } from "../../src/common/discount.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
+import { CommissionService } from "../../src/common/commission.service";
 import { TenantStateService } from "../../src/common/tenant-state.service";
 import { PlatformSettingsService } from "../../src/common/platform-settings.service";
 import { BillingService } from "../../src/platform/billing.service";
@@ -47,7 +48,7 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
   return new BookingsService(
     prisma,
-    new AvailabilityService(prisma),
+    new AvailabilityService(prisma, makeCommissionService(prisma)),
     makeRoomsService(prisma),
     new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
     // EmailService/SmsService fall back to console logging when unconfigured,
@@ -60,6 +61,7 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new TenantStateService(prisma),
     makeOptionsService(prisma),
     makeTaxService(prisma),
+    makeCommissionService(prisma),
   );
 }
 
@@ -105,6 +107,15 @@ export function makePlatformService(prisma: PrismaService): PlatformService {
     new PlanLimitsService(prisma),
     makeBillingService(prisma),
   );
+}
+
+/** Constructing this by hand in a spec is how helpers go stale; go through here. */
+export function makeAvailabilityService(prisma: PrismaService): AvailabilityService {
+  return new AvailabilityService(prisma, makeCommissionService(prisma));
+}
+
+export function makeCommissionService(prisma: PrismaService): CommissionService {
+  return new CommissionService(prisma, new PermissionsService(prisma), new AuditService(prisma));
 }
 
 export function makeSubscriptionService(prisma: PrismaService): SubscriptionService {
@@ -154,7 +165,7 @@ export function makeFbService(prisma: PrismaService): FbService {
 }
 
 export function makeReportsService(prisma: PrismaService): ReportsService {
-  return new ReportsService(prisma, new PermissionsService(prisma), makeTaxService(prisma));
+  return new ReportsService(prisma, new PermissionsService(prisma), makeTaxService(prisma), makeCommissionService(prisma));
 }
 
 export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
@@ -204,7 +215,7 @@ export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
   return new AgencyGuestsService(
     prisma,
     new AgencyContextService(prisma),
-    new AvailabilityService(prisma),
+    new AvailabilityService(prisma, makeCommissionService(prisma)),
     makeTaxService(prisma),
   );
 }

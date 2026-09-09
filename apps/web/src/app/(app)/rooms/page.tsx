@@ -8,7 +8,7 @@ import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, T
 import { ErrorState, Skeleton } from "@/components/error-state";
 
 export default function RoomsPage() {
-  const { activeResort, isManagement } = useAuth();
+  const { activeResort, isManagement, can } = useAuth();
   const { push } = useToast();
   const qc = useQueryClient();
   const [addRoom, setAddRoom] = useState(false);
@@ -17,6 +17,7 @@ export default function RoomsPage() {
   const [addPlan, setAddPlan] = useState(false);
 
   const canEdit = isManagement;
+  const canDelete = can("rooms.delete");
 
   const enabled = !!activeResort;
   const roomsQ = useApi(keys.rooms(activeResort?.id), () => client.rooms.list(activeResort!.id), { enabled });
@@ -71,6 +72,33 @@ export default function RoomsPage() {
     }
   }
 
+  /**
+   * Removing a room is the one action on this screen that cannot be undone by
+   * clicking the same button again, so it says which of the two things will
+   * happen — deleted outright, or retired with its history kept — and the
+   * owner types nothing they have not been told.
+   */
+  async function removeRoom(room: Room) {
+    const ask =
+      `Remove ${room.name} from the inventory?
+
+` +
+      `If it has never been sold it is deleted. If it has, it is retired: it leaves the calendar ` +
+      `and the room count, and its past bookings, invoices and reports keep it.
+
+This cannot be undone.`;
+    if (!window.confirm(ask)) return;
+    try {
+      const r = await api<{ removed: "deleted" | "retired"; name: string }>(`/rooms/${room.id}`, {
+        method: "DELETE",
+      });
+      push(r.removed === "deleted" ? `${r.name} deleted` : `${r.name} retired — its history is kept`);
+      void load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    }
+  }
+
   if (error) return <ErrorState error={error} />;
   if (loading) return <Skeleton rows={6} />;
 
@@ -97,6 +125,14 @@ export default function RoomsPage() {
                       <Button size="sm" variant={r.status === "ACTIVE" ? "subtle" : "primary"} onClick={() => toggleRoom(r)}>
                         {r.status === "ACTIVE" ? "Out of service" : "Activate"}
                       </Button>
+                      {canDelete && (
+                        <>
+                          {" "}
+                          <Button size="sm" variant="ghost" className="!text-red-600" onClick={() => void removeRoom(r)}>
+                            Remove
+                          </Button>
+                        </>
+                      )}
                     </Td>
                   )}
                 </tr>

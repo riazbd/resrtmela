@@ -63,6 +63,7 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "wallet.manage", label: "Top-up / payout wallets", group: "Money" },
   { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
+  { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
   { key: "guests.view", label: "View guests", group: "Inventory" },
   { key: "restaurant.view", label: "View restaurant bills", group: "Restaurant" },
   { key: "restaurant.create", label: "Create restaurant bills (POS)", group: "Restaurant" },

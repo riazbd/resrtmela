@@ -211,7 +211,7 @@ export class ImportService {
 
     // room + user caches for the batch
     const roomCache = new Map<string, { id: number; baseRate: number; roomTypeId: number }>();
-    const existingRooms = await this.prisma.room.findMany({ where: { resortId } });
+    const existingRooms = await this.prisma.room.findMany({ where: { resortId, deletedAt: null } });
     for (const r of existingRooms) roomCache.set(r.name.toLowerCase(), { id: r.id, baseRate: Number(r.baseRate), roomTypeId: r.roomTypeId });
     let defaultRoomTypeId = existingRooms[0]?.roomTypeId ?? null;
     if (!defaultRoomTypeId) {
@@ -598,7 +598,7 @@ export class ImportService {
 
     // room resolution via optional name map {"3": "Snow Drop"}
     const roomsByName = new Map<string, { id: number }>();
-    for (const r of await this.prisma.room.findMany({ where: { resortId }, select: { id: true, name: true } })) {
+    for (const r of await this.prisma.room.findMany({ where: { resortId, deletedAt: null }, select: { id: true, name: true } })) {
       roomsByName.set(r.name.toLowerCase(), { id: r.id });
     }
     /**

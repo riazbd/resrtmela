@@ -58,7 +58,7 @@ export interface Me {
   name: string;
   phone: string;
   role: string;
-  resorts: { resort: Resort; commissionRate: number | null }[];
+  resorts: { resort: Resort }[];
 }
 
 export interface PermRole {

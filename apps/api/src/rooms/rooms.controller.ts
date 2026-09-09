@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
 import { IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { RoomsService } from "./rooms.service";
@@ -85,6 +85,15 @@ export class RoomsController {
   @Patch("rooms/:id")
   updateRoom(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: UpdateRoomDto) {
     return this.rooms.updateRoom(req.user, id, dto);
+  }
+
+  /**
+   * Removing a room is its own permission, not part of `rooms.manage`:
+   * editing a rate and taking a room off the books are different authorities.
+   * The service decides between deleting and retiring; the caller cannot.
+   */
+  @Delete("rooms/:id") deleteRoom(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.rooms.deleteRoom(req.user, id);
   }
 
   @Get("resorts/:resortId/rate-plans")

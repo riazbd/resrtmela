@@ -9,7 +9,7 @@ import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/comp
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 interface AgentRow {
-  agentId: number; name: string; commissionRate: number;
+  agentId: number; name: string; commissionRate: number; commissionKind: string;
   bookings: number; rent: number; due: number; commission: number;
 }
 interface SourceRow { source: string; bookings: number; rent: number; due: number }
@@ -241,7 +241,7 @@ export default function ReportsPage() {
                 {agents.map((r) => (
                   <tr key={r.agentId}>
                     <Td className="font-medium">{r.name}</Td>
-                    <Td className="text-xs">{r.commissionRate}%</Td>
+                    <Td className="text-xs">{r.commissionKind === "FLAT" ? `${money(r.commissionRate)}/booking` : `${r.commissionRate}%`}</Td>
                     <Td>{r.bookings}</Td>
                     <Td className="text-right">{money(r.rent)}</Td>
                     <Td className="text-right text-red-700">{money(r.due)}</Td>

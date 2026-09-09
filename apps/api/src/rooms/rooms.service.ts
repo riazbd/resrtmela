@@ -7,6 +7,7 @@ import { dateOnly } from "../common/dates";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService } from "../common/permissions";
 import { AuditService } from "../common/audit.service";
+import { LIVE_STATES } from "../bookings/booking-state";
 
 @Injectable()
 export class RoomsService {
@@ -77,7 +78,8 @@ export class RoomsService {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "rooms.view");
     return this.prisma.room.findMany({
-      where: { resortId },
+      // retired rooms are history, not inventory
+      where: { resortId, deletedAt: null },
       include: { roomType: true },
       orderBy: [{ roomTypeId: "asc" }, { name: "asc" }],
     });
@@ -92,10 +94,24 @@ export class RoomsService {
     await this.perms.require(claims, resortId, "rooms.manage");
     // plan cap (soft-SaaS enforcement)
     const limits = await this.planLimits.forResort(resortId);
-    const roomCount = await this.prisma.room.count({ where: { resortId } });
+    const roomCount = await this.prisma.room.count({ where: { resortId, deletedAt: null } });
     const capError = PlanLimitsService.roomCapError(limits, roomCount);
     if (capError) {
       throw Object.assign(new Error(capError), { status: 402 });
+    }
+    /**
+     * `@@unique([resortId, name])` covers retired rooms too, so a name can be
+     * taken by a room the owner cannot see. Saying "already exists" and
+     * nothing else is how that becomes a support call.
+     */
+    const retired = await this.prisma.room.findFirst({
+      where: { resortId, name: data.name, deletedAt: { not: null } },
+      select: { id: true },
+    });
+    if (retired) {
+      throw badRequest(
+        `"${data.name}" is a retired room. Rename that one, or give this room a different name.`,
+      );
     }
     const room = await this.prisma.room.create({
       data: {
@@ -107,6 +123,68 @@ export class RoomsService {
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "room.create", entity: "room", entityId: room.id, diff: data });
     return room;
+  }
+
+  /**
+   * Take a room out of the inventory.
+   *
+   * Two outcomes, and which one happens is not the caller's choice — it is
+   * whether the room has ever been sold:
+   *
+   * - **Never sold.** It was a typo, or a room that never opened. It is
+   *   deleted, and its name is free again.
+   * - **Sold at least once.** Deleting it would take the room out of past
+   *   bookings, invoices and reports; `booking_items.roomId` points at it and
+   *   the database would refuse anyway. It is retired: off the calendar, out
+   *   of the plan cap, its history intact.
+   *
+   * A room with a stay still to come is refused outright either way. Removing
+   * a room from under a guest who has booked it is not a thing to let happen
+   * quietly, and the owner can cancel or move the booking first.
+   */
+  async deleteRoom(claims: JwtClaims, roomId: number): Promise<{ removed: "deleted" | "retired"; name: string }> {
+    const room = await this.prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) throw badRequest("room not found");
+    requireResortAccess(claims, room.resortId);
+    await this.perms.require(claims, room.resortId, "rooms.delete");
+    if (room.deletedAt) throw badRequest(`"${room.name}" has already been removed.`);
+
+    const today = new Date(new Date().toISOString().slice(0, 10));
+    const upcoming = await this.prisma.bookingNight.count({
+      where: {
+        roomId,
+        night: { gte: today },
+        item: { booking: { state: { in: LIVE_STATES }, deletedAt: null } },
+      },
+    });
+    if (upcoming > 0) {
+      throw badRequest(
+        `"${room.name}" has ${upcoming} night(s) still booked. Cancel or move those stays first.`,
+      );
+    }
+
+    // "ever sold" is the FK question, asked directly
+    const everSold = await this.prisma.bookingItem.count({ where: { roomId } });
+    const everBilled = await this.prisma.fbBill.count({ where: { roomId } });
+    const removed: "deleted" | "retired" = everSold + everBilled > 0 ? "retired" : "deleted";
+
+    if (removed === "retired") {
+      await this.prisma.room.update({ where: { id: roomId }, data: { deletedAt: new Date() } });
+    } else {
+      // nothing points at it, so nothing is lost
+      await this.prisma.discountOffer.deleteMany({ where: { roomId } });
+      await this.prisma.room.delete({ where: { id: roomId } });
+    }
+
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: room.resortId,
+      action: "room.delete",
+      entity: "room",
+      entityId: roomId,
+      diff: { name: room.name, removed, baseRate: Number(room.baseRate) },
+    });
+    return { removed, name: room.name };
   }
 
   async updateRoom(

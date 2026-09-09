@@ -66,7 +66,7 @@ export class PlatformService {
       this.prisma.user.findMany({ where: { role: "AGENT" }, select: { status: true } }),
       this.prisma.subscription.findMany({ select: { status: true, monthlyFee: true } }),
       this.prisma.subscriptionDue.findMany({ where: { status: { in: ["DUE", "OVERDUE"] } }, select: { amount: true } }),
-      this.prisma.room.count(),
+      this.prisma.room.count({ where: { deletedAt: null } }),
     ]);
     const activeSubs = subs.filter((s) => s.status === "ACTIVE");
     return {
@@ -515,8 +515,6 @@ export class PlatformService {
     return rows.map((r) => ({
       ...r.user,
       wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null,
-      commissionRate: r.commissionRate != null ? Number(r.commissionRate) : null,
-      commissionKind: r.commissionKind,
       roleId: r.roleId,
       roleName: r.role?.name ?? null,
     }));
@@ -525,7 +523,13 @@ export class PlatformService {
   async createResortUser(
     claims: JwtClaims,
     resortId: number,
-    input: { name: string; phone: string; password: string; role: string; commissionRate?: number; commissionKind?: string; roleId?: number },
+    /**
+     * No commission here any more. It was a per-agent field, so two agents
+     * selling the same room could earn different money on it; the rate is the
+     * resort's now, on Settings -> Agent access, and `CommissionService` is the
+     * only thing that sets it.
+     */
+    input: { name: string; phone: string; password: string; role: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -535,10 +539,6 @@ export class PlatformService {
     if (input.roleId != null) {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
       if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
-    }
-    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
-    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-      throw badRequest("percent commission 1-100");
     }
     const phone = input.phone.replace(/\D/g, "");
     const exists = await this.prisma.user.findUnique({ where: { phone } });
@@ -554,15 +554,9 @@ export class PlatformService {
       },
     });
     await this.prisma.userResort.create({
-      data: {
-        userId: user.id,
-        resortId,
-        roleId: input.roleId,
-        commissionRate: isAgent ? (input.commissionRate ?? 5) : null,
-        commissionKind: isAgent ? kind : "PERCENT",
-      },
+      data: { userId: user.id, resortId, roleId: input.roleId },
     });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, commissionKind: kind, roleId: input.roleId } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, roleId: input.roleId } });
     return { id: user.id, name: user.name, phone: user.phone, role: user.role, status: user.status };
   }
 
@@ -570,7 +564,7 @@ export class PlatformService {
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; commissionRate?: number; commissionKind?: string; name?: string; roleId?: number },
+    input: { role?: string; status?: string; password?: string; name?: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -624,20 +618,7 @@ export class PlatformService {
         await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: input.roleId } });
       }
     }
-    if (input.commissionRate != null || input.commissionKind != null) {
-      const kind = input.commissionKind === "FLAT" ? "FLAT" : input.commissionKind === "PERCENT" ? "PERCENT" : linked.commissionKind;
-      if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-        throw badRequest("percent commission 1-100");
-      }
-      await this.prisma.userResort.update({
-        where: { userId_resortId: { userId, resortId } },
-        data: {
-          ...(input.commissionRate != null ? { commissionRate: input.commissionRate } : {}),
-          commissionKind: kind,
-        },
-      });
-    }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, commissionKind: input.commissionKind, roleId: input.roleId } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, roleId: input.roleId } });
     return { id: user.id, name: user.name, role: user.role, status: user.status };
   }
 
@@ -1088,7 +1069,7 @@ export class PlatformService {
   async inviteAgentByEmail(
     claims: JwtClaims,
     resortId: number,
-    input: { email: string; name?: string; commissionRate?: number; commissionKind?: "PERCENT" | "FLAT" },
+    input: { email: string; name?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
@@ -1111,17 +1092,11 @@ export class PlatformService {
           status: "pending",
         },
       }));
-    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
-    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-      throw badRequest("percent commission 1-100");
-    }
     await this.prisma.userResort.create({
       data: {
         userId: user.id,
         resortId,
         roleId: (await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" } }))?.id ?? null,
-        commissionRate: input.commissionRate ?? 5,
-        commissionKind: kind,
       },
     });
     const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
@@ -1150,7 +1125,7 @@ export class PlatformService {
         data: { userId: user.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
       });
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to, commissionKind: kind, commissionRate: input.commissionRate ?? 5 } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to } });
     return { id: user.id, name: user.name, email: to, status: user.status, emailed: !existingUser };
   }
 
@@ -1207,8 +1182,6 @@ export class PlatformService {
           userId: user.id,
           resortId: link.resortId,
           roleId: link.roleId,
-          commissionRate: link.commissionRate,
-          commissionKind: link.commissionKind,
         },
       });
     }

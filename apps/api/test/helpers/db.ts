@@ -118,7 +118,16 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
   const uniq = `${seq}-${Math.floor(Math.random() * 1e6)}`;
   const tenant = await prisma.tenant.create({ data: { name: "Test Tenant", slug: `t-${uniq}` } });
   const resort = await prisma.resort.create({
-    data: { tenantId: tenant.id, name: "Test Resort", location: "Cox's Bazar" },
+    data: {
+      tenantId: tenant.id,
+      name: "Test Resort",
+      location: "Cox's Bazar",
+      // commission is the resort's term, not the agent's: 10% here so the
+      // specs that were written against the fixture agent's old 10% still
+      // describe the same resort
+      agentCommissionKind: "PERCENT",
+      agentCommissionRate: 10,
+    },
   });
   const roomType = await prisma.roomType.create({
     data: { resortId: resort.id, name: "Deluxe", maxAdults: 2, maxChildren: 2 },

@@ -3,12 +3,19 @@ import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLen
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
 import { SubscriptionService } from "./subscription.service";
+import { CommissionService } from "../common/commission.service";
 
 class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+}
+
+/** What the resort pays every agent. One term, set by hand. */
+class CommissionDto {
+  @IsIn(["PERCENT", "FLAT"]) kind!: "PERCENT" | "FLAT";
+  @IsNumber() @Min(0) rate!: number;
 }
 
 /** The owner asking to move plan. The plan table decides whether it exists. */
@@ -35,7 +42,6 @@ class CreateUserDto {
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MaxLength(128) password!: string;
   @IsIn(["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"]) role!: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
   @IsOptional() @IsNumber() roleId?: number;
 }
 
@@ -44,7 +50,6 @@ class UpdateUserDto {
   @IsOptional() @IsIn(["active", "pending", "suspended"]) status?: string;
   @IsOptional() @IsString() @MaxLength(128) password?: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
   @IsOptional() @IsNumber() roleId?: number;
 }
 
@@ -61,8 +66,6 @@ class RolePatchDto {
 class InviteAgentDto {
   @IsString() email!: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
-  @IsOptional() @IsIn(["PERCENT", "FLAT"]) commissionKind?: "PERCENT" | "FLAT";
 }
 
 class AgentStaffDto {
@@ -129,6 +132,7 @@ export class PlatformController {
   constructor(
     @Inject(PlatformService) private readonly platform: PlatformService,
     @Inject(SubscriptionService) private readonly subscriptions: SubscriptionService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
   ) {}
 
   // super admin — platform
@@ -238,6 +242,20 @@ export class PlatformController {
   }
   @Post("resorts/:id/subscription/plan") changePlan(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ChangePlanDto) {
     return this.subscriptions.changePlan(req.user, id, dto.plan);
+  }
+
+  /**
+   * owner — agent commission
+   *
+   * One rate for the resort, replacing a field that used to sit on every
+   * agent's row. Reading it needs only resort access, because an agent has to
+   * be able to see their own terms; setting it needs `agents.manage`.
+   */
+  @Get("resorts/:id/commission") commissionTerms(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.commission.publicTermsFor(req.user, id);
+  }
+  @Post("resorts/:id/commission") setCommission(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: CommissionDto) {
+    return this.commission.setTerms(req.user, id, dto);
   }
 
   // owner — permission roles (Paradox-style matrix)

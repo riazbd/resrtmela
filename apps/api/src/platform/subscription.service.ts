@@ -128,7 +128,7 @@ export class SubscriptionService {
     ]);
 
     const [rooms, resorts, bills, open] = await Promise.all([
-      this.prisma.room.count({ where: { resortId } }),
+      this.prisma.room.count({ where: { resortId, deletedAt: null } }),
       resort ? this.prisma.resort.count({ where: { tenantId: resort.tenantId } }) : Promise.resolve(1),
       // by resort, not by subscription: a subscription the super admin
       // cancelled and replaced still billed this resort, and its invoices are
@@ -321,7 +321,7 @@ export class SubscriptionService {
       select: { tenantId: true },
     });
     const [rooms, resorts] = await Promise.all([
-      this.prisma.room.count({ where: { resortId } }),
+      this.prisma.room.count({ where: { resortId, deletedAt: null } }),
       resort ? this.prisma.resort.count({ where: { tenantId: resort.tenantId } }) : Promise.resolve(1),
     ]);
     if (rooms > target.maxRooms) {

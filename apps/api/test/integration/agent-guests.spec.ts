@@ -208,9 +208,7 @@ describe("finding a room by date", () => {
     await prisma.room.create({
       data: { resortId: second.id, roomTypeId: type.id, name: "C1", baseRate: 4000 },
     });
-    await prisma.userResort.create({
-      data: { userId: fx.agentId, resortId: second.id, commissionRate: 10, commissionKind: "PERCENT" },
-    });
+    await prisma.userResort.create({ data: { userId: fx.agentId, resortId: second.id } });
 
     const free = await guests().rooms(junior, { from: "2026-07-01", to: "2026-07-03" });
 

@@ -158,7 +158,8 @@ export class EngageService {
       }
       const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
       if (!linked) {
-        await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId, commissionRate: 5 } });
+        // the commission is the resort's, set once on Settings -> Agent access
+        await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId } });
       }
     }
     await this.notify([req.userId], {

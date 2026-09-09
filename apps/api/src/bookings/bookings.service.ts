@@ -17,6 +17,7 @@ import { DiscountService } from "../common/discount.service";
 import { PermissionsService } from "../common/permissions";
 import { OptionsService } from "../options/options.service";
 import { TaxService } from "../common/tax.service";
+import { CommissionService } from "../common/commission.service";
 import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
@@ -79,6 +80,7 @@ export class BookingsService {
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
     @Inject(OptionsService) private readonly options: OptionsService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -216,7 +218,7 @@ export class BookingsService {
 
     // precheck rooms exist in resort
     const roomRows = await this.prisma.room.findMany({
-      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE", deletedAt: null },
     });
     if (roomRows.length !== input.roomIds.length) {
       throw badRequest("One or more rooms missing/inactive for this resort");
@@ -609,11 +611,9 @@ export class BookingsService {
      */
     let agentPricing: ReturnType<typeof agentPrices> | null = null;
     if (isAgent && resort.showRatesToAgents && b.agentUserId === claims.userId) {
-      const terms = await this.prisma.userResort.findUnique({
-        where: { userId_resortId: { userId: claims.userId, resortId: b.resortId } },
-        select: { commissionKind: true, commissionRate: true },
-      });
-      if (terms) agentPricing = agentPrices(terms, totals.roomRent);
+      // the resort's terms, not the agent's row: one rate for everyone selling
+      const terms = await this.commission.termsFor(b.resortId);
+      agentPricing = agentPrices({ commissionKind: terms.kind, commissionRate: terms.rate }, totals.roomRent);
     }
     const maskedGuest = isAgent
       ? {
@@ -725,7 +725,7 @@ export class BookingsService {
      */
     if (patch.roomIds?.length) {
       const mine = await this.prisma.room.count({
-        where: { id: { in: patch.roomIds }, resortId: b.resortId },
+        where: { id: { in: patch.roomIds }, resortId: b.resortId, deletedAt: null },
       });
       if (mine !== new Set(patch.roomIds).size) {
         throw badRequest("Room does not belong to this resort");
@@ -1060,7 +1060,7 @@ export class BookingsService {
 
     const taxRules = await this.taxRulesFor(resortId);
     const rooms = await this.prisma.room.findMany({
-      where: { resortId },
+      where: { resortId, deletedAt: null },
       include: { roomType: { select: { maxAdults: true, maxChildren: true } } },
       orderBy: { id: "asc" },
     });
@@ -1201,7 +1201,7 @@ export class BookingsService {
     });
     const guest = await this.prisma.guest.findUniqueOrThrow({ where: { id: guestId } });
     const roomRows = await this.prisma.room.findMany({
-      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE", deletedAt: null },
     });
     if (roomRows.length !== input.roomIds.length) {
       throw badRequest("One or more rooms missing/inactive for this resort");
@@ -1486,7 +1486,7 @@ export class BookingsService {
     const occupied = await this.prisma.bookingNight.count({
       where: { night: t, item: { booking: { resortId, state: "CHECKED_IN", deletedAt: null } } },
     });
-    const totalRooms = await this.prisma.room.count({ where: { resortId } });
+    const totalRooms = await this.prisma.room.count({ where: { resortId, deletedAt: null } });
     const dues = withTotals.filter((b) => b.arriving && b.due > 0);
     return {
       arrivals: withTotals.filter((b) => b.arriving),

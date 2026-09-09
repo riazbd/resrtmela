@@ -108,6 +108,17 @@ model Resort {
   /// Business Identification Number — a VAT invoice in Bangladesh must show it
   binNumber         String?   @db.VarChar(32)
   agentPaymentHours Int       @default(48) // agent bookings must be fully paid this many hours before check-in
+
+  /// What this resort pays its agents — one term for all of them.
+  ///
+  /// Commission used to be a per-agent field on `UserResort`, so two agents
+  /// selling the same room could earn different money on it and no screen
+  /// showed the spread. The owner's rule is that the rate belongs to the
+  /// resort: one number, set by hand, that everyone sells on. The old
+  /// per-agent columns still hold what each agent used to be on; nothing
+  /// reads them for pricing any more.
+  agentCommissionKind String  @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (per booking)
+  agentCommissionRate Decimal @default(5.00) @db.Decimal(10, 2)
   invoicePrefix     String    @default("SER") @db.VarChar(12)
   bookingPrefix     String    @default("BK") @db.VarChar(12)
   fbPrefix          String    @default("RES") @db.VarChar(12)
@@ -339,13 +350,23 @@ model Room {
   baseRate   Decimal    @db.Decimal(10, 2)
   status     RoomStatus @default(ACTIVE)
 
+  /// Retired: out of the inventory, still in the history.
+  ///
+  /// A room with no stay behind it is deleted outright — it was a typo. A room
+  /// that has been sold cannot be, because `booking_items.roomId` points at it
+  /// and taking it away would take the rooms out of last year's bookings,
+  /// invoices and reports. So it is retired: off the calendar, out of the plan
+  /// cap, and its past intact. Distinct from `OUT_OF_SERVICE`, which means a
+  /// room that is temporarily unsellable and still part of the inventory.
+  deletedAt  DateTime?
+
   items          BookingItem[]
   nights         BookingNight[]
   fbBills        FbBill[]
   discountOffers DiscountOffer[]
 
   @@unique([resortId, name])
-  @@index([resortId])
+  @@index([resortId, deletedAt])
   @@map("rooms")
 }
 

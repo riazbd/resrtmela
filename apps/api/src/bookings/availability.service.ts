@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
+import { CommissionService } from "../common/commission.service";
 import { JwtClaims, Role, ROLE } from "@rh/shared";
 import { agentPricing } from "../common/money";
 import { requireSellingAccess } from "../common/rbac";
@@ -20,7 +21,10 @@ export interface RoomAvailability {
 
 @Injectable()
 export class AvailabilityService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
+  ) {}
 
   /**
    * Rooms × nights grid for [from, to). Nights occupied by live bookings
@@ -40,7 +44,8 @@ export class AvailabilityService {
     }
 
     const rooms = await this.prisma.room.findMany({
-      where: { resortId },
+      // a retired room is history; it cannot be sold, so it is not on the grid
+      where: { resortId, deletedAt: null },
       include: { roomType: { select: { id: true } } },
       orderBy: { name: "asc" },
     });
@@ -66,13 +71,10 @@ export class AvailabilityService {
      * at the moment they are quoting a guest — not in a commission report at
      * the end of the month.
      */
-    const terms =
-      claims.role === ROLE.AGENT
-        ? await this.prisma.userResort.findUnique({
-            where: { userId_resortId: { userId: claims.userId, resortId } },
-            select: { commissionKind: true, commissionRate: true },
-          })
-        : null;
+    const resortTerms = claims.role === ROLE.AGENT ? await this.commission.termsFor(resortId) : null;
+    const terms = resortTerms
+      ? { commissionKind: resortTerms.kind, commissionRate: resortTerms.rate }
+      : null;
     const showRates =
       terms == null
         ? true

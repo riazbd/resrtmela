@@ -7,6 +7,7 @@ import { dateOnly, round2, nightsBetween } from "../common/dates";
 import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange } from "../common/money";
 import { PermissionsService } from "../common/permissions";
 import { TaxService } from "../common/tax.service";
+import { CommissionService } from "../common/commission.service";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
 
@@ -19,6 +20,7 @@ export class ReportsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
   ) {}
 
   /**
@@ -248,7 +250,8 @@ export class ReportsService {
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
 
     const rooms = await this.prisma.room.findMany({
-      where: { resortId },
+      // occupancy is measured against what the resort can sell today
+      where: { resortId, deletedAt: null },
       select: { id: true, name: true, status: true },
       orderBy: { name: "asc" },
     });
@@ -448,14 +451,18 @@ export class ReportsService {
       where: { resortId, user: { role: ROLE.AGENT } },
       include: { user: { select: { id: true, name: true } } },
     });
+    // one rate for the resort, not one per row: this used to read
+    // `s.commissionRate`, so the report showed whatever each agent had been
+    // typed in as, and two agents on the same booking earned differently
+    const terms = await this.commission.termsFor(resortId);
 
     const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
     for (const s of staff) {
       byAgent.set(s.userId, {
         agentId: s.userId,
         name: s.user.name,
-        commissionRate: Number(s.commissionRate ?? 0),
-        commissionKind: s.commissionKind,
+        commissionRate: terms.rate,
+        commissionKind: terms.kind,
         bookings: 0,
         rent: 0,
         due: 0,
@@ -515,11 +522,8 @@ export class ReportsService {
   async myReport(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     if (claims.role !== ROLE.AGENT) throw badRequest("Agents only");
     requireSellingAccess(claims, resortId);
-    const link = await this.prisma.userResort.findUnique({
-      where: { userId_resortId: { userId: claims.userId, resortId } },
-    });
-    const rate = Number(link?.commissionRate ?? 0);
-    const kind = link?.commissionKind ?? "PERCENT";
+    // the same terms the owner's report reads, so the two cannot disagree
+    const { rate, kind } = await this.commission.termsFor(resortId);
     const bookings = (await this.rangeBookings(resortId, from, to)).filter(
       (b) => b.agentUserId === claims.userId,
     );

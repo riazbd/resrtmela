@@ -1,7 +1,7 @@
 /**
  * An agent's own commission figure must match the one the resort owner sees.
  * Commission is either a percentage of rent or a flat fee per booking, set
- * per agent per resort (UserResort.commissionKind).
+ * by the resort (Resort.agentCommissionKind), one term for every agent.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
@@ -45,9 +45,9 @@ async function twoAgentBookings() {
 
 describe("agent commission", () => {
   it("pays a flat fee per booking when the agent is on FLAT terms", async () => {
-    await prisma.userResort.update({
-      where: { userId_resortId: { userId: fx.agentId, resortId: fx.resortId } },
-      data: { commissionKind: "FLAT", commissionRate: 500 },
+    await prisma.resort.update({
+      where: { id: fx.resortId },
+      data: { agentCommissionKind: "FLAT", agentCommissionRate: 500 },
     });
     await twoAgentBookings();
 
@@ -59,9 +59,9 @@ describe("agent commission", () => {
   });
 
   it("shows the agent the same commission the owner's report shows", async () => {
-    await prisma.userResort.update({
-      where: { userId_resortId: { userId: fx.agentId, resortId: fx.resortId } },
-      data: { commissionKind: "FLAT", commissionRate: 500 },
+    await prisma.resort.update({
+      where: { id: fx.resortId },
+      data: { agentCommissionKind: "FLAT", agentCommissionRate: 500 },
     });
     await twoAgentBookings();
 

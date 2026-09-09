@@ -176,7 +176,10 @@ export class AuthService {
         resorts: {
           select: {
             resort: { select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true, timezone: true } },
-            commissionRate: true,
+            // `commissionRate` used to ride along here. It was the agent's own
+            // legacy rate, which nothing sets and nothing prices on any more —
+            // shipping it would be handing the console a number that disagrees
+            // with every screen that shows commission.
           },
         },
       },

@@ -101,8 +101,6 @@ interface UserRow {
   status: string;
   createdAt: string;
   wallet: { balance: number; active: boolean } | null;
-  commissionRate: number | null;
-  commissionKind: string;
   roleId: number | null;
   roleName: string | null;
 }
@@ -515,7 +513,7 @@ function AccessTab({ rid }: { rid: number }) {
   const fail = useLoadFailure();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [invite, setInvite] = useState({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+  const [invite, setInvite] = useState({ email: "", name: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
@@ -541,15 +539,10 @@ function AccessTab({ rid }: { rid: number }) {
     try {
       const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agent`, {
         method: "POST",
-        body: {
-          email: invite.email,
-          name: invite.name || undefined,
-          commissionRate: Number(invite.commissionRate),
-          commissionKind: invite.commissionKind,
-        },
+        body: { email: invite.email, name: invite.name || undefined },
       });
       push(r.emailed ? "Invitation email sent — the agent can sign in with the emailed credentials" : "Agent linked — they were notified");
-      setInvite({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+      setInvite({ email: "", name: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -600,26 +593,101 @@ function AccessTab({ rid }: { rid: number }) {
         </div>
       </Card>
 
+      <div className="space-y-4">
+        <CommissionCard rid={rid} />
+
       <Card title="Invite agent by email">
         <div className="space-y-3">
           <Field label="Agent email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agent@email.com" /></Field>
           <Field label="Name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
-          <Field label="Commission type">
-            <Select value={invite.commissionKind} onChange={(e) => setInvite({ ...invite, commissionKind: e.target.value })}>
-              <option value="PERCENT">Percent of rent (%)</option>
-              <option value="FLAT">Fixed amount ({cur()} per booking)</option>
-            </Select>
-          </Field>
-          <Field label={invite.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
-            <Input type="number" min={0} max={invite.commissionKind === "PERCENT" ? 100 : undefined} value={invite.commissionRate} onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })} />
-          </Field>
+
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
             The agent receives a <b>verification email</b> with login credentials. New agents start pending — activate them below or in Users.
           </div>
           <Button onClick={sendInvite} loading={inviting} disabled={!invite.email}>Send invitation</Button>
         </div>
       </Card>
+      </div>
     </div>
+  );
+}
+
+/**
+ * What the resort pays its agents — one rate, for all of them.
+ *
+ * Commission used to be a field on every agent's row, editable per person, so
+ * two agents selling the same room could earn different money on it and no
+ * screen showed the spread. It is the resort's term now, and this is the only
+ * place it is set.
+ */
+function CommissionCard({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const [kind, setKind] = useState("PERCENT");
+  const [rate, setRate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const editable = can("agents.manage");
+
+  const q = useApi(["commission", rid], () => api<{ kind: string; rate: number }>(`/resorts/${rid}/commission`), {
+    enabled: !!rid,
+  });
+  useEffect(() => {
+    if (q.data) {
+      setKind(q.data.kind);
+      setRate(String(q.data.rate));
+    }
+  }, [q.data]);
+
+  const dirty = !!q.data && (kind !== q.data.kind || Number(rate) !== q.data.rate);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/resorts/${rid}/commission`, { method: "POST", body: { kind, rate: Number(rate) } });
+      push("Commission saved — it applies to every agent");
+      await qc.invalidateQueries({ queryKey: ["commission", rid] });
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Agent commission">
+      {q.error ? (
+        <ErrorState error={q.error} reset={() => void q.refetch()} />
+      ) : (
+        <div className="space-y-3">
+          <Field label="How it is worked out">
+            <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={!editable}>
+              <option value="PERCENT">Percent of room rent</option>
+              <option value="FLAT">Fixed amount per booking</option>
+            </Select>
+          </Field>
+          <Field label={kind === "FLAT" ? `Commission (${cur()} per booking)` : "Commission (%)"}>
+            <Input
+              type="number"
+              min={0}
+              max={kind === "PERCENT" ? 100 : undefined}
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              disabled={!editable}
+            />
+          </Field>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Every agent selling this resort earns on these terms. Changing them changes what agents see on
+            the booking screen and what the agent report adds up.
+          </p>
+          {editable && (
+            <Button onClick={() => void save()} loading={busy} disabled={!dirty || rate === ""}>
+              Save commission
+            </Button>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -629,7 +697,7 @@ function UsersTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
+  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -647,12 +715,10 @@ function UsersTab({ rid }: { rid: number }) {
         body: {
           name: form.name, phone: form.phone, password: form.password, role: form.role,
           roleId: form.roleId ? Number(form.roleId) : undefined,
-          commissionRate: form.role === "AGENT" ? Number(form.commissionRate) : undefined,
-          commissionKind: form.role === "AGENT" ? form.commissionKind : undefined,
         },
       });
       push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
-      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
+      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -677,7 +743,7 @@ function UsersTab({ rid }: { rid: number }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Commission</Th><Th>Wallet</Th><Th /></tr>
+              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Wallet</Th><Th /></tr>
             </thead>
             <tbody>
               {(rows ?? []).map((u) => (
@@ -696,9 +762,6 @@ function UsersTab({ rid }: { rid: number }) {
                   </Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
-                  </Td>
-                  <Td>
-                    {u.role === "AGENT" ? <CommissionEditor u={u} rid={rid} onDone={load} /> : <span className="text-xs text-slate-300">—</span>}
                   </Td>
                   <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{money(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
                   <Td>
@@ -758,25 +821,6 @@ function UsersTab({ rid }: { rid: number }) {
               ))}
             </Select>
           </Field>
-          {form.role === "AGENT" && (
-            <>
-              <Field label="Commission type">
-                <Select value={form.commissionKind} onChange={(e) => setForm({ ...form, commissionKind: e.target.value })}>
-                  <option value="PERCENT">Percent of rent (%)</option>
-                  <option value="FLAT">Fixed amount ({cur()} per booking)</option>
-                </Select>
-              </Field>
-              <Field label={form.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
-                <Input
-                  type="number"
-                  min={0}
-                  max={form.commissionKind === "PERCENT" ? 100 : undefined}
-                  value={form.commissionRate}
-                  onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
-                />
-              </Field>
-            </>
-          )}
           {form.role === "AGENT" && (
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
               Agents start as <b>pending</b> — activate them after review. Suspended agents can't create bookings.
@@ -934,37 +978,6 @@ function RolesTab({ rid }: { rid: number }) {
           </div>
         </Card>
       )}
-    </div>
-  );
-}
-
-function CommissionEditor({ u, rid, onDone }: { u: UserRow; rid: number; onDone: () => void }) {
-  const { push } = useToast();
-  const [kind, setKind] = useState(u.commissionKind === "FLAT" ? "FLAT" : "PERCENT");
-  const [value, setValue] = useState(String(u.commissionRate ?? ""));
-  const dirty = kind !== (u.commissionKind ?? "PERCENT") || Number(value) !== Number(u.commissionRate ?? 0);
-  return (
-    <div className="flex items-center gap-1.5">
-      <Select className="!w-24 !py-1" value={kind} onChange={(e) => setKind(e.target.value)}>
-        <option value="PERCENT">%</option>
-        <option value="FLAT">{cur()} fixed</option>
-      </Select>
-      <Input className="!w-16 !py-1" type="number" min={0} max={kind === "PERCENT" ? 100 : undefined} value={value} onChange={(e) => setValue(e.target.value)} />
-      <button
-        onClick={async () => {
-          try {
-            await api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body: { commissionKind: kind, commissionRate: Number(value) } });
-            push("Commission saved");
-            onDone();
-          } catch (ex) {
-            push((ex as Error).message, "err");
-          }
-        }}
-        disabled={!dirty}
-        className="rounded-lg border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40"
-      >
-        Save
-      </button>
     </div>
   );
 }
