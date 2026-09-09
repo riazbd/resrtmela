@@ -788,6 +788,12 @@ model Subscription {
 
   dues SubscriptionDue[]
 
+  /// One live subscription per resort. The database enforces it with a
+  /// generated column, `liveKey` — the resort id while the status is live, NULL
+  /// once it is cancelled — under a unique index. It is deliberately not in this
+  /// model: a column the application can write is a column the application can
+  /// get wrong, and the whole point is that it cannot. See migration
+  /// 20260910140000_one_live_subscription.
   @@index([resortId])
   @@index([status])
   @@map("subscriptions")

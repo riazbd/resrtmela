@@ -220,19 +220,56 @@ export class PlatformService {
     if (!def) throw badRequest(`Unknown plan "${input.plan}"`);
     if (!def.active) throw badRequest(`Plan "${def.label}" is not available`);
     const now = new Date();
-    const trialEndsAt = addDays(now, def.trialDays);
-    const sub = await this.prisma.subscription.create({
-      data: {
-        resortId,
-        plan: input.plan,
-        status: "TRIAL",
-        monthlyFee: input.monthlyFee ?? Number(def.monthlyFee),
-        trialEndsAt,
-        renewsAt: trialEndsAt,
-        note: input.note,
-      },
+
+    /**
+     * A resort has one live subscription, and changing plan changes it.
+     *
+     * This used to create a new row in TRIAL every time and never cancel the
+     * old one. So changing plan restarted the free trial — a way to never
+     * pay — and once the second trial ended the billing sweep, which walks
+     * every ACTIVE and PAST_DUE subscription, invoiced the resort twice a
+     * month. MRR counted both too.
+     *
+     * A resort that has already started paying keeps paying: only a genuinely
+     * new subscription gets a trial. The old row is cancelled rather than
+     * deleted, because what a resort used to pay is a thing to be able to say.
+     */
+    const existing = await this.prisma.subscription.findFirst({
+      where: { resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+      orderBy: { id: "desc" },
     });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "platform.subscription.create", entity: "subscription", entityId: Number(sub.id), diff: input });
+
+    const monthlyFee = input.monthlyFee ?? Number(def.monthlyFee);
+    const sub = await this.prisma.$transaction(async (tx) => {
+      if (existing) {
+        await tx.subscription.update({
+          where: { id: existing.id },
+          data: { status: "CANCELLED", cancelledAt: now },
+        });
+      }
+      // a trial is for someone who has not had one; a paying resort changing
+      // plan carries its dates and its status across
+      const fresh = !existing || existing.status === "TRIAL";
+      const trialEndsAt = fresh ? addDays(now, def.trialDays) : existing.trialEndsAt;
+      return tx.subscription.create({
+        data: {
+          resortId,
+          plan: input.plan,
+          status: existing && !fresh ? existing.status : "TRIAL",
+          monthlyFee,
+          startedAt: existing?.startedAt ?? now,
+          trialEndsAt,
+          renewsAt: existing && !fresh ? existing.renewsAt : trialEndsAt,
+          note: input.note,
+        },
+      });
+    });
+    await this.audit.log({
+      actorId: claims.userId, resortId,
+      action: existing ? "platform.subscription.change" : "platform.subscription.create",
+      entity: "subscription", entityId: Number(sub.id),
+      diff: { ...input, from: existing?.plan ?? null, replaced: existing ? Number(existing.id) : null },
+    });
     return sub;
   }
 
@@ -290,6 +327,7 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const sub = await this.prisma.subscription.update({
       where: { id: BigInt(subscriptionId) },
+      // the generated column frees the live slot on its own
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
     await this.audit.log({ actorId: claims.userId, resortId: sub.resortId, action: "platform.subscription.cancel", entity: "subscription", entityId: subscriptionId });
