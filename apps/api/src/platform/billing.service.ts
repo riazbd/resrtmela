@@ -154,6 +154,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       include: { resort: { select: { id: true, name: true } } },
     });
     for (const sub of ended) {
+      await this.applyPendingPlan(sub);
       // the first period starts when the trial ended, not today: a sweep that
       // ran late must not hand the tenant free days it did not sell
       const periodStart = sub.trialEndsAt!;
@@ -178,6 +179,9 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       include: { resort: { select: { id: true, name: true } } },
     });
     for (const sub of dueNow) {
+      // a downgrade the owner asked for lands here, at the period boundary,
+      // so the first bill of the new period is already the new price
+      await this.applyPendingPlan(sub);
       let periodStart = sub.renewsAt!;
       let renewsAt = addMonths(periodStart, 1);
       // catch up month by month if the sweep has not run for a long time
@@ -190,6 +194,50 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       }
       await this.prisma.subscription.update({ where: { id: sub.id }, data: { renewsAt } });
     }
+  }
+
+  /**
+   * Applies a plan change that was waiting for the renewal.
+   *
+   * An upgrade is immediate and billed pro rata by `SubscriptionService`; a
+   * downgrade is not, because the month the resort is in has already been
+   * invoiced. `pendingPlan` holds it until this moment. The row is mutated in
+   * place as well as in the database so the bill raised straight after this
+   * carries the new fee.
+   */
+  private async applyPendingPlan(sub: {
+    id: bigint;
+    resortId: number;
+    plan: string;
+    monthlyFee: unknown;
+    pendingPlan: string | null;
+  }): Promise<void> {
+    if (!sub.pendingPlan) return;
+    const target = await this.prisma.platformPlan.findUnique({ where: { name: sub.pendingPlan } });
+    if (!target) {
+      // the plan was deleted between the request and the renewal; keep the
+      // subscription where it is rather than move it somewhere nobody chose
+      this.logger.warn(`subscription ${sub.id}: pending plan ${sub.pendingPlan} no longer exists — kept on ${sub.plan}`);
+      await this.prisma.subscription.update({ where: { id: sub.id }, data: { pendingPlan: null } });
+      sub.pendingPlan = null;
+      return;
+    }
+    const from = sub.plan;
+    await this.prisma.subscription.update({
+      where: { id: sub.id },
+      data: { plan: target.name, monthlyFee: target.monthlyFee, pendingPlan: null },
+    });
+    sub.plan = target.name;
+    sub.monthlyFee = target.monthlyFee;
+    sub.pendingPlan = null;
+    await this.audit.log({
+      actorId: SYSTEM_ACTOR_ID,
+      resortId: sub.resortId,
+      action: "billing.plan.applied",
+      entity: "subscription",
+      entityId: Number(sub.id),
+      diff: { from, to: target.name, monthlyFee: Number(target.monthlyFee) },
+    });
   }
 
   /** Creates the bill for one period. Returns false when it already existed. */

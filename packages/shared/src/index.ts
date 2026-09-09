@@ -83,6 +83,8 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "roles.manage", label: "Manage roles & permissions", group: "Admin" },
   { key: "settings.manage", label: "Resort settings", group: "Admin" },
   { key: "apikeys.manage", label: "API keys", group: "Admin" },
+  { key: "billing.view", label: "See the subscription & bills", group: "Admin" },
+  { key: "billing.manage", label: "Change the subscription plan", group: "Admin" },
   { key: "import.run", label: "Import data from spreadsheets", group: "Admin" },
   { key: "export.run", label: "Export the resort's data", group: "Admin" },
   { key: "marketing.send", label: "Buy email credits & send campaigns", group: "Admin" },
@@ -147,6 +149,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "auditlog.view", "discounts.manage",
     "bookings.delete", "expenses.delete", "restaurant.delete",
     "import.run", "export.run", "marketing.send", "users.manage", "settings.manage",
+    "billing.view",
   ],
   "Front Desk": [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.walkin",

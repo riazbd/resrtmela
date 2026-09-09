@@ -19,6 +19,7 @@ import { TenantStateService } from "../../src/common/tenant-state.service";
 import { PlatformSettingsService } from "../../src/common/platform-settings.service";
 import { BillingService } from "../../src/platform/billing.service";
 import { PlatformService } from "../../src/platform/platform.service";
+import { SubscriptionService } from "../../src/platform/subscription.service";
 import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
@@ -103,6 +104,15 @@ export function makePlatformService(prisma: PrismaService): PlatformService {
     new PermissionsService(prisma),
     new PlanLimitsService(prisma),
     makeBillingService(prisma),
+  );
+}
+
+export function makeSubscriptionService(prisma: PrismaService): SubscriptionService {
+  return new SubscriptionService(
+    prisma,
+    new PermissionsService(prisma),
+    new PlanLimitsService(prisma),
+    new AuditService(prisma),
   );
 }
 

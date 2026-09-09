@@ -33,6 +33,45 @@ interface ResortDetail {
   _count?: { bookings: number; guests: number };
 }
 
+interface PlanOption {
+  name: string;
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  blurb: string | null;
+  direction: "current" | "upgrade" | "downgrade" | "available";
+}
+
+interface SubscriptionDetail {
+  plan: string | null;
+  planLabel: string | null;
+  blurb: string | null;
+  status: string;
+  monthlyFee: number;
+  startedAt: string | null;
+  trialEndsAt: string | null;
+  renewsAt: string | null;
+  pendingPlan: string | null;
+  pendingPlanLabel: string | null;
+  limits: { maxRooms: number; maxResorts: number; label: string };
+  usage: { rooms: number; resorts: number };
+  outstanding: { amount: number; count: number };
+  bills: {
+    id: string; amount: number; periodStart: string; periodEnd: string;
+    dueDate: string; status: string; paidAt: string | null; note: string | null;
+  }[];
+  plans: PlanOption[];
+}
+
+interface PlanChange {
+  plan: string;
+  planLabel: string;
+  effective: "now" | "renewal" | "cancelled";
+  effectiveFrom: string | null;
+  charged: number;
+}
+
 interface Usage {
   tenantId: number;
   name: string;
@@ -101,34 +140,22 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
+const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
 
 export default function SettingsPage() {
-  const { activeResort, isManagement, role } = useAuth();
+  const { activeResort, isManagement, can } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resort info");
   const [d, setD] = useState<ResortDetail | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [busy, setBusy] = useState(false);
   const rid = activeResort?.id;
+  /* the API refuses without `billing.view`; a tab that always errors is worse
+     than no tab, so it is not offered either */
+  const visibleTabs = TABS.filter((t) => t !== "Subscription" || can("billing.view"));
 
   const qc = useQueryClient();
   const infoQ = useApi(["resort", rid], () => api<ResortDetail>(`/resorts/${rid}`), { enabled: !!rid });
-  /**
-   * The plans the platform actually sells.
-   *
-   * These buttons read FREE / STANDARD / PRO — names the plan table does not
-   * contain — while the platform screen offered STARTER / GROWTH / CHAIN. Two
-   * hardcoded vocabularies in one product, neither of them the price list.
-   * Only a super admin sees this block, and only they may read the endpoint.
-   */
-  const plansQ = useApi(
-    ["platform-plans"],
-    () => api<{ name: string; label: string; active: boolean }[]>("/platform/plans"),
-    { enabled: role === "SUPER_ADMIN" },
-  );
-  const planNames = (plansQ.data ?? []).filter((p) => p.active).map((p) => p.name);
-
   const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => api<Usage>(`/tenants/${activeResort!.tenantId}/usage`), {
     enabled: !!activeResort,
   });
@@ -182,17 +209,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function changePlan(plan: string) {
-    if (!usage) return;
-    try {
-      await api(`/tenants/${usage.tenantId}/plan`, { method: "PATCH", body: { plan } });
-      push(`Plan changed to ${plan}`);
-      setUsage({ ...usage, plan, planLabel: plan });
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div>
@@ -200,7 +216,7 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500">{d.name} — team, activity, offers & integrations</p>
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
       {tab === "Resort info" && (
         <div className="max-w-xl space-y-4">
@@ -212,20 +228,17 @@ export default function SettingsPage() {
                 <Stat label="Staff users" value={String(usage.staffUsers)} />
                 <Stat label="Guests" value={String(usage.guests)} />
               </div>
-              {role === "SUPER_ADMIN" && (
-                <div className="mt-3 flex items-center gap-2">
-                  {/* these buttons read FREE / STANDARD / PRO — names the plan
-                      table does not contain, and a different vocabulary from the
-                      STARTER / GROWTH / CHAIN the platform screen offered. The
-                      price list is the authority. */}
-                  <span className="text-xs text-slate-500">Change plan:</span>
-                  {planNames.map((p) => (
-                    <Button key={p} size="sm" variant={usage.plan === p ? "primary" : "ghost"} onClick={() => changePlan(p)}>
-                      {p}
-                    </Button>
-                  ))}
-                </div>
-              )}
+              {/*
+                A "Change plan" row used to sit here. It wrote `Tenant.plan` —
+                a field the billing sweep never reads — so the fee, the renewal
+                date and the status stayed exactly as they were: it changed a
+                label. The subscription the platform actually bills is on the
+                Subscription tab, and a super admin assigns one in Platform →
+                Resorts.
+              */}
+              <p className="mt-3 text-xs text-slate-400">
+                Plan, price and renewal date live on the <b>Subscription</b> tab.
+              </p>
             </Card>
           )}
 
@@ -288,6 +301,7 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {tab === "Subscription" && rid && can("billing.view") && <SubscriptionTab rid={rid} />}
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
       {tab === "Permissions" && rid && <RolesTab rid={rid} />}
       {tab === "Agent access" && rid && <AccessTab rid={rid} />}
@@ -1278,6 +1292,213 @@ function ApiKeysTab({ rid }: { rid: number }) {
       </Card>
     </div>
   );
+}
+
+/**
+ * The subscription, from the side of the person paying for it.
+ *
+ * Before this tab the console could not answer "what am I paying", "when does
+ * it renew", "what do I owe" or "what would the next plan up cost me". The one
+ * plan control in the product wrote `Tenant.plan`, a field the billing sweep
+ * does not read.
+ *
+ * Two things here are deliberate rather than decorative. An upgrade names its
+ * pro-rata charge before it is pressed, because a button that takes money must
+ * say how much. And a downgrade says which day it lands on, because a customer
+ * who expects the cheaper price this month and gets billed the old one has been
+ * misled by the interface, not the invoice.
+ */
+function SubscriptionTab({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState("");
+
+  const q = useApi(["subscription", rid], () => api<SubscriptionDetail>(`/resorts/${rid}/subscription`), {
+    enabled: !!rid,
+  });
+  const d = q.data;
+
+  async function change(p: PlanOption) {
+    const fee = money(p.monthlyFee);
+    const ask =
+      p.direction === "upgrade"
+        ? `Move to ${p.label} (${fee}/month)?\n\nIt applies immediately, and you are billed only the difference for the days left in this month.`
+        : p.direction === "current"
+          ? `Stay on ${p.label} and call off the change?`
+          : `Move down to ${p.label} (${fee}/month)?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that month is already paid for — and ${p.label} starts from then.`;
+    if (!window.confirm(ask)) return;
+    setBusy(p.name);
+    try {
+      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name } });
+      push(
+        r.effective === "now"
+          ? r.charged > 0
+            ? `On ${r.planLabel} — ${money(r.charged)} billed for the rest of this month`
+            : `On ${r.planLabel}`
+          : r.effective === "cancelled"
+            ? `Staying on ${r.planLabel}`
+            : `${r.planLabel} starts ${when(r.effectiveFrom)}`,
+      );
+      await qc.invalidateQueries({ queryKey: ["subscription", rid] });
+      await qc.invalidateQueries({ queryKey: ["tenant-usage"] });
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // a screen that cannot load says so, rather than reading as "no subscription"
+  if (q.error) return <ErrorState error={q.error} reset={() => void q.refetch()} />;
+  if (!d) return <Empty msg="Loading…" />;
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      {d.outstanding.count > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <b>{money(d.outstanding.amount)}</b> outstanding across {d.outstanding.count} bill
+          {d.outstanding.count === 1 ? "" : "s"}. Unpaid bills eventually suspend the resort — you are
+          warned before that happens.
+        </div>
+      )}
+
+      <Card title={d.plan ? `Your plan — ${d.planLabel}` : "No subscription yet"}>
+        {d.plan ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+              <Stat label="Status" value={STATUS_LABEL[d.status] ?? d.status} />
+              <Stat label="Monthly" value={money(d.monthlyFee)} />
+              <Stat
+                label={d.status === "TRIAL" ? "Trial ends" : "Renews"}
+                value={when(d.status === "TRIAL" ? d.trialEndsAt : d.renewsAt)}
+              />
+              <Stat
+                label="Rooms"
+                value={`${d.usage.rooms}/${d.limits.maxRooms}`}
+                sub={`${d.usage.resorts}/${d.limits.maxResorts} resorts`}
+              />
+            </div>
+            {d.pendingPlan && (
+              <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Moving to <b>{d.pendingPlanLabel}</b> on {when(d.renewsAt)}. Choose {d.planLabel} again to
+                stay where you are.
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">
+            This resort is not on a subscription. The platform sets the first one up — the prices below are
+            what it would cost.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Plans">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {d.plans.map((p) => (
+            <div
+              key={p.name}
+              className={`rounded-lg border p-3 ${p.direction === "current" ? "border-brand-300 bg-brand-50" : "border-slate-200"}`}
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-bold text-slate-800">{p.label}</span>
+                {p.direction === "current" && (
+                  <span className="text-[10px] font-bold uppercase text-brand-600">Current</span>
+                )}
+              </div>
+              <div className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {money(p.monthlyFee)}
+                <span className="text-xs font-medium text-slate-400">/mo</span>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {p.maxRooms >= 1000 ? "Unlimited rooms" : `${p.maxRooms} rooms`} · {p.maxResorts} resort
+                {p.maxResorts === 1 ? "" : "s"}
+              </div>
+              {p.blurb && <div className="mt-1 text-[11px] text-slate-400">{p.blurb}</div>}
+              {d.plan && p.direction !== "current" && (
+                <Button
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant={p.direction === "upgrade" ? "primary" : "ghost"}
+                  loading={busy === p.name}
+                  onClick={() => void change(p)}
+                >
+                  {p.direction === "upgrade" ? "Upgrade" : "Move down"}
+                </Button>
+              )}
+              {d.plan && p.direction === "current" && d.pendingPlan && (
+                <Button
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant="ghost"
+                  loading={busy === p.name}
+                  onClick={() => void change(p)}
+                >
+                  Stay on {p.label}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Bills" className="!p-0">
+        {d.bills.length === 0 ? (
+          <div className="p-4">
+            <Empty msg="No bills yet" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead>
+                <tr>
+                  <Th>Period</Th>
+                  <Th>Amount</Th>
+                  <Th>Due</Th>
+                  <Th>Status</Th>
+                  <Th>Note</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.bills.map((b) => (
+                  <tr key={b.id} className="border-t border-slate-100">
+                    <Td>
+                      {when(b.periodStart)} → {when(b.periodEnd)}
+                    </Td>
+                    <Td className="tabular-nums">{money(b.amount)}</Td>
+                    <Td>{when(b.dueDate)}</Td>
+                    <Td>
+                      {b.status === "PAID" ? (
+                        <span className="text-emerald-600">Paid {when(b.paidAt)}</span>
+                      ) : (
+                        <span className={b.status === "OVERDUE" ? "text-red-600" : "text-slate-600"}>
+                          {b.status}
+                        </span>
+                      )}
+                    </Td>
+                    <Td className="text-xs text-slate-400">{b.note ?? ""}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  TRIAL: "Free trial",
+  ACTIVE: "Active",
+  PAST_DUE: "Past due",
+  NONE: "None",
+};
+
+/** A date the owner reads, rather than an ISO string. */
+function when(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {

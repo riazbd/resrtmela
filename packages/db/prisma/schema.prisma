@@ -804,6 +804,14 @@ model Subscription {
   cancelledAt DateTime?
   note        String?   @db.VarChar(255)
 
+  /// A plan change that has been asked for but not paid for yet.
+  ///
+  /// A downgrade must not take the month away that the resort has already
+  /// paid for, so it waits: this holds the plan the owner asked for, and the
+  /// billing sweep applies it at the next renewal — the same pass that raises
+  /// the first bill at the new price. NULL is the normal state.
+  pendingPlan String?   @db.VarChar(16)
+
   dues SubscriptionDue[]
 
   /// One live subscription per resort. The database enforces it with a

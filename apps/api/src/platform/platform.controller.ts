@@ -2,12 +2,18 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query,
 import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
+import { SubscriptionService } from "./subscription.service";
 
 class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+}
+
+/** The owner asking to move plan. The plan table decides whether it exists. */
+class ChangePlanDto {
+  @IsString() @MaxLength(16) plan!: string;
 }
 
 class ResortStatusDto {
@@ -120,7 +126,10 @@ class EmailInvoiceDto {
 @Controller()
 @UseGuards(AuthGuard)
 export class PlatformController {
-  constructor(@Inject(PlatformService) private readonly platform: PlatformService) {}
+  constructor(
+    @Inject(PlatformService) private readonly platform: PlatformService,
+    @Inject(SubscriptionService) private readonly subscriptions: SubscriptionService,
+  ) {}
 
   // super admin — platform
   @Get("platform/overview") overview(@Req() req: AuthedRequest) {
@@ -214,6 +223,21 @@ export class PlatformController {
   }
   @Delete("activity/:id") deleteActivity(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.platform.deleteActivity(req.user, id);
+  }
+
+  /**
+   * owner — their own subscription
+   *
+   * Distinct from `PATCH /tenants/:id/plan`, which is the super admin moving a
+   * tenant and writes `Tenant.plan`. This pair reads and writes the
+   * subscription the billing sweep actually bills, and is gated on
+   * `billing.view` / `billing.manage` rather than on being platform staff.
+   */
+  @Get("resorts/:id/subscription") subscription(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.subscriptions.detail(req.user, id);
+  }
+  @Post("resorts/:id/subscription/plan") changePlan(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ChangePlanDto) {
+    return this.subscriptions.changePlan(req.user, id, dto.plan);
   }
 
   // owner — permission roles (Paradox-style matrix)
