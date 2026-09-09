@@ -778,6 +778,62 @@ methods. `agent-visibility.spec.ts` was the only claim from the last pass that
 survived contact with this one, and it is the only one that was written as a
 spec.
 
+### §3.29 — Finishing the resort panel
+
+The audit in §3.23 produced about seventy findings and §3.24–§3.26 closed the
+ones that lose other people's data or money. This is the rest of it, done in one
+pass on the owner's instruction, and organised by the two questions that
+actually matter for this product:
+
+**Can a wrong state exist?** Five could, and now cannot — each enforced where it
+cannot be argued with rather than remembered by a service. `Guest` had no
+uniqueness on its own dedup key, so two bookings at one counter split a guest in
+two; adding the index immediately exposed the read-then-write race behind it,
+which is the index doing its job before it was even committed. A phone-less
+walk-in was keyed on a hash of their *name*, so every guest called "local" was
+one row owning hundreds of unrelated stays. `Booking.invoiceNo` was not unique
+next to a `code` that always has been. `Expense` had the offline replay guard on
+the agency side and not on the resort side, which is the side that goes offline.
+Four tenancy columns had no foreign key. And a resort could hold two live
+subscriptions — a plan change restarted the free trial and billed twice a month
+— which is now a generated column the application cannot write.
+
+**Can the owner change it without a deploy?** Three enums that described a
+business rather than a program became the resort's own lists, in one table so
+the next one costs a registry entry. Tax stopped being a single percentage and
+became rules — what each is charged on, whether it is inside the price, whether
+it stacks — which is the only shape that can express 15% VAT plus a 10% service
+charge that VAT is then charged on, plus a restaurant at its own rate, plus a
+menu price quoted gross. The restaurant could not carry tax at all before. And
+the last hardcoded things went: two rival plan vocabularies, a fee map beside
+the plan table it had already fetched, the agent deadline's three permitted
+numbers, an API example pointing at one specific server, and signup describing
+a plan it does not assign.
+
+**Dates.** `new Date().toISOString().slice(0, 10)` is today in UTC and the
+console said it seven times over. Bangladesh is UTC+6, so from 18:00 every
+default date was tomorrow — the day sheet, the expense register, a new booking's
+check-in. `Resort.timezone` had been in the schema all along and the console was
+never sent it.
+
+**Screens that were saying something untrue.** The financial-year picker looked
+its own options up by the wrong field and reported all time. Two selects sent
+their label instead of their value, so three booking states and every activity
+category were wrong. The public booking form sent `adults: 2` hardcoded and
+never asked. "Wallet on" sent the same body as the button beside it. Booking
+search filtered the hundred rows already fetched, under a footer admitting it
+was hiding the rest. The agent's own earnings page recomputed commission as a
+percentage, so flat-fee agents saw a number nobody agreed to.
+
+**Reports.** The P&L skipped February — `setUTCMonth(+1)` from a 31st lands on 3
+March — and charged whole months of payroll to part-month ranges. The collectors
+report totalled 300 rows and presented it as the answer, on the one report an
+owner opens to ask where the cash went.
+
+**And screens that lied by omission.** Fourteen `.catch(() => setRows([]))`
+turned every failure into "nothing here"; four destructive actions fired on one
+click, including a bulk email with no preview and no recipient count.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -785,85 +841,39 @@ is what is genuinely still open, ordered by the same rule: **a platform earns
 money only when it can onboard a tenant without us, enforce its own terms, and
 never promise what it does not do.**
 
-### What the audit found and this pass did not fix
+### What the audit found and is still open
 
-The audit in §3.23 produced about seventy findings. Isolation, money and the
-permission matrix were closed (§3.24–§3.26) because those lose other people's
-data or other people's money. These did not make that cut, and are listed so
-nobody has to find them twice. None of them leaks data; all of them are real.
+§3.29 closed most of it. What genuinely remains, and why:
 
-**The platform cannot correctly charge for itself.** `setSubscription` creates a
-new subscription in `TRIAL` without cancelling the old one, and nothing in the
-schema says a resort has only one — so changing plan restarts a free trial,
-two ACTIVE rows bill twice a month, and MRR counts both. A **cancelled**
-subscription raises no further dues and suspension only follows unpaid dues, so
-a tenant who cancels keeps the product free forever. And `assertWritable` is
-called in exactly two places: a suspended tenant can still take guest-app
-bookings, public-API bookings, F&B bills, payments, payroll and imports.
-**This is the one to do next**, and it blocks customer number two more surely
-than any feature does.
+**Domain gaps worth building.** A housekeeping bit, so a room is not sellable
+the instant a guest leaves — there is already a `HOUSEKEEPING` role that
+resolves to zero permissions. Dated out-of-service blocks with a reason, which
+is what would make the idle-inventory pitch true for past quarters rather than
+only today. Weekend rate plans, which is the most common pricing rule in this
+market and something `RatePlan` cannot express. A cancellation and refund
+policy: the workflow exists, the policy does not, so every refund amount is
+typed in by hand. Child pricing — `children` is stored and multiplied by
+nothing. Meal plans, since every package here is sold as room plus breakfast
+plus dinner. Group bookings as an entity rather than a `groupTag` string, which
+currently produces seven invoices for one seven-room group.
 
-**Screens that state something untrue.** The financial-year picker sets its
-option value to the year's start date and looks the year up by label, so it
-never matches: choosing "FY 2025-26" shows it selected and reports *all time*.
-The booking status filter renders options with no `value`, so it sends
-`CHECKED-IN` where the API expects `CHECKED_IN` and three filters silently
-return the wrong set; the activity category picker has the same bug. The public
-booking form sends `adults: 2, children: 0` hardcoded — the guest is never
-asked, so pax is wrong on every web booking. "Wallet on" sends the same body as
-the Activate button beside it and does not enable a wallet. The F&B collect
-modal hardcodes `method: "CASH"`, so bKash and card collections are booked as
-cash. The booking search filters client-side over the hundred rows already
-fetched, and the footer knows it is hiding the rest.
+**The legal one.** A guest roster. `adults: 3` records one name, and
+foreign-guest reporting in Sajek and Bandarban needs nationality, document type
+and every occupant.
 
-**Time.** `Resort.timezone` is read in three places in the API and **nowhere in
-the console**, where `iso()` is written seven times and every copy is UTC. In
-Bangladesh that means every default date is tomorrow after 18:00 — the day
-sheet, the expense register, a new booking's check-in — which is exactly the
-shift the front desk works. The day sheet's own default comes from the
-server's date, so before 06:00 it opens on yesterday.
+**Smaller, still true.** Overlapping rate plans resolve by whichever row the
+database returns first, so a resort with a season and an Eid weekend gets a
+price that depends on row order. `Payment` has no `resortId`, which is the index
+a cash-accountability feature will want first. Most tables have no `updatedAt`.
+`NotificationJob.renderedText` keeps the body of every message ever sent,
+forever, with no purge. NID and passport numbers are masked by the API and
+exported unmasked to CSV. There is no offboarding path for a tenant, and the FK
+graph makes deleting one structurally impossible.
 
-**Guest identity.** `Guest` has no `@@unique([resortId, phoneKey])`, so
-concurrent bookings and offline replays split a guest in two; and a walk-in
-with no phone is keyed by a hash of their name, so every guest called "local" —
-the most common booking in the client's own workbook — is one row.
-
-**Destructive actions with no confirmation**: removing an employee, paying a
-salary, revoking an API key (which takes a customer's booking form offline),
-cancelling a tenant's subscription, suspending a resort, sending a bulk email
-to every guest with no preview or recipient count, and importing expenses or
-restaurant CSVs with no dry-run. Payroll's *Undo* asks for confirmation; its
-*Remove* does not.
-
-**Reports.** Occupancy, ADR and RevPAR do not exist as figures an owner can
-read — two of the three are already computed inside `idleInventory` and thrown
-away. Cancellations and no-shows are excluded from every report by
-`COUNTED_STATES`, so the cancellation rate is invisible. The P&L allocates a
-whole month's payroll to any overlapping range, and skips February outright:
-`setUTCMonth(+1)` from a 31st lands on 3 March. `metrics` counts revenue by
-check-in date while `daily` spreads it over nights, and both render on one
-screen.
-
-**Not a gap:** language coverage. English is the default by decision (10 Sep);
-Bangla is a translation to extend on request.
-
-**Also standing**: eleven bare `Int` tenancy columns with no foreign key;
-`Payment` has no `resortId`, which is the index the cash-accountability feature
-will want first; `Booking.invoiceNo` is not unique; `Expense` has no
-`@@unique([resortId, clientRef])` although the resort side is the offline one;
-NID and passport numbers are masked by the API and exported **unmasked** to
-CSV; `NotificationJob.renderedText` keeps the full body of every message ever
-sent, forever, with no purge; and there is no offboarding path for a tenant at
-all — the FK graph makes deleting one structurally impossible.
-
-**Domain gaps worth building** (as against hotel-software cargo cult): a
-housekeeping bit so a room is not sellable the instant a guest leaves — there
-is already a `HOUSEKEEPING` role that resolves to zero permissions — dated
-out-of-service blocks with a reason, weekend rate plans, a cancellation and
-refund policy, child pricing (`children` is stored and multiplied by nothing),
-meal plans, and group bookings as an entity rather than a string. The legal one
-is a guest roster: `adults: 3` records one name, and foreign-guest reporting in
-Sajek and Bandarban needs nationality, document type and every occupant.
+**Deliberately not done.** Occupancy, ADR and RevPAR as first-class metrics —
+two of the three are already computed inside `idleInventory` and thrown away, so
+this is cheap, but it is a feature rather than a defect. Day close. Cash
+accountability (STRATEGY D3). Per-room pricing (D4).
 
 ### Next, and small
 
