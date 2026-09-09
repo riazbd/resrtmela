@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { bookingHandoff } from "@/lib/booking-handoff";
 import { FileDown } from "lucide-react";
 import {
   api, client, money, dmy, iso,
@@ -648,15 +649,31 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
 }
 
 function BookingsInner() {
-  const { activeResort } = useAuth();
+  const { activeResort, setActiveResort, me } = useAuth();
   const qc = useQueryClient();
   const params = useSearchParams();
-  const focusId = params.get("id");
+  const handoff = useMemo(() => bookingHandoff(params), [params]);
+  const focusId = handoff.focusId;
   const preset = {
-    roomId: params.get("roomId") ? Number(params.get("roomId")) : null,
-    checkIn: params.get("checkIn"),
-    checkOut: params.get("checkOut"),
+    roomId: handoff.roomId,
+    checkIn: handoff.checkIn,
+    checkOut: handoff.checkOut,
   };
+
+  /**
+   * Arriving for a different resort than the one on screen.
+   *
+   * An agent searching across the resorts they sell clicks "Book here" on one
+   * of them; the resort in the URL is the resort they chose. Without this the
+   * page quietly built the form for whichever resort happened to be active,
+   * which is the worst kind of wrong — a booking made at the wrong hotel, with
+   * nothing on screen to say so.
+   */
+  useEffect(() => {
+    if (!handoff.resortId || handoff.resortId === activeResort?.id) return;
+    const target = me?.resorts?.map((r) => r.resort).find((r) => r.id === handoff.resortId);
+    if (target) setActiveResort(target);
+  }, [handoff.resortId, activeResort?.id, me, setActiveResort]);
   const [state, setState] = useState("");
   const [source, setSource] = useState("");
   const [from, setFrom] = useState("");
@@ -666,11 +683,11 @@ function BookingsInner() {
   const [showNew, setShowNew] = useState(false);
   const [presetOn, setPresetOn] = useState(false);
   useEffect(() => {
-    if (params.get("new") === "1") {
+    if (handoff.openNew) {
       setPresetOn(true);
       setShowNew(true);
     }
-  }, [params]);
+  }, [handoff.openNew]);
   const [openId, setOpenId] = useState<number | null>(null);
 
   const filters = { state, source, group, from, to };
