@@ -22,6 +22,9 @@ import {
   makeEngageService,
   makeGuestService,
   makeTenancyService,
+  makePlatformService,
+  makeIntentsService,
+  makeImportService,
 } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ActivitiesService } from "../../src/activities/activities.service";
@@ -195,5 +198,161 @@ describe("what an agency may read of a resort it sells", () => {
 
     expect(detail).not.toHaveProperty("taxRatePct");
     expect(JSON.stringify(detail.rooms)).not.toContain("baseRate");
+  });
+});
+
+describe("who a resort's own admin may change", () => {
+  it("cannot promote a colleague to resort admin", async () => {
+    const platform = makePlatformService(asPrisma);
+    const clerk = await prisma.user.create({
+      data: { name: "Clerk", phone: "8801999000111", role: "FRONT_DESK", status: "active" },
+    });
+    await prisma.userResort.create({ data: { userId: clerk.id, resortId: ours.resortId } });
+
+    // creating a RESORT_ADMIN is refused; updating one into existence was not
+    await expect(
+      platform.updateResortUser(usManager, ours.resortId, clerk.id, { role: "RESORT_ADMIN" }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("cannot reset the password of someone who also works at another resort", async () => {
+    const platform = makePlatformService(asPrisma);
+    // one person, two employers — the `users` row is global, this route is not
+    const shared = await prisma.user.create({
+      data: { name: "Works at both", phone: "8801999000222", role: "MANAGER", status: "active" },
+    });
+    await prisma.userResort.create({ data: { userId: shared.id, resortId: ours.resortId } });
+    await prisma.userResort.create({ data: { userId: shared.id, resortId: theirs.resortId } });
+
+    await expect(
+      platform.updateResortUser(usManager, ours.resortId, shared.id, { password: "hunter2hunter2" }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("approving an agency's request to sell a resort", () => {
+  it("does not rewrite the role of someone who is staff elsewhere", async () => {
+    const engage = makeEngageService(asPrisma);
+    const theirManager = await prisma.user.findUniqueOrThrow({ where: { id: theirs.managerId } });
+    await prisma.resortAccess.create({
+      data: { userId: theirManager.id, resortId: ours.resortId, status: "PENDING" },
+    });
+    const request = await prisma.resortAccess.findFirstOrThrow({
+      where: { userId: theirManager.id, resortId: ours.resortId },
+    });
+
+    await expect(
+      engage.decideAccess(usManager, request.id.toString(), true),
+    ).rejects.toMatchObject({ status: 400 });
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: theirManager.id } });
+    expect(after.role).toBe("MANAGER");
+  });
+
+  it("does not quietly reactivate a suspended account", async () => {
+    const engage = makeEngageService(asPrisma);
+    const banned = await prisma.user.create({
+      data: { name: "Suspended agent", phone: "8801999000333", role: "AGENT", status: "suspended" },
+    });
+    const request = await prisma.resortAccess.create({
+      data: { userId: banned.id, resortId: ours.resortId, status: "PENDING" },
+    });
+
+    await expect(
+      engage.decideAccess(usManager, request.id.toString(), true),
+    ).rejects.toMatchObject({ status: 400 });
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: banned.id } });
+    expect(after.status).toBe("suspended");
+  });
+});
+
+describe("the activity log", () => {
+  it("does not let a resort's admin erase the platform's own history", async () => {
+    const platform = makePlatformService(asPrisma);
+    // a platform event: no resortId, so the resort check was skipped entirely
+    const platformRow = await prisma.auditLog.create({
+      data: { action: "platform.login_as", entity: "user", entityId: 1 },
+    });
+    const admin: JwtClaims = {
+      userId: ours.managerId, role: ROLE.RESORT_ADMIN, resortIds: [ours.resortId],
+    };
+
+    await expect(
+      platform.deleteActivity(admin, platformRow.id.toString()),
+    ).rejects.toMatchObject({ status: 403 });
+
+    expect(await prisma.auditLog.count({ where: { id: platformRow.id } })).toBe(1);
+  });
+
+  it("records the deletion of an entry, with what the entry said", async () => {
+    const platform = makePlatformService(asPrisma);
+    const row = await prisma.auditLog.create({
+      data: {
+        resortId: ours.resortId, action: "expense.delete", entity: "expense", entityId: 7,
+        diff: { amount: 50000 } as never,
+      },
+    });
+    const admin: JwtClaims = {
+      userId: ours.managerId, role: ROLE.RESORT_ADMIN, resortIds: [ours.resortId],
+    };
+
+    await platform.deleteActivity(admin, row.id.toString());
+
+    const trace = await prisma.auditLog.findFirst({ where: { action: "auditlog.delete" } });
+    expect(trace).not.toBeNull();
+    expect(JSON.stringify(trace!.diff)).toContain("expense.delete");
+  });
+});
+
+describe("the mock gateway's confirm button", () => {
+  it("will not settle a booking for someone who has nothing to do with it", async () => {
+    const intents = makeIntentsService(asPrisma);
+    const booking = await seedBooking(prisma as unknown as PrismaClient, ours, {
+      checkIn: "2026-11-01", checkOut: "2026-11-03",
+    });
+    const session = await intents.createCheckout(usManager, booking.id, {
+      method: "BKASH", amount: 1000,
+    });
+
+    // a signed-in stranger — an agent at the other resort — with the reference
+    const stranger: JwtClaims = {
+      userId: theirs.agentId, role: ROLE.AGENT, resortIds: [theirs.resortId],
+    };
+    await expect(
+      intents.confirmMock(stranger, session.providerRef, "trx-1"),
+    ).rejects.toMatchObject({ status: 403 });
+
+    const after = await prisma.paymentIntent.findUniqueOrThrow({
+      where: { providerRef: session.providerRef },
+    });
+    expect(after.status).toBe("pending");
+    expect(await prisma.payment.count({ where: { bookingId: booking.id } })).toBe(0);
+  });
+});
+
+describe("a spreadsheet import", () => {
+  it("does not grant a stranger access to the resort it is imported into", async () => {
+    const importer = makeImportService(asPrisma);
+    // the other tenant's manager, named in our sheet's "Advance received" column
+    const theirManager = await prisma.user.findUniqueOrThrow({ where: { id: theirs.managerId } });
+    const header =
+      "Booking ID,Booking Date,Guest Name,Mobile,NID/Passport No,Room,Check-In,Check-Out,Nights," +
+      "Room Rate,Rent,Discount,Advance,Due,Payment Status,Booking Source,Advance received," +
+      "Adults,Children,Status,Remarks";
+    const row =
+      `BK-90001,01-Nov-2026,Walk in,,,101,01-Nov-2026,02-Nov-2026,1,5000,5000,0,1000,4000,` +
+      `Partial,Agent,${theirManager.name},2,0,Confirmed,`;
+
+    const report = await importer.import(usManager, ours.resortId, `${header}\n${row}`, false);
+
+    // no link was handed out, and the booking is honestly unattributed
+    const granted = await prisma.userResort.count({
+      where: { userId: theirManager.id, resortId: ours.resortId },
+    });
+    expect(granted).toBe(0);
+    expect(report.unmatchedAgents).toContain(theirManager.name);
+    const booking = await prisma.booking.findFirst({ where: { code: "BK-90001" } });
+    expect(booking?.agentUserId).toBeNull();
   });
 });

@@ -538,9 +538,36 @@ export class PlatformService {
     await this.perms.require(claims, resortId, "users.manage");
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId, resortId } } });
     if (!linked) throw badRequest("user not in this resort");
+
+    /**
+     * This route is resort-scoped; the row it writes is not.
+     *
+     * `users` is global — one person, one row, however many resorts they work
+     * at. Only a link to *this* resort was ever checked, so a `users.manage`
+     * holder could reset the password, flip the role or suspend the account of
+     * someone who also works for another tenant, and own that tenant's account
+     * on the next login. Changing what the person is stays with the platform
+     * when the person is not this resort's alone; naming them and giving them
+     * a role inside this resort does not.
+     */
+    const account = input.role != null || input.status != null || input.password != null;
+    if (account && claims.role !== ROLE.SUPER_ADMIN) {
+      const elsewhere = await this.prisma.userResort.count({
+        where: { userId, resortId: { not: resortId } },
+      });
+      if (elsewhere > 0) {
+        throw forbid("This person also works at another resort — only the platform owner can change their account");
+      }
+    }
+
     const data: Prisma.UserUpdateInput = {};
     if (input.role) {
-      if (!["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING", "RESORT_ADMIN"].includes(input.role)) throw badRequest("bad role");
+      // the same list `createResortUser` accepts. RESORT_ADMIN resolves to
+      // ["*"], so allowing it only on update was a way to make an owner out of
+      // a colleague in two calls rather than one.
+      const allowed = ["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"];
+      if (claims.role === ROLE.SUPER_ADMIN) allowed.push("RESORT_ADMIN");
+      if (!allowed.includes(input.role)) throw badRequest("bad role");
       data.role = input.role as never;
     }
     if (input.status) {
@@ -615,9 +642,34 @@ export class PlatformService {
     if (!/^\d+$/.test(id)) throw badRequest("bad id");
     const row = await this.prisma.auditLog.findUnique({ where: { id: BigInt(id) } });
     if (!row) throw badRequest("activity not found");
-    if (row.resortId != null) requireResortAccess(claims, row.resortId);
-    await this.perms.require(claims, row.resortId ?? undefined, "activities.delete");
+
+    /**
+     * A row with no resort is the platform's own history — a tenant created, a
+     * plan changed, an owner impersonated. The old code skipped the resort
+     * check entirely for exactly those rows and then resolved the permission
+     * against `claims.resortIds[0]`, so any resort admin could erase them.
+     *
+     * The permission it asked for, `activities.delete`, is not a key that
+     * exists: `validPermissions` strips it, so it could never be granted and
+     * the guard was really "are you an admin". The key in the matrix — the one
+     * the settings screen shows an owner — is `auditlog.delete`.
+     */
+    if (row.resortId == null) {
+      requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    } else {
+      requireResortAccess(claims, row.resortId);
+      await this.perms.require(claims, row.resortId, "auditlog.delete");
+    }
     await this.prisma.auditLog.delete({ where: { id: BigInt(id) } });
+    // an audit trail whose deletions leave no trace is not an audit trail
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: row.resortId ?? undefined,
+      action: "auditlog.delete",
+      entity: "auditLog",
+      entityId: Number(row.id),
+      diff: { action: row.action, entity: row.entity, entityId: row.entityId?.toString() ?? null, at: row.createdAt },
+    });
     return { deleted: true };
   }
 

@@ -137,7 +137,25 @@ export class EngageService {
       data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
     });
     if (approve) {
-      await this.prisma.user.update({ where: { id: req.userId }, data: { role: "AGENT", status: "active" } });
+      /**
+       * Approving an agency to sell here is not a licence to rewrite them.
+       *
+       * This used to set `role: "AGENT", status: "active"` unconditionally on
+       * a global `users` row. So approving a request from someone who manages
+       * another resort demoted them platform-wide, and approving one from a
+       * suspended account silently un-suspended it — a resort's own approval
+       * screen undoing a platform ban.
+       */
+      const applicant = await this.prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+      if (applicant.status === "suspended") {
+        throw badRequest("that account is suspended — the platform owner must lift it first");
+      }
+      if (applicant.role !== "AGENT") {
+        if (applicant.role !== "GUEST") {
+          throw badRequest("that account is staff at a resort and cannot also be an agency login");
+        }
+        await this.prisma.user.update({ where: { id: req.userId }, data: { role: "AGENT", status: "active" } });
+      }
       const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
       if (!linked) {
         await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId, commissionRate: 5 } });
@@ -316,60 +334,6 @@ export class EngageService {
   async myCampaigns(claims: JwtClaims) {
     const rows = await this.prisma.emailCampaign.findMany({ where: { userId: claims.userId }, orderBy: { id: "desc" }, take: 50 });
     return rows.map((r) => ({ ...r, id: r.id.toString() }));
-  }
-
-  // ─────────────── agent payment deadline sweep ───────────────
-
-  /** sweep: flag agent bookings whose full-payment deadline is near/past; alert resort admins once per booking per day */
-  async sweepPaymentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
-    const now = new Date();
-    for (const resort of resorts) {
-      const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
-      const bookings = await this.prisma.booking.findMany({
-        where: {
-          resortId: resort.id,
-          agentUserId: { not: null },
-          state: { in: ["PENDING", "CONFIRMED"] },
-          deletedAt: null,
-          checkIn: { lte: horizon, gte: now },
-        },
-        select: {
-          id: true, code: true, checkIn: true, discount: true, agentUserId: true,
-          items: { select: { qty: true, unitPrice: true } },
-          payments: { select: { amount: true, paymentType: true } },
-        },
-      });
-      for (const b of bookings) {
-        const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-        const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
-        const due = Math.max(0, rent - Number(b.discount) - paid);
-        if (due <= 0) continue;
-        // dedupe: one alert per booking per day
-        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const existing = await this.prisma.notification.findFirst({
-          where: {
-            kind: "alert",
-            link: `/bookings?id=${b.id}`,
-            createdAt: { gte: dayStart },
-            title: { contains: b.code },
-          },
-        });
-        if (existing) continue;
-        const admins = await this.prisma.userResort.findMany({
-          where: { resortId: resort.id, user: { role: { in: ["RESORT_ADMIN", "MANAGER"] } } },
-          select: { userId: true },
-        });
-        const hoursLeft = Math.max(0, Math.round((b.checkIn!.getTime() - now.getTime()) / 3_600_000));
-        await this.notify(admins.map((a) => a.userId), {
-          title: `${b.code} unpaid — ${hoursLeft}h to check-in`,
-          body: `Agent booking ${b.code}: ${formatMoney(due, { currency: resort.currency, locale: resort.locale })} due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
-          kind: "alert",
-          link: `/bookings?id=${b.id}`,
-          resortId: resort.id,
-        });
-      }
-    }
   }
 }
 
