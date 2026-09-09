@@ -30,14 +30,19 @@ export class IntentsController {
     });
   }
 
-  /** Provider callback shape: POST /payments/webhook/:provider */
+  /**
+   * The gateway's server-to-server callback: POST /payments/webhook/:provider
+   *
+   * Deliberately unvalidated at this layer — the body is whatever the gateway
+   * chose to send, and different gateways send different shapes. It is also
+   * why nothing in it is trusted: the service asks the gateway what actually
+   * happened rather than believing the POST, which previously let anyone on
+   * the internet mark any booking paid by guessing a reference.
+   */
   @Post("payments/webhook/:provider")
-  webhook(@Param("provider") provider: string, @Body() dto: ConfirmDto & { providerRef?: string }) {
-    if (!dto.providerRef) {
-      throw Object.assign(new Error("providerRef required"), { status: 400 });
-    }
-    void provider;
-    return this.intents.confirm(dto.providerRef, dto.trxId ?? "webhook-trx", dto.outcome === "fail");
+  webhook(@Param("provider") provider: string, @Body() body: Record<string, unknown>) {
+    void provider; // the configured gateway decides how to read this, not the URL
+    return this.intents.confirmFromGateway(body ?? {});
   }
 
   /** Dev mock-gateway confirm (what the hosted checkout page would call). */

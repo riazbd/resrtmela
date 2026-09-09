@@ -23,6 +23,8 @@ import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
 import { FbService } from "../../src/fb/fb.service";
+import { IntentsService } from "../../src/payments/intents.service";
+import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
@@ -105,4 +107,13 @@ export function makeTemplatesService(prisma: PrismaService): TemplatesService {
 
 export function makeFbService(prisma: PrismaService): FbService {
   return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma));
+}
+
+export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
+  return new IntentsService(
+    prisma,
+    makeBookingsService(prisma),
+    makeNotificationsService(prisma),
+    gateway ?? new MockGateway(),
+  );
 }
