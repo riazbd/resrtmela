@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
-import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
+import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
 import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
@@ -86,7 +86,6 @@ export class BookingsService {
     return bookingTotals({ ...booking, taxRatePct });
   }
 
-  /** The resort's tax rate — every total shown to anyone must include it. */
   /**
    * Everyone acting under this agent's agency: the agency and its staff.
    *
@@ -105,6 +104,30 @@ export class BookingsService {
     return [agencyId, ...staff.map((s) => s.id)];
   }
 
+  /**
+   * One booking, and whether this agent may see it.
+   *
+   * `requireSellingAccess` answers "may you be at this resort at all"; it
+   * cannot answer "is this row yours", and a booking id is a small number that
+   * anyone can count through. Without this, an agent reading their own booking
+   * by id could read the resort's — and a rival agency's — just as easily.
+   */
+  private async requireOwnBooking(
+    claims: JwtClaims,
+    booking: { resortId: number; agentUserId: number | null },
+  ): Promise<void> {
+    requireSellingAccess(claims, booking.resortId);
+    if (claims.role !== ROLE.AGENT) {
+      requireResortAccess(claims, booking.resortId);
+      return;
+    }
+    const mine = await this.agencyActorIds(claims.userId);
+    if (booking.agentUserId == null || !mine.includes(booking.agentUserId)) {
+      throw forbid("Not your booking");
+    }
+  }
+
+  /** The resort's tax rate — every total shown to anyone must include it. */
   private async taxRateFor(resortId: number): Promise<number> {
     const r = await this.prisma.resort.findUnique({
       where: { id: resortId },
@@ -114,7 +137,7 @@ export class BookingsService {
   }
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
-    requireResortAccess(claims, input.resortId);
+    requireSellingAccess(claims, input.resortId);
     await this.tenantState.assertWritable(input.resortId);
     const checkIn = dateOnly(input.checkIn);
     const checkOut = dateOnly(input.checkOut);
@@ -427,7 +450,7 @@ export class BookingsService {
       take?: number;
     },
   ) {
-    requireResortAccess(claims, q.resortId);
+    requireSellingAccess(claims, q.resortId);
     const isAgent = claims.role === ROLE.AGENT;
     const where: Prisma.BookingWhereInput = {
       resortId: q.resortId,
@@ -491,7 +514,7 @@ export class BookingsService {
       },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
-    requireResortAccess(claims, b.resortId);
+    await this.requireOwnBooking(claims, b);
 
     const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: b.resortId },
@@ -594,12 +617,11 @@ export class BookingsService {
       include: { items: true, payments: true },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
-    requireResortAccess(claims, b.resortId);
+    await this.requireOwnBooking(claims, b);
 
     const role = claims.role;
     const isAgent = role === ROLE.AGENT;
     if (isAgent) {
-      if (b.agentUserId !== claims.userId) throw forbid("Not your booking");
       if (!["PENDING", "CONFIRMED"].includes(b.state)) {
         throw Object.assign(new Error("Editable only before check-in"), { status: 409 });
       }
@@ -1237,7 +1259,7 @@ export class BookingsService {
       },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
-    requireResortAccess(claims, b.resortId);
+    await this.requireOwnBooking(claims, b);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
     const totals = BookingsService.computeTotals(b, Number(b.resort.taxRatePct));
     return {

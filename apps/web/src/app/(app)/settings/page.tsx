@@ -17,6 +17,7 @@ interface ResortDetail {
   timezone: string;
   currency: string;
   showRatesToAgents: boolean;
+  showGuestNamesToAgents: boolean;
   taxRatePct: string | number;
   invoicePrefix: string;
   bookingPrefix: string;
@@ -143,6 +144,7 @@ export default function SettingsPage() {
           name: d.name,
           location: d.location ?? undefined,
           showRatesToAgents: d.showRatesToAgents,
+          showGuestNamesToAgents: d.showGuestNamesToAgents,
           taxRatePct: Number(d.taxRatePct) || 0,
           invoicePrefix: d.invoicePrefix || undefined,
           bookingPrefix: d.bookingPrefix || undefined,
@@ -222,6 +224,17 @@ export default function SettingsPage() {
               <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
                 <input type="checkbox" checked={d.showRatesToAgents} onChange={(e) => setD({ ...d, showRatesToAgents: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
                 Show room rates to agents
+              </label>
+              <label className="flex items-start gap-2 pt-1 text-sm text-slate-700">
+                <input type="checkbox" checked={d.showGuestNamesToAgents} onChange={(e) => setD({ ...d, showGuestNamesToAgents: e.target.checked })} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600" />
+                <span>
+                  Show guest names to agents
+                  <span className="mt-0.5 block text-xs text-slate-500">
+                    Off by default. Agents always see which nights are taken and the
+                    details of bookings they made themselves; this also gives them the
+                    names on everyone else&apos;s — including other agencies&apos; clients.
+                  </span>
+                </span>
               </label>
               <div className="mt-2 border-t border-slate-100 pt-3 text-xs font-semibold text-slate-500">Invoice & stay settings</div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

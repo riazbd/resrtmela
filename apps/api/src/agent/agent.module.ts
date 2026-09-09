@@ -9,6 +9,7 @@ import { BooksController } from "./books.controller";
 import { SalesService } from "./sales.service";
 import { SalesController } from "./sales.controller";
 import { AgencyGuestsService } from "./agency-guests.service";
+import { AgencyCalendarService } from "./agency-calendar.service";
 import { AgencyGuestsController } from "./agency-guests.controller";
 import { AvailabilityService } from "../bookings/availability.service";
 import { EmailService } from "../notifications/email.service";
@@ -26,6 +27,7 @@ import { EmailService } from "../notifications/email.service";
     BooksService,
     SalesService,
     AgencyGuestsService,
+    AgencyCalendarService,
     AvailabilityService,
     EmailService,
   ],

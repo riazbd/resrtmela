@@ -107,7 +107,7 @@ export default function RoomSearchPage() {
               title={offer.resort.name}
               action={
                 <Link
-                  href={`/bookings?resortId=${offer.resort.id}&from=${range.from}&to=${range.to}`}
+                  href={`/bookings?resortId=${offer.resort.id}&checkIn=${range.from}&checkOut=${range.to}&new=1`}
                   className="text-xs font-semibold text-brand-700 hover:underline"
                 >
                   Book here →

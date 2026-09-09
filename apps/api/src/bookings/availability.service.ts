@@ -3,7 +3,7 @@ import { Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { JwtClaims, Role, ROLE } from "@rh/shared";
 import { agentPricing } from "../common/money";
-import { requireResortAccess } from "../common/rbac";
+import { requireSellingAccess } from "../common/rbac";
 import { dateOnly, eachNight } from "../common/dates";
 import { LIVE_STATES } from "./booking-state";
 
@@ -32,7 +32,7 @@ export class AvailabilityService {
     fromStr: string,
     toStr: string,
   ): Promise<RoomAvailability[]> {
-    requireResortAccess(claims, resortId);
+    requireSellingAccess(claims, resortId);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) {

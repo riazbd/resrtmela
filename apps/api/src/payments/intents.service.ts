@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
-import { requireResortAccess, badRequest, apiKeyClaims } from "../common/rbac";
+import { requireResortAccess, requireSellingAccess, badRequest, apiKeyClaims } from "../common/rbac";
 import { round2 } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -51,6 +51,22 @@ export class IntentsService {
       const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
       const guestRows = await this.prisma.guest.findMany({ where: { phone: user.phone ?? "" }, select: { id: true } });
       if (!guestRows.some((g) => g.id === b.guestId)) {
+        throw Object.assign(new Error("Not your booking"), { status: 403 });
+      }
+    } else if (claims.role === ROLE.AGENT) {
+      // an agency may settle the booking it made, and no other
+      requireSellingAccess(claims, b.resortId);
+      const me = await this.prisma.user.findUnique({
+        where: { id: claims.userId },
+        select: { id: true, parentAgentId: true },
+      });
+      const agencyId = me?.parentAgentId ?? claims.userId;
+      const staff = await this.prisma.user.findMany({
+        where: { parentAgentId: agencyId },
+        select: { id: true },
+      });
+      const mine = [agencyId, ...staff.map((x) => x.id)];
+      if (b.agentUserId == null || !mine.includes(b.agentUserId)) {
         throw Object.assign(new Error("Not your booking"), { status: 403 });
       }
     } else {

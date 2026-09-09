@@ -28,6 +28,7 @@ import { ToursService } from "../../src/agent/tours.service";
 import { BooksService } from "../../src/agent/books.service";
 import { SalesService } from "../../src/agent/sales.service";
 import { AgencyGuestsService } from "../../src/agent/agency-guests.service";
+import { AgencyCalendarService } from "../../src/agent/agency-calendar.service";
 import { EngageService } from "../../src/engage/engage.service";
 import { GuestService } from "../../src/guest/guest.service";
 import { TenancyService } from "../../src/tenancy/tenancy.service";
@@ -35,6 +36,7 @@ import { ImportService } from "../../src/import/import.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
 import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
+import { ReportsService } from "../../src/reports/reports.service";
 import { IntentsService } from "../../src/payments/intents.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 
@@ -121,6 +123,10 @@ export function makeFbService(prisma: PrismaService): FbService {
   return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma));
 }
 
+export function makeReportsService(prisma: PrismaService): ReportsService {
+  return new ReportsService(prisma, new PermissionsService(prisma));
+}
+
 export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
   return new IntentsService(
     prisma,
@@ -170,6 +176,10 @@ export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
     new AgencyContextService(prisma),
     new AvailabilityService(prisma),
   );
+}
+
+export function makeCalendarService(prisma: PrismaService): AgencyCalendarService {
+  return new AgencyCalendarService(prisma, new AgencyContextService(prisma));
 }
 
 export function makePlatformSettings(prisma: PrismaService): PlatformSettingsService {
