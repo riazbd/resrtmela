@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 
@@ -12,6 +13,7 @@ type DueRow = DuesReport["rows"][number];
 export default function PaymentsPage() {
   const { activeResort, isStaff } = useAuth();
   const { push } = useToast();
+  const t = useT();
   const qc = useQueryClient();
   const [payFor, setPayFor] = useState<DueRow | null>(null);
 
@@ -34,18 +36,18 @@ export default function PaymentsPage() {
     void qc.invalidateQueries({ queryKey: ["bookings", activeResort?.id] });
   }
 
-  if (!isStaff) return <Empty msg="Staff only" />;
+  if (!isStaff) return <Empty msg={t("c.staffOnly")} />;
   if (error) return <ErrorState error={error} />;
   if (isPending || !data) return <Skeleton rows={6} />;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <Stat label="Total outstanding" value={money(data.total)} tone="red" />
-        <Stat label="Bookings with dues" value={String(data.count)} tone="amber" />
+        <Stat label={t("pay.outstanding")} value={money(data.total)} tone="red" />
+        <Stat label={t("pay.withDues")} value={String(data.count)} tone="amber" />
       </div>
 
-      <Card className="!p-0" title="Outstanding dues">
+      <Card className="!p-0" title={t("pay.title")}>
         {data.rows.length === 0 ? (
           <Empty msg="No outstanding dues 🎉" />
         ) : (

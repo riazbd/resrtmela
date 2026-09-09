@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, money, dmy, type CmsRow } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { Tabs } from "@/components/patterns";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
@@ -173,17 +174,7 @@ export default function PlatformPage() {
 
       {err && <div className="mt-3 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-700">{err}</div>}
 
-      <div className="mt-4 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition ${tab === t ? "bg-white text-brand-700 shadow" : "text-slate-500 hover:text-slate-800"}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} className="mt-4" />
 
       {/* ── overview ── */}
       {tab === "Overview" && ov && (

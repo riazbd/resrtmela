@@ -1,5 +1,7 @@
 "use client";
 
+import { useT, isStateKey, type DictKey } from "@/lib/i18n";
+
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 // ── primitives ──
@@ -137,11 +139,21 @@ const STATE_STYLES: Record<string, string> = {
   PAID: "bg-green-50 text-green-700 ring-green-200",
 };
 
+/**
+ * A booking's state, in the reader's language.
+ *
+ * This is the single most-read word on the busiest screens, and it was the
+ * raw enum with its underscore swapped for a hyphen — CHECKED-IN — on a
+ * console that calls itself Bangla-first.
+ */
 export function Badge({ value }: { value: string }) {
+  const t = useT();
   const style = STATE_STYLES[value] ?? "bg-slate-100 text-slate-600 ring-slate-200";
+  const key = `st.${value}` as DictKey;
+  const label = isStateKey(key) ? t(key) : value.replace(/_/g, "-");
   return (
     <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${style}`}>
-      {value.replace(/_/g, "-")}
+      {label}
     </span>
   );
 }

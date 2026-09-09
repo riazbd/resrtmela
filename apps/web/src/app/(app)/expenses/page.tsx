@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
+import { DateNav } from "@/components/patterns";
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -55,12 +56,6 @@ export default function ExpensesPage() {
     void qc.invalidateQueries({ queryKey: ["day-sheet", activeResort?.id] });
   };
 
-  function shift(days: number) {
-    const d = new Date(date + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + days);
-    setDate(iso(d));
-  }
-
   const addExpense = useMutation({
     mutationFn: () =>
       client.expenses.create(activeResort!.id, {
@@ -101,12 +96,7 @@ export default function ExpensesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => shift(-1)}>←</Button>
-          <Button variant="ghost" size="sm" onClick={() => setDate(iso(new Date()))}>{t("ds.today")}</Button>
-          <Button variant="ghost" size="sm" onClick={() => shift(1)}>→</Button>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="!w-40" />
-        </div>
+        <DateNav value={date} onChange={setDate} todayLabel={t("ds.today")} />
         <div className="text-sm font-semibold text-slate-600">
           {new Date(date + "T00:00:00").toLocaleDateString("en-GB", {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -168,11 +158,11 @@ export default function ExpensesPage() {
         ) : loading || rows === null ? (
           <Skeleton rows={4} />
         ) : rows.length === 0 ? (
-          <Empty msg="No entries for this day" />
+          <Empty msg={t("ex.none")} />
         ) : (
           <div className="overflow-x-auto"><table className="w-full">
             <thead className="border-b border-slate-100">
-              <tr><Th>খাত / Category</Th><Th>বিবরণ / Details</Th><Th className="text-right">৳</Th>{canManage && <Th />}</tr>
+              <tr><Th>{t("ex.category")}</Th><Th>{t("ex.details")}</Th><Th className="text-right">{cur()}</Th>{canManage && <Th />}</tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {rows.map((r) => (

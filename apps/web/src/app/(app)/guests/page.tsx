@@ -4,35 +4,43 @@ import { useState } from "react";
 import { client, dmy } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
+import { useT } from "@/lib/i18n";
 import { Badge, Card, Empty, Input, Spinner, Td, Th } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
+import { Pagination, Table } from "@/components/patterns";
 import { useDebounced } from "@/lib/use-debounced";
 
 export default function GuestsPage() {
   const { activeResort, isStaff } = useAuth();
+  const t = useT();
   const [search, setSearch] = useState("");
+  const [skip, setSkip] = useState(0);
+  const take = 50;
   // typing "rahman" used to be six requests; the last one is the only answer
   const debounced = useDebounced(search, 300);
 
   const { data, isPending, error } = useApi(
-    keys.guests(activeResort?.id, debounced),
-    () => client.guests.list(activeResort!.id, { search: debounced || undefined }),
+    keys.guests(activeResort?.id, `${debounced}:${skip}`),
+    () => client.guests.list(activeResort!.id, { search: debounced || undefined, skip, take }),
     { enabled: isStaff && !!activeResort, placeholderData: (prev) => prev },
   );
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
 
-  if (!isStaff) return <Empty msg="Staff only" />;
+  if (!isStaff) return <Empty msg={t("c.staffOnly")} />;
   if (error) return <ErrorState error={error} />;
 
   return (
     <Card
-      title={total > rows.length ? `Guest directory — showing ${rows.length} of ${total}` : "Guest directory"}
+      title={t("g.title")}
       action={
         <Input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or phone…"
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setSkip(0); // a new search starts at the first page, not page four
+          }}
+          placeholder={t("g.searchHint")}
           className="!w-60"
         />
       }
@@ -41,12 +49,12 @@ export default function GuestsPage() {
       {isPending ? (
         <Spinner />
       ) : rows.length === 0 ? (
-        <Empty msg="No guests found" />
+        <Empty msg={t("g.none")} />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+        <>
+        <Table minWidth={640}>
             <thead className="border-b border-slate-100">
-              <tr><Th>Guest</Th><Th>Phone</Th><Th>NID / Passport</Th><Th className="text-right">Bookings</Th><Th>Last stay</Th></tr>
+              <tr><Th>{t("ds.guest")}</Th><Th>{t("c.phone")}</Th><Th>NID / Passport</Th><Th className="text-right">{t("g.bookings")}</Th><Th>{t("g.lastStay")}</Th></tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {rows.map((g) => (
@@ -68,8 +76,9 @@ export default function GuestsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </Table>
+        <Pagination skip={skip} take={take} total={total} onChange={setSkip} />
+        </>
       )}
     </Card>
   );

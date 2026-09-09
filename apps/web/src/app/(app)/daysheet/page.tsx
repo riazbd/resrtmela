@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
+import { DateNav } from "@/components/patterns";
 
 function iso(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -25,12 +26,6 @@ export default function DaySheetPage() {
     { enabled: isStaff && !!activeResort },
   );
 
-  function shift(days: number) {
-    const d = new Date(date + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + days);
-    setDate(iso(d));
-  }
-
   if (!isStaff) return <Spinner />;
   if (error) return <ErrorState error={error} />;
   if (isPending || !sheet) return <Skeleton rows={8} />;
@@ -41,12 +36,7 @@ export default function DaySheetPage() {
     <div className="space-y-4">
       {/* date navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => shift(-1)}>←</Button>
-          <Button variant="ghost" size="sm" onClick={() => setDate(iso(new Date()))}>{t("ds.today")}</Button>
-          <Button variant="ghost" size="sm" onClick={() => shift(1)}>→</Button>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="!w-40" />
-        </div>
+        <DateNav value={date} onChange={setDate} todayLabel={t("ds.today")} />
         <div className="text-sm font-semibold text-slate-600">
           {new Date(date + "T00:00:00").toLocaleDateString("en-GB", {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
