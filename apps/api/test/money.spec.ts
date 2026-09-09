@@ -75,6 +75,39 @@ describe("bookingTotals — due and payment state", () => {
     expect(t.refunded).toBe(5000);
   });
 
+  /**
+   * Money that went back is money the guest no longer owes us — or rather,
+   * money we are owed again.
+   *
+   * `refunded` was computed and then dropped: `due` was `total - paid`, with
+   * `paid` the gross taken. So refunding a stay in full left it reading PAID
+   * with nothing outstanding, and every report counted the returned money as
+   * collected. The test above pinned how a refund is *represented* and never
+   * asked what it *means*, which is why the defect survived in the one file
+   * the whole product treats as the source of truth for money.
+   *
+   * `paid` stays gross on purpose: a ledger that shows "paid 15,000, refunded
+   * 5,000, due 5,000" tells the front desk what happened. One that shows
+   * "paid 10,000" hides it.
+   */
+  it("adds a refund back to what is owed", () => {
+    const t = bookingTotals({ items: [room(5000)], payments: [paid(15000), refund(5000)], discount: 0, checkIn: IN, checkOut: OUT });
+    expect(t.due).toBe(5000);
+    expect(t.paymentState).toBe("PARTIAL");
+  });
+
+  it("returns a fully refunded stay to unpaid", () => {
+    const t = bookingTotals({ items: [room(5000)], payments: [paid(15000), refund(15000)], discount: 0, checkIn: IN, checkOut: OUT });
+    expect(t.due).toBe(15000);
+    expect(t.paymentState).toBe("UNPAID");
+  });
+
+  it("still settles a stay that was paid and never refunded", () => {
+    const t = bookingTotals({ items: [room(5000)], payments: [paid(15000)], discount: 0, checkIn: IN, checkOut: OUT });
+    expect(t.due).toBe(0);
+    expect(t.paymentState).toBe("PAID");
+  });
+
   it("accepts Prisma Decimal-shaped values as strings", () => {
     const t = bookingTotals({
       items: [{ itemKind: "ROOM", unitPrice: "5000.00", qty: 1 }],

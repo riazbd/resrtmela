@@ -16,7 +16,21 @@ export class ReportsService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
   ) {}
 
+  /**
+   * The bookings in a range, with their money from the one money function.
+   *
+   * This used to reimplement `bookingTotals`: its own nights multiplier, its
+   * own `paid` that dropped refunds, and `due = rent - discount - paid` with
+   * no tax at all. So every report here disagreed with the booking screen and
+   * the invoice for any resort that charges tax, and a refunded stay still
+   * counted as collected. A second copy of a money rule is how the first one
+   * stops being true.
+   */
   private async rangeBookings(resortId: number, from?: string, to?: string) {
+    const resort = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { taxRatePct: true },
+    });
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -33,28 +47,18 @@ export class ReportsService {
       },
     });
     return rows.map((b) => {
-      const nights =
-        b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 1;
-      const rent = b.items.reduce(
-        (s, i) => s + Number(i.unitPrice) * i.qty * (i.itemKind === "ROOM" ? nights : 1),
-        0,
-      );
-      const roomRent = b.items
-        .filter((i) => i.itemKind === "ROOM")
-        .reduce((s, i) => s + Number(i.unitPrice) * i.qty * nights, 0);
-      const paid = b.payments
-        .filter((p) => p.paymentType !== "REFUND")
-        .reduce((s, p) => s + Number(p.amount), 0);
+      const t = bookingTotals({ ...b, taxRatePct: resort.taxRatePct });
       return {
         id: b.id,
         state: b.state,
         source: b.source,
         agentUserId: b.agentUserId,
         agentName: b.agentUser?.name ?? null,
-        rent,
-        roomRent,
-        paid,
-        due: round2(rent - Number(b.discount) - paid),
+        rent: t.rent,
+        roomRent: t.roomRent,
+        paid: t.paid,
+        refunded: t.refunded,
+        due: t.due,
       };
     });
   }

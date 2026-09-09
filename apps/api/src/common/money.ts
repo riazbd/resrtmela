@@ -93,8 +93,19 @@ export function bookingTotals(input: BookingMoneyInput): BookingTotals {
   const tax = round2((taxable * taxRatePct) / 100);
   const total = round2(taxable + tax);
 
-  const due = round2(total - paid);
-  const paymentState = due <= 0.001 && paid > 0 ? "PAID" : paid > 0 ? "PARTIAL" : "UNPAID";
+  /**
+   * What is owed is measured against what we have *kept*, not what we took.
+   *
+   * `refunded` was tracked here and then never used: `due` was `total - paid`.
+   * So a stay refunded in full still read PAID with nothing outstanding, and
+   * every report that sums payments counted the returned money as collected.
+   * `paid` stays gross so the ledger can show all three numbers and the desk
+   * can see what happened.
+   */
+  const netPaid = round2(paid - refunded);
+  const due = round2(total - netPaid);
+  const paymentState =
+    due <= 0.001 && netPaid > 0 ? "PAID" : netPaid > 0 ? "PARTIAL" : "UNPAID";
 
   return {
     nights,

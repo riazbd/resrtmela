@@ -86,13 +86,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       where: { id: bookingId },
       include: {
         guest: { select: { phone: true, email: true } },
-        resort: { select: { id: true, name: true } },
+        resort: { select: { id: true, name: true, taxRatePct: true } },
         items: true,
         payments: true,
       },
     });
     if (!b) return;
-    const due = Math.max(0, bookingTotals(b).due);
+    /**
+     * The same number the invoice prints, tax included.
+     *
+     * `bookingTotals(b)` was called without `taxRatePct`, so the balance in the
+     * guest's SMS or email excluded tax while `invoicePayload` included it. The
+     * guest was told one figure at booking and handed another at the desk, and
+     * nothing on either side could notice — no test in the suite sets a
+     * non-zero tax rate on this path.
+     */
+    const due = Math.max(0, bookingTotals({ ...b, taxRatePct: b.resort.taxRatePct }).due);
     const to = b.guest.email?.trim() || b.guest.phone;
     await this.enqueueJob({
       channel: b.guest.email?.trim() ? "EMAIL" : "SMS",
@@ -278,7 +287,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   /** flag agent bookings approaching the resort's full-payment deadline (in-app alerts to admins) */
   private async sweepAgentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
+    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true, taxRatePct: true } });
     const now = new Date();
     for (const resort of resorts) {
       const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
@@ -291,15 +300,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           checkIn: { lte: horizon, gte: now },
         },
         select: {
-          id: true, code: true, checkIn: true, discount: true,
-          items: { select: { qty: true, unitPrice: true } },
+          id: true, code: true, checkIn: true, checkOut: true, discount: true,
+          items: { select: { qty: true, unitPrice: true, itemKind: true } },
           payments: { select: { amount: true, paymentType: true } },
         },
       });
       for (const b of bookings) {
-        const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-        const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
-        const due = Math.max(0, rent - Number(b.discount) - paid);
+        /**
+         * What the agent actually owes.
+         *
+         * This was `rent - discount - paid` over `unitPrice * qty` — no nights
+         * multiplier and no tax. A ROOM item carries one night's price with
+         * qty 1, so a five-night stay was reported to the owner as one night:
+         * "this agent owes ৳5,000" on a ৳25,000 booking, in the alert whose
+         * whole job is to say how much is outstanding before the deadline.
+         */
+        const due = Math.max(0, bookingTotals({ ...b, taxRatePct: resort.taxRatePct }).due);
         if (due <= 0 || !b.checkIn) continue;
         const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const existing = await this.prisma.notification.findFirst({
