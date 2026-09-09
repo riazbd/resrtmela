@@ -219,7 +219,13 @@ export default function HomePage() {
               {cms["hero.badge"] || "The all-in-one software for resorts"}
             </div>
             <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-slate-900 sm:text-5xl">
-              {cms["hero.title"] || "Reservation calendar & front desk for your resort."}
+              {/* The same words as the CMS default. The page is a client
+                  component, so this fallback is what a crawler and a link
+                  preview see, and what shows for the moment before the fetch
+                  lands — a different sentence there means Google indexes copy
+                  nobody chose, and visitors watch the headline change under
+                  them. */}
+              {cms["hero.title"] || "Every booking in one place. No room ever sold twice."}
             </h1>
             <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
               {cms["hero.subtitle"] ||
