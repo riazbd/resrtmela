@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
+import { TemplatesService } from "./templates.service";
 import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
@@ -31,6 +32,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
+    @Inject(TemplatesService) private readonly templates: TemplatesService,
   ) {}
 
   onModuleInit() {
@@ -50,6 +52,8 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     data: Record<string, string | number | null | undefined>;
     sendAfter?: Date;
     dedupeKey?: string;
+    /** whose message this is — the resort whose wording and name it goes out in */
+    resortId?: number | null;
   }): Promise<{ queued: boolean }> {
     const key = input.dedupeKey ?? dedupeKeyFor(input.template, input.to);
     try {
@@ -60,6 +64,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           template: input.template,
           dedupeKey: key,
           payload: input.data as object,
+          resortId: input.resortId ?? null,
           sendAfter: input.sendAfter ?? new Date(),
         },
       });
@@ -81,7 +86,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       where: { id: bookingId },
       include: {
         guest: { select: { phone: true, email: true } },
-        resort: { select: { name: true } },
+        resort: { select: { id: true, name: true } },
         items: true,
         payments: true,
       },
@@ -103,6 +108,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         ...extra,
       },
       dedupeKey: dedupeKeyFor(template, `booking:${b.id}`, dedupeExtra),
+      resortId: b.resortId,
     });
   }
 
@@ -187,7 +193,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     let failed = 0;
     for (const job of due) {
       try {
-        const text = renderTemplate(
+        // the resort's own wording where they have written it, the built-in
+        // one where they have not
+        const text = await this.templates.render(
+          job.resortId,
           job.template as TemplateName,
           (job.payload ?? {}) as Record<string, string | number | null | undefined>,
         );
@@ -219,16 +228,18 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           }
         }
         if (sentOk) {
+          // renderedText is kept so "what did the guest actually receive" has
+          // an answer — it matters more now the wording is the tenant's
           await this.prisma.notificationJob.update({
             where: { id: job.id },
-            data: { sentAt: new Date() },
+            data: { sentAt: new Date(), renderedText: text },
           });
           sent++;
         } else if (!this.email.configured) {
           // no SMTP configured — dev: treat as delivered, note why
           await this.prisma.notificationJob.update({
             where: { id: job.id },
-            data: { sentAt: new Date(), lastError: `console-only (${error ?? "no SMTP"})` },
+            data: { sentAt: new Date(), renderedText: text, lastError: `console-only (${error ?? "no SMTP"})` },
           });
           sent++;
         } else {

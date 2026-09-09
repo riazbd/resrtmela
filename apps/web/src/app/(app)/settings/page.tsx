@@ -97,7 +97,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "API keys", "Your data"] as const;
+const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, role } = useAuth();
@@ -255,7 +255,120 @@ export default function SettingsPage() {
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
       {tab === "API keys" && rid && <ApiKeysTab rid={rid} />}
+      {tab === "Messages" && rid && <MessagesTab rid={rid} />}
       {tab === "Your data" && rid && <ExportTab rid={rid} name={d.name} />}
+    </div>
+  );
+}
+
+interface TemplateRow {
+  name: string;
+  body: string;
+  custom: boolean;
+  placeholders: string[];
+}
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  booking_confirmed: "Booking confirmed",
+  booking_received: "Booking request received",
+  checkin_reminder: "Check-in reminder (the day before)",
+  payment_receipt: "Payment received",
+};
+
+/**
+ * The words your guests read.
+ *
+ * These went out in wording compiled into the build — a resort could not add
+ * their check-in time, write it in Bangla, or soften a reminder for a repeat
+ * customer. The message the guest sees is the most visible part of the
+ * product, and it was the part the resort had least say over.
+ */
+function MessagesTab({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const [rows, setRows] = useState<TemplateRow[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<TemplateRow[]>(`/resorts/${rid}/message-templates`)
+      .then((r) => {
+        setRows(r);
+        setDrafts(Object.fromEntries(r.map((x) => [x.name, x.body])));
+      })
+      .catch(() => setRows([]));
+  }, [rid]);
+  useEffect(() => load(), [load]);
+
+  async function save(name: string) {
+    setBusy(name);
+    try {
+      await api(`/resorts/${rid}/message-templates/${name}`, { method: "PUT", body: { body: drafts[name] ?? "" } });
+      push("Saved — new messages will use your wording");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reset(name: string) {
+    setBusy(name);
+    try {
+      await api(`/resorts/${rid}/message-templates/${name}`, { method: "DELETE" });
+      push("Back to the standard wording");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-4 max-w-2xl space-y-4">
+      <Card>
+        <div className="space-y-1 p-4">
+          <h2 className="font-semibold text-slate-900">What your guests read</h2>
+          <p className="text-sm text-slate-500">
+            These go out under your resort&apos;s name. Write them in Bangla, English or both.
+            Words in {"{braces}"} are filled in for each guest — the list under each box shows
+            what that message can use.
+          </p>
+        </div>
+      </Card>
+
+      {rows.map((r) => (
+        <Card key={r.name}>
+          <div className="space-y-2 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-slate-900">{TEMPLATE_LABELS[r.name] ?? r.name}</span>
+              {r.custom && <span className="rounded-md bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700">Yours</span>}
+            </div>
+            <textarea
+              value={drafts[r.name] ?? ""}
+              onChange={(e) => setDrafts({ ...drafts, [r.name]: e.target.value })}
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-slate-400">
+                {r.placeholders.map((p) => `{${p}}`).join(" · ")}
+              </span>
+              <span className="ml-auto flex gap-2">
+                {r.custom && (
+                  <Button size="sm" variant="ghost" onClick={() => reset(r.name)} disabled={busy === r.name}>
+                    Use standard wording
+                  </Button>
+                )}
+                <Button size="sm" loading={busy === r.name} onClick={() => save(r.name)}>
+                  Save
+                </Button>
+              </span>
+            </div>
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }

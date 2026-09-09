@@ -29,6 +29,23 @@ export const TEMPLATES = {
 
 export type TemplateName = keyof typeof TEMPLATES;
 
+/**
+ * The messages a resort may rewrite: the ones sent to their own guests, under
+ * their own name. The subscription notices are the platform speaking to its
+ * customer about an unpaid bill, and are deliberately not on this list.
+ */
+export const GUEST_TEMPLATES = [
+  "booking_confirmed",
+  "booking_received",
+  "checkin_reminder",
+  "payment_receipt",
+] as const satisfies readonly TemplateName[];
+
+/** The placeholders a body uses, in order of first appearance. */
+export function placeholdersOf(body: string): string[] {
+  return [...new Set([...body.matchAll(/\{(\w+)\}/g)].map((m) => m[1]!))];
+}
+
 export function renderTemplate(
   template: TemplateName,
   data: Record<string, string | number | null | undefined>,

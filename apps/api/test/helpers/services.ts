@@ -21,6 +21,7 @@ import { BillingService } from "../../src/platform/billing.service";
 import { PlatformService } from "../../src/platform/platform.service";
 import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
+import { TemplatesService } from "../../src/notifications/templates.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
@@ -44,7 +45,13 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
 export function makeNotificationsService(prisma: PrismaService): NotificationsService {
   // EmailService/SmsService fall back to console logging when unconfigured,
   // so nothing leaves the machine during a test run.
-  return new NotificationsService(prisma, new EmailService(), new SmsService(), new PlatformSettingsService(prisma));
+  return new NotificationsService(
+    prisma,
+    new EmailService(),
+    new SmsService(),
+    new PlatformSettingsService(prisma),
+    makeTemplatesService(prisma),
+  );
 }
 
 export function makeRoomsService(prisma: PrismaService): RoomsService {
@@ -89,4 +96,8 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
     makeNotificationsService(prisma),
     new PermissionsService(prisma),
   );
+}
+
+export function makeTemplatesService(prisma: PrismaService): TemplatesService {
+  return new TemplatesService(prisma, new PermissionsService(prisma));
 }

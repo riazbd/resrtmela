@@ -162,6 +162,7 @@ model Resort {
   employees       Employee[]
   foodPackages    FoodPackage[]
   payrollPayments PayrollPayment[]
+  messageTemplates MessageTemplate[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -549,6 +550,10 @@ model NotificationJob {
   template  String       @db.VarChar(64)
   dedupeKey String?      @unique @db.VarChar(191)
   payload   Json?
+  /// whose message this is: the resort whose wording and name it goes out in
+  resortId  Int?
+  /// exactly what was sent, so "what did the guest actually receive" has an answer
+  renderedText String?   @db.Text
   sendAfter DateTime     @default(now())
   sentAt    DateTime?
   attempts  Int          @default(0)
@@ -866,4 +871,21 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+/// A resort's own wording for a message its guests receive.
+///
+/// Absent = the built-in wording is used, so a new resort works on day one and
+/// nobody has to write eight messages before taking a booking.
+model MessageTemplate {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// TemplateName — the message this replaces
+  name      String   @db.VarChar(64)
+  body      String   @db.VarChar(600)
+  updatedAt DateTime @updatedAt
+
+  @@unique([resortId, name])
+  @@map("message_templates")
 }
