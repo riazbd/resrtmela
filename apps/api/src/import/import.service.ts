@@ -59,6 +59,13 @@ export interface ImportReport {
    * importer did this silently and nobody knew there was anything to fix.
    */
   roomTypeCreated: { name: string; assumed: boolean } | null;
+  /**
+   * Names in the "Advance received" column that matched no agent working with
+   * this resort. Those bookings are imported without an agent, which is the
+   * honest outcome — the alternative was what this used to do, and that is
+   * described at the match site below.
+   */
+  unmatchedAgents: string[];
   rows: ImportRowResult[];
 }
 
@@ -171,7 +178,7 @@ export class ImportService {
     const report: ImportReport = {
       dryRun, totalRows: rows.length, imported: 0, skipped: 0,
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
-      paymentsCreated: 0, roomTypeCreated: null, rows: [],
+      paymentsCreated: 0, roomTypeCreated: null, rows: [], unmatchedAgents: [],
     };
 
     if (dryRun) {
@@ -306,30 +313,40 @@ export class ImportService {
 
           // link agent when the sheet names one (Advance received col);
           // auto-attach the agent to this resort if they aren't yet
+          /**
+           * Match the sheet's agent against agents who already work here.
+           *
+           * This used to search every user on the platform by name substring,
+           * fall back to `candidates[0]` of any role, and then — if that
+           * stranger had no link to this resort — create one. So a CSV whose
+           * "Advance received" column carried another tenant's admin name
+           * granted that person a `user_resorts` row, and login turns those
+           * rows into a token's `resortIds`: an upload handed out access.
+           *
+           * Granting access is the approval flow's job. An import that cannot
+           * find the agent leaves the booking unattributed and says so, which
+           * is a thing the owner can fix in one click; the old behaviour was a
+           * thing nobody could see.
+           */
           let agentUserId: number | null = null;
           if (source === "AGENT" && row.advanceReceiver) {
             const name = row.advanceReceiver.toLowerCase();
             const candidates = await tx.user.findMany({
-              where: { name: { contains: row.advanceReceiver } },
-              include: {
-                resorts: { select: { resortId: true, commissionRate: true } },
+              where: {
+                role: "AGENT",
+                name: { contains: row.advanceReceiver },
+                resorts: { some: { resortId } },
               },
+              select: { id: true, name: true },
             });
             const match =
-              candidates.find((u) => u.role === "AGENT" && u.name.toLowerCase() === name) ??
-              candidates.find((u) => u.role === "AGENT" && u.name.toLowerCase().includes(name)) ??
-              candidates[0];
+              candidates.find((u) => u.name.toLowerCase() === name) ??
+              candidates.find((u) => u.name.toLowerCase().includes(name)) ??
+              null;
             if (match) {
               agentUserId = match.id;
-              if (!match.resorts.some((r) => r.resortId === resortId)) {
-                await tx.userResort.create({
-                  data: {
-                    userId: match.id,
-                    resortId,
-                    commissionRate: match.resorts[0]?.commissionRate ?? 0,
-                  },
-                });
-              }
+            } else if (!report.unmatchedAgents.includes(row.advanceReceiver)) {
+              report.unmatchedAgents.push(row.advanceReceiver);
             }
           }
 

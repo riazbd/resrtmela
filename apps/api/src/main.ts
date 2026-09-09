@@ -3,6 +3,7 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { AppModule } from "./app.module";
+import { corsOrigins } from "./common/cors";
 import { eventLogLine } from "./common/observability";
 
 async function bootstrap() {
@@ -43,14 +44,19 @@ async function bootstrap() {
     }),
   );
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
-  app.enableCors({
-    origin: [
-      /localhost:\d+$/,
-      /resortmela\.app$/,
-      ...(process.env.CORS_ORIGIN ? [process.env.CORS_ORIGIN] : []),
-    ],
-    credentials: true,
-  });
+  /**
+   * One hop of reverse proxy, so `req.ip` is the caller and not nginx.
+   *
+   * Without this every request behind the proxy shares one address, which
+   * turned the auth rate limiter from "30 attempts per caller" into "30
+   * attempts for everybody" — one client could lock the whole platform out of
+   * login. Exactly one hop is trusted: more would let a caller forge the
+   * chain by sending their own X-Forwarded-For.
+   */
+  app.getHttpAdapter().getInstance().set("trust proxy", 1);
+
+  // the allow-list, and the reason it is a function, are in common/cors.ts
+  app.enableCors({ origin: corsOrigins(), credentials: true });
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
   await app.listen(port);
   console.log(eventLogLine("info", "listening", { port }));
