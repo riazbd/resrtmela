@@ -17,6 +17,12 @@
  *   nothing there             → leave pending, `migrate deploy` will run it
  *   some of it there          → stop and say so
  *
+ * A migration that creates nothing gets the mirror question. If it only drops
+ * things, the tool checks whether they are already gone — a `db push` database
+ * is routinely missing an index a later migration was written to drop, and
+ * running that DROP fails and stops the whole deployment. If it drops nothing
+ * either, it is data-only and simply runs.
+ *
  * That last case is the one that matters. A half-applied migration cannot be
  * resolved automatically without either losing a change or corrupting the
  * history, so the tool refuses and hands it to a person. It never guesses, it
@@ -27,7 +33,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { objectsCreatedBy } from "./migration-objects.mjs";
+import { objectsCreatedBy, objectsDroppedBy } from "./migration-objects.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..", "..");
@@ -123,15 +129,43 @@ async function main() {
   for (const name of pending) {
     const sql = readFileSync(join(migrationsDir, name, "migration.sql"), "utf8");
     const objects = objectsCreatedBy(sql);
-    if (objects.length === 0) {
-      // a data-only migration: nothing to detect, so it must run
+
+    if (objects.length > 0) {
+      const present = objects.filter((o) => hasObject(db, o));
+      if (present.length === objects.length) toResolve.push(name);
+      else if (present.length === 0) toRun.push(name);
+      else partial.push({ name, present, missing: objects.filter((o) => !hasObject(db, o)) });
+      continue;
+    }
+
+    /**
+     * Nothing created. That is either a data-only migration or a drop-only one,
+     * and the difference matters: a drop-only migration on a `db push` database
+     * is usually trying to remove something that was never created, and running
+     * it fails and takes the deployment with it. That is not hypothetical — it
+     * is what `20260827163511_guest_phonekey_index` did to a live server, and
+     * this tool sent it there by calling every create-nothing migration
+     * "data-only" and running it.
+     *
+     * So ask the other question: is the database already in the state this
+     * migration was reaching for?
+     */
+    const drops = objectsDroppedBy(sql);
+    if (drops.length === 0) {
+      // genuinely data-only — an UPDATE or an INSERT. Nothing to detect, run it.
       toRun.push(name);
       continue;
     }
-    const present = objects.filter((o) => hasObject(db, o));
-    if (present.length === objects.length) toResolve.push(name);
-    else if (present.length === 0) toRun.push(name);
-    else partial.push({ name, present, missing: objects.filter((o) => !hasObject(db, o)) });
+    const stillThere = drops.filter((o) => hasObject(db, o));
+    if (stillThere.length === 0) toResolve.push(name); // already gone: job done
+    else if (stillThere.length === drops.length) toRun.push(name);
+    else {
+      partial.push({
+        name,
+        present: stillThere,
+        missing: drops.filter((o) => !hasObject(db, o)),
+      });
+    }
   }
 
   console.log(`Database: ${schema}`);

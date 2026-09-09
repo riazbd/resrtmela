@@ -10,10 +10,12 @@
 -- activities.view stays (it still means "see the activities screen") and any role
 -- that held it also gains auditlog.view, which is what it granted in practice.
 
+-- No `CAST(... AS JSON)` here: MariaDB has no JSON type (Prisma maps Json to
+-- longtext there) and rejects the cast outright, while MySQL 8 parses a valid
+-- JSON string on assignment to a json column anyway. The cast bought nothing
+-- and cost the migration on every MariaDB server.
 UPDATE `roles`
-SET `permissions` = CAST(
-  REPLACE(CAST(`permissions` AS CHAR), '"activities.delete"', '"auditlog.delete"') AS JSON
-)
+SET `permissions` = REPLACE(CAST(`permissions` AS CHAR), '"activities.delete"', '"auditlog.delete"')
 WHERE JSON_SEARCH(`permissions`, 'one', 'activities.delete') IS NOT NULL;
 
 UPDATE `roles`
