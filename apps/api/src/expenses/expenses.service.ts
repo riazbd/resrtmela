@@ -26,6 +26,9 @@ export class ExpensesService {
     page?: PageRequest,
   ) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "expenses.view");
     const where = {
       resortId,
       ...(scope ? { scope: scope as never } : {}),
@@ -60,6 +63,9 @@ export class ExpensesService {
 
   async categories(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "expenses.view");
     const rows = await this.prisma.expense.groupBy({
       by: ["category"],
       where: { resortId },

@@ -113,6 +113,9 @@ export class PaymentsService {
   /** Outstanding dues across a resort (doc §3.6) */
   async dues(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "payments.view");
     const resort = await this.prisma.resort.findUnique({
       where: { id: resortId },
       select: { taxRatePct: true },

@@ -18,8 +18,11 @@ export class RoomsService {
   ) {}
 
   // ── room types ──
-  listRoomTypes(claims: JwtClaims, resortId: number) {
+  async listRoomTypes(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "rooms.view");
     return this.prisma.roomType.findMany({ where: { resortId }, orderBy: { id: "asc" } });
   }
 
@@ -70,10 +73,11 @@ export class RoomsService {
   }
 
   // ── rooms ──
-  listRooms(claims: JwtClaims, resortId: number, opts?: { includeInactive?: boolean }) {
+  async listRooms(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "rooms.view");
     return this.prisma.room.findMany({
-      where: { resortId, ...(opts?.includeInactive ? {} : {}) },
+      where: { resortId },
       include: { roomType: true },
       orderBy: [{ roomTypeId: "asc" }, { name: "asc" }],
     });

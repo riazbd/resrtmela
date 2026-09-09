@@ -157,6 +157,9 @@ export class FbService {
     query: { from?: string; to?: string } & PageRequest = {},
   ) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "restaurant.view");
     const { from, to } = query;
     const where = {
       resortId,
@@ -255,6 +258,9 @@ export class FbService {
   /** In-house rooms right now — the POS room picker. */
   async inHouse(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "restaurant.view");
     const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       select: { timezone: true },
@@ -286,6 +292,9 @@ export class FbService {
 
   async listPackages(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "restaurant.view");
     const rows = await this.prisma.foodPackage.findMany({
       where: { resortId },
       orderBy: [{ active: "desc" }, { name: "asc" }],

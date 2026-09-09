@@ -66,6 +66,7 @@ export class ReportsService {
   /** Management dashboard metrics (sheet tab 12): resort + F&B + expenses = net. */
   async metrics(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
     const bookings = await this.rangeBookings(resortId, from, to);
     const gross = round2(bookings.reduce((s, b) => s + (b.roomRent ?? b.rent), 0));
     const discounts = await this.prisma.booking.aggregate({
@@ -220,6 +221,7 @@ export class ReportsService {
    */
   async idleInventory(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
@@ -276,6 +278,7 @@ export class ReportsService {
   /** Daily revenue rows (sheet tabs 7/11) for a date range. */
   async daily(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");

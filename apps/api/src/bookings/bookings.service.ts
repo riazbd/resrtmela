@@ -618,6 +618,13 @@ export class BookingsService {
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     await this.requireOwnBooking(claims, b);
+    /**
+     * The one endpoint that changes dates, rooms and the discount asked for no
+     * permission at all — while `create`, `softDelete`, `decideCancel` and
+     * even adding an activity to a booking all asked for theirs. `bookings.edit`
+     * has been in the matrix, and on the Settings screen, the whole time.
+     */
+    await this.perms.require(claims, b.resortId, "bookings.edit");
 
     const role = claims.role;
     const isAgent = role === ROLE.AGENT;
@@ -753,6 +760,22 @@ export class BookingsService {
     if (b.state === to) return this.detail(claims, bookingId);
 
     assertTransition(b.state, to, claims.role);
+    /**
+     * The state machine says which moves are legal; the matrix says who may
+     * make them.
+     *
+     * `assertTransition` checks `TRANSITION_ACTORS`, the fixed role enum — so
+     * unticking "Cancel bookings" for a front-desk user changed nothing, their
+     * enum entry allows CANCELLED. The dedicated `cancel()` path does ask for
+     * `bookings.cancel`, and the console has never called it: it cancels
+     * through here. Ending a stay without revenue is the cancel permission's
+     * business; moving a live stay along is the edit permission's.
+     */
+    await this.perms.require(
+      claims,
+      b.resortId,
+      to === "CANCELLED" || to === "NO_SHOW" ? "bookings.cancel" : "bookings.edit",
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: b.id }, data: { state: to } });
@@ -850,6 +873,9 @@ export class BookingsService {
   /** Calendar data: bookings overlapping [from,to) — client paints the matrix (doc §3.3). */
   async calendar(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
@@ -893,6 +919,9 @@ export class BookingsService {
    */
   async guests(claims: JwtClaims, resortId: number, search?: string, page?: PageRequest) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "guests.view");
     const where = {
       resortId,
       ...(search
@@ -945,6 +974,9 @@ export class BookingsService {
    */
   async daySheet(claims: JwtClaims, resortId: number, dateStr: string) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
     const date = dateOnly(dateStr);
     const nextDay = new Date(date.getTime() + 86_400_000);
 
@@ -1333,6 +1365,9 @@ export class BookingsService {
   // today dashboard feed
   async today(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
     const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       select: { timezone: true, taxRatePct: true },

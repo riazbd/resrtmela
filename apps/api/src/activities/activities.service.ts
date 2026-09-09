@@ -21,6 +21,9 @@ export class ActivitiesService {
   // ── catalog CRUD ──
   async list(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "activities.view");
     const now = new Date();
     const rows = await this.prisma.activityCatalog.findMany({
       where: { resortId },
