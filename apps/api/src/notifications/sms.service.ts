@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
+import { normalizePhone } from "../common/dates";
 
 /**
  * SMS provider: SSL Wireless iSMS Plus (https://ismsplus.sslwireless.com).
@@ -21,9 +22,10 @@ export class SmsService {
   }
 
   async send(toRaw: string, text: string): Promise<{ sent: boolean; error?: string }> {
-    const to = toRaw.replace(/\D/g, "");
-    const msisdn = to.startsWith("880") ? to : `880${to.replace(/^0+/, "")}`;
-    if (msisdn.length !== 13) return { sent: false, error: "invalid msisdn" };
+    // one normaliser, so the gateway and the database always agree about what
+    // a number is — this had its own copy of the 880 rule
+    const msisdn = normalizePhone(toRaw);
+    if (msisdn.length < 11) return { sent: false, error: "invalid msisdn" };
 
     if (!this.configured) {
       this.logger.log(`[SMS:console] to=${msisdn}: ${text.slice(0, 80)}`);

@@ -1,12 +1,40 @@
 import { createHash } from "node:crypto";
 
-/** Normalize BD-style phones to E.164-ish digits: 8801XXXXXXXXX */
-export function normalizePhone(raw: string): string {
+/**
+ * How a country writes its phone numbers.
+ *
+ * `trunkPrefix` is the digit dropped when dialling from abroad — 0 in
+ * Bangladesh, India and most of the world; absent in a few places.
+ */
+export interface PhoneCountry {
+  dialCode: string;
+  trunkPrefix: string;
+  /** digits in a national number, without the trunk prefix */
+  nationalLength: number;
+}
+
+/**
+ * Bangladesh. The default because every customer today is here — but a
+ * default, not an assumption baked into the function: an Indian guest's
+ * ten-digit number with 880 stapled to the front sends the SMS to a stranger
+ * in Dhaka, and nothing anywhere says so.
+ */
+export const DEFAULT_COUNTRY: PhoneCountry = { dialCode: "880", trunkPrefix: "0", nationalLength: 10 };
+
+/** Normalize a phone to E.164-ish digits: <dialCode><national>, e.g. 8801XXXXXXXXX */
+export function normalizePhone(raw: string, country: PhoneCountry = DEFAULT_COUNTRY): string {
   const digits = raw.replace(/\D/g, "");
-  if (digits.startsWith("880") && digits.length >= 13) return digits.slice(0, 13);
-  if (digits.length === 11 && digits.startsWith("01")) return "880" + digits.slice(1);
-  if (digits.length === 10 && digits.startsWith("1")) return "880" + digits;
-  if (digits.startsWith("880")) return digits;
+  const { dialCode, trunkPrefix, nationalLength } = country;
+  const full = dialCode.length + nationalLength;
+
+  if (digits.startsWith(dialCode) && digits.length >= full) return digits.slice(0, full);
+  if (digits.startsWith(dialCode)) return digits;
+  if (digits.length === nationalLength + trunkPrefix.length && digits.startsWith(trunkPrefix)) {
+    return dialCode + digits.slice(trunkPrefix.length);
+  }
+  if (digits.length === nationalLength) return dialCode + digits;
+  // anything else — a foreign number, or not a phone number at all — is left
+  // as the caller gave it rather than guessed at
   return digits;
 }
 

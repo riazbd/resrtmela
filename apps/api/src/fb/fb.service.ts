@@ -5,6 +5,7 @@ import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, todayIn } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
+import { pageArgs, toPage, type PageRequest } from "../common/page";
 
 /** Fallback only — the prefix is a per-resort setting. */
 const FB_PREFIX = "RES";
@@ -141,20 +142,42 @@ export class FbService {
     return this.shape(bill, total);
   }
 
-  async list(claims: JwtClaims, resortId: number, from?: string, to?: string) {
+  /**
+   * Bills for a period.
+   *
+   * This used to stop at a hard take: 300 and return a bare array, so a busy
+   * kitchen's fourth month simply vanished: the screen showed 300 bills and
+   * said nothing about the rest. A resort doing twenty covers a day passes 300
+   * inside three weeks, which makes this the one remaining capped list a
+   * working resort actually reaches.
+   */
+  async list(
+    claims: JwtClaims,
+    resortId: number,
+    query: { from?: string; to?: string } & PageRequest = {},
+  ) {
     requireResortAccess(claims, resortId);
-    const rows = await this.prisma.fbBill.findMany({
-      where: {
-        resortId,
-        deletedAt: null,
-        ...(from ? { billDate: { gte: dateOnly(from) } } : {}),
-        ...(to ? { billDate: { ...((from ? { gte: dateOnly(from) } : {}) as object), lt: dateOnly(to) } } : {}),
-      },
-      include: { items: true, room: { select: { name: true } }, booking: { select: { id: true, code: true } } },
-      orderBy: [{ billDate: "desc" }, { id: "desc" }],
-      take: 300,
-    });
-    return rows.map((b) => this.shape(b));
+    const { from, to } = query;
+    const where = {
+      resortId,
+      deletedAt: null,
+      ...(from ? { billDate: { gte: dateOnly(from) } } : {}),
+      ...(to ? { billDate: { ...((from ? { gte: dateOnly(from) } : {}) as object), lt: dateOnly(to) } } : {}),
+    };
+    const { skip, take } = pageArgs(query, 100);
+    // the count is over the same filter, so it is the truth about this
+    // selection rather than about the table
+    const [rows, total] = await Promise.all([
+      this.prisma.fbBill.findMany({
+        where,
+        include: { items: true, room: { select: { name: true } }, booking: { select: { id: true, code: true } } },
+        orderBy: [{ billDate: "desc" }, { id: "desc" }],
+        skip,
+        take,
+      }),
+      this.prisma.fbBill.count({ where }),
+    ]);
+    return toPage(rows.map((b) => this.shape(b)), total, skip, take);
   }
 
   async addPayment(claims: JwtClaims, billId: number, amount: number, method?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK") {

@@ -22,6 +22,7 @@ import { PlatformService } from "../../src/platform/platform.service";
 import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
+import { FbService } from "../../src/fb/fb.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
@@ -100,4 +101,8 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
 
 export function makeTemplatesService(prisma: PrismaService): TemplatesService {
   return new TemplatesService(prisma, new PermissionsService(prisma));
+}
+
+export function makeFbService(prisma: PrismaService): FbService {
+  return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma));
 }

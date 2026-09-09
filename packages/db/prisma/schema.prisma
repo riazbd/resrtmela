@@ -135,7 +135,6 @@ model Resort {
   address            String?        @db.VarChar(255)
   website            String?        @db.VarChar(160)
   contactPhone       String?        @db.VarChar(32)
-  settings           Json?
   status             String         @default("active") @db.VarChar(16)
   /// why the resort is not active: "billing" is the sweep's, anything else is a human's
   suspendedReason    String?        @db.VarChar(32)

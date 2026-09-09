@@ -65,7 +65,7 @@ export default function FbPage() {
 
   const billsQ = useApi(
     keys.fbBills(activeResort?.id, `${from}:${to}`),
-    () => api<Bill[]>(`/resorts/${activeResort!.id}/fb/bills?from=${from}&to=${to}`),
+    () => api<{ rows: Bill[]; total: number; truncated: boolean }>(`/resorts/${activeResort!.id}/fb/bills?from=${from}&to=${to}`),
     { enabled, placeholderData: (prev) => prev },
   );
   // the in-house list is what the kitchen charges a room against, so it is
@@ -73,7 +73,8 @@ export default function FbPage() {
   const inHouseQ = useApi(keys.fbInHouse(activeResort?.id), () => api<InHouse[]>(`/resorts/${activeResort!.id}/fb/in-house`), { enabled });
   const packagesQ = useApi(keys.fbPackages(activeResort?.id), () => client.fb.packages(activeResort!.id), { enabled, staleTime: 3_600_000 });
 
-  const bills: Bill[] = billsQ.data ?? [];
+  const bills: Bill[] = billsQ.data?.rows ?? [];
+  const billsTotal = billsQ.data?.total ?? 0;
   const inHouse: InHouse[] = inHouseQ.data ?? [];
   const packages: FoodPackage[] = packagesQ.data ?? [];
   const loading = billsQ.isPending;
@@ -330,7 +331,7 @@ export default function FbPage() {
       ) : loading ? (
         <Skeleton rows={4} />
       ) : (
-        <Card title={`Bills (${bills.length})`} className="!p-0">
+        <Card title={`Bills (${billsTotal > bills.length ? `${bills.length} of ${billsTotal}` : bills.length})`} className="!p-0">
           {bills.length === 0 ? (
             <Empty msg="No bills in this period" />
           ) : (

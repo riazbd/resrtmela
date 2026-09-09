@@ -30,6 +30,8 @@ class PayBillDto {
 class BillRangeQuery {
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) skip?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) take?: number;
 }
 
 class PackageDto {
@@ -62,7 +64,7 @@ export class FbController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query() q: BillRangeQuery,
   ) {
-    return this.fb.list(req.user, resortId, q.from, q.to);
+    return this.fb.list(req.user, resortId, q);
   }
 
   @Post("resorts/:resortId/fb/bills")
