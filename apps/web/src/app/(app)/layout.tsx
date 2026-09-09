@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
-  Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus,
+  Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
@@ -26,6 +26,12 @@ import { Select, Button, Input, useToast } from "@/components/ui";
 const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
+  { href: "/agent/search", label: "Find a room", icon: Search, roles: ["AGENT"], perm: "agent.book" },
+  { href: "/agent/tours", label: "Tours", icon: Package, roles: ["AGENT"], perm: "agent.tours.manage" },
+  { href: "/agent/sales", label: "Quotes & invoices", icon: FileText, roles: ["AGENT"], perm: "agent.sales.manage" },
+  { href: "/agent/guests", label: "Guests", icon: Users, roles: ["AGENT"], perm: "agent.guests.view" },
+  { href: "/agent/expenses", label: "Expenses", icon: Receipt, roles: ["AGENT"], perm: "agent.expenses.manage" },
+  { href: "/agent/payroll", label: "Payroll", icon: Banknote, roles: ["AGENT"], perm: "agent.payroll.manage" },
   { href: "/agent/wallet", label: "Wallet", icon: Wallet, roles: ["AGENT"], perm: "agent.wallet.view" },
   { href: "/agent/team", label: "My team", icon: Users, roles: ["AGENT"], perm: "agent.staff.manage" },
   { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send" },

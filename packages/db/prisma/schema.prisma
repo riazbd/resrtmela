@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider        = "mysql"
-  url             = env("DATABASE_URL")
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
@@ -103,64 +103,64 @@ enum NotifChannel {
 // ───────────────────────── Tenancy ─────────────────────────
 
 model Tenant {
-  id        Int       @id @default(autoincrement())
-  name      String    @db.VarChar(120)
-  slug      String    @unique @db.VarChar(80)
-  plan      String    @default("free") @db.VarChar(32)
-  status    String    @default("active") @db.VarChar(16)
-  createdAt DateTime  @default(now())
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(120)
+  slug      String   @unique @db.VarChar(80)
+  plan      String   @default("free") @db.VarChar(32)
+  status    String   @default("active") @db.VarChar(16)
+  createdAt DateTime @default(now())
   resorts   Resort[]
 
   @@map("tenants")
 }
 
 model Resort {
-  id                 Int            @id @default(autoincrement())
-  tenantId           Int
-  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name               String         @db.VarChar(160)
-  location           String?        @db.VarChar(255)
-  timezone           String         @default("Asia/Dhaka") @db.VarChar(64)
-  currency           String         @default("BDT") @db.VarChar(8)
-  locale             String         @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
-  showRatesToAgents  Boolean        @default(false)
-  taxRatePct         Decimal        @default(0.00) @db.Decimal(5, 2)
-  agentPaymentHours  Int            @default(48) // agent bookings must be fully paid this many hours before check-in
-  invoicePrefix      String         @default("SER") @db.VarChar(12)
-  bookingPrefix      String         @default("BK") @db.VarChar(12)
-  fbPrefix           String         @default("RES") @db.VarChar(12)
-  fyStartMonthDay    String         @default("07-01") @db.VarChar(5) // financial year start MM-DD
-  checkInTime        String         @default("12:00 PM") @db.VarChar(16)
-  checkOutTime       String         @default("10:00 AM") @db.VarChar(16)
-  address            String?        @db.VarChar(255)
-  website            String?        @db.VarChar(160)
-  contactPhone       String?        @db.VarChar(32)
-  status             String         @default("active") @db.VarChar(16)
+  id                Int       @id @default(autoincrement())
+  tenantId          Int
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String    @db.VarChar(160)
+  location          String?   @db.VarChar(255)
+  timezone          String    @default("Asia/Dhaka") @db.VarChar(64)
+  currency          String    @default("BDT") @db.VarChar(8)
+  locale            String    @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
+  showRatesToAgents Boolean   @default(false)
+  taxRatePct        Decimal   @default(0.00) @db.Decimal(5, 2)
+  agentPaymentHours Int       @default(48) // agent bookings must be fully paid this many hours before check-in
+  invoicePrefix     String    @default("SER") @db.VarChar(12)
+  bookingPrefix     String    @default("BK") @db.VarChar(12)
+  fbPrefix          String    @default("RES") @db.VarChar(12)
+  fyStartMonthDay   String    @default("07-01") @db.VarChar(5) // financial year start MM-DD
+  checkInTime       String    @default("12:00 PM") @db.VarChar(16)
+  checkOutTime      String    @default("10:00 AM") @db.VarChar(16)
+  address           String?   @db.VarChar(255)
+  website           String?   @db.VarChar(160)
+  contactPhone      String?   @db.VarChar(32)
+  status            String    @default("active") @db.VarChar(16)
   /// why the resort is not active: "billing" is the sweep's, anything else is a human's
-  suspendedReason    String?        @db.VarChar(32)
-  suspendedAt        DateTime?
-  createdAt          DateTime       @default(now())
+  suspendedReason   String?   @db.VarChar(32)
+  suspendedAt       DateTime?
+  createdAt         DateTime  @default(now())
 
-  roomTypes       RoomType[]
-  rooms           Room[]
-  ratePlans       RatePlan[]
-  guests          Guest[]
-  bookings        Booking[]
-  activities      ActivityCatalog[]
-  userResorts     UserResort[]
-  auditLogs       AuditLog[]
-  counters        Counter[]
-  expenses Expense[]
-  fbBills  FbBill[]
-  subscriptions   Subscription[]
+  roomTypes        RoomType[]
+  rooms            Room[]
+  ratePlans        RatePlan[]
+  guests           Guest[]
+  bookings         Booking[]
+  activities       ActivityCatalog[]
+  userResorts      UserResort[]
+  auditLogs        AuditLog[]
+  counters         Counter[]
+  expenses         Expense[]
+  fbBills          FbBill[]
+  subscriptions    Subscription[]
   subscriptionDues SubscriptionDue[]
-  apiKeys         ApiKey[]
-  discountOffers  DiscountOffer[]
-  accessRequests  ResortAccess[]
-  roles           CustomRole[]
-  employees       Employee[]
-  foodPackages    FoodPackage[]
-  payrollPayments PayrollPayment[]
+  apiKeys          ApiKey[]
+  discountOffers   DiscountOffer[]
+  accessRequests   ResortAccess[]
+  roles            CustomRole[]
+  employees        Employee[]
+  foodPackages     FoodPackage[]
+  payrollPayments  PayrollPayment[]
   messageTemplates MessageTemplate[]
 
   @@index([tenantId])
@@ -169,13 +169,13 @@ model Resort {
 
 // staff & agents & guests-auth users
 model User {
-  id           Int       @id @default(autoincrement())
-  name         String    @db.VarChar(160)
-  phone        String?   @unique @db.VarChar(32)
-  email        String?   @unique @db.VarChar(191)
-  passwordHash String?   @db.VarChar(255)
-  role         Role
-  status       String    @default("active") @db.VarChar(16)
+  id            Int        @id @default(autoincrement())
+  name          String     @db.VarChar(160)
+  phone         String?    @unique @db.VarChar(32)
+  email         String?    @unique @db.VarChar(191)
+  passwordHash  String?    @db.VarChar(255)
+  role          Role
+  status        String     @default("active") @db.VarChar(16)
   /// For AGENT users: the agency this person works under.
   ///
   /// There is no agency entity, only agent users, so an agency is the agent
@@ -183,38 +183,46 @@ model User {
   /// Without this, "my staff" could only be inferred from "shares a resort
   /// with me" -- which shows two agencies selling the same resort each other.
   parentAgentId Int?
-  parentAgent  User?     @relation("AgencyStaff", fields: [parentAgentId], references: [id], onDelete: SetNull)
-  agencyStaff  User[]    @relation("AgencyStaff")
+  parentAgent   User?      @relation("AgencyStaff", fields: [parentAgentId], references: [id], onDelete: SetNull)
+  agencyStaff   User[]     @relation("AgencyStaff")
   /// Permission set for an agency's staff. Null on an agency itself, which
   /// holds every agent permission by being the agency.
-  agentRoleId  Int?
-  agentRole    AgentRole? @relation(fields: [agentRoleId], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
+  agentRoleId   Int?
+  agentRole     AgentRole? @relation(fields: [agentRoleId], references: [id], onDelete: SetNull)
+  createdAt     DateTime   @default(now())
 
-  resorts        UserResort[]
-  createdBookings Booking[]    @relation("BookingCreatedBy")
-  agentBookings   Booking[]    @relation("BookingAgent")
-  paymentsRecv    Payment[]    @relation("PaymentReceivedBy")
-  auditLogs       AuditLog[]   @relation("AuditActor")
+  resorts         UserResort[]
+  createdBookings Booking[]        @relation("BookingCreatedBy")
+  agentBookings   Booking[]        @relation("BookingAgent")
+  paymentsRecv    Payment[]        @relation("PaymentReceivedBy")
+  auditLogs       AuditLog[]       @relation("AuditActor")
   wallet          Wallet?
   notifications   Notification[]
   accessRequests  ResortAccess[]
   emailCredits    EmailCredit?
   campaigns       EmailCampaign[]
-  agentRoles      AgentRole[]    @relation("AgencyRoles")
+  agentRoles      AgentRole[]      @relation("AgencyRoles")
+  agencyExpenses  Expense[]        @relation("AgencyExpenses")
+  agencyHeads     ExpenseHead[]    @relation("AgencyExpenseHeads")
+  agencyEmployees Employee[]       @relation("AgencyEmployees")
+  agencyPayroll   PayrollPayment[] @relation("AgencyPayroll")
+  agencyCounters  Counter[]        @relation("AgencyCounters")
+  tourCategories  TourCategory[]   @relation("AgencyTourCategories")
+  tourPackages    TourPackage[]    @relation("AgencyTourPackages")
+  salesDocs       SalesDoc[]       @relation("AgencySalesDocs")
 
   @@map("users")
 }
 
 model UserResort {
-  id             Int      @id @default(autoincrement())
+  id             Int         @id @default(autoincrement())
   userId         Int
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId       Int
-  resort         Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  commissionRate Decimal? @db.Decimal(10, 2) // agents only: percent value (PERCENT) or fixed ৳ (FLAT)
-  commissionKind String   @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (fixed per booking)
-  roleId         Int?     // custom role (permissions matrix); null = legacy fixed role behaviour
+  resort         Resort      @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  commissionRate Decimal?    @db.Decimal(10, 2) // agents only: percent value (PERCENT) or fixed ৳ (FLAT)
+  commissionKind String      @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (fixed per booking)
+  roleId         Int? // custom role (permissions matrix); null = legacy fixed role behaviour
   role           CustomRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   @@unique([userId, resortId])
@@ -239,10 +247,16 @@ model CustomRole {
 
 // ───────────────────────── Payroll ─────────────────────────
 
+/// Someone on a payroll. A resort has staff; so does a travel agency, and
+/// paying them is the same act, so it is the same table with two possible
+/// owners rather than two tables that drift apart.
 model Employee {
   id          Int       @id @default(autoincrement())
-  resortId    Int
-  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resortId    Int?
+  resort      Resort?   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// set instead of resortId when the employer is a travel agency
+  agencyId    Int?
+  agency      User?     @relation("AgencyEmployees", fields: [agencyId], references: [id], onDelete: Cascade)
   name        String    @db.VarChar(120)
   phone       String?   @db.VarChar(20)
   designation String?   @db.VarChar(80)
@@ -254,24 +268,28 @@ model Employee {
   payments PayrollPayment[]
 
   @@index([resortId])
+  @@index([agencyId])
   @@map("employees")
 }
 
 model PayrollPayment {
-  id          Int      @id @default(autoincrement())
-  resortId    Int
-  resort      Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  id          Int            @id @default(autoincrement())
+  resortId    Int?
+  resort      Resort?        @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  agencyId    Int?
+  agency      User?          @relation("AgencyPayroll", fields: [agencyId], references: [id], onDelete: Cascade)
   employeeId  Int
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  month       String   @db.VarChar(7) // "2026-09"
-  amount      Decimal  @db.Decimal(10, 2)
+  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month       String         @db.VarChar(7) // "2026-09"
+  amount      Decimal        @db.Decimal(10, 2)
   method      PaymentMethod?
-  note        String?  @db.VarChar(255)
-  paidAt      DateTime @default(now())
+  note        String?        @db.VarChar(255)
+  paidAt      DateTime       @default(now())
   createdById Int?
 
   @@unique([employeeId, month])
   @@index([resortId, month])
+  @@index([agencyId, month])
   @@map("payroll_payments")
 }
 
@@ -303,19 +321,19 @@ model CmsSetting {
 // ───────────────────────── Inventory ─────────────────────────
 
 model RoomType {
-  id               Int     @id @default(autoincrement())
-  resortId         Int
-  resort           Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  name             String  @db.VarChar(120)
-  maxAdults        Int     @default(2)
-  maxChildren      Int     @default(0)
+  id                 Int     @id @default(autoincrement())
+  resortId           Int
+  resort             Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name               String  @db.VarChar(120)
+  maxAdults          Int     @default(2)
+  maxChildren        Int     @default(0)
   extraPersonAllowed Boolean @default(false)
-  extraPersonRate  Decimal @default(0) @db.Decimal(10, 2)
-  amenities        Json?
-  active           Boolean @default(true)
+  extraPersonRate    Decimal @default(0) @db.Decimal(10, 2)
+  amenities          Json?
+  active             Boolean @default(true)
 
-  rooms     Room[]
-  ratePlans RatePlan[]
+  rooms          Room[]
+  ratePlans      RatePlan[]
   discountOffers DiscountOffer[]
 
   @@index([resortId])
@@ -332,9 +350,9 @@ model Room {
   baseRate   Decimal    @db.Decimal(10, 2)
   status     RoomStatus @default(ACTIVE)
 
-  items BookingItem[]
-  nights BookingNight[]
-  fbBills FbBill[]
+  items          BookingItem[]
+  nights         BookingNight[]
+  fbBills        FbBill[]
   discountOffers DiscountOffer[]
 
   @@unique([resortId, name])
@@ -369,7 +387,8 @@ model Guest {
   createdAt     DateTime @default(now())
   isGuestUser   Boolean  @default(false) // has app login?
 
-  bookings Booking[]
+  bookings  Booking[]
+  salesDocs SalesDoc[]
 
   @@index([phoneKey])
   @@index([resortId])
@@ -379,35 +398,35 @@ model Guest {
 // ───────────────────────── Bookings ─────────────────────────
 
 model Booking {
-  id           Int            @id @default(autoincrement())
-  code         String         @db.VarChar(12) // BK-00001, per-resort sequence
+  id           Int           @id @default(autoincrement())
+  code         String        @db.VarChar(12) // BK-00001, per-resort sequence
   resortId     Int
-  resort       Resort         @relation(fields: [resortId], references: [id])
-  kind         BookingKind    @default(ROOM)
+  resort       Resort        @relation(fields: [resortId], references: [id])
+  kind         BookingKind   @default(ROOM)
   guestId      Int
-  guest        Guest          @relation(fields: [guestId], references: [id])
-  createdById  Int?           
-  createdBy    User?          @relation("BookingCreatedBy", fields: [createdById], references: [id])
-  agentUserId  Int?           
-  agentUser    User?          @relation("BookingAgent", fields: [agentUserId], references: [id])
-  source       BookingSource  @default(DIRECT)
-  checkIn      DateTime?      @db.Date
-  checkOut     DateTime?      @db.Date
-  adults       Int            @default(2)
-  children     Int            @default(0)
-  extraPersons Int            @default(0) // extra guests beyond room capacity, charged at room type rate
-  discount     Decimal        @default(0.00) @db.Decimal(10, 2)
-  remarks      String?        @db.Text
-  state        BookingState   @default(PENDING)
-  cancelState  CancelState    @default(NONE) // agent cancel-request queue
-  paymentState PaymentState   @default(UNPAID)
-  groupTag     String?        @db.VarChar(24) // links N one-room bookings of a tour group
-  bookedAt     DateTime       @default(now())
-  invoiceNo    String?        @db.VarChar(20) // SER-00001, per-resort invoice counter
+  guest        Guest         @relation(fields: [guestId], references: [id])
+  createdById  Int?
+  createdBy    User?         @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  agentUserId  Int?
+  agentUser    User?         @relation("BookingAgent", fields: [agentUserId], references: [id])
+  source       BookingSource @default(DIRECT)
+  checkIn      DateTime?     @db.Date
+  checkOut     DateTime?     @db.Date
+  adults       Int           @default(2)
+  children     Int           @default(0)
+  extraPersons Int           @default(0) // extra guests beyond room capacity, charged at room type rate
+  discount     Decimal       @default(0.00) @db.Decimal(10, 2)
+  remarks      String?       @db.Text
+  state        BookingState  @default(PENDING)
+  cancelState  CancelState   @default(NONE) // agent cancel-request queue
+  paymentState PaymentState  @default(UNPAID)
+  groupTag     String?       @db.VarChar(24) // links N one-room bookings of a tour group
+  bookedAt     DateTime      @default(now())
+  invoiceNo    String?       @db.VarChar(20) // SER-00001, per-resort invoice counter
   invoiceAt    DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  deletedAt    DateTime?      // soft delete; never hard-delete history
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime? // soft delete; never hard-delete history
 
   items    BookingItem[]
   payments Payment[]
@@ -424,18 +443,18 @@ model Booking {
 }
 
 model BookingItem {
-  id             Int        @id @default(autoincrement())
+  id             Int           @id @default(autoincrement())
   bookingId      Int
-  booking        Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  itemKind       ItemKind   @default(ROOM)
+  booking        Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  itemKind       ItemKind      @default(ROOM)
   roomId         Int?
-  room           Room?      @relation(fields: [roomId], references: [id])
+  room           Room?         @relation(fields: [roomId], references: [id])
   activitySlotId Int?
   activitySlot   ActivitySlot? @relation(fields: [activitySlotId], references: [id])
   fbBillId       Int?
   fbBill         FbBill?       @relation(fields: [fbBillId], references: [id], onDelete: SetNull)
-  qty            Int        @default(1)
-  unitPrice      Decimal    @db.Decimal(10, 2)
+  qty            Int           @default(1)
+  unitPrice      Decimal       @db.Decimal(10, 2)
 
   nights BookingNight[]
 
@@ -446,12 +465,12 @@ model BookingItem {
 /// THE double-booking guard: one row per night per room.
 /// UNIQUE(roomId, night) makes overlapping stays physically impossible.
 model BookingNight {
-  id     Int      @id @default(autoincrement())
-  itemId Int      
+  id     Int         @id @default(autoincrement())
+  itemId Int
   item   BookingItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   roomId Int
-  room   Room     @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  night  DateTime @db.Date
+  room   Room        @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  night  DateTime    @db.Date
 
   @@unique([roomId, night])
   @@index([night])
@@ -461,18 +480,18 @@ model BookingNight {
 // ───────────────────────── Activities ─────────────────────────
 
 model ActivityCatalog {
-  id           Int              @id @default(autoincrement())
-  resortId     Int
-  resort       Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  name         String           @db.VarChar(160)
-  category     ActivityCategory @default(TOUR)
-  basePrice    Decimal          @db.Decimal(10, 2)
-  durationMin  Int              @default(60)
-  minPerSlot   Int              @default(1)
-  maxPerSlot   Int              @default(10)
-  description  String?          @db.Text
-  photos       Json?
-  active       Boolean          @default(true)
+  id          Int              @id @default(autoincrement())
+  resortId    Int
+  resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name        String           @db.VarChar(160)
+  category    ActivityCategory @default(TOUR)
+  basePrice   Decimal          @db.Decimal(10, 2)
+  durationMin Int              @default(60)
+  minPerSlot  Int              @default(1)
+  maxPerSlot  Int              @default(10)
+  description String?          @db.Text
+  photos      Json?
+  active      Boolean          @default(true)
 
   slots             ActivitySlot[]
   activitySchedules ActivitySchedule[]
@@ -539,17 +558,17 @@ model Payment {
 // ───────────────────────── Platform ops ─────────────────────────
 
 model AuditLog {
-  id         BigInt    @id @default(autoincrement())
-  actorId    Int?
-  actor      User?     @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
-  resortId   Int?
-  resort     Resort?   @relation(fields: [resortId], references: [id], onDelete: SetNull)
-  action     String    @db.VarChar(64)
-  entity     String    @db.VarChar(32)
-  entityId   BigInt?
-  diff       Json?
-  ip         Bytes?    @db.VarBinary(16)
-  createdAt  DateTime  @default(now())
+  id        BigInt   @id @default(autoincrement())
+  actorId   Int?
+  actor     User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  resortId  Int?
+  resort    Resort?  @relation(fields: [resortId], references: [id], onDelete: SetNull)
+  action    String   @db.VarChar(64)
+  entity    String   @db.VarChar(32)
+  entityId  BigInt?
+  diff      Json?
+  ip        Bytes?   @db.VarBinary(16)
+  createdAt DateTime @default(now())
 
   @@index([entity, entityId])
   @@index([createdAt])
@@ -558,20 +577,20 @@ model AuditLog {
 }
 
 model NotificationJob {
-  id        BigInt       @id @default(autoincrement())
-  channel   NotifChannel
-  toRef     String       @db.VarChar(64)
-  template  String       @db.VarChar(64)
-  dedupeKey String?      @unique @db.VarChar(191)
-  payload   Json?
+  id           BigInt       @id @default(autoincrement())
+  channel      NotifChannel
+  toRef        String       @db.VarChar(64)
+  template     String       @db.VarChar(64)
+  dedupeKey    String?      @unique @db.VarChar(191)
+  payload      Json?
   /// whose message this is: the resort whose wording and name it goes out in
-  resortId  Int?
+  resortId     Int?
   /// exactly what was sent, so "what did the guest actually receive" has an answer
-  renderedText String?   @db.Text
-  sendAfter DateTime     @default(now())
-  sentAt    DateTime?
-  attempts  Int          @default(0)
-  lastError String?      @db.Text
+  renderedText String?      @db.Text
+  sendAfter    DateTime     @default(now())
+  sentAt       DateTime?
+  attempts     Int          @default(0)
+  lastError    String?      @db.Text
 
   @@index([sendAfter, sentAt])
   @@map("notification_jobs")
@@ -579,38 +598,67 @@ model NotificationJob {
 
 /// Daily operating expenses (resort-side, Bangla categories in `category`)
 model Expense {
-  id        Int      @id @default(autoincrement())
-  resortId  Int
-  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  date      DateTime @db.Date
-  category  String   @db.VarChar(120)
-  details   String?  @db.VarChar(255)
-  amount    Decimal  @db.Decimal(10, 2)
-  scope     String   @default("RESORT") @db.VarChar(10) // RESORT | RESTAURANT
+  id        Int          @id @default(autoincrement())
+  resortId  Int?
+  resort    Resort?      @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// set instead of resortId when the cost belongs to a travel agency
+  agencyId  Int?
+  agency    User?        @relation("AgencyExpenses", fields: [agencyId], references: [id], onDelete: Cascade)
+  /// An agency files under heads it invented. The link is what reports group
+  /// by, so renaming a head renames it everywhere; `category` keeps the name
+  /// as it read on the day, which is what an exported CSV should say.
+  headId    Int?
+  head      ExpenseHead? @relation(fields: [headId], references: [id], onDelete: SetNull)
+  date      DateTime     @db.Date
+  category  String       @db.VarChar(120)
+  details   String?      @db.VarChar(255)
+  amount    Decimal      @db.Decimal(10, 2)
+  scope     String       @default("RESORT") @db.VarChar(10) // RESORT | RESTAURANT
   createdBy Int?
+  /// offline identity: the same entry replayed twice is still one entry
+  clientRef String?      @db.VarChar(64)
+  createdAt DateTime     @default(now())
+
+  @@unique([agencyId, clientRef])
+  @@index([resortId, date])
+  @@index([agencyId, date])
+  @@map("expenses")
+}
+
+/// A heading a travel agency files its own costs under -- office rent, fuel,
+/// commission paid out. The agency invents the list; the platform ships none,
+/// because no two agencies keep books the same way.
+model ExpenseHead {
+  id        Int      @id @default(autoincrement())
+  agencyId  Int
+  agency    User     @relation("AgencyExpenseHeads", fields: [agencyId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(80)
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  @@index([resortId, date])
-  @@map("expenses")
+  expenses Expense[]
+
+  @@unique([agencyId, name])
+  @@map("expense_heads")
 }
 
 /// Restaurant / F&B bills (RES-##### sequence) — walk-in or charged to a stay
 model FbBill {
-  id         Int        @id @default(autoincrement())
+  id         Int            @id @default(autoincrement())
   resortId   Int
-  resort     Resort     @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  code       String     @db.VarChar(16) // RES-00001 per-resort sequence
-  billDate   DateTime   @db.Date
-  guestName  String?    @db.VarChar(160)
-  bookingId  Int?       // charge to a stay (nullable)
-  booking    Booking?   @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  roomId     Int?       // room (optional, charge-to-room)
-  room       Room?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  paidAmount Decimal    @default(0.00) @db.Decimal(10, 2)
+  resort     Resort         @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  code       String         @db.VarChar(16) // RES-00001 per-resort sequence
+  billDate   DateTime       @db.Date
+  guestName  String?        @db.VarChar(160)
+  bookingId  Int? // charge to a stay (nullable)
+  booking    Booking?       @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  roomId     Int? // room (optional, charge-to-room)
+  room       Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  paidAmount Decimal        @default(0.00) @db.Decimal(10, 2)
   method     PaymentMethod?
-  note       String?    @db.VarChar(255)
+  note       String?        @db.VarChar(255)
   createdBy  Int?
-  createdAt  DateTime   @default(now())
+  createdAt  DateTime       @default(now())
   deletedAt  DateTime?
 
   items        FbBillItem[]
@@ -635,17 +683,17 @@ model FbBillItem {
 
 /// Online payment checkout intents (bKash/Nagad-shaped, provider-agnostic)
 model PaymentIntent {
-  id          BigInt       @id @default(autoincrement())
+  id          BigInt        @id @default(autoincrement())
   resortId    Int
   bookingId   Int
-  booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  provider    String       @db.VarChar(24) // mock | bkash | nagad
-  providerRef String       @unique @db.VarChar(64)
-  amount      Decimal      @db.Decimal(10, 2)
+  booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  provider    String        @db.VarChar(24) // mock | bkash | nagad
+  providerRef String        @unique @db.VarChar(64)
+  amount      Decimal       @db.Decimal(10, 2)
   method      PaymentMethod
-  status      String       @default("pending") @db.VarChar(16) // pending | paid | failed | cancelled
-  trxId       String?      @db.VarChar(64)
-  createdAt   DateTime     @default(now())
+  status      String        @default("pending") @db.VarChar(16) // pending | paid | failed | cancelled
+  trxId       String?       @db.VarChar(64)
+  createdAt   DateTime      @default(now())
   paidAt      DateTime?
 
   @@index([bookingId])
@@ -655,13 +703,17 @@ model PaymentIntent {
 
 /// Per-resort sequence generator for booking codes (avoids MAX race).
 model Counter {
-  id       Int    @id @default(autoincrement())
-  resortId Int
-  resort   Resort @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  kind     String @db.VarChar(16) // 'BOOKING'
-  nextVal  Int    @default(1)
+  id       Int     @id @default(autoincrement())
+  resortId Int?
+  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// set instead of resortId when an agency numbers its own documents
+  agencyId Int?
+  agency   User?   @relation("AgencyCounters", fields: [agencyId], references: [id], onDelete: Cascade)
+  kind     String  @db.VarChar(16) // 'BOOKING' | 'QUOTATION' | 'INVOICE'
+  nextVal  Int     @default(1)
 
   @@unique([resortId, kind])
+  @@unique([agencyId, kind])
   @@map("counters")
 }
 
@@ -669,18 +721,18 @@ model Counter {
 
 /// A resort's platform subscription ("booking" the resort makes with the platform).
 model Subscription {
-  id          BigInt           @id @default(autoincrement())
+  id          BigInt    @id @default(autoincrement())
   resortId    Int
-  resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
   /// PlatformPlan.name — a string, not an enum, so a new plan needs no migration
-  plan        String           @default("STARTER") @db.VarChar(16)
-  status      String           @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
-  monthlyFee  Decimal          @db.Decimal(10, 2)
-  startedAt   DateTime         @default(now())
+  plan        String    @default("STARTER") @db.VarChar(16)
+  status      String    @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  monthlyFee  Decimal   @db.Decimal(10, 2)
+  startedAt   DateTime  @default(now())
   trialEndsAt DateTime?
   renewsAt    DateTime?
   cancelledAt DateTime?
-  note        String?          @db.VarChar(255)
+  note        String?   @db.VarChar(255)
 
   dues SubscriptionDue[]
 
@@ -735,15 +787,15 @@ model Wallet {
 }
 
 model WalletTxn {
-  id        BigInt     @id @default(autoincrement())
-  walletId  Int
-  wallet    Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
-  kind      WalletKind
-  amount    Decimal    @db.Decimal(12, 2) // signed: + credit, − debit
-  balanceAfter Decimal @db.Decimal(12, 2)
-  bookingId Int?
-  note      String?    @db.VarChar(255)
-  createdAt DateTime   @default(now())
+  id           BigInt     @id @default(autoincrement())
+  walletId     Int
+  wallet       Wallet     @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  kind         WalletKind
+  amount       Decimal    @db.Decimal(12, 2) // signed: + credit, − debit
+  balanceAfter Decimal    @db.Decimal(12, 2)
+  bookingId    Int?
+  note         String?    @db.VarChar(255)
+  createdAt    DateTime   @default(now())
 
   @@index([walletId])
   @@map("wallet_txns")
@@ -789,6 +841,7 @@ model DiscountOffer {
   @@index([resortId])
   @@map("discount_offers")
 }
+
 /// In-app notification (bell).
 model Notification {
   id        BigInt    @id @default(autoincrement())
@@ -881,6 +934,7 @@ model PlatformPlan {
 
   @@map("platform_plans")
 }
+
 /// Platform-wide policy the super admin edits: billing windows, notice periods,
 /// the platform's own name on outgoing mail. Key/value because the alternative
 /// is a column per decision and a migration every time one is added.
@@ -927,4 +981,157 @@ model AgentRole {
 
   @@unique([agencyId, name])
   @@map("agent_roles")
+}
+
+// --------------------- Agency: tours, quotations, invoices ---------------------
+
+/// One node in an agency's own tree of what a tour is built from:
+/// Transport -> Bus -> AC, Food -> Breakfast -> Set menu. Any depth, and the
+/// platform ships no starting list: an agency that runs hill treks and one
+/// that runs beach weekends do not buy the same things.
+model TourCategory {
+  id        Int            @id @default(autoincrement())
+  agencyId  Int
+  agency    User           @relation("AgencyTourCategories", fields: [agencyId], references: [id], onDelete: Cascade)
+  parentId  Int?
+  parent    TourCategory?  @relation("TourTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  TourCategory[] @relation("TourTree")
+  name      String         @db.VarChar(80)
+  active    Boolean        @default(true)
+  sort      Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  items TourPackageItem[]
+
+  @@index([agencyId, parentId])
+  @@map("tour_categories")
+}
+
+/// A package an agency sells: the tree's leaves picked out, priced, and given
+/// a name. Cost sits beside price on every line, so an agency can see the
+/// margin it is quoting rather than discovering it after the trip.
+model TourPackage {
+  id          Int      @id @default(autoincrement())
+  agencyId    Int
+  agency      User     @relation("AgencyTourPackages", fields: [agencyId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(160)
+  summary     String?  @db.VarChar(500)
+  days        Int      @default(1)
+  nights      Int      @default(0)
+  /// how many people the priced lines cover
+  pax         Int      @default(1)
+  active      Boolean  @default(true)
+  clientRef   String?  @db.VarChar(64)
+  createdById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items TourPackageItem[]
+  docs  SalesDoc[]
+
+  @@unique([agencyId, clientRef])
+  @@index([agencyId])
+  @@map("tour_packages")
+}
+
+model TourPackageItem {
+  id         Int           @id @default(autoincrement())
+  packageId  Int
+  package    TourPackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  /// the leaf this line was chosen from; kept nullable so deleting a category
+  /// never destroys the packages already sold from it
+  categoryId Int?
+  category   TourCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  label      String        @db.VarChar(160)
+  qty        Decimal       @default(1) @db.Decimal(10, 2)
+  unitCost   Decimal       @default(0) @db.Decimal(10, 2)
+  unitPrice  Decimal       @default(0) @db.Decimal(10, 2)
+  sort       Int           @default(0)
+
+  @@index([packageId])
+  @@map("tour_package_items")
+}
+
+enum SalesDocKind {
+  QUOTATION
+  INVOICE
+}
+
+enum SalesDocStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  PAID
+  VOID
+}
+
+/// A quotation or an invoice. One table, because an invoice is a quotation the
+/// client said yes to: converting must carry every line across unchanged, and
+/// two tables would mean copying between two shapes and getting it wrong.
+///
+/// The lines live on the document, not on the package it came from, so a
+/// package repriced next month never rewrites a quote already sent.
+model SalesDoc {
+  id       Int            @id @default(autoincrement())
+  agencyId Int
+  agency   User           @relation("AgencySalesDocs", fields: [agencyId], references: [id], onDelete: Cascade)
+  kind     SalesDocKind
+  number   String         @db.VarChar(24) // QUO-000123 | INV-000123
+  status   SalesDocStatus @default(DRAFT)
+
+  clientName    String  @db.VarChar(160)
+  clientEmail   String? @db.VarChar(191)
+  clientPhone   String? @db.VarChar(32)
+  clientAddress String? @db.VarChar(255)
+  /// set when the client is someone the agency has already served
+  guestId       Int?
+  guest         Guest?  @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  packageId Int?
+  package   TourPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  issueDate  DateTime  @db.Date
+  validUntil DateTime? @db.Date
+  currency   String    @default("BDT") @db.VarChar(3)
+  discount   Decimal   @default(0) @db.Decimal(10, 2)
+  taxRate    Decimal   @default(0) @db.Decimal(5, 2) // percent
+  amountPaid Decimal   @default(0) @db.Decimal(10, 2)
+  notes      String?   @db.Text
+  terms      String?   @db.Text
+
+  /// the quotation this invoice was made from; one invoice per quotation
+  convertedFromId Int?      @unique
+  convertedFrom   SalesDoc? @relation("Conversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
+  convertedTo     SalesDoc? @relation("Conversion")
+
+  sentAt      DateTime?
+  paidAt      DateTime?
+  createdById Int?
+  clientRef   String?   @db.VarChar(64)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items SalesDocItem[]
+
+  @@unique([agencyId, number])
+  @@unique([agencyId, clientRef])
+  @@index([agencyId, kind, status])
+  @@index([agencyId, guestId])
+  @@map("sales_docs")
+}
+
+model SalesDocItem {
+  id        Int      @id @default(autoincrement())
+  docId     Int
+  doc       SalesDoc @relation(fields: [docId], references: [id], onDelete: Cascade)
+  label     String   @db.VarChar(200)
+  details   String?  @db.VarChar(500)
+  qty       Decimal  @default(1) @db.Decimal(10, 2)
+  unitPrice Decimal  @default(0) @db.Decimal(10, 2)
+  sort      Int      @default(0)
+
+  @@index([docId])
+  @@map("sales_doc_items")
 }

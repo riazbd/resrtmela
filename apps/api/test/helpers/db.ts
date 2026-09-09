@@ -50,7 +50,8 @@ const TABLES = [
   "payroll_payments", "employees", "food_packages",
   "wallet_txns", "wallets", "subscription_dues", "subscriptions",
   "email_campaigns", "email_credits", "notifications", "resort_access",
-  "api_keys", "discount_offers", "expenses", "counters", "audit_log",
+  "api_keys", "discount_offers", "expenses", "expense_heads", "counters", "audit_log",
+  "sales_doc_items", "sales_docs", "tour_package_items", "tour_packages", "tour_categories",
   "notification_jobs", "message_templates", "user_resorts", "roles", "users", "agent_roles",
   "resorts", "tenants", "platform_plans", "platform_settings", "cms_settings",
 ];

@@ -68,3 +68,7 @@ export function forbid(detail: string): Error {
 export function badRequest(detail: string): Error {
   return Object.assign(new Error(detail), { status: 400 });
 }
+
+export function notFound(detail: string): Error {
+  return Object.assign(new Error(detail), { status: 404 });
+}

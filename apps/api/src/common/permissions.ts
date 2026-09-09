@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ALL_PERMISSIONS, AGENT_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
+import { ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { agentPermissionsFor } from "./agency-permissions";
 import { forbid } from "./rbac";
 
 /** Seeds the three system roles for a resort (idempotent). */
@@ -44,9 +45,9 @@ export class PermissionsService {
         select: { parentAgentId: true, agentRole: { select: { permissions: true } } },
       });
       if (!me) return [];
-      if (me.parentAgentId == null) return [...AGENT_PERMISSIONS];
-      const perms = me.agentRole?.permissions;
-      return Array.isArray(perms) ? (perms as string[]) : (DEFAULT_ROLE_PERMISSIONS.Agent ?? []);
+      // the same rule the agency-side services run through, so the menu this
+      // draws and what those services allow cannot disagree
+      return agentPermissionsFor(me);
     }
 
     const rid = resortId ?? claims.resortIds[0];

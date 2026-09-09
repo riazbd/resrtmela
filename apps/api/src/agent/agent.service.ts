@@ -21,7 +21,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { forbid, badRequest } from "../common/rbac";
-import { AGENT_PERMISSIONS, isAgentPermission, ROLE, type JwtClaims } from "@rh/shared";
+import { AgencyContextService } from "./agency-context.service";
+import { AGENT_PERMISSIONS, isAgentPermission, type JwtClaims } from "@rh/shared";
 
 export interface AgentRoleView {
   id: number;
@@ -32,50 +33,15 @@ export interface AgentRoleView {
 
 @Injectable()
 export class AgentService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
-
-  /**
-   * The agency this caller belongs to, and what they may do inside it.
-   *
-   * An agency owner (no parent) holds every agent permission. A staff member
-   * holds what their role says, or the default set when they have no role —
-   * which is what every existing staff member has today.
-   */
-  private async context(claims: JwtClaims) {
-    if (claims.role !== ROLE.AGENT) throw forbid("Agents only");
-    const me = await this.prisma.user.findUnique({
-      where: { id: claims.userId },
-      select: { id: true, parentAgentId: true, agentRole: { select: { permissions: true } } },
-    });
-    if (!me) throw forbid("Agents only");
-    const agencyId = me.parentAgentId ?? me.id;
-    const isOwner = me.parentAgentId == null;
-    const permissions = isOwner
-      ? [...AGENT_PERMISSIONS]
-      : Array.isArray(me.agentRole?.permissions)
-        ? (me.agentRole!.permissions as string[])
-        : ["agent.book", "agent.wallet.view"];
-    return { agencyId, isOwner, permissions };
-  }
-
-  private require(ctx: { permissions: string[] }, perm: string) {
-    if (!ctx.permissions.includes(perm)) throw forbid(`Missing permission: ${perm}`);
-  }
-
-  /** Everyone acting under this agency: the owner and their staff. */
-  private async agencyActorIds(agencyId: number): Promise<number[]> {
-    const staff = await this.prisma.user.findMany({
-      where: { parentAgentId: agencyId },
-      select: { id: true },
-    });
-    return [agencyId, ...staff.map((s) => s.id)];
-  }
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AgencyContextService) private readonly agency: AgencyContextService,
+  ) {}
 
   // ─────────────────────────── roles ───────────────────────────
 
   async listRoles(claims: JwtClaims): Promise<AgentRoleView[]> {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.staff.manage");
+    const ctx = await this.agency.require(claims, "agent.staff.manage");
     const rows = await this.prisma.agentRole.findMany({
       where: { agencyId: ctx.agencyId },
       include: { _count: { select: { staff: true } } },
@@ -90,8 +56,7 @@ export class AgentService {
   }
 
   async createRole(claims: JwtClaims, input: { name: string; permissions: string[] }) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.staff.manage");
+    const ctx = await this.agency.require(claims, "agent.staff.manage");
     const permissions = this.checkPermissions(input.permissions);
     const name = input.name?.trim();
     if (!name) throw badRequest("The role needs a name");
@@ -102,8 +67,7 @@ export class AgentService {
   }
 
   async updateRole(claims: JwtClaims, roleId: number, input: { name?: string; permissions?: string[] }) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.staff.manage");
+    const ctx = await this.agency.require(claims, "agent.staff.manage");
     await this.ownRole(ctx.agencyId, roleId);
     const role = await this.prisma.agentRole.update({
       where: { id: roleId },
@@ -116,8 +80,7 @@ export class AgentService {
   }
 
   async deleteRole(claims: JwtClaims, roleId: number) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.staff.manage");
+    const ctx = await this.agency.require(claims, "agent.staff.manage");
     await this.ownRole(ctx.agencyId, roleId);
     // staff keep working on the default set rather than losing access mid-day
     await this.prisma.user.updateMany({ where: { agentRoleId: roleId }, data: { agentRoleId: null } });
@@ -127,8 +90,7 @@ export class AgentService {
 
   /** Puts a staff member on a role. Both must belong to this agency. */
   async assignRole(claims: JwtClaims, staffUserId: number, roleId: number | null) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.staff.manage");
+    const ctx = await this.agency.require(claims, "agent.staff.manage");
     const staff = await this.prisma.user.findUnique({
       where: { id: staffUserId },
       select: { parentAgentId: true },
@@ -172,8 +134,7 @@ export class AgentService {
    * balance — the platform held their money and showed them no statement.
    */
   async wallet(claims: JwtClaims) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.wallet.view");
+    const ctx = await this.agency.require(claims, "agent.wallet.view");
     const wallet = await this.prisma.wallet.upsert({
       where: { userId: ctx.agencyId },
       update: {},
@@ -209,9 +170,8 @@ export class AgentService {
    * cancelled that booking" about its own people.
    */
   async activity(claims: JwtClaims, query: { q?: string; take?: number }) {
-    const ctx = await this.context(claims);
-    this.require(ctx, "agent.auditlog.view");
-    const actorIds = await this.agencyActorIds(ctx.agencyId);
+    const ctx = await this.agency.require(claims, "agent.auditlog.view");
+    const actorIds = await this.agency.actorIds(ctx.agencyId);
     const search = query.q?.trim();
     const rows = await this.prisma.auditLog.findMany({
       where: {
@@ -246,7 +206,7 @@ export class AgentService {
 
   /** What the caller may do, for the console to draw the right menu. */
   async me(claims: JwtClaims) {
-    const ctx = await this.context(claims);
+    const ctx = await this.agency.of(claims);
     return { agencyId: ctx.agencyId, isOwner: ctx.isOwner, permissions: ctx.permissions };
   }
 }

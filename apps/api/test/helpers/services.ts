@@ -23,6 +23,13 @@ import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
 import { AgentService } from "../../src/agent/agent.service";
+import { AgencyContextService } from "../../src/agent/agency-context.service";
+import { ToursService } from "../../src/agent/tours.service";
+import { BooksService } from "../../src/agent/books.service";
+import { SalesService } from "../../src/agent/sales.service";
+import { AgencyGuestsService } from "../../src/agent/agency-guests.service";
+import { ExpensesService } from "../../src/expenses/expenses.service";
+import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
 import { IntentsService } from "../../src/payments/intents.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
@@ -120,5 +127,43 @@ export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGatew
 }
 
 export function makeAgentService(prisma: PrismaService): AgentService {
-  return new AgentService(prisma);
+  return new AgentService(prisma, new AgencyContextService(prisma));
+}
+
+export function makeToursService(prisma: PrismaService): ToursService {
+  return new ToursService(prisma, new AgencyContextService(prisma), new AuditService(prisma));
+}
+
+export function makeBooksService(prisma: PrismaService): BooksService {
+  return new BooksService(prisma, new AgencyContextService(prisma), new AuditService(prisma));
+}
+
+export function makeExpensesService(prisma: PrismaService): ExpensesService {
+  return new ExpensesService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    new TenantStateService(prisma),
+  );
+}
+
+export function makePayrollService(prisma: PrismaService): PayrollService {
+  return new PayrollService(prisma, new PermissionsService(prisma), new AuditService(prisma));
+}
+
+export function makeSalesService(prisma: PrismaService, email?: EmailService): SalesService {
+  return new SalesService(
+    prisma,
+    new AgencyContextService(prisma),
+    new AuditService(prisma),
+    email ?? new EmailService(),
+  );
+}
+
+export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
+  return new AgencyGuestsService(
+    prisma,
+    new AgencyContextService(prisma),
+    new AvailabilityService(prisma),
+  );
 }

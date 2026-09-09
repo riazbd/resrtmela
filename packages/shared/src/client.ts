@@ -15,6 +15,10 @@
  * the mobile app in secure storage, and neither concern belongs here.
  */
 import type {
+  AgencyEmployee,
+  AgencyExpensePage,
+  AgencyGuestRow,
+  AgencyRoomOffer,
   BookingDetail,
   BookingRow,
   CalendarBooking,
@@ -22,6 +26,7 @@ import type {
   DaySheet,
   DuesReport,
   Employee,
+  ExpenseHeadRow,
   ExpensePage,
   ExportArchive,
   FoodPackage,
@@ -38,6 +43,12 @@ import type {
   Room,
   RoomAvail,
   RoomType,
+  SalesDocDetail,
+  SalesDocKind,
+  SalesDocRow,
+  TourCategoryNode,
+  TourPackageDetail,
+  TourPackageRow,
 } from "./api-types";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -217,6 +228,82 @@ export function createApiClient(http: Fetcher) {
       archive: (resortId: number) => http<ExportArchive>(`/resorts/${resortId}/export/archive`),
       /** CSV is a file download, not JSON — the host app fetches this path itself. */
       csvPath: (resortId: number, dataset: string) => `/resorts/${resortId}/export/${dataset}.csv`,
+    },
+
+    // ── the agency's own side ──
+    agent: {
+      me: () => http<{ agencyId: number; isOwner: boolean; permissions: string[] }>("/agent/me"),
+      wallet: () => http<unknown>("/agent/wallet"),
+      activity: (q: { q?: string; take?: number } = {}) => http<unknown[]>(`/agent/activity${qs(q)}`),
+
+      tours: {
+        categories: () => http<TourCategoryNode[]>("/agent/tours/categories"),
+        createCategory: (body: { name: string; parentId?: number | null }) =>
+          http<unknown>("/agent/tours/categories", { method: "POST", body }),
+        updateCategory: (id: number, body: unknown) =>
+          http<unknown>(`/agent/tours/categories/${id}`, { method: "PATCH", body }),
+        deleteCategory: (id: number) =>
+          http<{ deleted: boolean }>(`/agent/tours/categories/${id}`, { method: "DELETE" }),
+        packages: (q: { q?: string; active?: boolean } = {}) =>
+          http<TourPackageRow[]>(`/agent/tours/packages${qs(q)}`),
+        package: (id: number) => http<TourPackageDetail>(`/agent/tours/packages/${id}`),
+        createPackage: (body: unknown) =>
+          http<{ id: number }>("/agent/tours/packages", { method: "POST", body }),
+        updatePackage: (id: number, body: unknown) =>
+          http<{ id: number }>(`/agent/tours/packages/${id}`, { method: "PATCH", body }),
+        deletePackage: (id: number) =>
+          http<{ deleted: boolean }>(`/agent/tours/packages/${id}`, { method: "DELETE" }),
+      },
+
+      books: {
+        heads: () => http<ExpenseHeadRow[]>("/agent/expense-heads"),
+        createHead: (name: string) =>
+          http<ExpenseHeadRow>("/agent/expense-heads", { method: "POST", body: { name } }),
+        updateHead: (id: number, body: { name?: string; active?: boolean }) =>
+          http<ExpenseHeadRow>(`/agent/expense-heads/${id}`, { method: "PATCH", body }),
+        deleteHead: (id: number) => http<unknown>(`/agent/expense-heads/${id}`, { method: "DELETE" }),
+        expenses: (q: { from?: string; to?: string; headId?: number; skip?: number; take?: number } = {}) =>
+          http<AgencyExpensePage>(`/agent/expenses${qs(q)}`),
+        addExpense: (body: unknown) => http<{ id: number }>("/agent/expenses", { method: "POST", body }),
+        removeExpense: (id: number) => http<{ deleted: boolean }>(`/agent/expenses/${id}`, { method: "DELETE" }),
+      },
+
+      payroll: {
+        employees: () => http<AgencyEmployee[]>("/agent/employees"),
+        addEmployee: (body: unknown) => http<{ id: number }>("/agent/employees", { method: "POST", body }),
+        editEmployee: (id: number, body: unknown) =>
+          http<{ id: number }>(`/agent/employees/${id}`, { method: "PATCH", body }),
+        removeEmployee: (id: number) => http<unknown>(`/agent/employees/${id}`, { method: "DELETE" }),
+        sheet: (month: string) => http<PayrollSheet>(`/agent/payroll${qs({ month })}`),
+        pay: (employeeId: number, body: unknown) =>
+          http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
+        undoPay: (paymentId: number) =>
+          http<{ deleted: boolean }>(`/agent/payroll/payment/${paymentId}`, { method: "DELETE" }),
+      },
+
+      sales: {
+        list: (q: { kind?: SalesDocKind; status?: string; q?: string } = {}) =>
+          http<SalesDocRow[]>(`/agent/sales${qs(q)}`),
+        get: (id: number) => http<SalesDocDetail>(`/agent/sales/${id}`),
+        create: (body: unknown) => http<{ id: number; number: string }>("/agent/sales", { method: "POST", body }),
+        update: (id: number, body: unknown) => http<{ id: number }>(`/agent/sales/${id}`, { method: "PATCH", body }),
+        convert: (id: number) =>
+          http<{ id: number; number: string }>(`/agent/sales/${id}/convert`, { method: "POST", body: {} }),
+        send: (id: number, body: { to?: string; message?: string } = {}) =>
+          http<{ sent: boolean; to: string }>(`/agent/sales/${id}/send`, { method: "POST", body }),
+        recordPayment: (id: number, body: { amount: number; note?: string }) =>
+          http<unknown>(`/agent/sales/${id}/payments`, { method: "POST", body }),
+        setStatus: (id: number, status: string) =>
+          http<unknown>(`/agent/sales/${id}/status`, { method: "PATCH", body: { status } }),
+        remove: (id: number) => http<unknown>(`/agent/sales/${id}`, { method: "DELETE" }),
+        /** The printable copy is HTML, fetched by the host app, not JSON. */
+        printPath: (id: number) => `/agent/sales/${id}/print`,
+      },
+
+      guests: (q: { q?: string; take?: number } = {}) =>
+        http<{ rows: AgencyGuestRow[]; total: number }>(`/agent/guests${qs(q)}`),
+      rooms: (q: { from: string; to: string; resortId?: number }) =>
+        http<AgencyRoomOffer[]>(`/agent/rooms${qs(q)}`),
     },
 
     // ── running the platform ──

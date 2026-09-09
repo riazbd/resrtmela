@@ -45,9 +45,9 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **223 API tests** across 33 files (34 at the start of this pass,
-all of them pure unit tests; there are now 22 integration suites running against
-a real MySQL) plus **11 front-end tests**, which is 11 more than there were. All
+Current state: **324 API tests** across 41 files (34 at the start of this pass,
+all of them pure unit tests; there are now 29 integration suites running against
+a real MySQL) plus **24 front-end tests**, which is 24 more than there were. All
 five packages typecheck clean, the console builds, and the repository can be
 provisioned from an empty database — which it could not before.
 
@@ -299,6 +299,84 @@ Nagad, Rocket and cards -- and stays inert until a merchant account exists,
 which is the owner's to open. Until then the mock gateway works exactly as it
 did.
 
+### An agency was a login, not a business
+
+The agent side could sell a room and hold a wallet. That is a channel, not a
+company, and a travel agency is a company: it sells trips rather than rooms, it
+buys transport and food and guides to make one, it pays people, it quotes
+clients and bills them, and it has a customer list of its own.
+
+**What a tour is made of** is now the agency's own tree, to whatever depth the
+way they buy actually needs -- Transport → Bus → AC, Food → Breakfast → set
+menu. The platform ships no categories at all, because an agency running hill
+treks and one running beach weekends do not buy the same things and a starting
+list nobody asked for is a list everybody deletes first. A package is built by
+picking leaves off that tree and pricing them, with **cost beside price on
+every line**: an agency that cannot see its own margin while quoting finds it
+out after the trip.
+
+**Quotations and invoices are one table**, because an invoice is a quotation the
+client said yes to. Converting carries every line across untouched -- nobody
+retypes anything, which is where the numbers stop matching -- and the reverse
+link means a document always knows where it came from. Converting twice returns
+the same invoice, which a double-click, a retried request and a replayed offline
+write all depend on.
+
+The lines live on the document rather than on the package they came from, so
+repricing a package next month does not rewrite a quote sent last month. A
+client holding a number the system no longer agrees with is how an agency loses
+an argument it should win.
+
+**The client reads the document in the email**, not behind an attachment. An
+attachment they have to download is one they mostly do not, and then an agency
+cannot tell a lost sale from an unopened PDF. The same markup prints to PDF from
+the browser, fetched with the auth header rather than a token in a URL, which
+would land in history and logs.
+
+**Expenses and payroll ride the tables the resort side already uses**, with an
+agency as the owner instead of a resort. A resort paying its cook and an agency
+paying its counter clerk are the same act, and two tables for it would drift --
+the day they did, a bug fixed on one side would still be live on the other. What
+makes that safe is that a row has exactly one owner and each side filters on its
+own column; the tests that matter here are the ones proving neither side can
+read or delete the other's rows even by guessing an id. Unlike the resort, an
+agency defines its heads first and files under them, which is what makes a
+head-by-head total possible at all -- free text produces "Fuel", "fuel" and
+"Fuel " in the same report.
+
+**A guest list, and a room search that spans resorts.** An agent asked "have you
+got anything for the 12th to the 14th" was opening each resort in turn and
+reading a grid, which is why the answer took a call back. And the guest list is
+the *agency's*, counted across everyone on its team.
+
+**A defect the agent portal left behind:** the booking list was scoped to the
+person, not the agency, so an owner could not see what their own staff had
+booked -- while, correctly, seeing nothing of any other agency's. The agency is
+the unit; it is now the unit everywhere.
+
+### Reading with no connection, not just writing
+
+The outbox let the desk keep *writing* offline. Reading was still impossible:
+open the app on a hill road and every screen was blank, because the in-memory
+cache dies with the page -- the one moment last-known figures are worth most.
+
+Every successful read is now kept in the browser and restored on the next load,
+and a screen showing kept data **says how old it is**. Presenting stale figures
+as current is worse than an empty screen, because the reader cannot tell. It
+stays a cache and never becomes a source: anything past a day is dropped, the
+store is capped so it cannot fill the browser's quota, and signing out empties
+it -- the next person at that counter is not the last one.
+
+**What may wait for a connection changed rule.** The first version queued three
+actions on the grounds that they cannot be postponed. That was right about the
+danger and wrong about the boundary: what makes a write safe to replay is not
+urgency, it is *identity*. A write that creates a new row carrying its own
+reference can be replayed all day and still make one row, so an agent writing up
+a tour on the bus, filing the day's fuel, or drafting a quotation now keeps
+working with no signal. An edit still needs a connection and says so plainly --
+two devices editing the same row offline cannot both be right, and there is no
+reference that makes them so.
+
 ### Smaller, but shipped
 
 Per-tenant document prefixes · the guest directory's per-guest N+1 removed ·
@@ -328,11 +406,16 @@ never promise what it does not do.**
    and the list in one file. Splitting them is mechanical and low-risk; it was
    left until last because file size is a symptom, and the disease was the
    missing primitives.
-2. **More front-end tests.** There are 11, all on the offline queue, which is
-   where the risk was. The money formatter, the permission-driven navigation
-   and the outbox bar are the next three worth holding down.
-3. **Mobile adopts the typed client.** It still hand-rolls nine interfaces.
-   Nothing is broken; it will drift.
+2. **More front-end tests.** There are 24, on the offline queue and the offline
+   read cache, which is where the risk was. The money formatter, the
+   permission-driven navigation and the outbox bar are the next three worth
+   holding down.
+3. **Mobile adopts the typed client.** It still hand-rolls nine interfaces, and
+   none of the agency screens exist there. Nothing is broken; it will drift.
+4. **Agency staff resort links are copied at hire time and never again.** An
+   agency approved for a new resort has staff with no link of their own to it.
+   The room search works around this by running on the agency's authority; the
+   rest of the agent surface has not been swept for the same assumption.
 
 ### P5 — Growth, when the above is quiet
 

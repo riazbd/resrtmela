@@ -87,6 +87,24 @@ export class BookingsService {
   }
 
   /** The resort's tax rate — every total shown to anyone must include it. */
+  /**
+   * Everyone acting under this agent's agency: the agency and its staff.
+   *
+   * A staff member's agency is their parent; an agency's own is itself.
+   */
+  private async agencyActorIds(userId: number): Promise<number[]> {
+    const me = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, parentAgentId: true },
+    });
+    const agencyId = me?.parentAgentId ?? userId;
+    const staff = await this.prisma.user.findMany({
+      where: { parentAgentId: agencyId },
+      select: { id: true },
+    });
+    return [agencyId, ...staff.map((s) => s.id)];
+  }
+
   private async taxRateFor(resortId: number): Promise<number> {
     const r = await this.prisma.resort.findUnique({
       where: { id: resortId },
@@ -417,7 +435,10 @@ export class BookingsService {
       ...(q.state ? { state: q.state } : {}),
       ...(q.source ? { source: q.source } : {}),
       ...(q.guestId ? { guestId: q.guestId } : {}),
-      ...(isAgent ? { agentUserId: claims.userId } : {}),
+      // An agency is the unit, not a person. Scoping this to the caller meant
+      // an agency owner could not see what their own staff had booked, while
+      // still — correctly — seeing nothing of any other agency's.
+      ...(isAgent ? { agentUserId: { in: await this.agencyActorIds(claims.userId) } } : {}),
       ...(q.group ? { groupTag: q.group } : {}),
       ...(q.from && q.to
         ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }

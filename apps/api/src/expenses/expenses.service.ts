@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
-import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
+import { requireResortAccess, requireRoles, badRequest, notFound } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
@@ -99,7 +99,10 @@ export class ExpensesService {
 
   async remove(claims: JwtClaims, id: number) {
     const exp = await this.prisma.expense.findUnique({ where: { id } });
-    if (!exp) throw Object.assign(new Error("Expense not found"), { status: 404 });
+    if (!exp) throw notFound("Expense not found");
+    // the table is shared with the agency side; an entry with no resort is an
+    // agency's own cost and is none of this resort's business
+    if (exp.resortId == null) throw notFound("Expense not found");
     await this.perms.require(claims, exp.resortId, "expenses.delete");
     requireResortAccess(claims, exp.resortId);
     await this.prisma.expense.delete({ where: { id } });

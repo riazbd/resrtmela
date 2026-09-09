@@ -163,7 +163,9 @@ export class PayrollService {
 
   async undoPay(claims: JwtClaims, paymentId: number) {
     const row = await this.prisma.payrollPayment.findUnique({ where: { id: paymentId } });
-    if (!row) throw badRequest("payment not found");
+    // the table is shared with the agency side; a payment with no resort was
+    // made by an agency to its own staff and is none of this resort's business
+    if (!row || row.resortId == null) throw badRequest("payment not found");
     await this.requireManage(claims, row.resortId);
     await this.prisma.payrollPayment.delete({ where: { id: paymentId } });
     await this.audit.log({ actorId: claims.userId, resortId: row.resortId, action: "payroll.pay.undo", entity: "payroll_payment", entityId: paymentId, diff: { month: row.month } });

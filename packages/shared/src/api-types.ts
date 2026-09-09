@@ -414,3 +414,160 @@ export interface ExportArchive {
   datasets: Record<string, ExportDataset>;
   counts: Record<string, number>;
 }
+
+// ───────────────────────── the agency's own side ─────────────────────────
+
+/** One node of the agency's tour tree: Transport → Bus → AC, any depth. */
+export interface TourCategoryNode {
+  id: number;
+  name: string;
+  active: boolean;
+  children: TourCategoryNode[];
+}
+
+export interface TourPackageLine {
+  id: number;
+  categoryId: number | null;
+  category: string | null;
+  label: string;
+  qty: number;
+  /** what the agency pays — its own business, never on a client's copy */
+  unitCost: number;
+  unitPrice: number;
+}
+
+export interface TourPackageTotals {
+  cost: number;
+  price: number;
+  margin: number;
+}
+
+export interface TourPackageRow {
+  id: number;
+  name: string;
+  summary: string | null;
+  days: number;
+  nights: number;
+  pax: number;
+  active: boolean;
+  lines: number;
+  totals: TourPackageTotals;
+}
+
+export interface TourPackageDetail extends Omit<TourPackageRow, "lines"> {
+  items: TourPackageLine[];
+}
+
+export interface ExpenseHeadRow {
+  id: number;
+  name: string;
+  active: boolean;
+  entries: number;
+  amount: number;
+}
+
+export interface AgencyExpenseRow {
+  id: number;
+  date: string;
+  headId: number | null;
+  head: string;
+  details: string | null;
+  amount: number;
+}
+
+export interface AgencyExpensePage extends Page<AgencyExpenseRow> {
+  summary: { amount: number; byHead: { headId: number | null; head: string; amount: number }[] };
+}
+
+export interface AgencyEmployee {
+  id: number;
+  name: string;
+  phone: string | null;
+  designation: string | null;
+  salary: number;
+  joinDate: string | null;
+  active: boolean;
+  recent: { month: string; amount: number }[];
+}
+
+export type SalesDocKind = "QUOTATION" | "INVOICE";
+export type SalesDocStatus =
+  | "DRAFT"
+  | "SENT"
+  | "ACCEPTED"
+  | "DECLINED"
+  | "EXPIRED"
+  | "PAID"
+  | "VOID";
+
+export interface SalesDocTotals {
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  paid: number;
+  due: number;
+}
+
+export interface SalesDocRow {
+  id: number;
+  kind: SalesDocKind;
+  number: string;
+  status: SalesDocStatus;
+  clientName: string;
+  issueDate: string;
+  validUntil: string | null;
+  sentAt: string | null;
+  totals: SalesDocTotals;
+}
+
+export interface SalesDocLine {
+  id: number;
+  label: string;
+  details: string | null;
+  qty: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export interface SalesDocDetail extends SalesDocRow {
+  clientEmail: string | null;
+  clientPhone: string | null;
+  clientAddress: string | null;
+  guestId: number | null;
+  packageId: number | null;
+  currency: string;
+  taxRate: number;
+  notes: string | null;
+  terms: string | null;
+  paidAt: string | null;
+  items: SalesDocLine[];
+  convertedFrom: { id: number; number: string } | null;
+  convertedTo: { id: number; number: string } | null;
+}
+
+/** Everyone this agency has served, counted across its whole team. */
+export interface AgencyGuestRow {
+  id: number;
+  fullName: string;
+  phone: string;
+  email: string | null;
+  bookings: number;
+  nights: number;
+  spend: number;
+  lastStay: string | null;
+  resorts: string[];
+}
+
+/** What is free between two dates, at one of the resorts the agency sells. */
+export interface AgencyRoomOffer {
+  resort: { id: number; name: string; location: string | null };
+  rooms: {
+    roomId: number;
+    roomName: string;
+    roomTypeId: number;
+    baseRate: number;
+    /** what the agency would owe the resort; absent when the resort hides rates */
+    agentRate?: number;
+  }[];
+}

@@ -91,6 +91,11 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "agent.wallet.view", label: "See the agency wallet", group: "Agent portal" },
   { key: "agent.staff.manage", label: "Add & manage agency staff", group: "Agent portal" },
   { key: "agent.auditlog.view", label: "See the agency activity log", group: "Agent portal" },
+  { key: "agent.tours.manage", label: "Build tour packages", group: "Agent portal" },
+  { key: "agent.expenses.manage", label: "Keep the agency's expenses", group: "Agent portal" },
+  { key: "agent.payroll.manage", label: "Run the agency's payroll", group: "Agent portal" },
+  { key: "agent.sales.manage", label: "Quotations & invoices", group: "Agent portal" },
+  { key: "agent.guests.view", label: "See every guest the agency has served", group: "Agent portal" },
 ];
 
 /**
@@ -106,6 +111,11 @@ export const AGENT_PERMISSIONS = [
   "agent.wallet.view",
   "agent.staff.manage",
   "agent.auditlog.view",
+  "agent.tours.manage",
+  "agent.expenses.manage",
+  "agent.payroll.manage",
+  "agent.sales.manage",
+  "agent.guests.view",
   "marketing.send",
 ] as const;
 
