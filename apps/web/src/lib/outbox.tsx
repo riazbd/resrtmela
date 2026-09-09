@@ -2,7 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { OfflineQueue, isNetworkError, type QueuedKind, type QueuedWrite } from "@/lib/offline-queue";
+import {
+  OfflineQueue,
+  canWaitOffline,
+  isNetworkError,
+  type QueuedKind,
+  type QueuedWrite,
+} from "@/lib/offline-queue";
 import { useQueryClient } from "@tanstack/react-query";
 
 /**
@@ -12,11 +18,12 @@ import { useQueryClient } from "@tanstack/react-query";
  * network is the problem it queues instead of failing. The desk keeps working;
  * the guest gets their room; the write lands when the connection does.
  *
- * It deliberately does not queue everything. Editing a rate or adding a staff
- * member can wait for a connection — a queue that accepts every write becomes
- * a second, worse database, and the moment two devices queue conflicting edits
- * nobody can say what the truth is. Check in, check out and take money are the
- * three that cannot wait, because a guest is standing at the counter.
+ * It deliberately does not queue everything. What may wait is decided by
+ * `canWaitOffline`, and the rule is identity, not urgency: a write that
+ * creates a new row and carries its own reference can be replayed all day and
+ * still make one row. An edit cannot — two devices editing the same row
+ * offline cannot both be right, and the second write would quietly overwrite
+ * the first — so an edit still needs a connection and says so.
  */
 
 interface OutboxValue {
@@ -29,6 +36,7 @@ interface OutboxValue {
     label: string;
     path: string;
     body: Record<string, unknown>;
+    method?: string;
   }) => Promise<{ queued: boolean }>;
   flush: () => Promise<void>;
   discard: (id: string) => void;
@@ -96,10 +104,17 @@ export function OutboxProvider({ children }: { children: React.ReactNode }) {
   const submit: OutboxValue["submit"] = useCallback(
     async (input) => {
       try {
-        await api(input.path, { method: "POST", body: input.body });
+        await api(input.path, { method: input.method ?? "POST", body: input.body });
         return { queued: false };
       } catch (error) {
         if (!isNetworkError(error)) throw error;
+        if (!canWaitOffline(input.kind)) {
+          // saying "saved" and then quietly losing the change would be worse
+          // than this refusal, which at least the person can act on
+          throw new Error(
+            "This change needs a connection — someone else may be editing the same thing. Try again when you are back online.",
+          );
+        }
         queue.enqueue(input);
         refresh();
         return { queued: true };

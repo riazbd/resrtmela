@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, getToken, setToken, permissionsFor, setMoneyFormat, type Me, type Resort } from "./api";
+import { cacheStore } from "./offline-cache";
 
 interface AuthState {
   me: Me | null;
@@ -99,6 +100,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setToken(null);
     window.localStorage.removeItem("rh.impersonator");
+    // whatever the app kept for reading offline belongs to the person signing
+    // out, not to whoever sits down at this counter next
+    cacheStore.clear();
     setMe(null);
     setActive(null);
     setPerms([]);

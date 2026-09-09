@@ -12,10 +12,22 @@ import { ApiError } from "@/lib/api";
  * counter next to the software it is paying for. No competitor selling into
  * this market handles it.
  *
- * So the three actions that cannot wait — check in, check out, take money —
- * are written here when the network fails, and replayed in order when it
- * returns. Everything else still requires a connection: a queue that accepts
- * every write becomes a second, worse database.
+ * So a write that fails for want of a network is written here and replayed in
+ * order when the network returns.
+ *
+ * **What may wait, and what may not.** The first version of this queued three
+ * actions — check in, check out, take money — on the grounds that they cannot
+ * be postponed. That was right about the danger and wrong about the boundary.
+ * What makes a write safe to replay is not urgency, it is *identity*: a write
+ * that creates a brand-new row and carries its own reference can be replayed
+ * all day and still produce one row, because the server treats the reference
+ * as the row's identity. So creating an expense, a quotation, an invoice or a
+ * tour package now waits happily on a bus with no signal.
+ *
+ * Editing or deleting a row is a different act. Two devices that both edit the
+ * same row offline cannot both be right, and there is no reference that makes
+ * them so — the second write would silently overwrite the first and nobody
+ * would ever know. Those still require a connection, and say so.
  *
  * Two properties make this safe rather than clever:
  *
@@ -29,7 +41,49 @@ import { ApiError } from "@/lib/api";
  *    something that can never succeed — but it is reported, never swallowed.
  */
 
-export type QueuedKind = "payment" | "checkin" | "checkout";
+/**
+ * The kinds of write this queue knows about.
+ *
+ * Everything up to `package` creates a new row carrying a client reference, so
+ * replaying it is safe. `edit` and `delete` are named here so callers have a
+ * word for what they are doing and get a clear refusal instead of silence.
+ */
+export type QueuedKind =
+  | "payment"
+  | "checkin"
+  | "checkout"
+  | "booking"
+  | "expense"
+  | "quotation"
+  | "invoice"
+  | "package"
+  | "payroll"
+  | "edit"
+  | "delete";
+
+/** Writes that create a new row, each identified by its own `clientRef`. */
+const CREATES_A_ROW: readonly QueuedKind[] = [
+  "payment",
+  "checkin",
+  "checkout",
+  "booking",
+  "expense",
+  "quotation",
+  "invoice",
+  "package",
+  "payroll",
+];
+
+/**
+ * Whether this kind of write can be held until the network returns.
+ *
+ * The answer is about replay safety, not importance: a write the server can
+ * recognise as one it has already seen may wait; one that would silently
+ * overwrite somebody else's change may not.
+ */
+export function canWaitOffline(kind: QueuedKind): boolean {
+  return CREATES_A_ROW.includes(kind);
+}
 
 export interface QueuedWrite {
   id: string;
