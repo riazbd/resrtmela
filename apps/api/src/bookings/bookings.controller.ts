@@ -122,7 +122,10 @@ export class BookingsController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query("date") date: string,
   ) {
-    return this.bookings.daySheet(req.user, resortId, date || new Date().toISOString().slice(0, 10));
+    // no date means "today at this resort", which `daySheet` works out from the
+    // resort's own timezone. It used to mean today on the server, so before
+    // 06:00 in Dhaka the desk opened yesterday's sheet.
+    return this.bookings.daySheet(req.user, resortId, date);
   }
 
   @Get("resorts/:resortId/calendar")

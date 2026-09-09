@@ -6,6 +6,7 @@ import { useApi, keys } from "@/lib/query";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 interface AgentRow {
   agentId: number; name: string; commissionRate: number;
@@ -31,9 +32,7 @@ interface AuditRow {
   entity: string; entityId: string | null; diff: unknown; at: string;
 }
 
-function isoDays(offset: number) {
-  return new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10);
-}
+
 
 function MiniBox({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "green" | "red" }) {
   const tones = { default: "text-slate-900", green: "text-green-700", red: "text-red-700" };
@@ -57,6 +56,8 @@ function PLRow({ label, value, tone = "default", bold = false, muted = false }: 
 
 export default function ReportsPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
+  // the resort's day, not the browser's: after 18:00 in Dhaka these differ
+  const today = todayIn(activeResort?.timezone);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [fy, setFy] = useState("");
@@ -82,12 +83,12 @@ export default function ReportsPage() {
   const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range) as Promise<Metrics>, { enabled, placeholderData: (prev) => prev });
   const dailyQ = useApi(
     keys.reports(rid, "daily", period),
-    () => client.reports.daily(rid!, from || isoDays(-7), to || isoDays(1)) as Promise<DailyRow[]>,
+    () => client.reports.daily(rid!, from || addDaysIso(today, -7), to || addDaysIso(today, 1)) as Promise<DailyRow[]>,
     { enabled, placeholderData: (prev) => prev },
   );
   const plQ = useApi(
     keys.reports(rid, "pl", period),
-    () => client.reports.pl(rid!, from || isoDays(-90), to || isoDays(1)),
+    () => client.reports.pl(rid!, from || addDaysIso(today, -90), to || addDaysIso(today, 1)),
     { enabled, placeholderData: (prev) => prev },
   );
   const auditQ = useApi(keys.reports(rid, "audit"), () => client.reports.audit(rid!, 60) as Promise<AuditRow[]>, {

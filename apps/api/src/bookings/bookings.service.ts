@@ -1020,12 +1020,23 @@ export class BookingsService {
    * - occupancy: BOOKED/AVAILABLE/out-of-service
    * Computed from bookings (not night holds) so history works forever.
    */
-  async daySheet(claims: JwtClaims, resortId: number, dateStr: string) {
+  async daySheet(claims: JwtClaims, resortId: number, dateStr?: string) {
     requireResortAccess(claims, resortId);
     // the matrix showed this box and nothing asked for it: hiding the menu
     // link is not access control, and a token plus curl was the whole gap
     await this.perms.require(claims, resortId, "bookings.view");
-    const date = dateOnly(dateStr);
+    /**
+     * No date means today at *this resort*.
+     *
+     * The controller used to substitute the server's date, so before 06:00 in
+     * Dhaka the desk opened yesterday's sheet — and `civilDateIn` was written
+     * for exactly this and never called here.
+     */
+    const resortDay = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { timezone: true },
+    });
+    const date = dateStr ? dateOnly(dateStr) : todayIn(resortDay.timezone);
     const nextDay = new Date(date.getTime() + 86_400_000);
 
     const taxRules = await this.taxRulesFor(resortId);

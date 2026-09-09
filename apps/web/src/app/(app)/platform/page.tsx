@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
+import { monthOf } from "@/lib/resort-dates";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -135,7 +136,7 @@ export default function PlatformPage() {
     keys.platform("sub-calendar", month),
     () =>
       api<CalCell[]>(
-        `/platform/sub-calendar?from=${month}-01&to=${new Date(calYear!, calMonth!, 0).toISOString().slice(0, 10)}`,
+        `/platform/sub-calendar?from=${monthOf.firstDay(month)}&to=${monthOf.lastDay(month)}`,
       ),
     // only fetched once the tab is actually open
     { enabled: tab === "Calendar" },
@@ -168,9 +169,10 @@ export default function PlatformPage() {
   }
 
   function shiftMonth(delta: number) {
-    const [y, m] = month.split("-").map(Number);
-    const d = new Date(y!, m! - 1 + delta, 1);
-    setMonth(d.toISOString().slice(0, 7));
+    // `new Date(y, m, 1).toISOString()` converts local midnight to the previous
+    // day in any positive-offset browser, and so to the previous month: in Dhaka
+    // the Next arrow returned the month it started from and appeared dead
+    setMonth(monthOf(month, delta));
   }
 
   if (ov === null && resorts === null) return <Spinner />;

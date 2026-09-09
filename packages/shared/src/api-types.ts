@@ -45,6 +45,12 @@ export interface Resort {
   status: string;
   currency?: string;
   locale?: string;
+  /**
+   * The resort's own day. It has been in the schema all along and the console
+   * never received it, so every default date was UTC — which in Bangladesh
+   * means tomorrow from 18:00, the shift the front desk actually works.
+   */
+  timezone?: string;
 }
 
 export interface Me {

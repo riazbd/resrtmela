@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 const CATEGORIES = ["TOUR", "WATER_SPORTS", "WELLNESS", "DINING", "ENTERTAINMENT", "OTHER"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -45,7 +46,6 @@ interface Slot {
   remaining: number;
 }
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function ActivitiesPage() {
   const { activeResort, isManagement, isStaff } = useAuth();
@@ -53,8 +53,8 @@ export default function ActivitiesPage() {
   const [selected, setSelected] = useState<Activity | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Activity> & { schedules: Schedule[] } | null>(null);
-  const [genFrom, setGenFrom] = useState(iso(new Date()));
-  const [genTo, setGenTo] = useState(iso(new Date(Date.now() + 14 * 86400000)));
+  const [genFrom, setGenFrom] = useState(() => todayIn(activeResort?.timezone));
+  const [genTo, setGenTo] = useState(() => addDaysIso(todayIn(activeResort?.timezone), 14));
   const [busy, setBusy] = useState(false);
 
   const canManage = isManagement;
@@ -69,7 +69,8 @@ export default function ActivitiesPage() {
 
   // slots are per activity, so each one caches separately: clicking between
   // two activities to compare their schedules is now two requests, not four
-  const slotRange = { from: iso(new Date()), to: iso(new Date(Date.now() + 14 * 86400000)) };
+  const today = todayIn(activeResort?.timezone);
+  const slotRange = { from: today, to: addDaysIso(today, 14) };
   const slotsQ = useApi(
     ["activity-slots", activeResort?.id, selected?.id] as const,
     () =>
