@@ -950,23 +950,21 @@ export class PlatformService {
 
   // ─────────────────── agent agency staff (agent's own users & roles) ───────────────────
 
+  /**
+   * The people who work for this agency.
+   *
+   * This used to be inferred from "shares a resort with me", which is wrong the
+   * moment two agencies sell the same resort — the normal case, not the
+   * unusual one. Each agency saw the other's people, with their phone numbers
+   * and email addresses. Staff now point at the agency that created them.
+   */
   async agentStaffList(claims: JwtClaims) {
     if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
-    const rows = await this.prisma.user.findMany({
-      where: { role: "AGENT" },
+    return this.prisma.user.findMany({
+      where: { role: "AGENT", parentAgentId: claims.userId },
       select: { id: true, name: true, phone: true, email: true, status: true, createdAt: true },
       orderBy: { id: "asc" },
     });
-    // staff = agents that were created by (share resorts with) the caller and are not the caller
-    const myResorts = await this.prisma.userResort.findMany({ where: { userId: claims.userId }, select: { resortId: true } });
-    const mine = new Set(myResorts.map((r) => r.resortId));
-    const out: typeof rows = [];
-    for (const r of rows) {
-      if (r.id === claims.userId) continue;
-      const links = await this.prisma.userResort.findMany({ where: { userId: r.id }, select: { resortId: true } });
-      if (links.some((l) => mine.has(l.resortId))) out.push(r);
-    }
-    return out;
   }
 
   async createAgentStaff(claims: JwtClaims, input: { name: string; email?: string; phone?: string; password: string }) {
@@ -993,6 +991,8 @@ export class PlatformService {
         passwordHash: await bcrypt.hash(input.password, 12),
         role: "AGENT",
         status: "active",
+        // whose staff this is; an agency itself has no parent
+        parentAgentId: claims.role === ROLE.AGENT ? claims.userId : null,
       },
     });
     for (const link of myLinks) {

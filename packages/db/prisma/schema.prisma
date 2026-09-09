@@ -176,6 +176,15 @@ model User {
   passwordHash String?   @db.VarChar(255)
   role         Role
   status       String    @default("active") @db.VarChar(16)
+  /// For AGENT users: the agency this person works under.
+  ///
+  /// There is no agency entity, only agent users, so an agency is the agent
+  /// whose staff point at them. Null means "an agency in their own right".
+  /// Without this, "my staff" could only be inferred from "shares a resort
+  /// with me" -- which shows two agencies selling the same resort each other.
+  parentAgentId Int?
+  parentAgent  User?     @relation("AgencyStaff", fields: [parentAgentId], references: [id], onDelete: SetNull)
+  agencyStaff  User[]    @relation("AgencyStaff")
   createdAt    DateTime  @default(now())
 
   resorts        UserResort[]
