@@ -9,6 +9,7 @@ import { PermissionsService } from "../common/permissions";
 import { OptionsService } from "../options/options.service";
 import { TaxService } from "../common/tax.service";
 import { fbBillTotals } from "../common/money";
+import { anonGuestKey } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import {
   parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
@@ -291,7 +292,9 @@ export class ImportService {
 
           // guest dedupe
           const phone = normalizePhone(row.mobile);
-          const key = phone ? phoneKey(phone) : phoneKey("n:" + row.guestName.toLowerCase().trim());
+          // a sheet row with no number cannot be matched to anyone; hashing the
+          // name made every "local" one guest with hundreds of unrelated stays
+          const key = phone ? phoneKey(phone) : anonGuestKey();
           let guest = await tx.guest.findFirst({ where: { phoneKey: key, resortId } });
           if (!guest) {
             guest = await tx.guest.create({

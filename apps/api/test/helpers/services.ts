@@ -250,5 +250,6 @@ export function makeImportService(prisma: PrismaService): ImportService {
     makeBookingsService(prisma),
     new PermissionsService(prisma),
     makeOptionsService(prisma),
+    makeTaxService(prisma),
   );
 }

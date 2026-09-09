@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 /**
  * How a country writes its phone numbers.
@@ -40,6 +40,18 @@ export function normalizePhone(raw: string, country: PhoneCountry = DEFAULT_COUN
 
 export function phoneKey(normalizedPhone: string): string {
   return createHash("sha256").update(normalizedPhone).digest("hex");
+}
+
+/**
+ * A dedup key for a guest there is nothing to dedup on.
+ *
+ * `phoneKey("")` is a constant, and the walk-in path hashed the guest's *name*
+ * instead — so every guest called "local" was one row owning hundreds of
+ * unrelated stays, and `UNIQUE(resortId, phoneKey)` could never have been added
+ * over it. Two people with no phone and the same name are two people.
+ */
+export function anonGuestKey(): string {
+  return createHash("sha256").update("anon:" + randomUUID()).digest("hex");
 }
 
 export function dateOnly(d: Date | string): Date {

@@ -3,7 +3,7 @@ import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
-import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
+import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
@@ -139,6 +139,48 @@ export class BookingsService {
     }
   }
 
+
+  /**
+   * The guest behind a booking, resolved once and safely.
+   *
+   * `findFirst` then `create` is a read-then-write race: two bookings taken at
+   * the same counter at the same moment both miss and both insert. Before
+   * `UNIQUE(resortId, phoneKey)` that quietly produced two rows for one person
+   * and split their history; now it is a constraint violation, which is the
+   * database telling the truth. `upsert` asks the database to decide, and the
+   * catch covers the gap between its own check and its own write.
+   */
+  private async resolveGuest(
+    resortId: number,
+    key: string,
+    who: { fullName: string; phone: string; email?: string | null; nidPassportNo?: string | null },
+  ): Promise<number> {
+    const create = {
+      resortId,
+      fullName: who.fullName,
+      email: who.email || null,
+      phone: who.phone,
+      nidPassportNo: who.nidPassportNo,
+      phoneKey: key,
+    };
+    try {
+      const guest = await this.prisma.guest.upsert({
+        where: { resortId_phoneKey: { resortId, phoneKey: key } },
+        // an email we did not have before is worth keeping; a name we already
+        // have is the one the guest gave first, and stays
+        update: who.email ? { email: who.email } : {},
+        create,
+      });
+      return guest.id;
+    } catch {
+      const existing = await this.prisma.guest.findUnique({
+        where: { resortId_phoneKey: { resortId, phoneKey: key } },
+      });
+      if (existing) return existing.id;
+      throw badRequest("Could not resolve the guest for this booking");
+    }
+  }
+
   /** The resort's tax rules — every total shown to anyone must include them. */
   private taxRulesFor(resortId: number): Promise<TaxRule[]> {
     return this.tax.rulesFor(resortId);
@@ -236,28 +278,15 @@ export class BookingsService {
       if (!input.guest?.fullName) {
         throw badRequest("guestId or guest{fullName} required");
       }
+      // sha256("") is a constant, so every phone-less guest collided on it
       const phone = input.guest.phone ? normalizePhone(input.guest.phone) : "";
-      const key = phoneKey(phone);
-      const existing = await this.prisma.guest.findFirst({
-        where: { phoneKey: key, resortId: input.resortId },
+      const key = phone ? phoneKey(phone) : anonGuestKey();
+      guestId = await this.resolveGuest(input.resortId, key, {
+        fullName: input.guest.fullName,
+        phone,
+        email: input.guest.email,
+        nidPassportNo: input.guest.nidPassportNo,
       });
-      if (existing && input.guest.email && !existing.email) {
-        await this.prisma.guest.update({ where: { id: existing.id }, data: { email: input.guest.email } });
-      }
-      guestId = existing
-        ? existing.id
-        : (
-            await this.prisma.guest.create({
-              data: {
-                resortId: input.resortId,
-                fullName: input.guest.fullName,
-                email: input.guest.email || null,
-                phone,
-                nidPassportNo: input.guest.nidPassportNo,
-                phoneKey: key,
-              },
-            })
-          ).id;
     } else {
       const g = await this.prisma.guest.findFirst({
         where: { id: guestId, resortId: input.resortId },
@@ -1123,24 +1152,24 @@ export class BookingsService {
     if (!input.roomIds?.length) throw badRequest("At least one room required");
 
     // guest resolved once, shared by all rooms
+    /**
+     * No phone number is not an identity.
+     *
+     * This keyed a phone-less walk-in on a hash of their name, so every guest
+     * called "local" — the most common booking in the client's own workbook —
+     * became one Guest row owning hundreds of unrelated stays. Two walk-ins
+     * with the same name are two people; without a number there is nothing to
+     * say otherwise, so each gets a row of their own.
+     */
     const phone = input.guest.phone ? normalizePhone(input.guest.phone) : "";
-    const key = phone ? phoneKey(phone) : phoneKey("n:" + input.guest.fullName.toLowerCase().trim());
-    let guest = await this.prisma.guest.findFirst({
-      where: { phoneKey: key, resortId: input.resortId },
+    const key = phone ? phoneKey(phone) : anonGuestKey();
+    const guestId = await this.resolveGuest(input.resortId, key, {
+      fullName: input.guest.fullName,
+      phone,
+      email: input.guest.email,
+      nidPassportNo: input.guest.nidPassportNo,
     });
-    if (!guest) {
-      guest = await this.prisma.guest.create({
-        data: {
-          resortId: input.resortId,
-          fullName: input.guest.fullName,
-          email: input.guest.email || null,
-          phone,
-          nidPassportNo: input.guest.nidPassportNo,
-          phoneKey: key,
-        },
-      });
-    }
-
+    const guest = await this.prisma.guest.findUniqueOrThrow({ where: { id: guestId } });
     const roomRows = await this.prisma.room.findMany({
       where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
     });

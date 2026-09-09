@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { badRequest, forbid } from "../common/rbac";
-import { dateOnly, nightsBetween, normalizePhone, phoneKey, round2 } from "../common/dates";
+import { anonGuestKey, dateOnly, nightsBetween, normalizePhone, phoneKey, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { TaxService } from "../common/tax.service";
 import { BookingsService } from "../bookings/bookings.service";
@@ -212,9 +212,10 @@ export class GuestService {
     if (nights <= 0) throw badRequest("Check-out must be after check-in");
     if (!input.items?.length) throw badRequest("Select at least one room");
 
-    // my guest identity in this resort
+    // my guest identity in this resort. A user with no phone has none to share,
+    // so they get their own row rather than joining every other phone-less one
     const phone = normalizePhone(user.phone ?? "");
-    const key = phoneKey(phone);
+    const key = phone ? phoneKey(phone) : anonGuestKey();
     let guest = await this.prisma.guest.findFirst({
       where: { phoneKey: key, resortId: input.resortId },
     });

@@ -146,6 +146,10 @@ model Resort {
   messageTemplates MessageTemplate[]
   options          ResortOption[]
   taxRules         TaxRule[]
+  notificationJobs NotificationJob[]
+  paymentIntents   PaymentIntent[]
+  notifications    Notification[]
+  emailCampaigns   EmailCampaign[]
   platformCharges  PlatformCharge[]
 
   @@index([tenantId])
@@ -375,7 +379,12 @@ model Guest {
   bookings  Booking[]
   salesDocs SalesDoc[]
 
-  @@index([phoneKey])
+  /// One guest, one row. Without this two concurrent bookings for the same
+  /// number — or an offline write replayed — each created their own, and the
+  /// guest's history quietly split in two. A walk-in taken without a phone gets
+  /// a key of its own rather than a hash of their name, because every walk-in
+  /// called "local" was otherwise the same person.
+  @@unique([resortId, phoneKey])
   @@index([resortId])
   @@map("guests")
 }
@@ -420,11 +429,14 @@ model Booking {
   fbBills  FbBill[]
 
   @@unique([resortId, code])
+  /// A VAT invoice with a duplicated serial is a problem with the VAT office,
+  /// not a cosmetic one — and the resort's BIN is printed on it now.
+  @@unique([resortId, invoiceNo])
   @@index([resortId, checkIn, checkOut])
   @@index([guestId])
   @@index([agentUserId])
-  @@index([state, paymentState])
-  @@index([groupTag])
+  @@index([resortId, state, deletedAt])
+  @@index([resortId, groupTag])
   @@map("bookings")
 }
 
@@ -572,6 +584,7 @@ model NotificationJob {
   payload      Json?
   /// whose message this is: the resort whose wording and name it goes out in
   resortId     Int?
+  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
   /// exactly what was sent, so "what did the guest actually receive" has an answer
   renderedText String?      @db.Text
   sendAfter    DateTime     @default(now())
@@ -607,6 +620,10 @@ model Expense {
   createdAt DateTime     @default(now())
 
   @@unique([agencyId, clientRef])
+  /// The agency side had this and the resort side did not — and the resort side
+  /// is the one with the offline front desk, so a replayed write made a second
+  /// expense row.
+  @@unique([resortId, clientRef])
   @@index([resortId, date])
   @@index([agencyId, date])
   @@map("expenses")
@@ -675,6 +692,7 @@ model FbBillItem {
 model PaymentIntent {
   id          BigInt        @id @default(autoincrement())
   resortId    Int
+  resort   Resort @relation(fields: [resortId], references: [id], onDelete: Cascade)
   bookingId   Int
   booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   provider    String        @db.VarChar(24) // mock | bkash | nagad
@@ -906,6 +924,7 @@ model Notification {
   userId    Int
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId  Int?
+  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
   title     String    @db.VarChar(160)
   body      String?   @db.VarChar(500)
   kind      String    @default("info") @db.VarChar(16) // info | booking | payment | alert | request
@@ -950,6 +969,7 @@ model EmailCampaign {
   userId     Int
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId   Int?
+  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
   subject    String   @db.VarChar(200)
   body       String   @db.Text
   recipients Int      @default(0)
