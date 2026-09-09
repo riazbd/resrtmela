@@ -517,6 +517,80 @@ Live state after all that: 97 bookings, 33 guests and 25 payments unchanged,
 38 tables became 50, all 28 migrations applied, `migrate status` reports the
 schema up to date. A verified dump was taken first and sits in `/root/backups`.
 
+### A resort's books were open to every agency that sold it
+
+Someone outside the project suggested the agent portal could show a resort's
+calendar, and added the caution that an agent should not see other people's
+booking details. The first half was a feature. The second half was already
+broken.
+
+Approving an agency writes a `user_resorts` row, and login turns those rows into
+the token's `resortIds` — the same list a manager's own resorts arrive in. So
+`requireResortAccess` could not tell the two apart, and **twenty-seven service
+methods had that check and nothing else**: the calendar with every guest's name
+on it, the guest directory with phone and NID numbers, the day sheet with each
+booking's outstanding balance, the revenue reports, the dues list, the resort's
+expenses, the restaurant's in-house covers, the API-key list. A booking could
+also be read by id — including the invoice, which carried the guest's full name,
+phone, NID and email unmasked, for any booking in the resort.
+
+None of it was reachable from the console: agents have no `bookings.view`, so
+those links are hidden. But the console is not the security boundary. A token
+and curl were enough, and on the live server two approved agents could reach
+thirty-three guests and ninety-seven bookings that were not theirs.
+
+The fix is a changed default rather than twenty-seven patches. A link now means
+an agent may **sell** a resort, and the five paths where selling is genuinely
+enough — the availability grid, creating a booking, listing and opening the
+agency's own bookings, the agency's own commission report — say so by calling
+`requireSellingAccess` by name. Everything else closed without being touched,
+which is the point: the next endpoint someone writes is closed too, and opening
+one is now a decision with a name on it rather than the silent consequence of
+two ideas sharing a list.
+
+Opening a booking by id gets a second question, because "may you be at this
+resort" was never the same as "is this row yours". `requireOwnBooking` asks the
+agency, not the individual — an owner can open what their staff booked, and
+nothing of the agency next door.
+
+`agent-visibility.spec.ts` holds both halves: eleven doors that must stay shut,
+and four that must stay open, because an agency that cannot search for a room
+cannot work. Those four passed before the change as well as after, which is how
+the closure is known to have cost nothing.
+
+### The calendar an agency is allowed to see
+
+Then the feature. `/agent/calendar` draws the month as a grid — rooms down,
+nights across — over every resort the agency sells.
+
+A night the agency sold is theirs in full: guest name, booking code, and the
+booking a click away. A night anyone else sold is a grey block and nothing
+more — no name, no code, not even which agency it belongs to. The resort down
+the road sells to the same agencies, and a calendar with names on it is a
+customer list with a date attached.
+
+A resort that wants to be more open can be: `showGuestNamesToAgents` sits beside
+`showRatesToAgents` in the resort's own settings and labels the other blocks
+too. It is off for every resort until someone turns it on, which is the part of
+the design worth stating plainly — the safe answer is what you get without
+deciding anything, and the open one costs a deliberate act by the resort that
+owns the data.
+
+Cancelled and no-show stays are left off the grid entirely: those rooms are free
+again, and drawing them as taken would lose the resort a sellable night. The
+range is capped at a quarter, which is longer than anyone plans a group over and
+short of pulling a resort's history through a screen that shows one month.
+
+Clicking a free night opens the booking form with that resort, that room and
+that date already in it — which is where a second defect turned up. The room
+search's "Book here" sent `from`/`to` while the bookings page read
+`checkIn`/`checkOut`, so an agent who had just picked their dates arrived at an
+empty form. Worse, `resortId` was never read at all: an agent whose active
+resort was A could search resort B, click Book here, and get a form for A with
+nothing on screen saying so — a booking at the wrong hotel. Reading the URL is
+now one tested function, `lib/booking-handoff`, which accepts both spellings of
+the dates and switches the active resort to the one that was clicked.
+
 ### Smaller, but shipped
 
 Per-tenant document prefixes · the guest directory's per-guest N+1 removed ·
