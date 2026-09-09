@@ -84,4 +84,10 @@ export class PublicCmsController {
   all() {
     return this.platform.publicCms();
   }
+
+  /** The price list the homepage quotes — the same rows Platform → Plans edits. */
+  @Get("plans")
+  plans() {
+    return this.platform.publicPlans();
+  }
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, API_URL } from "@/lib/api";
+import { formatMoney } from "@rh/shared";
 import {
   CalendarDays,
   BedDouble,
@@ -145,9 +146,45 @@ function MockPos() {
   );
 }
 
+/** One row of the platform's price list, as `/cms/plans` sends it. */
+interface PublicPlan {
+  name: string;
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  trialDays: number;
+  blurb: string | null;
+}
+
+/**
+ * What each plan includes.
+ *
+ * The price, the name, the room cap and the trial length are the platform's
+ * commercial terms and come from `platform_plans`. These bullets are marketing
+ * copy about the product, not terms — they are keyed by plan name so a plan the
+ * table gains still renders, with no bullets rather than someone else's.
+ */
+/** "Up to 10 rooms", or the honest thing when a plan has no practical cap. */
+function roomCap(p: PublicPlan): string {
+  return p.maxRooms >= 1000 ? "Unlimited rooms" : `Up to ${p.maxRooms} rooms`;
+}
+
+const PLAN_FEATURES: Record<string, string[]> = {
+  STARTER: ["Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"],
+  GROWTH: ["Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"],
+  CHAIN: ["Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"],
+};
+
 export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cms, setCms] = useState<Record<string, string>>({});
+  const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  // every plan carries its own trial; the line only claims one when they agree
+  const trialDays =
+    plans && plans.length && plans.every((p) => p.trialDays === plans[0]!.trialDays)
+      ? plans[0]!.trialDays
+      : 0;
 
   useEffect(() => {
     // CMS overrides are optional — defaults kick in on any failure
@@ -155,6 +192,15 @@ export default function HomePage() {
       .then((r) => r.json())
       .then((d) => setCms(d ?? {}))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // the price list comes from the same rows Platform → Plans edits, so the
+    // page cannot quote a price the platform has stopped charging
+    fetch(`${API_URL}/cms/plans`)
+      .then((r) => r.json())
+      .then((d) => setPlans(Array.isArray(d) ? d : []))
+      .catch(() => setPlans([]));
   }, []);
 
   useEffect(() => {
@@ -396,28 +442,27 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Simple monthly plans</h2>
-            <p className="mt-3 text-slate-500">Per resort. Cancel anytime. 14 days free on every plan.</p>
+            <p className="mt-3 text-slate-500">
+              Per resort. Cancel anytime.
+              {trialDays ? ` ${trialDays} days free on every plan.` : ""}
+            </p>
           </div>
           <div className="mt-12 grid gap-6 lg:grid-cols-3">
-            {[
-              { name: "Starter", price: "৳2,500", tagline: "For small resorts leaving spreadsheets", features: ["Up to 10 rooms", "Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"], highlight: false },
-              { name: "Growth", price: "৳5,000", tagline: "For busy resorts with restaurant & agents", features: ["Up to 40 rooms", "Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"], highlight: true },
-              { name: "Chain", price: "৳12,000", tagline: "For multi-resort owners", features: ["Unlimited rooms & resorts", "Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"], highlight: false },
-            ].map((p) => (
-              <div key={p.name} className={`relative rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
-                {p.highlight && (
+            {(plans ?? []).map((p, i) => (
+              <div key={p.name} className={`relative rounded-3xl border bg-white p-8 shadow-sm ${i === 1 ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
+                {i === 1 && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
                     Most popular
                   </div>
                 )}
-                <div className="text-lg font-bold text-slate-900">{p.name}</div>
-                <div className="mt-1 text-xs text-slate-500">{p.tagline}</div>
+                <div className="text-lg font-bold text-slate-900">{p.label}</div>
+                <div className="mt-1 text-xs text-slate-500">{p.blurb ?? ""}</div>
                 <div className="mt-5 text-4xl font-black text-slate-900">
-                  {p.price}
+                  {formatMoney(p.monthlyFee, { currency: "BDT", locale: "en-IN" })}
                   <span className="text-sm font-medium text-slate-400">/month</span>
                 </div>
                 <ul className="mt-6 space-y-2.5">
-                  {p.features.map((f) => (
+                  {[roomCap(p), ...(PLAN_FEATURES[p.name] ?? [])].map((f) => (
                     <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
                       <Check className="h-4 w-4 shrink-0 text-brand-600" /> {f}
                     </li>
@@ -425,7 +470,7 @@ export default function HomePage() {
                 </ul>
                 <Link
                   href="/signup"
-                  className={`mt-8 block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                  className={`mt-8 block rounded-xl py-3 text-center text-sm font-bold transition ${i === 1 ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
                   Start free trial
                 </Link>

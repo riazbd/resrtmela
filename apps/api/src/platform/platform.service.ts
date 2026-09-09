@@ -1226,6 +1226,30 @@ export class PlatformService {
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
 
+  /**
+   * The price list, for the page that quotes it.
+   *
+   * The homepage carried its own copy — three names and three prices written
+   * into the markup — while `platform_plans` was the editable source and the
+   * screen that edits it. So changing what the platform charges left the
+   * public page selling the old number, and there was no way to tell which
+   * one a customer had read. A price belongs in one place.
+   *
+   * Only what is actually being sold: an inactive plan is one the owner has
+   * stopped offering, and it should leave the page when they say so.
+   */
+  async publicPlans() {
+    const rows = await this.prisma.platformPlan.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        name: true, label: true, monthlyFee: true,
+        maxRooms: true, maxResorts: true, trialDays: true, blurb: true,
+      },
+    });
+    return rows.map((r) => ({ ...r, monthlyFee: Number(r.monthlyFee) }));
+  }
+
   async putCms(claims: JwtClaims, key: string, value: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!/^[a-z0-9_.]{2,60}$/.test(key)) throw badRequest("key must be lowercase letters, digits, dot or underscore");
