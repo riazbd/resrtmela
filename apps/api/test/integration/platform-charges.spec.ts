@@ -50,9 +50,22 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+/**
+ * Taking a pack, end to end.
+ *
+ * A request no longer grants anything on its own — the platform has to
+ * approve it, and that is the moment the charge is raised. These tests are
+ * about the ledger, so they go through both halves.
+ */
+async function buy(opts: { clientRef?: string } = {}) {
+  const order = await engage().requestCredits(manager, 750, opts);
+  if (order.status === "PENDING") await engage().decideCreditOrder(superAdmin, order.id, "APPROVE");
+  return order;
+}
+
 describe("taking a credit pack", () => {
   it("raises a charge for what it costs", async () => {
-    await engage().purchaseCredits(manager, 750);
+    await buy();
 
     const charges = await prisma.platformCharge.findMany({ where: { resortId: fx.resortId } });
     expect(charges).toHaveLength(1);
@@ -61,7 +74,7 @@ describe("taking a credit pack", () => {
   });
 
   it("says what the charge was for, in words a person can invoice from", async () => {
-    await engage().purchaseCredits(manager, 750);
+    await buy();
 
     const charge = await prisma.platformCharge.findFirstOrThrow({ where: { resortId: fx.resortId } });
     expect(charge.description).toMatch(/750/);
@@ -70,7 +83,7 @@ describe("taking a credit pack", () => {
   it("grants the credits and raises the charge together, or does neither", async () => {
     // the two used to be separate statements: credits could land with no
     // charge behind them if anything failed in between
-    await engage().purchaseCredits(manager, 750);
+    await buy();
 
     const credit = await prisma.emailCredit.findFirstOrThrow({ where: { userId: fx.managerId } });
     const charges = await prisma.platformCharge.count({ where: { resortId: fx.resortId } });
@@ -81,8 +94,8 @@ describe("taking a credit pack", () => {
   it("charges once when the same purchase is replayed", async () => {
     const body = { clientRef: "device-c-7" };
 
-    await engage().purchaseCredits(manager, 750, body);
-    await engage().purchaseCredits(manager, 750, body);
+    await buy(body);
+    await buy(body);
 
     const credit = await prisma.emailCredit.findFirstOrThrow({ where: { userId: fx.managerId } });
     expect(await prisma.platformCharge.count({ where: { resortId: fx.resortId } })).toBe(1);
@@ -91,8 +104,8 @@ describe("taking a credit pack", () => {
 
   it("charges twice for two genuine purchases in one month", async () => {
     // exactly what SubscriptionDue's period index would have refused
-    await engage().purchaseCredits(manager, 750);
-    await engage().purchaseCredits(manager, 750);
+    await buy();
+    await buy();
 
     expect(await prisma.platformCharge.count({ where: { resortId: fx.resortId } })).toBe(2);
   });
@@ -113,7 +126,7 @@ describe("what the platform is owed", () => {
         dueDate: new Date("2026-09-01"),
       },
     });
-    await engage().purchaseCredits(manager, 750);
+    await buy();
 
     const owed = await platform().outstanding(superAdmin);
 
@@ -124,7 +137,7 @@ describe("what the platform is owed", () => {
   });
 
   it("stops counting a charge once it is settled", async () => {
-    await engage().purchaseCredits(manager, 750);
+    await buy();
     const charge = await prisma.platformCharge.findFirstOrThrow({ where: { resortId: fx.resortId } });
 
     await platform().payCharge(superAdmin, Number(charge.id), "bKash");
@@ -134,7 +147,7 @@ describe("what the platform is owed", () => {
   });
 
   it("refuses to settle the same charge twice", async () => {
-    await engage().purchaseCredits(manager, 750);
+    await buy();
     const charge = await prisma.platformCharge.findFirstOrThrow({ where: { resortId: fx.resortId } });
 
     await platform().payCharge(superAdmin, Number(charge.id), "bKash");

@@ -79,41 +79,37 @@ describe("what is on sale", () => {
   });
 });
 
-describe("buying one", () => {
-  it("grants exactly the pack that was bought", async () => {
+/**
+ * What a request quotes. Granting is `credit-approval.spec.ts`: since the
+ * platform has to approve a pack before anyone gets it, the moment of buying
+ * and the moment of granting are two different moments.
+ */
+describe("asking for one", () => {
+  it("quotes exactly the pack that was asked for", async () => {
     await setPacks([{ credits: 750, price: 600 }]);
 
-    const result = await engage().purchaseCredits(manager, 750);
+    const order = await engage().requestCredits(manager, 750);
 
-    expect(result).toMatchObject({ added: 750, credits: 750 });
+    expect(order).toMatchObject({ credits: 750, price: 600, status: "PENDING" });
   });
 
   it("refuses a size nobody is selling, however plausible", async () => {
     await setPacks([{ credits: 750, price: 600 }]);
 
-    await expect(engage().purchaseCredits(manager, 2000)).rejects.toThrow(/750/);
+    await expect(engage().requestCredits(manager, 2000)).rejects.toThrow(/750/);
   });
 
-  it("records what is owed, because nothing was actually charged", async () => {
+  it("records the price with the request, so what was quoted is what is charged", async () => {
     await setPacks([{ credits: 750, price: 600 }]);
 
-    await engage().purchaseCredits(manager, 750);
+    await engage().requestCredits(manager, 750);
 
     const entry = await prisma.auditLog.findFirst({
-      where: { action: "email.credits.purchase" },
+      where: { action: "email.credits.request" },
       orderBy: { id: "desc" },
     });
     // the platform has to be able to invoice this later; an audit row that
     // records only the credits leaves no record of the amount
     expect(entry!.diff).toMatchObject({ credits: 750, price: 600 });
-  });
-
-  it("adds to what is already there rather than replacing it", async () => {
-    await setPacks([{ credits: 750, price: 600 }]);
-
-    await engage().purchaseCredits(manager, 750);
-    const second = await engage().purchaseCredits(manager, 750);
-
-    expect(second.credits).toBe(1500);
   });
 });

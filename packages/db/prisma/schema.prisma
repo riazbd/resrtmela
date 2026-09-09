@@ -162,6 +162,7 @@ model Resort {
   notifications    Notification[]
   emailCampaigns   EmailCampaign[]
   platformCharges  PlatformCharge[]
+  creditOrders     EmailCreditOrder[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -200,6 +201,7 @@ model User {
   notifications   Notification[]
   accessRequests  ResortAccess[]
   emailCredits    EmailCredit?
+  creditOrders    EmailCreditOrder[]
   campaigns       EmailCampaign[]
   agentRoles      AgentRole[]      @relation("AgencyRoles")
   agencyExpenses  Expense[]        @relation("AgencyExpenses")
@@ -1055,6 +1057,40 @@ model PlatformPlan {
 /// index to fit one-off charges would trade recurring billing's one guarantee
 /// for a convenience, so these carry their own identity instead: the reference
 /// of the act that raised them.
+/// A pack of email credits somebody has asked for, waiting on the platform.
+///
+/// Pressing a pack button used to grant the credits and raise the charge in
+/// the same request: a misclick on the ৳12,000 pack was a ৳12,000 charge, and
+/// a resort could bill itself without anyone at the platform agreeing. The
+/// order sits here instead, and approval is the moment credits and charge
+/// both come into being — in one transaction.
+///
+/// `price` is stored rather than looked up at approval time: what was quoted
+/// when the request was made is what gets charged, whatever the price list
+/// says by then.
+model EmailCreditOrder {
+  id          BigInt    @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// the resort the charge lands on, fixed when the order is placed
+  resortId    Int
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  credits     Int
+  price       Decimal   @db.Decimal(10, 2)
+  status      String    @default("PENDING") @db.VarChar(16) // PENDING | APPROVED | REJECTED
+  /// identity of the submit, so a retried request queues one order
+  clientRef   String?   @db.VarChar(64)
+  note        String?   @db.VarChar(255)
+  decidedById Int?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([resortId, clientRef])
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("email_credit_orders")
+}
+
 model PlatformCharge {
   id          BigInt    @id @default(autoincrement())
   resortId    Int

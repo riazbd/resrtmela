@@ -186,24 +186,28 @@ export class EngageService {
   }
 
   /**
-   * Takes a pack.
+   * Asks for a pack. Nothing is granted and nothing is charged here.
    *
-   * No card is charged here: the credits arrive at once and the amount lands on
-   * the tenant's platform bill as a one-off charge. The grant and the charge go
-   * in one transaction, because credits with no charge behind them is the
-   * platform giving its product away and never knowing.
+   * This used to be `purchaseCredits`, and it did both in one call: pressing
+   * the button granted the credits and raised a billable charge on the
+   * tenant's platform bill. There was no confirmation and no review, so a
+   * misclick on the largest pack was a charge of that size, and a resort could
+   * raise unlimited charges against itself with nothing in between.
    *
-   * A `clientRef` makes the whole thing replayable: a retried request finds the
-   * charge already raised and neither grants nor bills a second time.
+   * The order waits for the platform. `price` is written down now rather than
+   * looked up at approval, so what was quoted is what gets charged however the
+   * price list moves in between.
+   *
+   * A `clientRef` makes the submit replayable: a retried request finds its own
+   * order instead of queuing a second one.
    */
-  async purchaseCredits(
+  async requestCredits(
     claims: JwtClaims,
     credits: number,
     opts: { clientRef?: string } = {},
   ) {
     // the charge has to land on a resort's bill; someone with no resort at all
-    // has nowhere to send it, and silently skipping the charge would be the
-    // platform giving credits away
+    // has nowhere to send it
     const resortId = claims.resortIds[0];
     if (resortId == null) throw badRequest("No resort on this account to bill the pack to");
     await this.perms.require(claims, resortId, "marketing.send");
@@ -214,44 +218,157 @@ export class EngageService {
     }
 
     if (opts.clientRef) {
-      const seen = await this.prisma.platformCharge.findUnique({
+      const seen = await this.prisma.emailCreditOrder.findUnique({
         where: { resortId_clientRef: { resortId, clientRef: opts.clientRef } },
-        select: { id: true },
       });
-      if (seen) {
-        const current = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
-        return { credits: current?.credits ?? 0, added: 0, price: pack.price };
-      }
+      if (seen) return this.orderView(seen);
     }
 
-    const row = await this.prisma.$transaction(async (tx) => {
-      const credit = await tx.emailCredit.upsert({
-        where: { userId: claims.userId },
-        update: { credits: { increment: credits }, purchasedAt: new Date() },
-        create: { userId: claims.userId, credits, purchasedAt: new Date() },
-      });
-      await tx.platformCharge.create({
-        data: {
-          resortId,
-          kind: "EMAIL_CREDITS",
-          description: `${credits.toLocaleString("en-IN")} email credits`,
-          amount: pack.price as never,
-          clientRef: opts.clientRef ?? null,
-          createdById: claims.userId,
-        },
-      });
-      return credit;
+    const order = await this.prisma.emailCreditOrder.create({
+      data: {
+        userId: claims.userId,
+        resortId,
+        credits,
+        price: pack.price as never,
+        clientRef: opts.clientRef ?? null,
+      },
     });
-
     await this.audit.log({
       actorId: claims.userId,
       resortId,
-      action: "email.credits.purchase",
-      entity: "email_credit",
-      entityId: Number(row.id),
+      action: "email.credits.request",
+      entity: "email_credit_order",
+      entityId: Number(order.id),
       diff: { credits, price: pack.price },
     });
-    return { credits: row.credits, added: credits, price: pack.price };
+    return this.orderView(order);
+  }
+
+  /** The orders this account has placed, newest first. */
+  async myCreditOrders(claims: JwtClaims, take = 20) {
+    const rows = await this.prisma.emailCreditOrder.findMany({
+      where: { userId: claims.userId },
+      orderBy: { id: "desc" },
+      take: Math.min(take, 100),
+    });
+    return rows.map((r) => this.orderView(r));
+  }
+
+  /** The platform's queue. */
+  async listCreditOrders(claims: JwtClaims, status?: string, take = 100) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.emailCreditOrder.findMany({
+      where: status ? { status } : {},
+      orderBy: { id: "desc" },
+      take: Math.min(take, 200),
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        resort: { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      ...this.orderView(r),
+      buyer: r.user.name,
+      buyerContact: r.user.email ?? r.user.phone ?? "",
+      resortName: r.resort.name,
+    }));
+  }
+
+  /**
+   * The platform's decision.
+   *
+   * Approval is the only moment credits come into being, and it grants them
+   * and raises the charge in one transaction — credits with no charge behind
+   * them is the platform giving its product away and never knowing.
+   */
+  async decideCreditOrder(
+    claims: JwtClaims,
+    orderId: string | number | bigint,
+    decision: "APPROVE" | "REJECT",
+    note?: string,
+  ) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const id = BigInt(orderId);
+    const order = await this.prisma.emailCreditOrder.findUnique({ where: { id } });
+    if (!order) throw badRequest("credit order not found");
+    if (order.status !== "PENDING") {
+      throw badRequest(`This order has already been ${order.status.toLowerCase()}.`);
+    }
+
+    const now = new Date();
+    if (decision === "REJECT") {
+      const rejected = await this.prisma.emailCreditOrder.update({
+        where: { id },
+        data: { status: "REJECTED", decidedById: claims.userId, decidedAt: now, note: note ?? null },
+      });
+      await this.notify([order.userId], {
+        title: "Email credit request declined",
+        body: note?.trim()
+          ? `${order.credits.toLocaleString("en-IN")} credits — ${note.trim()}`
+          : `Your request for ${order.credits.toLocaleString("en-IN")} email credits was not approved.`,
+        kind: "request",
+        resortId: order.resortId,
+        link: "/mailbox",
+      });
+      await this.audit.log({
+        actorId: claims.userId, resortId: order.resortId,
+        action: "email.credits.reject", entity: "email_credit_order", entityId: Number(id),
+        diff: { credits: order.credits, note: note ?? null },
+      });
+      return this.orderView(rejected);
+    }
+
+    const approved = await this.prisma.$transaction(async (tx) => {
+      await tx.emailCredit.upsert({
+        where: { userId: order.userId },
+        update: { credits: { increment: order.credits }, purchasedAt: now },
+        create: { userId: order.userId, credits: order.credits, purchasedAt: now },
+      });
+      await tx.platformCharge.create({
+        data: {
+          resortId: order.resortId,
+          kind: "EMAIL_CREDITS",
+          description: `${order.credits.toLocaleString("en-IN")} email credits`,
+          amount: order.price,
+          // the order's own identity, so the charge cannot be raised twice
+          clientRef: `credit-order:${order.id}`,
+          createdById: order.userId,
+        },
+      });
+      return tx.emailCreditOrder.update({
+        where: { id },
+        data: { status: "APPROVED", decidedById: claims.userId, decidedAt: now, note: note ?? null },
+      });
+    });
+
+    await this.notify([order.userId], {
+      title: "Email credits approved",
+      body: `${order.credits.toLocaleString("en-IN")} credits are in your account. The pack will appear on your platform bill.`,
+      kind: "request",
+      resortId: order.resortId,
+      link: "/mailbox",
+    });
+    await this.audit.log({
+      actorId: claims.userId, resortId: order.resortId,
+      action: "email.credits.approve", entity: "email_credit_order", entityId: Number(id),
+      diff: { credits: order.credits, price: Number(order.price) },
+    });
+    return this.orderView(approved);
+  }
+
+  private orderView(o: {
+    id: bigint; credits: number; price: unknown; status: string;
+    note: string | null; createdAt: Date; decidedAt: Date | null;
+  }) {
+    return {
+      id: o.id.toString(),
+      credits: o.credits,
+      price: Number(o.price),
+      status: o.status,
+      note: o.note,
+      createdAt: o.createdAt.toISOString(),
+      decidedAt: o.decidedAt?.toISOString() ?? null,
+    };
   }
 
   async sendCampaign(

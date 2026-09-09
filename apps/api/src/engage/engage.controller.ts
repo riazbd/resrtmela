@@ -18,6 +18,11 @@ class PurchaseCreditsDto {
   @IsOptional() @IsString() @MaxLength(64) clientRef?: string;
 }
 
+class CreditDecisionDto {
+  @IsIn(["APPROVE", "REJECT"]) decision!: "APPROVE" | "REJECT";
+  @IsOptional() @IsString() @MaxLength(255) note?: string;
+}
+
 class CampaignDto {
   @IsString() @MaxLength(200) subject!: string;
   @IsString() @MaxLength(20000) body!: string;
@@ -69,8 +74,28 @@ export class EngageController {
   @Get("email-credits") credits(@Req() req: AuthedRequest) {
     return this.engage.myEmailCredits(req.user);
   }
-  @Post("email-credits/purchase") purchase(@Req() req: AuthedRequest, @Body() dto: PurchaseCreditsDto) {
-    return this.engage.purchaseCredits(req.user, dto.credits, { clientRef: dto.clientRef });
+  /**
+   * Asking for a pack. Kept at the old path so an in-flight console does not
+   * silently 404, but it queues an order now: nothing is granted and nothing
+   * is charged until the platform approves it.
+   */
+  @Post("email-credits/purchase") requestCredits(@Req() req: AuthedRequest, @Body() dto: PurchaseCreditsDto) {
+    return this.engage.requestCredits(req.user, dto.credits, { clientRef: dto.clientRef });
+  }
+  @Get("email-credits/orders") myOrders(@Req() req: AuthedRequest) {
+    return this.engage.myCreditOrders(req.user);
+  }
+
+  // platform — the credit queue
+  @Get("platform/email-credit-orders") creditQueue(@Req() req: AuthedRequest, @Query("status") status?: string) {
+    return this.engage.listCreditOrders(req.user, status);
+  }
+  @Post("platform/email-credit-orders/:id/decision") decideCredits(
+    @Req() req: AuthedRequest,
+    @Param("id") id: string,
+    @Body() dto: CreditDecisionDto,
+  ) {
+    return this.engage.decideCreditOrder(req.user, id, dto.decision, dto.note);
   }
   @Post("email-campaigns") send(@Req() req: AuthedRequest, @Body() dto: CampaignDto) {
     return this.engage.sendCampaign(req.user, dto as never);

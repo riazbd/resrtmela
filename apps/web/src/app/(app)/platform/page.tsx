@@ -10,6 +10,7 @@ import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 import { monthOf } from "@/lib/resort-dates";
+import { ErrorState } from "@/components/error-state";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -62,6 +63,18 @@ interface DueRow {
   status: string;
   paidAt: string | null;
 }
+interface CreditOrderRow {
+  id: string;
+  credits: number;
+  price: number;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  note: string | null;
+  createdAt: string;
+  buyer: string;
+  buyerContact: string;
+  resortName: string;
+}
+
 /** A one-off amount a tenant owes, outside the subscription's monthly rhythm. */
 interface ChargeRow {
   id: number;
@@ -80,7 +93,7 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Calendar", "Billing policy", "Website CMS"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -106,12 +119,24 @@ export default function PlatformPage() {
    */
   const chargesQ = useApi(keys.platform("charges"), () => api<ChargeRow[]>("/platform/charges"));
   const plansQ = useApi(keys.platform("plans"), () => api<PlanDef[]>("/platform/plans"));
+  /**
+   * Email credit packs waiting on a decision.
+   *
+   * A pack used to be granted the moment a resort clicked it, raising a
+   * billable charge nobody here had agreed to. Now it queues, and this is
+   * where somebody says yes.
+   */
+  const creditOrdersQ = useApi(
+    keys.platform("credit-orders"),
+    () => api<CreditOrderRow[]>("/platform/email-credit-orders"),
+  );
 
   const ov = ovQ.data ?? null;
   const resorts = resortsQ.data ?? null;
   const agents = agentsQ.data ?? null;
   const dues = duesQ.data ?? null;
   const plans = plansQ.data ?? null;
+  const creditOrders = creditOrdersQ.data ?? null;
 
   const loadAll = useCallback(async () => {
     await qc.invalidateQueries({ queryKey: ["platform"] });
@@ -493,6 +518,73 @@ export default function PlatformPage() {
       )}
 
       {/* ── website CMS ── */}
+      {tab === "Email credits" && (
+        <Card
+          title={`Email credit requests (${(creditOrders ?? []).filter((o) => o.status === "PENDING").length} waiting)`}
+          className="!p-0"
+        >
+          {creditOrdersQ.error ? (
+            <div className="p-4"><ErrorState error={creditOrdersQ.error} reset={() => void creditOrdersQ.refetch()} /></div>
+          ) : (creditOrders ?? []).length === 0 ? (
+            <div className="p-4 text-sm text-slate-400">No requests yet.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr><Th>Requested</Th><Th>Resort</Th><Th>Who</Th><Th className="text-right">Credits</Th><Th className="text-right">Price</Th><Th>Status</Th><Th /></tr>
+                </thead>
+                <tbody>
+                  {(creditOrders ?? []).map((o) => (
+                    <tr key={o.id} className="border-t border-slate-100">
+                      <Td className="text-xs text-slate-400">{new Date(o.createdAt).toLocaleDateString("en-GB")}</Td>
+                      <Td className="font-medium">{o.resortName}</Td>
+                      <Td className="text-xs">
+                        <div>{o.buyer}</div>
+                        <div className="text-slate-400">{o.buyerContact}</div>
+                      </Td>
+                      <Td className="text-right tabular-nums">{o.credits.toLocaleString("en-IN")}</Td>
+                      <Td className="text-right tabular-nums font-semibold">{money(o.price)}</Td>
+                      <Td>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${o.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : o.status === "REJECTED" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"}`}>
+                          {o.status}
+                        </span>
+                        {o.note && <div className="text-[11px] text-slate-400">{o.note}</div>}
+                      </Td>
+                      <Td>
+                        {o.status === "PENDING" && (
+                          <div className="flex justify-end gap-1.5">
+                            <Btn
+                              disabled={busy}
+                              onClick={() => {
+                                if (!window.confirm(`Approve ${o.credits.toLocaleString("en-IN")} credits for ${o.resortName}? ${money(o.price)} is charged to their platform bill.`)) return;
+                                void act(() => api(`/platform/email-credit-orders/${o.id}/decision`, { method: "POST", body: { decision: "APPROVE" } }));
+                              }}
+                            >
+                              Approve
+                            </Btn>
+                            <Btn
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={() => {
+                                const note = window.prompt(`Decline ${o.credits.toLocaleString("en-IN")} credits for ${o.resortName}. Reason (they will see it):`);
+                                if (note === null) return;
+                                void act(() => api(`/platform/email-credit-orders/${o.id}/decision`, { method: "POST", body: { decision: "REJECT", note: note || undefined } }));
+                              }}
+                            >
+                              Decline
+                            </Btn>
+                          </div>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
       {tab === "Billing policy" && <PolicyTab />}
       {tab === "Website CMS" && <CmsTab />}
 
