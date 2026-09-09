@@ -60,7 +60,7 @@ export default function RoomsPage() {
   }
 
   async function editRate(room: Room) {
-    const v = window.prompt(`New base rate for ${room.name} (৳)`, String(Number(room.baseRate)));
+    const v = window.prompt(`New base rate for ${room.name} (${cur()})`, String(Number(room.baseRate)));
     if (!v) return;
     try {
       await api(`/rooms/${room.id}`, { method: "PATCH", body: { baseRate: Number(v) } });

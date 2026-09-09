@@ -31,7 +31,46 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   "platform.name": "Resort Mela",
   "platform.supportEmail": "",
   "platform.supportPhone": "",
+  /**
+   * What an email credit pack costs. Commercial terms, so the super admin owns
+   * them: these were compiled into the console *and* the request validator
+   * *and* the service, which meant the platform could not change what it sells
+   * without a deploy, and the three copies could disagree in the meantime.
+   */
+  "email.creditPacks": JSON.stringify([
+    { credits: 500, price: 500 },
+    { credits: 2000, price: 1800 },
+    { credits: 10000, price: 7500 },
+  ]),
 };
+
+export interface CreditPack {
+  credits: number;
+  price: number;
+}
+
+/**
+ * The packs as configured, or the shipped list when the setting is missing or
+ * malformed. A platform that sells nothing because someone mistyped a JSON
+ * comma is a worse failure than one selling last month's prices.
+ */
+export function parseCreditPacks(raw: string | undefined): CreditPack[] {
+  const fallback = () => JSON.parse(SETTING_DEFAULTS["email.creditPacks"]!) as CreditPack[];
+  if (!raw) return fallback();
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return fallback();
+    const packs = parsed
+      .filter((p): p is CreditPack => {
+        const row = p as CreditPack;
+        return row != null && Number(row.credits) > 0 && Number(row.price) >= 0;
+      })
+      .map((p) => ({ credits: Number(p.credits), price: Number(p.price) }));
+    return packs.length > 0 ? packs : fallback();
+  } catch {
+    return fallback();
+  }
+}
 
 /** Settings are read on every sweep and every branded email; a short cache keeps that free. */
 const CACHE_MS = 30_000;

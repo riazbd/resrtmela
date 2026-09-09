@@ -38,7 +38,7 @@ export class GuestService {
     const resorts = await this.prisma.resort.findMany({
       where: { status: "active" },
       select: {
-        id: true, name: true, location: true,
+        id: true, name: true, location: true, currency: true,
         roomTypes: { select: { id: true, name: true, maxAdults: true, maxChildren: true, rooms: { where: { status: "ACTIVE" }, select: { baseRate: true } } } },
         _count: { select: { rooms: true } },
       },
@@ -49,6 +49,9 @@ export class GuestService {
         id: r.id,
         name: r.name,
         location: r.location,
+        // a bare number is not a price; the guest app had its own formatter
+        // stamping "Tk" on every figure because nothing ever told it otherwise
+        currency: r.currency,
         roomCount: r._count.rooms,
         roomTypes: r.roomTypes.map((t) => ({
           id: t.id,
@@ -76,6 +79,7 @@ export class GuestService {
       id: resort.id,
       name: resort.name,
       location: resort.location,
+      currency: resort.currency,
       roomTypes: resort.roomTypes.map((t) => ({
         id: t.id,
         name: t.name,
@@ -284,7 +288,7 @@ export class GuestService {
     const rows = await this.prisma.booking.findMany({
       where: { guestId: { in: guestIds }, deletedAt: null },
       include: {
-        resort: { select: { id: true, name: true, taxRatePct: true } },
+        resort: { select: { id: true, name: true, taxRatePct: true, currency: true } },
         items: { include: { room: { select: { name: true } } } },
         payments: true,
       },
@@ -295,6 +299,7 @@ export class GuestService {
       code: b.code,
       resortId: b.resort.id,
       resortName: b.resort.name,
+      currency: b.resort.currency,
       state: b.state,
       checkIn: b.checkIn,
       checkOut: b.checkOut,

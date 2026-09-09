@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { guestResorts, type GuestResort, bdt } from "../lib/api";
+import { guestResorts, type GuestResort, money } from "../lib/api";
 import { Button, Card, COLORS, Empty, S, Spinner } from "../components/Ui";
 
 export default function ExploreScreen({ onOpen }: { onOpen: (resortId: number) => void }) {
@@ -47,7 +47,7 @@ export default function ExploreScreen({ onOpen }: { onOpen: (resortId: number) =
                 </Text>
                 {min !== null && (
                   <Text style={{ fontSize: 13, fontWeight: "700", color: COLORS.brand, marginTop: 2 }}>
-                    From {bdt(min)} / night
+                    From {money(min, r.currency)} / night
                   </Text>
                 )}
               </View>

@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, ScrollView, Text, View } from "react-native";
-import {
-  guestCancel, guestTrips, createCheckout, confirmMockCheckout,
-  bdt, dmy, type GuestTrip,
-} from "../lib/api";
+import { guestCancel, guestTrips, createCheckout, confirmMockCheckout, dmy, type GuestTrip, money } from "../lib/api";
 import { Badge, Button, Empty, S, Spinner, COLORS } from "../components/Ui";
 
 export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
@@ -59,7 +56,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
       setPayStage("gateway");
       await new Promise((r) => setTimeout(r, 1200));
       const res = await confirmMockCheckout(co.providerRef);
-      setPayResult(`${res.booking.paid > 0 ? `Paid ${bdt(res.booking.paid)}` : ""} · due ${bdt(res.booking.due)}`);
+      setPayResult(`${res.booking.paid > 0 ? `Paid ${money(res.booking.paid, open?.currency)}` : ""} · due ${money(res.booking.due, open?.currency)}`);
       setPayStage("done");
       await load();
     } catch (e) {
@@ -84,7 +81,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
               <Text style={S.tiny}>
                 {t.code} · {dmy(t.checkIn)} → {dmy(t.checkOut)} · {t.rooms.join(", ")}
               </Text>
-              <Text style={S.tiny}>due {bdt(t.due)}</Text>
+              <Text style={S.tiny}>due {money(t.due, t.currency)}</Text>
             </View>
             <View style={{ gap: 4, alignItems: "flex-end" }}>
               <Badge value={t.state} />
@@ -123,7 +120,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
                         <Text style={S.tiny}>
                           {a.name} × {a.qty} · {new Date(a.startsAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
                         </Text>
-                        <Text style={{ fontSize: 11, fontWeight: '600' }}>{bdt(a.unitPrice * a.qty)}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '600' }}>{money(a.unitPrice * a.qty, open?.currency)}</Text>
                       </View>
                     ))}
                   </View>
@@ -132,21 +129,21 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
                 <View style={{ marginTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10, gap: 2 }}>
                   <View style={[S.row, S.between]}>
                     <Text style={S.sub}>Rent</Text>
-                    <Text style={{ fontWeight: "600" }}>{bdt(open.rent)}</Text>
+                    <Text style={{ fontWeight: "600" }}>{money(open.rent, open.currency)}</Text>
                   </View>
                   {open.discount > 0 && (
                     <View style={[S.row, S.between]}>
                       <Text style={S.sub}>Discount</Text>
-                      <Text>-{bdt(open.discount)}</Text>
+                      <Text>-{money(open.discount, open.currency)}</Text>
                     </View>
                   )}
                   <View style={[S.row, S.between]}>
                     <Text style={S.sub}>Paid</Text>
-                    <Text style={{ color: COLORS.brand, fontWeight: "600" }}>{bdt(open.paid)}</Text>
+                    <Text style={{ color: COLORS.brand, fontWeight: "600" }}>{money(open.paid, open.currency)}</Text>
                   </View>
                   <View style={[S.row, S.between]}>
                     <Text style={[S.sub, { fontWeight: "700" }]}>Due at resort</Text>
-                    <Text style={{ fontWeight: "800", fontSize: 15, color: COLORS.red }}>{bdt(open.due)}</Text>
+                    <Text style={{ fontWeight: "800", fontSize: 15, color: COLORS.red }}>{money(open.due, open.currency)}</Text>
                   </View>
                 </View>
 
@@ -176,7 +173,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
             <Text style={S.h2}>Secure checkout</Text>
             {payFor && (
               <Text style={[S.tiny, { marginTop: 2 }]}>
-                {payFor.code} · {bdt(payFor.due)} due
+                {payFor.code} · {money(payFor.due, payFor.currency)} due
               </Text>
             )}
             {payStage === "form" && (
@@ -193,7 +190,7 @@ export default function TripsScreen({ refreshKey }: { refreshKey: number }) {
                     </View>
                   ))}
                 </View>
-                <Button title={`Pay ${payFor ? bdt(payFor.due) : ""}`} onPress={pay} loading={busy} />
+                <Button title={`Pay ${payFor ? money(payFor.due, payFor.currency) : ""}`} onPress={pay} loading={busy} />
                 <Button title="Cancel" variant="ghost" onPress={() => setPayFor(null)} />
               </View>
             )}

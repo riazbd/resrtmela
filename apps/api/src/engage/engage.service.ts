@@ -6,6 +6,7 @@ import { requireResortAccess } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { EmailService } from "../notifications/email.service";
+import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
 
 @Injectable()
 export class EngageService {
@@ -14,6 +15,7 @@ export class EngageService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
   ) {}
 
   // ─────────────── in-app notifications ───────────────
@@ -159,16 +161,40 @@ export class EngageService {
     return { credits: row.credits };
   }
 
+  /** What the platform is selling today — the console draws its buttons from this. */
+  async creditPacks(): Promise<CreditPack[]> {
+    return parseCreditPacks(await this.settings.str("email.creditPacks"));
+  }
+
+  /**
+   * Takes a pack.
+   *
+   * No money changes hands here and none ever did: the platform grants the
+   * credits and invoices separately. The price is written into the audit row
+   * so there is a record of what is owed — without it the platform had granted
+   * credits with no trace of the amount, while the console displayed a price
+   * it was not charging.
+   */
   async purchaseCredits(claims: JwtClaims, credits: number) {
     await this.perms.require(claims, claims.resortIds[0], "marketing.send");
-    if (![500, 2000, 10000].includes(credits)) throw badRequest("choose a pack: 500, 2000 or 10000");
+    const packs = await this.creditPacks();
+    const pack = packs.find((p) => p.credits === credits);
+    if (!pack) {
+      throw badRequest(`Choose a pack: ${packs.map((p) => p.credits).join(", ")}`);
+    }
     const row = await this.prisma.emailCredit.upsert({
       where: { userId: claims.userId },
       update: { credits: { increment: credits }, purchasedAt: new Date() },
       create: { userId: claims.userId, credits, purchasedAt: new Date() },
     });
-    await this.audit.log({ actorId: claims.userId, action: "email.credits.purchase", entity: "email_credit", entityId: Number(row.id), diff: { credits } });
-    return { credits: row.credits, added: credits };
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "email.credits.purchase",
+      entity: "email_credit",
+      entityId: Number(row.id),
+      diff: { credits, price: pack.price },
+    });
+    return { credits: row.credits, added: credits, price: pack.price };
   }
 
   async sendCampaign(

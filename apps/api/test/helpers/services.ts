@@ -28,6 +28,8 @@ import { ToursService } from "../../src/agent/tours.service";
 import { BooksService } from "../../src/agent/books.service";
 import { SalesService } from "../../src/agent/sales.service";
 import { AgencyGuestsService } from "../../src/agent/agency-guests.service";
+import { EngageService } from "../../src/engage/engage.service";
+import { GuestService } from "../../src/guest/guest.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
 import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
@@ -165,5 +167,31 @@ export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
     prisma,
     new AgencyContextService(prisma),
     new AvailabilityService(prisma),
+  );
+}
+
+export function makePlatformSettings(prisma: PrismaService): PlatformSettingsService {
+  return new PlatformSettingsService(prisma);
+}
+
+export function makeEngageService(prisma: PrismaService): EngageService {
+  return new EngageService(
+    prisma,
+    new AuditService(prisma),
+    new EmailService(),
+    new PermissionsService(prisma),
+    makePlatformSettings(prisma),
+  );
+}
+
+export function makeGuestService(prisma: PrismaService): GuestService {
+  const audit = new AuditService(prisma);
+  return new GuestService(
+    prisma,
+    makeBookingsService(prisma),
+    makeRoomsService(prisma),
+    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
+    makeNotificationsService(prisma),
+    audit,
   );
 }

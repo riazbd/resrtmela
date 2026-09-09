@@ -12,7 +12,9 @@ class AccessDecisionDto {
 }
 
 class PurchaseCreditsDto {
-  @IsInt() @IsIn([500, 2000, 10000]) credits!: number;
+  // which sizes exist is the platform's commercial decision, read at request
+  // time from settings; a list here would be a fourth copy going stale
+  @IsInt() @Min(1) credits!: number;
 }
 
 class CampaignDto {
@@ -59,6 +61,10 @@ export class EngageController {
   }
 
   // bulk email
+  @Get("email-credits/packs") packs() {
+    return this.engage.creditPacks();
+  }
+
   @Get("email-credits") credits(@Req() req: AuthedRequest) {
     return this.engage.myEmailCredits(req.user);
   }

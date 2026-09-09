@@ -220,8 +220,9 @@ export class AuthService {
           tenantId: tenant.id,
           name: input.resortName,
           location: input.location,
-          timezone: "Asia/Dhaka",
-          currency: "BDT",
+          // timezone, currency and locale come from the schema's defaults;
+          // repeating them here was a second place to change when a resort
+          // outside Bangladesh signs up, and the one nobody would remember
         },
       });
       const user = await tx.user.create({

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, Text, View } from "react-native";
-import { api, bdt, dmy, type BookingRow, type TodayFeed } from "../lib/api";
+import { api, dmy, type BookingRow, type TodayFeed, money } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Badge, Button, Card, Empty, S, Spinner, COLORS } from "../components/Ui";
 
 export default function TodayScreen({ refreshKey }: { refreshKey: number }) {
   const { activeResort, isStaff } = useAuth();
+  const cur = activeResort?.currency;
   const [feed, setFeed] = useState<TodayFeed | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -37,7 +38,7 @@ export default function TodayScreen({ refreshKey }: { refreshKey: number }) {
   }
 
   async function collect(b: BookingRow) {
-    Alert.prompt?.("Collect payment", `Due ${bdt(b.due)} — amount:`, async (text) => {
+    Alert.prompt?.("Collect payment", `Due ${money(b.due, cur)} — amount:`, async (text) => {
       const amount = Number(text);
       if (!amount || amount <= 0) return;
       try {
@@ -61,7 +62,7 @@ export default function TodayScreen({ refreshKey }: { refreshKey: number }) {
         </View>
         <View style={[S.card, { flex: 1, alignItems: "center", marginBottom: 0 }]}>
           <Text style={[S.tiny, { color: COLORS.sub }]}>DUES</Text>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.red }}>{bdt(feed.duesTotal)}</Text>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.red }}>{money(feed.duesTotal, cur)}</Text>
           <Text style={S.tiny}>{feed.duesCount} booking(s)</Text>
         </View>
       </View>
@@ -73,7 +74,7 @@ export default function TodayScreen({ refreshKey }: { refreshKey: number }) {
           <View style={[S.row, S.between]}>
             <View style={{ flex: 1 }}>
               <Text style={S.h2}>{b.guest?.fullName ?? "-"}</Text>
-              <Text style={S.tiny}>{b.code} · {b.rooms.join(", ")} · due {bdt(b.due)}</Text>
+              <Text style={S.tiny}>{b.code} · {b.rooms.join(", ")} · due {money(b.due, cur)}</Text>
             </View>
             <Badge value={b.state} />
           </View>
@@ -96,7 +97,7 @@ export default function TodayScreen({ refreshKey }: { refreshKey: number }) {
           <View style={[S.row, S.between]}>
             <View style={{ flex: 1 }}>
               <Text style={S.h2}>{b.guest?.fullName ?? "-"}</Text>
-              <Text style={S.tiny}>{b.code} · {dmy(b.checkIn)} → {dmy(b.checkOut)} · due {bdt(b.due)}</Text>
+              <Text style={S.tiny}>{b.code} · {dmy(b.checkIn)} → {dmy(b.checkOut)} · due {money(b.due, cur)}</Text>
             </View>
             <Badge value={b.state} />
           </View>

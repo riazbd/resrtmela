@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, Modal, ScrollView, Text, View } from "react-native";
-import {
-  guestAvailability, guestBook, guestResort, guestTrips, guestActivitySlots,
-  guestAddActivity, bdt, dmy,
-  type GuestAvailability, type GuestResort, type GuestTrip,
-} from "../lib/api";
+import { guestAvailability, guestBook, guestResort, guestTrips, guestActivitySlots, guestAddActivity, dmy, type GuestAvailability, type GuestResort, type GuestTrip, money } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Badge, Button, Card, Empty, Input, S, Spinner, COLORS } from "../components/Ui";
 
@@ -85,7 +81,7 @@ export default function ResortDetailScreen({ resortId, onBack }: { resortId: num
         fullName: fullName || undefined,
         remarks: "booked via app — pay at resort",
       });
-      setConfirmed(`${trip.code} · due ${bdt(trip.due)}`);
+      setConfirmed(`${trip.code} · due ${money(trip.due, resort?.currency)}`);
       setAvail(null);
       setQty({});
     } catch (e) {
@@ -197,7 +193,7 @@ export default function ResortDetailScreen({ resortId, onBack }: { resortId: num
                 <View style={{ flex: 1 }}>
                   <Text style={S.h2}>{t.name}</Text>
                   <Text style={S.tiny}>
-                    {bdt(t.pricePerNight)}/night · sleeps {t.maxAdults}+{t.maxChildren} · {t.available} left
+                    {money(t.pricePerNight, resort?.currency)}/night · sleeps {t.maxAdults}+{t.maxChildren} · {t.available} left
                   </Text>
                 </View>
                 {t.available === 0 ? (
@@ -222,7 +218,7 @@ export default function ResortDetailScreen({ resortId, onBack }: { resortId: num
               </View>
               <View style={[S.row, S.between, { marginTop: 10 }]}>
                 <Text style={S.sub}>
-                  {pickedCount} room(s) × {nights}n ≈ <Text style={{ fontWeight: "800", color: COLORS.text }}>{bdt(totalEstimate)}</Text>
+                  {pickedCount} room(s) × {nights}n ≈ <Text style={{ fontWeight: "800", color: COLORS.text }}>{money(totalEstimate, resort?.currency)}</Text>
                 </Text>
                 <Button title="Book — pay at resort" onPress={book} loading={booking} />
               </View>
@@ -239,7 +235,7 @@ export default function ResortDetailScreen({ resortId, onBack }: { resortId: num
               <View style={[S.row, S.between]}>
                 <View style={{ flex: 1 }}>
                   <Text style={S.h2}>{a.name}</Text>
-                  <Text style={S.tiny}>{a.durationMin} min · {bdt(a.price)} / person</Text>
+                  <Text style={S.tiny}>{a.durationMin} min · {money(a.price, resort?.currency)} / person</Text>
                 </View>
                 <Button
                   title={openSlots === a.id ? "Hide" : "See times"}

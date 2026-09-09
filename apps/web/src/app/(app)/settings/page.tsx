@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, download, money, type PermRole } from "@/lib/api";
+import { api, download, money, type PermRole, cur } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs } from "@/components/patterns";
@@ -553,10 +553,10 @@ function AccessTab({ rid }: { rid: number }) {
           <Field label="Commission type">
             <Select value={invite.commissionKind} onChange={(e) => setInvite({ ...invite, commissionKind: e.target.value })}>
               <option value="PERCENT">Percent of rent (%)</option>
-              <option value="FLAT">Fixed amount (৳ per booking)</option>
+              <option value="FLAT">Fixed amount ({cur()} per booking)</option>
             </Select>
           </Field>
-          <Field label={invite.commissionKind === "FLAT" ? "Commission (৳ / booking)" : "Commission (%)"}>
+          <Field label={invite.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
             <Input type="number" min={0} max={invite.commissionKind === "PERCENT" ? 100 : undefined} value={invite.commissionRate} onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })} />
           </Field>
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
@@ -705,10 +705,10 @@ function UsersTab({ rid }: { rid: number }) {
               <Field label="Commission type">
                 <Select value={form.commissionKind} onChange={(e) => setForm({ ...form, commissionKind: e.target.value })}>
                   <option value="PERCENT">Percent of rent (%)</option>
-                  <option value="FLAT">Fixed amount (৳ per booking)</option>
+                  <option value="FLAT">Fixed amount ({cur()} per booking)</option>
                 </Select>
               </Field>
-              <Field label={form.commissionKind === "FLAT" ? "Commission (৳ / booking)" : "Commission (%)"}>
+              <Field label={form.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
                 <Input
                   type="number"
                   min={0}
@@ -889,7 +889,7 @@ function CommissionEditor({ u, rid, onDone }: { u: UserRow; rid: number; onDone:
     <div className="flex items-center gap-1.5">
       <Select className="!w-24 !py-1" value={kind} onChange={(e) => setKind(e.target.value)}>
         <option value="PERCENT">%</option>
-        <option value="FLAT">৳ fixed</option>
+        <option value="FLAT">{cur()} fixed</option>
       </Select>
       <Input className="!w-16 !py-1" type="number" min={0} max={kind === "PERCENT" ? 100 : undefined} value={value} onChange={(e) => setValue(e.target.value)} />
       <button
@@ -1101,10 +1101,10 @@ function DiscountsTab({ rid }: { rid: number }) {
             <Field label="Kind">
               <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
                 <option value="PERCENT">Percent</option>
-                <option value="FLAT">Flat ৳</option>
+                <option value="FLAT">Flat {cur()}</option>
               </Select>
             </Field>
-            <Field label={form.kind === "PERCENT" ? "Percent" : "Amount ৳"}>
+            <Field label={form.kind === "PERCENT" ? "Percent" : `Amount ${cur()}`}>
               <Input type="number" min={0} value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} />
             </Field>
           </div>

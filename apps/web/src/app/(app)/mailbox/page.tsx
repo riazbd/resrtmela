@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, dmy } from "@/lib/api";
+import { api, dmy, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
 import { Mail, ShoppingCart, Send } from "lucide-react";
@@ -14,11 +14,18 @@ interface CampaignRow {
   sentAt: string;
 }
 
-const PACKS = [
-  { credits: 500, price: "৳500" },
-  { credits: 2000, price: "৳1,800" },
-  { credits: 10000, price: "৳7,500" },
-];
+/**
+ * What the platform sells is the platform's decision.
+ *
+ * These three packs used to be written out here with their prices as strings,
+ * and again in the request validator, and again in the service. So the platform
+ * could not change what it sells without a deploy, and the three lists could
+ * disagree in the meantime. They come from the super admin's settings now.
+ */
+interface CreditPack {
+  credits: number;
+  price: number;
+}
 
 export default function MailboxPage() {
   const { activeResort, isManagement, role } = useAuth();
@@ -29,11 +36,13 @@ export default function MailboxPage() {
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("RESORT_GUESTS");
   const [busy, setBusy] = useState(false);
+  const [packs, setPacks] = useState<CreditPack[]>([]);
   const isAgent = role === "AGENT";
 
   const load = useCallback(async () => {
     const c = await api<{ credits: number }>("/email-credits").catch(() => null);
     setCredits(c?.credits ?? 0);
+    api<CreditPack[]>("/email-credits/packs").then(setPacks).catch(() => setPacks([]));
     api<CampaignRow[]>("/email-campaigns").then(setHistory).catch(() => setHistory([]));
   }, []);
   useEffect(() => {
@@ -44,8 +53,14 @@ export default function MailboxPage() {
   async function buy(pack: number) {
     setBusy(true);
     try {
-      const r = await api<{ credits: number; added: number }>("/email-credits/purchase", { method: "POST", body: { credits: pack } });
-      push(`+${r.added} email credits`);
+      const r = await api<{ credits: number; added: number; price: number }>("/email-credits/purchase", {
+        method: "POST",
+        body: { credits: pack },
+      });
+      // the credits are real and immediate; the money is not taken here, and
+      // saying "purchased" would be the software describing something it did
+      // not do
+      push(`${r.added} credits added — ${money(r.price)} will be invoiced`);
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -149,9 +164,14 @@ export default function MailboxPage() {
               </div>
             </div>
           </Card>
-          <Card title="Buy credits">
+          <Card title="Add credits">
             <div className="space-y-2.5">
-              {PACKS.map((p) => (
+              {packs.length === 0 && (
+                <div className="rounded-xl border border-slate-200 px-4 py-3 text-xs text-slate-400">
+                  No packs are on sale at the moment.
+                </div>
+              )}
+              {packs.map((p) => (
                 <button
                   key={p.credits}
                   onClick={() => buy(p.credits)}
@@ -162,11 +182,15 @@ export default function MailboxPage() {
                     <ShoppingCart className="h-4 w-4 text-brand-600" />
                     <span className="text-sm font-bold">{p.credits.toLocaleString("en-IN")} emails</span>
                   </span>
-                  <span className="text-sm font-black text-brand-700">{p.price}</span>
+                  <span className="text-sm font-black text-brand-700">{money(p.price)}</span>
                 </button>
               ))}
-              <div className="pt-1 text-[11px] text-slate-400">
-                Delivered via your configured SMTP account. Payment gateway integration coming soon — packs are credited instantly for now.
+              {/* This sat in grey micro-text under a bold price, which is where
+                  a disclaimer goes when nobody wants it read. No card is
+                  charged here; the credits arrive and the amount is billed. */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                <b>Nothing is charged now.</b> The credits are added straight away and the amount is
+                added to your platform bill. Emails go out through your own configured SMTP account.
               </div>
             </div>
           </Card>

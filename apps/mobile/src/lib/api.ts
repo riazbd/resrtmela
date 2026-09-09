@@ -54,6 +54,8 @@ export async function api<T = unknown>(
 export interface Resort {
   id: number;
   name: string;
+  /** the resort's own currency; `/auth/me` has always sent it, nothing read it */
+  currency?: string;
 }
 
 export interface Me {
@@ -87,8 +89,36 @@ export interface TodayFeed {
   duesCount: number;
 }
 
-export const bdt = (n: number | null | undefined) =>
-  n === null || n === undefined ? "-" : `Tk ${Number(n).toLocaleString("en-IN")}`;
+/**
+ * Money, in whatever currency the resort actually keeps.
+ *
+ * This used to print "Tk" onto every figure unconditionally, because the public
+ * API never said what currency it was quoting — so a resort keeping its books
+ * in dollars had its rates shown to guests in taka: the right number, the wrong
+ * money, and nothing on either side that could notice. The API sends the
+ * currency now.
+ *
+ * Bengali digit grouping is not the Western one — 1,50,000 rather than 150,000
+ * — which is why the locale stays `en-IN` whatever the currency.
+ */
+export const money = (n: number | null | undefined, currency = "BDT") => {
+  if (n === null || n === undefined) return "-";
+  const amount = Number(n).toLocaleString("en-IN");
+  try {
+    const symbol = new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      currencyDisplay: "narrowSymbol",
+    })
+      .formatToParts(0)
+      .find((p) => p.type === "currency")?.value;
+    return `${symbol ?? currency} ${amount}`;
+  } catch {
+    // an unknown currency code is still better shown than swallowed
+    return `${currency} ${amount}`;
+  }
+};
+
 
 export const dmy = (d: string | null | undefined) =>
   !d ? "-" : new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
@@ -109,6 +139,8 @@ export interface GuestResort {
   id: number;
   name: string;
   location: string | null;
+  /** what the prices below are quoted in; the app must not assume */
+  currency?: string;
   roomCount?: number;
   roomTypes?: GuestRoomType[];
   activities?: { id: number; name: string; category: string; price: number; durationMin: number }[];
@@ -128,6 +160,8 @@ export interface GuestTrip {
   id: number;
   code: string;
   resortId?: number;
+  /** what this trip's figures are quoted in */
+  currency?: string;
   resortName?: string;
   resort?: { id: number; name: string; location: string | null };
   state: string;

@@ -27,12 +27,29 @@ import {
   MessageSquare,
 } from "lucide-react";
 
-const STATS = [
-  { n: "89+", l: "Bookings managed" },
-  { n: "৳1M+", l: "Revenue tracked" },
-  { n: "10+", l: "Rooms per resort" },
-  { n: "99.9%", l: "Uptime" },
-];
+/**
+ * The four figures under the hero.
+ *
+ * They used to read "89+ bookings managed", "৳1M+ revenue tracked", "10+ rooms
+ * per resort" and "99.9% uptime". The first three were the demo database's
+ * numbers and the fourth was nobody's: no uptime was ever measured, so the page
+ * was making a reliability promise on the strength of a round number that
+ * looked good.
+ *
+ * These defaults are claims that are true and can be shown to be true — a room
+ * cannot be sold twice because a unique index forbids it, and the revenue
+ * figures were checked cell by cell against a manager's own register. They are
+ * CMS keys like the rest of the homepage, so the platform can change them
+ * without a deploy, which is what stopped the old ones being fixed.
+ */
+const STAT_KEYS = ["stats.1", "stats.2", "stats.3", "stats.4"] as const;
+
+const STAT_FALLBACKS: Record<string, { n: string; l: string }> = {
+  "stats.1": { n: "0", l: "Double bookings possible" },
+  "stats.2": { n: "98.9%", l: "Match to a manager's own register" },
+  "stats.3": { n: "2", l: "Languages, on every screen" },
+  "stats.4": { n: "14 days", l: "Free, no card" },
+};
 
 function MockDaySheet() {
   return (
@@ -261,12 +278,17 @@ export default function HomePage() {
       {/* ── trust bar ── */}
       <section className="border-y border-slate-100 bg-white">
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-10 sm:grid-cols-4">
-          {STATS.map((s) => (
-            <div key={s.l} className="text-center">
-              <div className="text-3xl font-black text-slate-900">{s.n}</div>
-              <div className="mt-0.5 text-xs font-medium uppercase tracking-wider text-slate-400">{s.l}</div>
-            </div>
-          ))}
+          {STAT_KEYS.map((key) => {
+            const fallback = STAT_FALLBACKS[key]!;
+            const value = cms[`${key}.value`] || fallback.n;
+            const label = cms[`${key}.label`] || fallback.l;
+            return (
+              <div key={key} className="text-center">
+                <div className="text-3xl font-black text-slate-900">{value}</div>
+                <div className="mt-0.5 text-xs font-medium uppercase tracking-wider text-slate-400">{label}</div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

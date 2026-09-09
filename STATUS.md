@@ -45,8 +45,8 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **324 API tests** across 41 files (34 at the start of this pass,
-all of them pure unit tests; there are now 29 integration suites running against
+Current state: **334 API tests** across 43 files (34 at the start of this pass,
+all of them pure unit tests; there are now 31 integration suites running against
 a real MySQL) plus **24 front-end tests**, which is 24 more than there were. All
 five packages typecheck clean, the console builds, and the repository can be
 provisioned from an empty database — which it could not before.
@@ -377,6 +377,56 @@ working with no signal. An edit still needs a connection and says so plainly --
 two devices editing the same row offline cannot both be right, and there is no
 reference that makes them so.
 
+### Six more things the software had decided on its owner's behalf
+
+A sweep for invented business data, prompted by a fair question about whether
+the tour tree shipped with categories in it. It does not — the tree starts empty
+and a test holds it there. Six other things did.
+
+**The restaurant screen came with a menu.** Lunch 300, Dinner 350, Breakfast
+200, as one-tap buttons, and the bill opened with "Lunch, 1, 300" already typed
+in. Three invented dishes at three invented prices: a resort selling lunch at
+500 had a clerk deleting 300 and typing 500 on every bill, until the day they
+forgot. What the kitchen sells is the resort's own food packages, which that
+screen already listed beside the fakes.
+
+**Email credit packs were written out three times** — in the console, in the
+request validator and again in the service — and the *prices* existed only in
+the console, as strings. So the platform could not change what it sells without
+a deploy. Worse, the console showed a price and the server took no money: click
+"৳1,800 for 2,000 credits" and you were granted 2,000 credits, free, with no
+record anywhere of the amount owed. A disclaimer did exist, in grey micro-text
+under the bold price, which is where a disclaimer goes when nobody wants it
+read. Packs are platform settings now, the price lands in the audit row so it
+can be invoiced, and the screen says plainly that nothing is charged yet.
+
+**The homepage claimed 99.9% uptime.** Nobody has ever measured uptime. The
+other three figures — "89+ bookings managed", "৳1M+ revenue tracked", "10+ rooms
+per resort" — were the demo database's. They are CMS keys now like the rest of
+the homepage, and the shipped defaults are claims that can be shown to be true:
+a room cannot be sold twice because a unique index forbids it, and the revenue
+figures were checked cell by cell against a manager's own register.
+
+**Ten input labels said "৳"** while the value beside them was formatted in the
+resort's own currency. `cur()` had existed in the console since the money
+formatter landed, and nothing called it.
+
+**The guest app stamped "Tk" on every figure**, because the public API never
+said what currency it was quoting — a resort keeping books in dollars had its
+rates shown to guests in taka: the right number, the wrong money, and nothing on
+either side that could notice. The resort already carried a currency; it just
+was not being sent.
+
+**Signup wrote its own copy of the schema's defaults** for timezone and
+currency, which is a second place to change when a resort outside Bangladesh
+signs up, and the one nobody would remember.
+
+Two things were looked at and deliberately left. The legacy `PLANS` table is a
+documented fallback for tenants with no subscription, not a hardcoded price
+list. The importer names a room type "Standard" when a resort has none, because
+rooms must attach to something and `maxAdults` is displayed rather than
+enforced; it is one click to rename.
+
 ### Smaller, but shipped
 
 Per-tenant document prefixes · the guest directory's per-guest N+1 removed ·
@@ -416,6 +466,12 @@ never promise what it does not do.**
    agency approved for a new resort has staff with no link of their own to it.
    The room search works around this by running on the agency's authority; the
    rest of the agent surface has not been swept for the same assumption.
+5. **Email credits are granted but never billed.** The amount is recorded in the
+   audit row and the screen says so, which is honest but manual — the platform
+   has to read those rows to invoice. Wiring them to the dues ledger is the real
+   fix, and `SubscriptionDue` cannot take them as it stands: its
+   `UNIQUE(subscriptionId, periodStart)` would refuse a second purchase inside
+   one billing period.
 
 ### P5 — Growth, when the above is quiet
 

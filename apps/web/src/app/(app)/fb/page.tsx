@@ -35,11 +35,17 @@ interface InHouse {
   rooms: (string | null)[];
 }
 
-const MEAL_PRESETS = [
-  { name: "Lunch", price: 300 },
-  { name: "Dinner", price: 350 },
-  { name: "Breakfast", price: 200 },
-];
+/**
+ * A blank line, not a guess.
+ *
+ * This screen used to open with "Lunch, 1, 300" already typed in, and offered
+ * Lunch/Dinner/Breakfast at 300/350/200 as one-tap buttons. Those were three
+ * invented dishes at three invented prices: a resort selling lunch at 500 had
+ * a clerk deleting 300 and typing 500 on every bill, until the day they forgot.
+ * What the kitchen actually sells is the resort's own food packages, which this
+ * screen already lists beside them.
+ */
+const BLANK_ITEM = { name: "", qty: 1, unitPrice: 0, total: 0 };
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -48,7 +54,7 @@ export default function FbPage() {
   const t = useT();
   const { push } = useToast();
   const [target, setTarget] = useState<{ bookingId: number | null; label: string } | null>(null);
-  const [ticket, setTicket] = useState<BillItem[]>([{ name: "Lunch", qty: 1, unitPrice: 300, total: 300 }]);
+  const [ticket, setTicket] = useState<BillItem[]>([{ ...BLANK_ITEM }]);
   const [paidAmount, setPaidAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
   const [date, setDate] = useState(iso(new Date()));
@@ -120,7 +126,7 @@ export default function FbPage() {
       });
       push(`${created.code} — ${money(created.total)}${target.bookingId ? " charged to room" : ""}`);
       setTarget(null);
-      setTicket([{ name: "Lunch", qty: 1, unitPrice: 300, total: 300 }]);
+      setTicket([{ ...BLANK_ITEM }]);
       setPaidAmount(0);
       await load();
     } catch (ex) {
@@ -230,16 +236,14 @@ export default function FbPage() {
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium text-slate-400">PRESETS</span>
-                {MEAL_PRESETS.map((p) => (
-                  <button
-                    key={p.name}
-                    onClick={() => setTicket([...ticket, { name: p.name, qty: 1, unitPrice: p.price, total: p.price }])}
-                    className="rounded-full border border-slate-300 px-2.5 py-1 text-xs hover:border-brand-400 hover:bg-brand-50"
-                  >
-                    {p.name} · {money(p.price)}
-                  </button>
-                ))}
+                {packages.filter((p) => p.active).length === 0 ? (
+                  <span className="text-[11px] text-slate-400">
+                    Add what your kitchen sells under Food packages below, and it becomes a one-tap
+                    button here.
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-medium text-slate-400">ON THE MENU</span>
+                )}
                 {packages.filter((p) => p.active).map((p) => (
                   <button
                     key={p.id}
@@ -257,7 +261,7 @@ export default function FbPage() {
                   <div key={i} className="flex items-end gap-2">
                     <Field label={i === 0 ? "Item" : ""}><Input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} /></Field>
                     <Field label={i === 0 ? "Qty" : ""}><Input type="number" min={1} value={it.qty} onChange={(e) => setItem(i, { qty: Number(e.target.value) })} className="!w-16" /></Field>
-                    <Field label={i === 0 ? "Unit ৳" : ""}><Input type="number" min={0} value={it.unitPrice || ""} onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) })} className="!w-24" /></Field>
+                    <Field label={i === 0 ? `Unit ${cur()}` : ""}><Input type="number" min={0} value={it.unitPrice || ""} onChange={(e) => setItem(i, { unitPrice: Number(e.target.value) })} className="!w-24" /></Field>
                     <div className="w-20 pb-2 text-right text-sm font-medium">{money(it.qty * it.unitPrice)}</div>
                     {ticket.length > 1 && (
                       <Button size="sm" variant="ghost" onClick={() => setTicket(ticket.filter((_, x) => x !== i))}>✕</Button>

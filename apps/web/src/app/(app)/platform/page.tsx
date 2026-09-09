@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, money, dmy, type CmsRow } from "@/lib/api";
+import { api, money, dmy, type CmsRow, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Tabs } from "@/components/patterns";
 import { useAuth } from "@/lib/auth";
@@ -448,7 +448,7 @@ export default function PlatformPage() {
                 <option>GROWTH</option>
                 <option>CHAIN</option>
               </select>
-              <label className="block text-xs font-semibold text-slate-500">Monthly fee (৳)</label>
+              <label className="block text-xs font-semibold text-slate-500">Monthly fee ({cur()})</label>
               <input value={subFee} onChange={(e) => setSubFee(e.target.value)} type="number" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
               <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">Starts with a 14-day trial, first due generated on renewal.</div>
             </div>
@@ -485,7 +485,7 @@ function PlanCard({ plan, busy, onSave }: { plan: PlanDef; busy: boolean; onSave
       )}
       <div className="mt-4 space-y-3">
         <label className="block">
-          <span className="text-xs font-semibold text-slate-500">Monthly fee (৳)</span>
+          <span className="text-xs font-semibold text-slate-500">Monthly fee ({cur()})</span>
           <input type="number" min={0} value={fee} onChange={(e) => setFee(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </label>
         <label className="block">
@@ -509,6 +509,14 @@ const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "hero.subtitle", label: "Hero subtitle", hint: "one line under the title" },
   { key: "hero.cta", label: "Hero button text" },
   { key: "hero.badge", label: "Hero badge", hint: "small pill above the title" },
+  { key: "stats.1.value", label: "Figure 1", hint: "the four figures under the hero — keep them to claims you can show are true" },
+  { key: "stats.1.label", label: "Figure 1 caption" },
+  { key: "stats.2.value", label: "Figure 2" },
+  { key: "stats.2.label", label: "Figure 2 caption" },
+  { key: "stats.3.value", label: "Figure 3" },
+  { key: "stats.3.label", label: "Figure 3 caption" },
+  { key: "stats.4.value", label: "Figure 4" },
+  { key: "stats.4.label", label: "Figure 4 caption" },
   { key: "cta.title", label: "Bottom CTA title" },
   { key: "cta.body", label: "Bottom CTA text" },
   { key: "cta.button", label: "Bottom CTA button" },

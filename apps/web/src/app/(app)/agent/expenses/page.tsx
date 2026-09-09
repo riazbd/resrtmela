@@ -181,7 +181,7 @@ function AddExpense({
       // the entry carries its own reference, so a replay is still one entry
       const { queued } = await submit({
         kind: "expense",
-        label: `Expense ৳${form.amount}`,
+        label: `Expense ${money(Number(form.amount || 0))}`,
         path: "/agent/expenses",
         body: { ...form, headId: Number(form.headId), amount: Number(form.amount) },
       });

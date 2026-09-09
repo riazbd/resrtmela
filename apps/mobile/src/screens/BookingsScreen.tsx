@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { api, bdt, dmy, type BookingRow } from "../lib/api";
+import { api, dmy, type BookingRow, money } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { Badge, Empty, S, Spinner } from "../components/Ui";
 
 export default function BookingsScreen({ refreshKey }: { refreshKey: number }) {
   const { activeResort, isAgent } = useAuth();
+  const cur = activeResort?.currency;
   const [rows, setRows] = useState<BookingRow[] | null>(null);
 
   const load = useCallback(async () => {
@@ -36,7 +37,7 @@ export default function BookingsScreen({ refreshKey }: { refreshKey: number }) {
               <Text style={S.tiny}>
                 {b.code} · {dmy(b.checkIn)} → {dmy(b.checkOut)} · {b.rooms.join(", ")}
               </Text>
-              <Text style={S.tiny}>rent {bdt(b.rent)} · paid {bdt(b.paid)} · due {bdt(b.due)}</Text>
+              <Text style={S.tiny}>rent {money(b.rent, cur)} · paid {money(b.paid, cur)} · due {money(b.due, cur)}</Text>
             </View>
             <View style={{ gap: 4, alignItems: "flex-end" }}>
               <Badge value={b.state} />
