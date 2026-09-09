@@ -19,6 +19,7 @@ import type {
   AgencyExpensePage,
   AgencyGuestRow,
   AgencyRoomOffer,
+  AgencyCalendar,
   BookingDetail,
   BookingRow,
   CalendarBooking,
@@ -304,6 +305,8 @@ export function createApiClient(http: Fetcher) {
         http<{ rows: AgencyGuestRow[]; total: number }>(`/agent/guests${qs(q)}`),
       rooms: (q: { from: string; to: string; resortId?: number }) =>
         http<AgencyRoomOffer[]>(`/agent/rooms${qs(q)}`),
+      calendar: (q: { from: string; to: string; resortId?: number }) =>
+        http<AgencyCalendar>(`/agent/calendar${qs(q)}`),
     },
 
     // ── running the platform ──

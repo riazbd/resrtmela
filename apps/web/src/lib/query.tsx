@@ -177,5 +177,7 @@ export const keys = {
   agentSalesDoc: (id: number) => ["agent", "sales", "doc", id] as const,
   agentGuests: (q?: unknown) => ["agent", "guests", q] as const,
   agentRooms: (from: string, to: string) => ["agent", "rooms", from, to] as const,
+  agentCalendar: (from: string, to: string, resortId?: number) =>
+    ["agent", "calendar", from, to, resortId ?? null] as const,
   agentWallet: () => ["agent", "wallet"] as const,
 };

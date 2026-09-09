@@ -27,6 +27,7 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
   { href: "/agent/search", label: "Find a room", icon: Search, roles: ["AGENT"], perm: "agent.book" },
+  { href: "/agent/calendar", label: "Calendar", icon: CalendarDays, roles: ["AGENT"], perm: "agent.book" },
   { href: "/agent/tours", label: "Tours", icon: Package, roles: ["AGENT"], perm: "agent.tours.manage" },
   { href: "/agent/sales", label: "Quotes & invoices", icon: FileText, roles: ["AGENT"], perm: "agent.sales.manage" },
   { href: "/agent/guests", label: "Guests", icon: Users, roles: ["AGENT"], perm: "agent.guests.view" },

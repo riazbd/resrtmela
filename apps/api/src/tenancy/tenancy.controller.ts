@@ -26,6 +26,7 @@ class UpdateResortDto {
   @IsOptional() @IsString() @MaxLength(16) locale?: string;
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsBoolean() showRatesToAgents?: boolean;
+  @IsOptional() @IsBoolean() showGuestNamesToAgents?: boolean;
   @IsOptional() @IsNumber() taxRatePct?: number;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() @MaxLength(12) invoicePrefix?: string;

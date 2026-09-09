@@ -559,6 +559,37 @@ export interface AgencyGuestRow {
   resorts: string[];
 }
 
+/**
+ * One room, occupied for a span of nights, as an agency is allowed to see it.
+ *
+ * `guestName` and `code` are null for a stay the agency did not sell, unless
+ * the resort has turned `showGuestNamesToAgents` on. That is the whole point of
+ * the type: an agency needs to know a night is gone without learning whose
+ * customer is in the room.
+ */
+export interface AgencyStay {
+  roomId: number;
+  checkIn: string;
+  checkOut: string;
+  mine: boolean;
+  state: string;
+  guestName: string | null;
+  code: string | null;
+}
+
+/** One resort's month: the rooms it has, and the nights already taken. */
+export interface AgencyResortMonth {
+  resort: { id: number; name: string; location: string | null };
+  rooms: { id: number; name: string; roomTypeId: number | null; roomTypeName: string | null }[];
+  stays: AgencyStay[];
+}
+
+export interface AgencyCalendar {
+  from: string;
+  to: string;
+  resorts: AgencyResortMonth[];
+}
+
 /** What is free between two dates, at one of the resorts the agency sells. */
 export interface AgencyRoomOffer {
   resort: { id: number; name: string; location: string | null };
