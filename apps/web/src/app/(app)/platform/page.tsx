@@ -61,6 +61,17 @@ interface DueRow {
   status: string;
   paidAt: string | null;
 }
+/** A one-off amount a tenant owes, outside the subscription's monthly rhythm. */
+interface ChargeRow {
+  id: number;
+  resort: { id: number; name: string };
+  kind: string;
+  description: string;
+  amount: number;
+  status: string;
+  paidAt: string | null;
+  createdAt: string;
+}
 interface CalCell {
   date: string;
   dues: number;
@@ -87,6 +98,12 @@ export default function PlatformPage() {
   const resortsQ = useApi(keys.platform("resorts"), () => api<ResortRow[]>("/platform/resorts"));
   const agentsQ = useApi(keys.platform("agents"), () => api<AgentRow[]>("/platform/agents"));
   const duesQ = useApi(keys.platform("dues"), () => api<DueRow[]>("/platform/dues"));
+  /**
+   * One-off charges — an email credit pack today; SMS packs and setup fees will
+   * be the same shape. They live beside the subscription dues rather than in
+   * their own tab, because "what does this tenant owe" is one question.
+   */
+  const chargesQ = useApi(keys.platform("charges"), () => api<ChargeRow[]>("/platform/charges"));
   const plansQ = useApi(keys.platform("plans"), () => api<PlanDef[]>("/platform/plans"));
 
   const ov = ovQ.data ?? null;
@@ -428,6 +445,43 @@ export default function PlatformPage() {
             </tbody>
           </table>
           {dues.length === 0 && <Empty msg="No dues — every resort is square" />}
+        </Card>
+      )}
+
+      {tab === "Dues" && (
+        <Card className="mt-5 overflow-x-auto">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-sm font-bold text-slate-800">One-off charges</h3>
+            <span className="text-xs text-slate-400">
+              Credit packs and the like. The credits arrive at once; the money is collected here.
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr><Th>Resort</Th><Th>What for</Th><Th>Raised</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
+            </thead>
+            <tbody>
+              {(chargesQ.data ?? []).map((c) => (
+                <tr key={c.id} className="border-t border-slate-100">
+                  <Td className="font-semibold text-slate-800">{c.resort.name}</Td>
+                  <Td>{c.description}</Td>
+                  <Td className="text-xs text-slate-500">{dmy(c.createdAt)}</Td>
+                  <Td className="text-right font-bold">{money(c.amount)}</Td>
+                  <Td>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${c.status === "PAID" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{c.status}</span>
+                  </Td>
+                  <Td>
+                    {c.status !== "PAID" && (
+                      <button onClick={() => act(() => api(`/platform/charges/${c.id}/pay`, { method: "POST", body: { method: "CASH" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                        Mark paid
+                      </button>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {(chargesQ.data ?? []).length === 0 && <Empty msg="No one-off charges outstanding" />}
         </Card>
       )}
 

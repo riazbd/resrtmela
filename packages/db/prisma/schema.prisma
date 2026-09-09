@@ -162,6 +162,7 @@ model Resort {
   foodPackages     FoodPackage[]
   payrollPayments  PayrollPayment[]
   messageTemplates MessageTemplate[]
+  platformCharges  PlatformCharge[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -938,6 +939,36 @@ model PlatformPlan {
 /// Platform-wide policy the super admin edits: billing windows, notice periods,
 /// the platform's own name on outgoing mail. Key/value because the alternative
 /// is a column per decision and a migration every time one is added.
+/// A one-off amount a tenant owes the platform, outside the subscription's
+/// monthly rhythm: an email credit pack today; SMS packs, extra resorts and
+/// setup fees are the same shape.
+///
+/// Deliberately not a SubscriptionDue. That table's UNIQUE(subscriptionId,
+/// periodStart) is the only thing making the monthly billing sweep idempotent,
+/// and two credit packs bought in one month would collide on it. Weakening the
+/// index to fit one-off charges would trade recurring billing's one guarantee
+/// for a convenience, so these carry their own identity instead: the reference
+/// of the act that raised them.
+model PlatformCharge {
+  id          BigInt    @id @default(autoincrement())
+  resortId    Int
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  kind        String    @db.VarChar(24) // EMAIL_CREDITS | ...
+  description String    @db.VarChar(160) // what a person would put on the invoice
+  amount      Decimal   @db.Decimal(10, 2)
+  status      String    @default("DUE") @db.VarChar(16) // DUE | PAID | WAIVED
+  /// identity of the purchase, so a replayed request raises one charge
+  clientRef   String?   @db.VarChar(64)
+  createdById Int?
+  paidAt      DateTime?
+  note        String?   @db.VarChar(255)
+  createdAt   DateTime  @default(now())
+
+  @@unique([resortId, clientRef])
+  @@index([resortId, status])
+  @@map("platform_charges")
+}
+
 model PlatformSetting {
   key       String   @id @db.VarChar(64)
   value     String   @db.VarChar(255)

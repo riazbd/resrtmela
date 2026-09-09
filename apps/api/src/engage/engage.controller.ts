@@ -15,6 +15,7 @@ class PurchaseCreditsDto {
   // which sizes exist is the platform's commercial decision, read at request
   // time from settings; a list here would be a fourth copy going stale
   @IsInt() @Min(1) credits!: number;
+  @IsOptional() @IsString() @MaxLength(64) clientRef?: string;
 }
 
 class CampaignDto {
@@ -69,7 +70,7 @@ export class EngageController {
     return this.engage.myEmailCredits(req.user);
   }
   @Post("email-credits/purchase") purchase(@Req() req: AuthedRequest, @Body() dto: PurchaseCreditsDto) {
-    return this.engage.purchaseCredits(req.user, dto.credits);
+    return this.engage.purchaseCredits(req.user, dto.credits, { clientRef: dto.clientRef });
   }
   @Post("email-campaigns") send(@Req() req: AuthedRequest, @Body() dto: CampaignDto) {
     return this.engage.sendCampaign(req.user, dto as never);

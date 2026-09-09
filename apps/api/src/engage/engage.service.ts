@@ -169,26 +169,64 @@ export class EngageService {
   /**
    * Takes a pack.
    *
-   * No money changes hands here and none ever did: the platform grants the
-   * credits and invoices separately. The price is written into the audit row
-   * so there is a record of what is owed — without it the platform had granted
-   * credits with no trace of the amount, while the console displayed a price
-   * it was not charging.
+   * No card is charged here: the credits arrive at once and the amount lands on
+   * the tenant's platform bill as a one-off charge. The grant and the charge go
+   * in one transaction, because credits with no charge behind them is the
+   * platform giving its product away and never knowing.
+   *
+   * A `clientRef` makes the whole thing replayable: a retried request finds the
+   * charge already raised and neither grants nor bills a second time.
    */
-  async purchaseCredits(claims: JwtClaims, credits: number) {
-    await this.perms.require(claims, claims.resortIds[0], "marketing.send");
+  async purchaseCredits(
+    claims: JwtClaims,
+    credits: number,
+    opts: { clientRef?: string } = {},
+  ) {
+    // the charge has to land on a resort's bill; someone with no resort at all
+    // has nowhere to send it, and silently skipping the charge would be the
+    // platform giving credits away
+    const resortId = claims.resortIds[0];
+    if (resortId == null) throw badRequest("No resort on this account to bill the pack to");
+    await this.perms.require(claims, resortId, "marketing.send");
     const packs = await this.creditPacks();
     const pack = packs.find((p) => p.credits === credits);
     if (!pack) {
       throw badRequest(`Choose a pack: ${packs.map((p) => p.credits).join(", ")}`);
     }
-    const row = await this.prisma.emailCredit.upsert({
-      where: { userId: claims.userId },
-      update: { credits: { increment: credits }, purchasedAt: new Date() },
-      create: { userId: claims.userId, credits, purchasedAt: new Date() },
+
+    if (opts.clientRef) {
+      const seen = await this.prisma.platformCharge.findUnique({
+        where: { resortId_clientRef: { resortId, clientRef: opts.clientRef } },
+        select: { id: true },
+      });
+      if (seen) {
+        const current = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
+        return { credits: current?.credits ?? 0, added: 0, price: pack.price };
+      }
+    }
+
+    const row = await this.prisma.$transaction(async (tx) => {
+      const credit = await tx.emailCredit.upsert({
+        where: { userId: claims.userId },
+        update: { credits: { increment: credits }, purchasedAt: new Date() },
+        create: { userId: claims.userId, credits, purchasedAt: new Date() },
+      });
+      await tx.platformCharge.create({
+        data: {
+          resortId,
+          kind: "EMAIL_CREDITS",
+          description: `${credits.toLocaleString("en-IN")} email credits`,
+          amount: pack.price as never,
+          clientRef: opts.clientRef ?? null,
+          createdById: claims.userId,
+        },
+      });
+      return credit;
     });
+
     await this.audit.log({
       actorId: claims.userId,
+      resortId,
       action: "email.credits.purchase",
       entity: "email_credit",
       entityId: Number(row.id),

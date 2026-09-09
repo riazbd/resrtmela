@@ -314,6 +314,26 @@ export function createApiClient(http: Fetcher) {
       plans: () => http<unknown[]>("/platform/plans"),
       updatePlan: (name: string, body: unknown) => http<unknown>(`/platform/plans/${name}`, { method: "PATCH", body }),
       dues: (q: { resortId?: number; status?: string } = {}) => http<unknown[]>(`/platform/dues${qs(q)}`),
+      /** Subscription dues and one-off charges together, per resort. */
+      outstanding: () =>
+        http<{ resortId: number; resort: string; subscriptions: number; charges: number; total: number }[]>(
+          "/platform/outstanding",
+        ),
+      charges: (q: { resortId?: number; status?: string } = {}) =>
+        http<
+          {
+            id: number;
+            resort: { id: number; name: string };
+            kind: string;
+            description: string;
+            amount: number;
+            status: string;
+            paidAt: string | null;
+            createdAt: string;
+          }[]
+        >(`/platform/charges${qs(q)}`),
+      payCharge: (id: number, method?: string) =>
+        http<unknown>(`/platform/charges/${id}/pay`, { method: "POST", body: { method } }),
       payDue: (id: number, method?: string) =>
         http<unknown>(`/platform/dues/${id}/pay`, { method: "POST", body: { method } }),
       subscribe: (resortId: number, body: unknown) =>

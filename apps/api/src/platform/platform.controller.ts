@@ -152,6 +152,19 @@ export class PlatformController {
   @Get("platform/dues") dues(@Req() req: AuthedRequest, @Query("resortId") resortId?: string, @Query("status") status?: string) {
     return this.platform.listDues(req.user, { resortId: resortId ? Number(resortId) : undefined, status });
   }
+  /** Subscription dues and one-off charges together — what each tenant owes. */
+  @Get("platform/outstanding") outstanding(@Req() req: AuthedRequest) {
+    return this.platform.outstanding(req.user);
+  }
+
+  @Get("platform/charges") charges(@Req() req: AuthedRequest, @Query("resortId") resortId?: string, @Query("status") status?: string) {
+    return this.platform.charges(req.user, { resortId: resortId ? Number(resortId) : undefined, status });
+  }
+
+  @Post("platform/charges/:id/pay") payCharge(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: PayDueDto) {
+    return this.platform.payCharge(req.user, id, dto.method);
+  }
+
   @Post("platform/dues/:id/pay") payDue(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: PayDueDto) {
     return this.platform.payDue(req.user, id, dto.method);
   }

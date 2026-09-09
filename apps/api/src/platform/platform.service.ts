@@ -10,6 +10,7 @@ import { PlanLimitsService } from "../common/plan-limits.service";
 import { BillingService } from "./billing.service";
 import { PlatformSettingsService, SETTING_DEFAULTS } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
+import { round2 } from "../common/dates";
 import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
@@ -306,6 +307,101 @@ export class PlatformService {
       orderBy: { dueDate: "desc" },
       take: 200,
     });
+  }
+
+  /**
+   * What every tenant owes, subscription and one-off together.
+   *
+   * They were separate answers before there was anywhere to put a one-off
+   * charge: the monthly dues were a table and an email credit pack was a line
+   * in the audit log. Two places to look is one place to forget.
+   */
+  async outstanding(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const OPEN = ["DUE", "OVERDUE"];
+
+    const [dues, charges, resorts] = await Promise.all([
+      this.prisma.subscriptionDue.groupBy({
+        by: ["resortId"],
+        where: { status: { in: OPEN } },
+        _sum: { amount: true },
+      }),
+      this.prisma.platformCharge.groupBy({
+        by: ["resortId"],
+        where: { status: { in: OPEN } },
+        _sum: { amount: true },
+      }),
+      this.prisma.resort.findMany({ select: { id: true, name: true } }),
+    ]);
+
+    const name = new Map(resorts.map((r) => [r.id, r.name]));
+    const ids = new Set([...dues.map((d) => d.resortId), ...charges.map((c) => c.resortId)]);
+    const dueBy = new Map(dues.map((d) => [d.resortId, round2(Number(d._sum.amount ?? 0))]));
+    const chargeBy = new Map(charges.map((c) => [c.resortId, round2(Number(c._sum.amount ?? 0))]));
+
+    return [...ids]
+      .map((resortId) => {
+        const subscriptions = dueBy.get(resortId) ?? 0;
+        const oneOff = chargeBy.get(resortId) ?? 0;
+        return {
+          resortId,
+          resort: name.get(resortId) ?? `#${resortId}`,
+          subscriptions,
+          charges: oneOff,
+          total: round2(subscriptions + oneOff),
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  }
+
+  /** Settles a one-off charge. The subscription's own dues are payDue's job. */
+  async payCharge(claims: JwtClaims, chargeId: number, method?: string) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const charge = await this.prisma.platformCharge.findUnique({ where: { id: BigInt(chargeId) } });
+    if (!charge) throw badRequest("charge not found");
+    if (charge.status === "PAID") throw badRequest("already paid");
+
+    const updated = await this.prisma.platformCharge.update({
+      where: { id: charge.id },
+      data: {
+        status: "PAID",
+        paidAt: new Date(),
+        note: method ? `paid via ${method}` : charge.note,
+      },
+    });
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: charge.resortId,
+      action: "platform.charge.paid",
+      entity: "platform_charge",
+      entityId: Number(charge.id),
+      diff: { amount: Number(charge.amount), method },
+    });
+    return { ...updated, id: Number(updated.id), amount: Number(updated.amount) };
+  }
+
+  /** Every one-off charge, newest first — the invoice queue. */
+  async charges(claims: JwtClaims, query: { resortId?: number; status?: string } = {}) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.platformCharge.findMany({
+      where: {
+        ...(query.resortId ? { resortId: query.resortId } : {}),
+        ...(query.status ? { status: query.status } : {}),
+      },
+      include: { resort: { select: { id: true, name: true } } },
+      orderBy: { id: "desc" },
+      take: 300,
+    });
+    return rows.map((c) => ({
+      id: Number(c.id),
+      resort: c.resort,
+      kind: c.kind,
+      description: c.description,
+      amount: Number(c.amount),
+      status: c.status,
+      paidAt: c.paidAt,
+      createdAt: c.createdAt,
+    }));
   }
 
   async payDue(claims: JwtClaims, dueId: number, method?: string) {

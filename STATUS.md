@@ -427,6 +427,52 @@ list. The importer names a room type "Standard" when a resort has none, because
 rooms must attach to something and `maxAdults` is displayed rather than
 enforced; it is one click to rename.
 
+### The three things the last sweep left behind
+
+**There were two plan tables, not a plan table and a fallback.** The earlier
+note called `PLANS` a documented fallback. Looking properly, it was a second
+vocabulary: the code held FREE / STANDARD / PRO with limits of 10 / 50 / 500
+rooms, the database held STARTER / GROWTH / CHAIN with 10 / 40 / 10,000, and
+`PlanLimitsService` silently chose between them. Signup put every new tenant on
+"FREE" — a name that did not exist in the plan table at all — so a new
+customer's limits lived in a constant nobody could change without a deploy. And
+the super admin's own plan-change screen refused every plan the platform
+actually sells, because it validated against the code list.
+
+The database is the vocabulary now. The legacy names survive as *inactive* rows
+carrying exactly the limits they always had, so no existing tenant's capacity
+moves by a single room: remapping STANDARD onto GROWTH would have taken ten off
+every tenant on it. The entry plan comes from the price list rather than a
+string in the signup code, and the constant is gone.
+
+**The importer stopped inventing a room type.** A spreadsheet import into a
+resort with no room types created "Standard, two adults, no children" and said
+nothing, so a resort importing family cottages had its whole inventory typed as
+a double. The import screen asks now, with the old invention prefilled — the
+fast path is still one keypress — and when it does have to name the type
+itself, the report says so, because the old one did it silently and nobody knew
+there was anything to correct.
+
+Two more things fell out of that. The F&B importer could not match a sheet that
+wrote the room's actual name, only one that needed a translation map — and the
+console papered over it by shipping **one specific resort's map**,
+`{ "3": "Snow Drop" }`, sent by every customer on every import. Names match
+directly now, and the map is back to being the escape hatch it was meant to be.
+
+**Email credits have a ledger.** They were granted and the price went into an
+audit row, which is a record but not a ledger: the platform had to read the log
+to find out who owed what, and nothing could mark a charge settled.
+
+`SubscriptionDue` could not take them. Its `UNIQUE(subscriptionId, periodStart)`
+is the only thing making the monthly billing sweep idempotent, and a second
+credit pack bought in the same month would collide with the first — so fitting
+one-off charges in would have meant trading recurring billing's one guarantee
+for a convenience. `PlatformCharge` carries its own idempotency instead: the
+identity of the purchase. The grant and the charge are one transaction, because
+credits with no charge behind them is the platform giving its product away and
+never knowing. Platform → Dues shows both, and "what does this tenant owe" is
+one number again.
+
 ### Smaller, but shipped
 
 Per-tenant document prefixes · the guest directory's per-guest N+1 removed ·
@@ -466,12 +512,10 @@ never promise what it does not do.**
    agency approved for a new resort has staff with no link of their own to it.
    The room search works around this by running on the agency's authority; the
    rest of the agent surface has not been swept for the same assumption.
-5. **Email credits are granted but never billed.** The amount is recorded in the
-   audit row and the screen says so, which is honest but manual — the platform
-   has to read those rows to invoice. Wiring them to the dues ledger is the real
-   fix, and `SubscriptionDue` cannot take them as it stands: its
-   `UNIQUE(subscriptionId, periodStart)` would refuse a second purchase inside
-   one billing period.
+5. **One-off charges are collected by hand.** `PlatformCharge` records what is
+   owed and the platform marks it paid in Platform → Dues; no gateway is
+   involved, the same as subscription dues. That is deliberate until a merchant
+   account exists (§5), not an oversight.
 
 ### P5 — Growth, when the above is quiet
 
