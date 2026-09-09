@@ -128,7 +128,10 @@ export default function ReportsPage() {
           <Select
             value={fy}
             onChange={(e) => {
-              const y = fyList.find((x) => x.label === e.target.value);
+              // the options carry `y.from` as their value and this looked the
+              // year up by `label`, so it never matched: choosing "FY 2025-26"
+              // showed it selected and quietly reported all time instead
+              const y = fyList.find((x) => x.from === e.target.value);
               setFy(e.target.value);
               if (y) { setFrom(y.from); setTo(y.to); } else { setFrom(""); setTo(""); }
             }}

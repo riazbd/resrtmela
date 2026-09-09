@@ -670,11 +670,12 @@ function UsersTab({ rid }: { rid: number }) {
                           <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
                             <Ban className="inline h-3.5 w-3.5" /> Suspend
                           </button>
-                          {!u.wallet?.active && (
-                            <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-brand-200 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">
-                              Wallet on
-                            </button>
-                          )}
+                          {/* "Wallet on" sent the same body as Activate beside it
+                              and enabled no wallet, so it never went away however
+                              many times it was pressed. Removed rather than wired
+                              up: nothing in the product turns a wallet on, and a
+                              button for a feature that does not exist is worse
+                              than no button. */}
                         </>
                       )}
                       {u.status === "active" && u.role !== "AGENT" && (

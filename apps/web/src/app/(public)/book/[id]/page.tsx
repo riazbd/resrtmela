@@ -19,6 +19,16 @@ export default function ResortBookingPage() {
   const [checkOut, setCheckOut] = useState(iso(new Date(Date.now() + 3 * 86400000)));
   const [avail, setAvail] = useState<GuestAvailability[] | null>(null);
   const [qty, setQty] = useState<Record<number, number>>({});
+  /**
+   * How many people are coming.
+   *
+   * This was `adults: 2, children: 0`, hardcoded, on every booking taken
+   * through the resort's own website — the guest was never asked. So occupancy
+   * was wrong on every web booking, the extra-person charge never applied, and
+   * the day sheet's pax column was fiction.
+   */
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
   const [searching, setSearching] = useState(false);
   const [booking, setBooking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -104,7 +114,7 @@ export default function ResortBookingPage() {
       const trip = await api<GuestTrip>("/guest/bookings", {
         method: "POST",
         body: {
-          resortId, items, checkIn, checkOut, adults: 2, children: 0,
+          resortId, items, checkIn, checkOut, adults, children,
           fullName: fullName || undefined, remarks: "booked via web — pay at resort",
         },
       });
@@ -182,6 +192,22 @@ export default function ResortBookingPage() {
                       </div>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <Field label="Your name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" /></Field>
+                        <Field label="Adults">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={adults}
+                            onChange={(e) => setAdults(Math.max(1, Number(e.target.value) || 1))}
+                          />
+                        </Field>
+                        <Field label="Children">
+                          <Input
+                            type="number"
+                            min={0}
+                            value={children}
+                            onChange={(e) => setChildren(Math.max(0, Number(e.target.value) || 0))}
+                          />
+                        </Field>
                         {verifyMode === "email" ? (
                           <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></Field>
                         ) : (

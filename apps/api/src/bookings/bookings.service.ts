@@ -493,6 +493,8 @@ export class BookingsService {
       guestId?: number;
       source?: string;
       group?: string;
+      /** guest name, guest phone, or booking code */
+      search?: string;
       mine?: boolean;
       skip?: number;
       take?: number;
@@ -511,6 +513,23 @@ export class BookingsService {
       // still — correctly — seeing nothing of any other agency's.
       ...(isAgent ? { agentUserId: { in: await this.agencyActorIds(claims.userId) } } : {}),
       ...(q.group ? { groupTag: q.group } : {}),
+      /**
+       * Searching happens here, not in the browser.
+       *
+       * The console filtered the hundred rows it had already fetched, so a
+       * guest whose booking was row 101 came back "no bookings match" — and
+       * the footer underneath printed "12 of 431", which is the screen saying
+       * out loud that it is hiding the rest.
+       */
+      ...(q.search?.trim()
+        ? {
+            OR: [
+              { code: { contains: q.search.trim() } },
+              { guest: { fullName: { contains: q.search.trim() } } },
+              { guest: { phone: { contains: q.search.trim() } } },
+            ],
+          }
+        : {}),
       ...(q.from && q.to
         ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }
         : {}),

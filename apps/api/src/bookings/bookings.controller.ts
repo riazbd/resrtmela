@@ -63,6 +63,7 @@ class ListBookingsQuery {
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @Type(() => Number) @IsInt() skip?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Max(200) take?: number;
+  @IsOptional() @IsString() @MaxLength(80) search?: string;
 }
 
 class UpdateBookingDto {

@@ -84,6 +84,8 @@ export interface BookingListQuery {
   to?: string;
   skip?: number;
   take?: number;
+  /** guest name, guest phone or booking code — matched by the server, over every row */
+  search?: string;
 }
 
 export interface DateRange {
@@ -106,8 +108,10 @@ export function createApiClient(http: Fetcher) {
       create: (body: unknown) => http<BookingDetail>("/bookings", { method: "POST", body }),
       createGroup: (body: unknown) => http<{ bookings: BookingDetail[] }>("/bookings/group", { method: "POST", body }),
       update: (id: number, body: unknown) => http<BookingDetail>(`/bookings/${id}`, { method: "PATCH", body }),
-      transition: (id: number, state: string) =>
-        http<BookingDetail>(`/bookings/${id}/transition`, { method: "POST", body: { state } }),
+      // the controller reads `to`; this sent `state`, so the typed client's
+      // transition has never worked and the console hand-rolls the call
+      transition: (id: number, to: string) =>
+        http<BookingDetail>(`/bookings/${id}/transition`, { method: "POST", body: { to } }),
       cancel: (id: number, reason?: string) =>
         http<BookingDetail>(`/bookings/${id}/cancel`, { method: "POST", body: { reason } }),
       remove: (id: number) => http<{ deleted: boolean }>(`/bookings/${id}`, { method: "DELETE" }),
