@@ -34,5 +34,8 @@ every few months, forced because EAS drops old SDKs, plus Google Play's annual
 ## If it comes back
 
 Nothing has been deleted; the code and its dependencies are exactly as they
-were. Reviving it means renaming `typecheck:frozen` back to `typecheck`, and
-then doing the four things in the list above before it is worth publishing.
+were. However, the endpoints it calls were removed on 2026-09-11 when the
+platform stopped having guest accounts and became business-to-business. See
+`README.md` and `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md`.
+Reviving it would mean building a different app: a guest is no longer an account
+holder and cannot authenticate.
