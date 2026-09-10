@@ -427,7 +427,15 @@ export class EngageService {
      */
     if (input.resortId != null) requireResortAccess(claims, input.resortId);
     await this.perms.require(claims, input.resortId ?? claims.resortIds[0], "marketing.send");
-    await this.planLimits.requireFeature(input.resortId ?? claims.resortIds[0]!, "bulk_email");
+    /**
+     * The plan gate is the resort's, so it is asked only about the resort's own
+     * lists. `MY_GUESTS` is an agency writing to people it booked, wherever it
+     * booked them — asking a resort's plan whether an agency may mail its own
+     * list is the wrong question, and the first version of this asked it.
+     */
+    if (input.audience !== "MY_GUESTS") {
+      await this.planLimits.requireFeature(input.resortId ?? claims.resortIds[0]!, "bulk_email");
+    }
     const credit = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
     if (!credit || credit.credits <= 0) throw badRequest("no email credits — buy a pack first");
 

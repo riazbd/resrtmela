@@ -181,7 +181,7 @@ export const guestOtpVerify = (phone: string, code: string) =>
 // ── permissions ──
 
 export const permissionsFor = (resortId?: number) =>
-  api<{ permissions: string[] }>(`/auth/permissions${resortId ? `?resortId=${resortId}` : ""}`);
+  api<{ permissions: string[]; features?: string[] }>(`/auth/permissions${resortId ? `?resortId=${resortId}` : ""}`);
 
 
 // ── payroll ──

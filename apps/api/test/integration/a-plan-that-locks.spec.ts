@@ -148,6 +148,24 @@ describe("the doors those ticks open", () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 
+  it("does not shut an agent out of their own guest list — that is not the resort's plan", async () => {
+    /**
+     * `MY_GUESTS` is the agency writing to people it booked, wherever it booked
+     * them. Asking a resort's plan whether an agency may mail its own list is
+     * the wrong question, and the first version of this gate asked it.
+     */
+    await onAPlanWith([]);
+    const agent: JwtClaims = { userId: fx.agentId, role: ROLE.AGENT, resortIds: [fx.resortId] };
+
+    await expect(
+      makeEngageService(asPrisma).sendCampaign(agent, {
+        subject: "Eid offer",
+        body: "Come and stay",
+        audience: "MY_GUESTS",
+      }),
+    ).rejects.toThrow(/credit/i);
+  });
+
   it("keeps the spreadsheet importer shut on a plan without it", async () => {
     await onAPlanWith([]);
 
@@ -193,6 +211,45 @@ describe("what may be ticked", () => {
     const card = (await platform().publicPlans()).find((p) => p.name === "STARTER")!;
 
     expect(card.features).toEqual(["restaurant"]);
+  });
+});
+
+describe("what the console is told", () => {
+  /**
+   * The API refusing is not enough on its own.
+   *
+   * A resort on a plan without the restaurant still saw "Restaurant" in the
+   * navigation and met a 403 on arriving — a menu that leads to a wall, which
+   * is the same defect the permission matrix had in the other direction. The
+   * console needs the answer before it draws the menu, and it already asks one
+   * question of this shape when it loads a resort, so the feature list rides
+   * along with the permission list rather than costing a second round trip.
+   */
+  it("every feature, for a resort nobody has billed", async () => {
+    const shown = await plans().featuresFor(fx.resortId);
+
+    expect([...shown].sort()).toEqual([...ALL_PLAN_FEATURES].sort());
+  });
+
+  it("only the plan's features once there is a subscription", async () => {
+    await onAPlanWith(["restaurant", "payroll"]);
+
+    expect((await plans().featuresFor(fx.resortId)).sort()).toEqual(["payroll", "restaurant"]);
+  });
+
+  it("an empty list for a plan that includes nothing extra", async () => {
+    await onAPlanWith([]);
+
+    expect(await plans().featuresFor(fx.resortId)).toEqual([]);
+  });
+
+  it("the same answer the lock gives, so the menu and the door cannot disagree", async () => {
+    await onAPlanWith(["activities"]);
+
+    const shown = await plans().featuresFor(fx.resortId);
+    for (const key of ALL_PLAN_FEATURES) {
+      expect(shown.includes(key)).toBe(await plans().hasFeature(fx.resortId, key));
+    }
   });
 });
 

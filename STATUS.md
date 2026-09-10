@@ -45,8 +45,8 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **542 API tests** across 62 files (34 at the start of all this,
-all of them pure unit tests) plus **47 front-end tests**. Four packages
+Current state: **633 API tests** across 68 files (34 at the start of all this,
+all of them pure unit tests) plus **81 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
 empty database, which it could not before.
@@ -947,6 +947,107 @@ before them. It asks `information_schema` now. A list that has to be edited in
 step with the schema is a list that will be wrong — the same lesson as §3.28,
 one layer down.
 
+### §3.31 — The calendar, the guest, and a plan that means something
+
+Four pieces of work, and the thread running through them is the same one: a
+screen was saying something the software did not do.
+
+**The calendar was showing cancelled stays as occupied rooms.** `calendar()`
+filtered on nothing, so a cancelled booking still painted its nights — the one
+screen the front desk trusts to say what is free was hiding rooms it could
+sell. Fixed, then rebuilt: a stay is one bar rather than one box per night,
+four states have four colours, and money is a stripe under the bar rather than a
+second grid to read.
+
+Then it was opened in a browser, and three faults appeared that types, tests and
+the build had all passed. Merging free nights — done in the previous commit and
+called an improvement — destroyed the column grid: a room with nothing booked
+became one pale fortnight-wide band, so the table stopped lining up with its own
+header and there was nothing left to click. Day columns were unequal, because
+`table-fixed` shares surplus width proportionally when every column has one.
+Out-of-service rooms sat interleaved among the sellable ones. **Two of the three
+were decisions made in the previous commit, and no test could have caught any of
+them.**
+
+**A guest cannot book directly.** A business decision, and the code said the
+opposite in as many words: `bookings.create` refused a guest with "Guests book
+via the mobile app flow (phase 4)". The desk's door was shut and the app's door
+was the open one — and that flow went straight to `bookRoomsTx` with state
+PENDING, which blocks. A stranger with a verified phone could take a resort's
+rooms off the market without anyone at the resort being asked.
+
+Both doors refuse now, including the public v1 API: a booking form on a resort's
+own website is a guest booking directly however it reaches us, and
+`apiKeyClaims` records that nobody at a desk pressed anything. They refuse
+rather than 404 because the mobile app is frozen and still has the button.
+
+Which exposed the real cost of the decision. `resortDetail` returned rooms,
+prices and activities and no way to reach anybody, so "call the resort" would
+have been a dead end. It carries a phone number now.
+
+**A plan is a list of features, and the owner writes it.** The Plans tab offered
+two boxes — fee and room cap — on three rows seeded in code. Trial length,
+resort limit, label, blurb, order, whether it was still on sale: none of them
+reachable, and no way at all to add a fourth plan or retire one. Every pricing
+decision was a deployment.
+
+Worse, the ticks on the pricing cards were a map in the homepage keyed by plan
+name. A plan the owner created matched no key and rendered with no features at
+all — and no line on any card gated anything, so a Starter customer whose card
+never mentioned the restaurant could use it all month.
+
+One vocabulary now, three readers: `PLAN_FEATURES` in `@rh/shared` is the shelf,
+`platform_plans.features` is what each plan takes off it, and the public card,
+the panel's checkboxes and `requireFeature` all read the same list. Eight
+features are gated — restaurant, agents, activities, discounts, bulk email,
+public API, payroll, spreadsheet import — and a test walks `src/` and fails if
+any declared feature has no gate. Selling a lock with no door is worse than
+selling no lock.
+
+**One rule decides who is exempt, and it is the important one.** A resort with
+no subscription is not a downgraded customer, it is an unbilled one. Every
+resort in the live database is in exactly that state, and one of them runs a
+restaurant with 24 bills in it, so a lock that bit on the fallback plan would
+have taken a working module from a paying customer on the morning it deployed.
+Locks follow a subscription, because a plan is something you sold somebody.
+
+**And the trial is the owner's, including none.** A plan selling zero days
+produced a TRIAL whose end date was already behind it: the money was right, but
+the customer's own page said TRIAL until the next hourly sweep. Zero now starts
+them ACTIVE and bills from today. A single resort can also be given different
+terms from the plan's, which the fee could always do and the trial could not.
+
+**A super admin could not open the console at all.** Found by opening it. The
+layout gate was `loading || !me || !activeResort`, and the platform owner has no
+resort — that is the role. They sat on "Loading…" for ever, locked out of the
+one screen only they can use. The gate has four answers now, and staff whose
+resort link was removed are told so instead of watching a spinner.
+
+**And the menu had to learn the same answer.** Gating the API is not enough on
+its own: a resort on a plan without the restaurant still saw "Restaurant" in the
+sidebar and met a 403 on arriving, which is the defect §3.26 named, in the other
+direction. `/auth/permissions` returns two lists now — what the owner gave this
+person, and what the plan includes — because it is one question asked when a
+resort loads, and both go through the same `effective()` so the menu and the
+door cannot come to different conclusions.
+
+Doing that exposed a wrong question in the gate written the day before. Bulk
+Email is shared between a resort's management and its agents, and an agent's
+copy writes to the agency's own guest list, wherever it booked them. Asking a
+resort's plan whether an agency may mail its own list is not a stricter rule, it
+is the wrong rule; the gate now applies to the resort's own audiences only, and
+the sidebar draws the same line.
+
+Hiding a link is still not the whole job — a typed URL or an old bookmark opens
+the screen anyway — so the layout says once, above the page, which feature is
+missing. **Reads stay open.** A resort whose plan no longer includes the
+restaurant can still read the bills it took while it did: locking creation is the
+sale, locking history would be keeping their own books from them.
+
+**What this leaves open.** There is no per-resort feature override to match the
+per-resort fee and trial, so a customer who needs one extra module needs a plan
+that has it.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -1033,8 +1134,10 @@ release** likewise.
 capability, stop building for it. **OTA channel sync** and **embed themes** —
 both assume a maturity the platform has not reached; the offline front desk was
 worth more than either and is now the only thing in this market that does it.
-**The mobile app release** — guests already book on the web, and the offline
-work landed in the browser, so a native shell buys less than it did.
+**The mobile app release** — guests do not book at all now (§3.31), and the
+offline work landed in the browser, so a native shell buys less than it did.
+The shipped build still has its Book button; the API answers it with a sentence
+about ringing the resort.
 
 ### Kept honest
 

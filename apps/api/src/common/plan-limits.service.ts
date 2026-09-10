@@ -20,7 +20,7 @@
  *   3. neither, or a name nobody sells → the cheapest plan still on sale
  */
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { planFeatureLabel } from "@rh/shared";
+import { ALL_PLAN_FEATURES, planFeatureLabel } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { forbid } from "./rbac";
 
@@ -33,6 +33,17 @@ export interface PlanLimits {
   features: string[];
   /** Where the numbers came from — useful in error messages and support. */
   source: "subscription" | "tenant" | "fallback";
+}
+
+/**
+ * What a resort may use, given how its plan was resolved.
+ *
+ * Only a real subscription can take something away — see `hasFeature`. This is
+ * the single place that rule is written, so the lock and the menu cannot come
+ * to different conclusions.
+ */
+function effective(limits: PlanLimits): string[] {
+  return limits.source === "subscription" ? limits.features : [...ALL_PLAN_FEATURES];
 }
 
 /** `features` is JSON in the database, so it is whatever was written into it. */
@@ -132,14 +143,25 @@ export class PlanLimitsService {
    * clothes.
    */
   async hasFeature(resortId: number, key: string): Promise<boolean> {
-    const limits = await this.forResort(resortId);
-    return limits.source === "subscription" ? limits.features.includes(key) : true;
+    return (await this.featuresFor(resortId)).includes(key);
+  }
+
+  /**
+   * Everything this resort may actually use.
+   *
+   * The console asks for this when it loads a resort, so it can leave a link
+   * out rather than draw one that ends in a 403. It must be the same answer
+   * `requireFeature` gives — a menu and a door that disagree are worse than
+   * either being wrong on its own — so both go through `effective()`.
+   */
+  async featuresFor(resortId: number): Promise<string[]> {
+    return effective(await this.forResort(resortId));
   }
 
   /** Throws 403 naming the feature and the plan, so the owner knows what to buy. */
   async requireFeature(resortId: number, key: string): Promise<void> {
     const limits = await this.forResort(resortId);
-    if (limits.source !== "subscription" || limits.features.includes(key)) return;
+    if (effective(limits).includes(key)) return;
     throw forbid(
       `Your ${limits.label} plan does not include ${planFeatureLabel(key)}. Change the plan to switch it on.`,
     );
