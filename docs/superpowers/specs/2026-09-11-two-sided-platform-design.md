@@ -125,7 +125,7 @@ phase has to work against. That is why it goes first.
 | What | Where |
 |---|---|
 | Guest API — 10 endpoints | `apps/api/src/guest/` (controller, service, module) |
-| Phone-OTP login and the GUEST user it mints | `auth.controller` `otp/request`, `otp/verify`; `auth.service` around L149 and L158 |
+| Phone/email OTP login and the GUEST user it mints | `auth.controller` `otp/request`, `otp/verify`; `auth.service` `requestOtp`, `verifyOtp` |
 | `ROLE.GUEST` | `packages/shared`, and the guards that name it |
 | Guest web pages | `apps/web/src/app/(public)/book`, `book/trips`, `book/[id]` |
 | Guest client functions | `apps/web/src/lib/api.ts` — the `guest*` block |
@@ -180,7 +180,33 @@ wins — the loser carries a one-night billing bug that a reordering would
 activate; `sweepPaymentDeadlines` is duplicated with no caller at all. Code kept
 "in case" does not hold a place open. It sets a trap.
 
-### 4.4 Consequences to follow through
+### 4.4 OTP was never only a guest door — so phase 1 owes a replacement
+
+Found while planning, and it corrects the table above. `verifyOtp` looks the
+identifier up in `users` and, if it finds somebody, issues a token for
+**whatever role that person already has**:
+
+```ts
+user = await this.prisma.user.findUnique({ where: { phone } });
+if (!user) { user = create({ ..., role: ROLE.GUEST }); }   // the guest part
+...
+return this.issueToken(user.id, user.role);                // anybody at all
+```
+
+So a resort manager can sign in with a code instead of a password. And there is
+no way to change a staff member's password and no forgot-password flow — which
+makes OTP, by accident, the only door a locked-out manager has.
+
+Removing OTP therefore removes a working staff capability. The owner's decision:
+**remove OTP entirely, and build a real forgot-password in the same phase.** A
+capability is not allowed to disappear as a side effect of deleting something
+else; if it goes, it goes deliberately and something replaces it.
+
+The replacement is a password-reset token — single-use, short-lived, emailed —
+not a code that mints accounts. It can only reset a password for an account that
+already exists, so it gives a guest nothing.
+
+### 4.5 Consequences to follow through
 
 - `public_api` leaves `PLAN_FEATURES` **and** every plan row that lists it.
   `isPlanFeature` rejects unknown keys, so an orphan would fail validation on the
