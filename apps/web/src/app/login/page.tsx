@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
@@ -17,9 +17,11 @@ const HIGHLIGHTS = [
   { icon: ShieldCheck, text: "Agents, wallets & role-based access" },
 ];
 
-export default function LoginPage() {
+function LoginInner() {
   const { login } = useAuth();
   const router = useRouter();
+  // reset=1 is only ever set by our own redirect from /reset on success
+  const justReset = useSearchParams().get("reset") === "1";
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -107,6 +109,11 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Welcome back</h1>
             <p className="mt-1 text-sm text-slate-500">Sign in to your resort console</p>
           </div>
+          {justReset && (
+            <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
+              Password updated. Sign in with your new password.
+            </div>
+          )}
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-600">Phone or email</label>
@@ -198,5 +205,16 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  // useSearchParams() (for the post-reset banner) opts this route out of
+  // static prerendering unless it is wrapped in Suspense — same reason /reset
+  // and /bookings need it, and the same failure mode: next build, not a warning
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }
