@@ -152,6 +152,14 @@ export interface Room {
   name: string;
   baseRate: string | number;
   status: "ACTIVE" | "OUT_OF_SERVICE";
+  /**
+   * What THIS room takes. Seeded from its type when the room is created and
+   * the room's own answer after that, because rooms of one type are not one
+   * size — which is why this moved off the type.
+   */
+  extraPersonAllowed?: boolean;
+  extraPersonRate?: string | number;
+  extraPersonMax?: number;
   roomType?: RoomType;
 }
 
@@ -174,6 +182,15 @@ export interface RoomAvail {
   agentRate?: number;
   status: string;
   busyNights: string[];
+  /**
+   * What this room takes, so the booking form can offer the box for the rooms
+   * that have a bed and price it at the room's own rate. It used to ask the
+   * room *type*, which one type covering nine rooms of different sizes could
+   * not answer.
+   */
+  extraPersonAllowed?: boolean;
+  extraPersonRate?: number;
+  extraPersonMax?: number;
 }
 
 /**

@@ -30,7 +30,7 @@ export class RoomsService {
   async createRoomType(
     claims: JwtClaims,
     resortId: number,
-    data: { name: string; maxAdults: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; amenities?: string[] },
+    data: { name: string; maxAdults: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; extraPersonMax?: number; amenities?: string[] },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "rooms.manage");
@@ -42,6 +42,8 @@ export class RoomsService {
         maxChildren: data.maxChildren ?? 0,
         extraPersonAllowed: data.extraPersonAllowed ?? false,
         extraPersonRate: data.extraPersonRate ?? 0,
+        // a type that allows extra persons and names no count means one bed
+        extraPersonMax: data.extraPersonMax ?? (data.extraPersonAllowed ? 1 : 0),
         amenities: data.amenities,
       },
     });
@@ -52,7 +54,7 @@ export class RoomsService {
   async updateRoomType(
     claims: JwtClaims,
     id: number,
-    data: { name?: string; maxAdults?: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; active?: boolean },
+    data: { name?: string; maxAdults?: number; maxChildren?: number; extraPersonAllowed?: boolean; extraPersonRate?: number; extraPersonMax?: number; active?: boolean },
   ) {
     const rt0 = await this.prisma.roomType.findUnique({ where: { id } });
     if (!rt0) throw badRequest("room type not found");
@@ -66,6 +68,7 @@ export class RoomsService {
         ...(data.maxChildren != null ? { maxChildren: data.maxChildren } : {}),
         ...(data.extraPersonAllowed != null ? { extraPersonAllowed: data.extraPersonAllowed } : {}),
         ...(data.extraPersonRate != null ? { extraPersonRate: data.extraPersonRate } : {}),
+        ...(data.extraPersonMax != null ? { extraPersonMax: data.extraPersonMax } : {}),
         ...(data.active != null ? { active: data.active } : {}),
       },
     });
@@ -113,12 +116,29 @@ export class RoomsService {
         `"${data.name}" is a retired room. Rename that one, or give this room a different name.`,
       );
     }
+    /**
+     * A new room starts where its type says, and is its own answer after that.
+     *
+     * Extra-bed terms live on the room, because rooms of one type are not one
+     * size. But a resort adding its ninth Standard should not type the same
+     * rate a ninth time, so the type is the starting point and the room screen
+     * is where it is adjusted.
+     */
+    const type = await this.prisma.roomType.findFirst({
+      where: { id: data.roomTypeId, resortId },
+      select: { extraPersonAllowed: true, extraPersonRate: true, extraPersonMax: true },
+    });
+    if (!type) throw badRequest("That room type is not in this resort");
+
     const room = await this.prisma.room.create({
       data: {
         resortId,
         name: data.name,
         roomTypeId: data.roomTypeId,
         baseRate: data.baseRate as never,
+        extraPersonAllowed: type.extraPersonAllowed,
+        extraPersonRate: type.extraPersonRate,
+        extraPersonMax: type.extraPersonMax,
       },
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "room.create", entity: "room", entityId: room.id, diff: data });
@@ -190,7 +210,15 @@ export class RoomsService {
   async updateRoom(
     claims: JwtClaims,
     roomId: number,
-    data: { baseRate?: number; status?: "ACTIVE" | "OUT_OF_SERVICE"; name?: string },
+    data: {
+      baseRate?: number;
+      status?: "ACTIVE" | "OUT_OF_SERVICE";
+      name?: string;
+      /** What THIS room takes, whatever its type says — rooms of one type differ in size. */
+      extraPersonAllowed?: boolean;
+      extraPersonRate?: number;
+      extraPersonMax?: number;
+    },
   ) {
     const existing = await this.prisma.room.findUniqueOrThrow({ where: { id: roomId } });
     requireResortAccess(claims, existing.resortId);
@@ -201,6 +229,9 @@ export class RoomsService {
         ...(data.baseRate !== undefined ? { baseRate: data.baseRate as never } : {}),
         ...(data.status ? { status: data.status } : {}),
         ...(data.name ? { name: data.name } : {}),
+        ...(data.extraPersonAllowed !== undefined ? { extraPersonAllowed: data.extraPersonAllowed } : {}),
+        ...(data.extraPersonRate !== undefined ? { extraPersonRate: data.extraPersonRate as never } : {}),
+        ...(data.extraPersonMax !== undefined ? { extraPersonMax: data.extraPersonMax } : {}),
       },
     });
     requireResortAccess(claims, room.resortId);

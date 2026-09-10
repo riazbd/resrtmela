@@ -329,8 +329,18 @@ model RoomType {
   name               String  @db.VarChar(120)
   maxAdults          Int     @default(2)
   maxChildren        Int     @default(0)
+
+  /// What a NEW room of this type starts with. The room is what a booking reads.
+  ///
+  /// These used to be the answer: extra persons were allowed and priced per
+  /// type. One type covers nine rooms at Sky Eco and they are not one size —
+  /// some take a third bed, some do not, and the ones that do are not worth the
+  /// same — so a single number here could not describe the inventory and the
+  /// resort left the whole feature off. They are a starting point now, copied
+  /// down when a room is created, so nobody types the same rate nine times.
   extraPersonAllowed Boolean @default(false)
   extraPersonRate    Decimal @default(0) @db.Decimal(10, 2)
+  extraPersonMax     Int     @default(0)
   amenities          Json?
   active             Boolean @default(true)
 
@@ -351,6 +361,16 @@ model Room {
   name       String     @db.VarChar(120)
   baseRate   Decimal    @db.Decimal(10, 2)
   status     RoomStatus @default(ACTIVE)
+
+  /// How many extra beds THIS room takes, and what each costs per night.
+  ///
+  /// Seeded from the room type when the room is created, and the room's own
+  /// answer from then on: rooms of one type differ in size, which is the whole
+  /// reason this moved off the type. A booking charges each extra person at the
+  /// rate of the room they are actually in.
+  extraPersonAllowed Boolean @default(false)
+  extraPersonRate    Decimal @default(0) @db.Decimal(10, 2)
+  extraPersonMax     Int     @default(0)
 
   /// Retired: out of the inventory, still in the history.
   ///

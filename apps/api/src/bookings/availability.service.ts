@@ -17,6 +17,15 @@ export interface RoomAvailability {
   agentRate?: number;
   status: string;
   busyNights: string[]; // ISO yyyy-mm-dd within requested range
+  /**
+   * What this room takes, so the booking form can offer the box for the rooms
+   * that have a bed and price it at the room's own rate. It used to ask the
+   * room *type*, which one type covering nine rooms of different sizes could
+   * not answer.
+   */
+  extraPersonAllowed: boolean;
+  extraPersonRate: number;
+  extraPersonMax: number;
 }
 
 @Injectable()
@@ -90,6 +99,9 @@ export class AvailabilityService {
         baseRate,
         ...(terms && showRates ? { agentRate: agentPricing(terms, baseRate).agentPrice } : {}),
         status: r.status,
+        extraPersonAllowed: r.extraPersonAllowed,
+        extraPersonRate: Number(r.extraPersonRate),
+        extraPersonMax: r.extraPersonMax,
         busyNights: busyByRoom.get(r.id) ?? [],
       };
     });

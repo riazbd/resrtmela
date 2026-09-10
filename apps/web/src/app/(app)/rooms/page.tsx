@@ -60,6 +60,48 @@ export default function RoomsPage() {
     }
   }
 
+  /**
+   * What this room takes, asked one room at a time.
+   *
+   * Extra persons used to be a switch and a rate on the room *type*, so a type
+   * covering nine rooms of different sizes could not describe any of them, and
+   * the resort left it off — which is why the "Extra persons" box never once
+   * appeared on a booking form.
+   */
+  async function editBeds(room: Room) {
+    const maxRaw = window.prompt(
+      `How many extra beds fit in ${room.name}? (0 for none)`,
+      String(room.extraPersonMax ?? 0),
+    );
+    if (maxRaw === null) return;
+    const max = Math.max(0, Math.floor(Number(maxRaw) || 0));
+
+    let rate = Number(room.extraPersonRate ?? 0);
+    if (max > 0) {
+      const rateRaw = window.prompt(
+        `What does one extra bed in ${room.name} cost per night? (${cur()})`,
+        String(rate || ""),
+      );
+      if (rateRaw === null) return;
+      rate = Math.max(0, Number(rateRaw) || 0);
+      if (rate <= 0) {
+        push("A bed with no price cannot be sold — set a rate, or set the count to 0", "err");
+        return;
+      }
+    }
+
+    try {
+      await api(`/rooms/${room.id}`, {
+        method: "PATCH",
+        body: { extraPersonAllowed: max > 0, extraPersonMax: max, extraPersonRate: rate },
+      });
+      push(max > 0 ? `${room.name}: ${max} × ${money(rate)}/night` : `${room.name}: no extra bed`);
+      await load();
+    } catch (e) {
+      push((e as Error).message, "err");
+    }
+  }
+
   async function editRate(room: Room) {
     const v = window.prompt(`New base rate for ${room.name} (${cur()})`, String(Number(room.baseRate)));
     if (!v) return;
@@ -111,17 +153,29 @@ This cannot be undone.`;
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px]">
-            <thead className="border-b border-slate-100"><tr><Th>Room</Th><Th>Type</Th><Th>Base rate</Th><Th>Status</Th>{canEdit && <Th className="text-right">Actions</Th>}</tr></thead>
+            <thead className="border-b border-slate-100"><tr><Th>Room</Th><Th>Type</Th><Th>Base rate</Th><Th>Extra beds</Th><Th>Status</Th>{canEdit && <Th className="text-right">Actions</Th>}</tr></thead>
             <tbody className="divide-y divide-slate-50">
               {rooms.map((r) => (
                 <tr key={r.id}>
                   <Td className="font-medium">{r.name}</Td>
                   <Td className="text-xs">{r.roomType?.name}</Td>
                   <Td>{money(r.baseRate)}</Td>
+                  {/* the room's own answer: one type covers rooms of different
+                      sizes, which is why this is not on the type any more */}
+                  <Td className="text-xs">
+                    {r.extraPersonAllowed && (r.extraPersonMax ?? 0) > 0 ? (
+                      <span className="text-slate-600">
+                        {r.extraPersonMax} × {money(r.extraPersonRate ?? 0)}/night
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">none</span>
+                    )}
+                  </Td>
                   <Td><Badge value={r.status === "ACTIVE" ? "CONFIRMED" : "CANCELLED"} /></Td>
                   {canEdit && (
                     <Td className="text-right">
                       <Button size="sm" variant="ghost" onClick={() => editRate(r)}>Rate</Button>{" "}
+                      <Button size="sm" variant="ghost" onClick={() => void editBeds(r)}>Extra beds</Button>{" "}
                       <Button size="sm" variant={r.status === "ACTIVE" ? "subtle" : "primary"} onClick={() => toggleRoom(r)}>
                         {r.status === "ACTIVE" ? "Out of service" : "Activate"}
                       </Button>

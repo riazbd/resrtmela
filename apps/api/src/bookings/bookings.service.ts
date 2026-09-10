@@ -54,7 +54,8 @@ export interface RoomBookingTxParams {
   state: "PENDING" | "CONFIRMED";
   groupTag?: string;
   extraPersons?: number;
-  extraRate?: number;
+  /** One entry per room that is taking extra beds, at that room's own rate. */
+  extraBeds?: { roomId: number; persons: number; rate: number }[];
   rooms: { id: number; name: string; roomTypeId: number; baseRate: number }[];
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
@@ -243,16 +244,21 @@ export class BookingsService {
       throw badRequest("One or more rooms missing/inactive for this resort");
     }
 
-    // extra persons: room type must allow them and have a rate
-    let extraRate = 0;
-    if (extraPersons > 0) {
-      const types = await this.prisma.roomType.findMany({ where: { id: { in: roomRows.map((r) => r.roomTypeId) } } });
-      const allowed = types.filter((t) => t.extraPersonAllowed && Number(t.extraPersonRate) > 0);
-      if (allowed.length === 0) {
-        throw badRequest("The selected room type does not allow extra persons (or rate is not set)");
-      }
-      extraRate = Math.max(...allowed.map((t) => Number(t.extraPersonRate)));
-    }
+    /**
+     * Extra beds, room by room.
+     *
+     * This used to ask the room *types*: it collected the types of the picked
+     * rooms, kept the ones that allowed extra persons, and charged everybody
+     * `Math.max` of their rates. So a guest given the small room paid the big
+     * room's rate, and a resort whose rooms of one type differ in size — which
+     * is every resort — could not describe its inventory at all, so Sky Eco
+     * left the feature off and the box never appeared on a booking form.
+     *
+     * The beds go into the rooms that were picked, in the order they were
+     * picked, and each person is charged at the rate of the room they are
+     * actually sleeping in.
+     */
+    const extraBeds = this.spreadExtraBeds(roomRows, extraPersons);
 
     let discount: number;
     if (isAgent) {
@@ -352,7 +358,7 @@ export class BookingsService {
         remarks: input.remarks,
         state: isAgent ? "PENDING" : "CONFIRMED",
         extraPersons,
-        extraRate,
+        extraBeds,
         rooms: roomRows.map((r) => ({
           id: r.id,
           name: r.name,
@@ -407,6 +413,44 @@ export class BookingsService {
    * rate resolution (rate plan override → base), booking_nights materialization
    * (UNIQUE guard; P2002 → friendly 409), optional advance payment.
    */
+  /**
+   * Puts `people` extra beds into `rooms`, in order, at each room's own rate.
+   *
+   * Refuses by naming the room, because "extra persons not allowed" on a
+   * six-room booking is not a thing anyone can act on.
+   */
+  private spreadExtraBeds(
+    rooms: { id: number; name: string; extraPersonAllowed: boolean; extraPersonMax: number; extraPersonRate: unknown }[],
+    people: number,
+  ): { roomId: number; persons: number; rate: number }[] {
+    if (people <= 0) return [];
+
+    const capacity = rooms.reduce((n, r) => n + (r.extraPersonAllowed ? r.extraPersonMax : 0), 0);
+    if (capacity === 0) {
+      const named = rooms.map((r) => r.name).join(", ");
+      throw badRequest(
+        `No extra bed in ${named}. Set what the room takes on Rooms & Rates, or pick a room that has one.`,
+      );
+    }
+    if (people > capacity) {
+      throw badRequest(
+        `Those rooms take ${capacity} extra person${capacity === 1 ? "" : "s"}, not ${people}. Add another room or reduce the count.`,
+      );
+    }
+
+    const spread: { roomId: number; persons: number; rate: number }[] = [];
+    let left = people;
+    for (const room of rooms) {
+      if (left === 0) break;
+      const room_takes = room.extraPersonAllowed ? room.extraPersonMax : 0;
+      if (room_takes === 0) continue;
+      const persons = Math.min(left, room_takes);
+      spread.push({ roomId: room.id, persons, rate: Number(room.extraPersonRate) });
+      left -= persons;
+    }
+    return spread;
+  }
+
   async bookRoomsTx(tx: Prisma.TransactionClient, p: RoomBookingTxParams) {
     const nights = nightsBetween(p.checkIn, p.checkOut);
     const wanted = eachNight(p.checkIn, nights);
@@ -475,13 +519,17 @@ export class BookingsService {
       }
     }
 
-    if (p.extraPersons && p.extraPersons > 0 && (p.extraRate ?? 0) > 0) {
+    // one row per room, so the invoice can say which room the bed was in and
+    // the two rooms of a booking are not averaged into one price
+    for (const bed of p.extraBeds ?? []) {
+      if (bed.persons <= 0 || bed.rate <= 0) continue;
       await tx.bookingItem.create({
         data: {
           bookingId: created.id,
+          roomId: bed.roomId,
           itemKind: "EXTRA_PERSON",
-          qty: p.extraPersons * nights,
-          unitPrice: (p.extraRate ?? 0) as never,
+          qty: bed.persons * nights,
+          unitPrice: bed.rate as never,
         },
       });
     }
@@ -1291,7 +1339,7 @@ export class BookingsService {
           state: "CONFIRMED",
           groupTag,
           extraPersons: 0,
-          extraRate: 0,
+          extraBeds: [],
           rooms: [{ id: room.id, name: room.name, roomTypeId: room.roomTypeId, baseRate: Number(room.baseRate) }],
           advancePayment:
             input.advancePerRoom && input.advancePerRoom > 0

@@ -9,6 +9,7 @@ class CreateRoomTypeDto {
   @IsOptional() @IsInt() @Min(0) maxChildren?: number;
   @IsOptional() @IsBoolean() extraPersonAllowed?: boolean;
   @IsOptional() @IsNumber() @Min(0) extraPersonRate?: number;
+  @IsOptional() @IsInt() @Min(0) extraPersonMax?: number;
   @IsOptional() amenities?: string[];
 }
 
@@ -18,6 +19,7 @@ class UpdateRoomTypeDto {
   @IsOptional() @IsInt() @Min(0) maxChildren?: number;
   @IsOptional() @IsBoolean() extraPersonAllowed?: boolean;
   @IsOptional() @IsNumber() @Min(0) extraPersonRate?: number;
+  @IsOptional() @IsInt() @Min(0) extraPersonMax?: number;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 
@@ -27,7 +29,14 @@ class CreateRoomDto {
   @IsNumber() @Min(0) baseRate!: number;
 }
 
-class UpdateRoomDto {
+/** What a single room takes, which its type can only suggest. */
+class ExtraBedDto {
+  @IsOptional() @IsBoolean() extraPersonAllowed?: boolean;
+  @IsOptional() @IsNumber() @Min(0) extraPersonRate?: number;
+  @IsOptional() @IsInt() @Min(0) extraPersonMax?: number;
+}
+
+class UpdateRoomDto extends ExtraBedDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsNumber() @Min(0) baseRate?: number;
   @IsOptional() @IsEnum(["ACTIVE", "OUT_OF_SERVICE"]) status?: "ACTIVE" | "OUT_OF_SERVICE";

@@ -94,12 +94,24 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   );
   const roomTypes: RoomTypeLite[] = typesQ.data?.roomTypes ?? [];
 
-  const pickedTypes = grid
-    .filter((r) => picked.includes(r.roomId))
-    .map((r) => roomTypes.find((t) => t.id === r.roomTypeId))
-    .filter(Boolean);
-  const extraAllowed = pickedTypes.some((t) => t?.extraPersonAllowed);
-  const extraRate = Math.max(0, ...pickedTypes.map((t) => Number(t?.extraPersonRate ?? 0)));
+  /**
+   * Extra beds come from the picked rooms, not their types.
+   *
+   * A type covering nine rooms of different sizes could not say which of them
+   * takes a third bed or what it is worth, so the resort left the switch off
+   * and this box never appeared. Each room now carries its own count and rate:
+   * the beds fill the picked rooms in order, and the API charges each person at
+   * the rate of the room they are in — so the figure shown here is the sum of
+   * what the first `extraPersons` beds actually cost, not one rate times a
+   * count.
+   */
+  const pickedRooms = grid.filter((r) => picked.includes(r.roomId));
+  const bedSlots = pickedRooms.flatMap((r) =>
+    r.extraPersonAllowed ? Array.from({ length: r.extraPersonMax ?? 0 }, () => Number(r.extraPersonRate ?? 0)) : [],
+  );
+  const extraAllowed = bedSlots.length > 0;
+  const extraMax = bedSlots.length;
+  const extraCost = bedSlots.slice(0, extraPersons).reduce((sum, rate) => sum + rate, 0);
 
 
   const [walkIn, setWalkIn] = useState(false);
@@ -249,8 +261,21 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Field label="Adults"><Input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} /></Field>
           <Field label="Children"><Input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} /></Field>
           {extraAllowed && (
-            <Field label="Extra persons" hint={`+${money(extraRate)} / person / night`}>
-              <Input type="number" min={0} value={extraPersons} onChange={(e) => setExtraPersons(Math.max(0, Number(e.target.value)))} />
+            <Field
+              label="Extra persons"
+              hint={
+                extraPersons > 0
+                  ? `+${money(extraCost)} / night — ${extraMax} bed${extraMax === 1 ? "" : "s"} in these rooms`
+                  : `${extraMax} extra bed${extraMax === 1 ? "" : "s"} in these rooms`
+              }
+            >
+              <Input
+                type="number"
+                min={0}
+                max={extraMax}
+                value={extraPersons}
+                onChange={(e) => setExtraPersons(Math.min(extraMax, Math.max(0, Number(e.target.value))))}
+              />
             </Field>
           )}
           {isStaff && (
