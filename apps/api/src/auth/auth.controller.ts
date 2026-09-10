@@ -16,17 +16,6 @@ export class LoginDto {
   @IsString() @MinLength(6) password!: string;
 }
 
-class OtpRequestDto {
-  @IsOptional() @IsString() @MaxLength(32) phone?: string;
-  @IsOptional() @IsString() @MaxLength(191) email?: string;
-}
-
-class OtpVerifyDto {
-  @IsOptional() @IsString() @MaxLength(32) phone?: string;
-  @IsOptional() @IsString() @MaxLength(191) email?: string;
-  @IsString() @MaxLength(8) code!: string;
-}
-
 class SetPasswordDto {
   @IsString() @MinLength(8) newPassword!: string;
   @IsOptional() @IsString() currentPassword?: string;
@@ -64,24 +53,6 @@ export class PublicAuthController {
     return this.auth.loginWithPassword(id ?? "", dto.password);
   }
 
-  @Post("otp/request")
-  @HttpCode(200)
-  requestOtp(@Body() dto: OtpRequestDto) {
-    if (!dto.phone && !dto.email) {
-      throw Object.assign(new Error("phone or email required"), { status: 400 });
-    }
-    return this.auth.requestOtp({ phone: dto.phone, email: dto.email });
-  }
-
-  @Post("otp/verify")
-  @HttpCode(200)
-  verifyOtp(@Body() dto: OtpVerifyDto) {
-    if (!dto.phone && !dto.email) {
-      throw Object.assign(new Error("phone or email required"), { status: 400 });
-    }
-    return this.auth.verifyOtp({ phone: dto.phone, email: dto.email }, dto.code);
-  }
-
   /** Public self-serve onboarding: tenant + resort + admin account. */
   @Post("signup")
   @HttpCode(201)
@@ -91,7 +62,7 @@ export class PublicAuthController {
 
   /**
    * The deliberate replacement for OTP-as-password-recovery: a locked-out
-   * staff member has no session yet, so this — like login and OTP above —
+   * staff member has no session yet, so this — like login and signup above —
    * has to sit on the unauthenticated controller, not beside `me/password`.
    */
   @Post("password/forgot")

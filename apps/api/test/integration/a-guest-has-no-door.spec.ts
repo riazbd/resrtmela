@@ -18,8 +18,10 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, UnauthorizedException, type ExecutionContext } from "@nestjs/common";
+import { ROLE, type Role } from "@rh/shared";
 import { AppModule } from "../../src/app.module";
+import { AuthGuard, signToken } from "../../src/common/auth.guard";
 import { testDatabaseUrl, testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
 import type { PrismaClient } from "@rh/db";
 
@@ -52,6 +54,105 @@ describe("the resort-website API", () => {
 
     const rbac = await import("../../src/common/rbac");
     expect("apiKeyClaims" in rbac).toBe(false);
+  });
+});
+
+/**
+ * The account behind the doors.
+ *
+ * Removing the routes a guest used leaves the thing they signed in as: a
+ * `users` row with role GUEST, minted by `verifyOtp` for any phone or email
+ * that asked for a code. The owner's decision of 2026-09-11 is that a guest
+ * is a line in a resort's register, never an account — so the role goes from
+ * the code, from the database, and from any session still carrying it.
+ */
+describe("the guest account", () => {
+  it("is not a role anybody can hold", () => {
+    expect("GUEST" in ROLE).toBe(false);
+  });
+
+  it("cannot be minted by a code, because there is no code", async () => {
+    const auth = await import("../../src/auth/auth.service");
+    const proto = auth.AuthService.prototype as unknown as Record<string, unknown>;
+
+    expect("requestOtp" in proto).toBe(false);
+    expect("verifyOtp" in proto).toBe(false);
+  });
+
+  /**
+   * The shared constant is what the code agrees on; the column is what the
+   * database will actually keep. Taking GUEST out of one and not the other
+   * would leave the database willing to hold an account no code can name.
+   *
+   * The insert is run on a session pinned to strict mode on purpose. The
+   * local MySQL runs with an empty `sql_mode`, and a lax server does not
+   * refuse an out-of-enum value — it stores `''` with a warning. Production's
+   * MariaDB is strict by default, so pinning the session asks the question
+   * production would ask, instead of whatever the machine running the suite
+   * happens to be configured for.
+   */
+  it("will not be held by the database", async () => {
+    const db = testPrisma();
+    try {
+      await expect(
+        db.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
+          await tx.$executeRawUnsafe(
+            "INSERT INTO `users` (`name`, `phone`, `role`) VALUES ('A guest', '+8801799999001', 'GUEST')",
+          );
+        }),
+      ).rejects.toThrow(/Data truncated for column 'role'/);
+
+      const [column] = await db.$queryRawUnsafe<{ t: string }[]>(
+        "SELECT CAST(COLUMN_TYPE AS CHAR) AS t FROM information_schema.COLUMNS " +
+          "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'",
+      );
+      // the control: the query found the column, so its silence on GUEST means something
+      expect(column?.t).toContain("'AGENT'");
+      expect(column?.t).not.toContain("'GUEST'");
+    } finally {
+      await db.$executeRawUnsafe("DELETE FROM `users` WHERE `phone` = '+8801799999001'");
+      await db.$disconnect();
+    }
+  });
+});
+
+/**
+ * A session outlives the account it was minted for.
+ *
+ * `AuthGuard` trusts the signed token alone — no lookup, seven days to run —
+ * so deleting every GUEST account does not end a GUEST session issued the
+ * day before the deploy. The guard is where that token is stopped: a role
+ * the platform no longer has is refused, in words the person holding it can
+ * read, and a staff token is let through exactly as before.
+ */
+describe("a guest session minted before the deploy", () => {
+  const guard = new AuthGuard();
+  const knock = (token: string) => {
+    const req = { headers: { authorization: `Bearer ${token}` } };
+    const ctx = { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
+    return () => guard.canActivate(ctx);
+  };
+
+  it("is refused at the guard with a sentence, not waved through", () => {
+    const stale = signToken({ userId: 1, role: "GUEST" as unknown as Role, resortIds: [] });
+
+    let refusal: unknown;
+    try {
+      knock(stale)();
+    } catch (err) {
+      refusal = err;
+    }
+    expect(refusal).toBeInstanceOf(UnauthorizedException);
+    expect((refusal as UnauthorizedException).getStatus()).toBe(401);
+    // not the generic "Invalid or expired token": the signature is good, and
+    // the person deserves to be told what is actually wrong
+    expect((refusal as UnauthorizedException).message).toMatch(/no longer/i);
+  });
+
+  it("while a staff token still passes", () => {
+    const desk = signToken({ userId: 2, role: ROLE.FRONT_DESK, resortIds: [7] });
+    expect(knock(desk)()).toBe(true);
   });
 });
 
@@ -119,7 +220,8 @@ describe("every door, walked over HTTP", () => {
   /**
    * Every route the three removed controllers declared, method and path as
    * written in `guest.controller.ts`, `public-api.controller.ts` and
-   * `intents.controller.ts`. Params are filled with a real, seeded id where
+   * `intents.controller.ts` — and the two OTP routes on `auth.controller.ts`
+   * that minted the account those doors were for. Params are filled with a real, seeded id where
    * the handler runs far enough to look one up before this task (so the
    * pre-deletion answer is not itself an accidental 404); everywhere else —
    * every route behind `AuthGuard`, and the API-key routes — the guard or
@@ -155,6 +257,12 @@ describe("every door, walked over HTTP", () => {
     { name: "POST /payments/webhook/:provider", method: "POST", path: () => "/payments/webhook/mock" },
     { name: "POST /mock-checkout/:ref/confirm", method: "POST", path: () => "/mock-checkout/999999/confirm" },
     { name: "GET /payments/:ref/status", method: "GET", path: () => "/payments/999999/status" },
+    // auth.controller.ts — @Controller("auth"), the two routes that minted a
+    // guest account from a code. The controller itself stays (login, signup
+    // and the password reset live on it), so these are the one pair of doors
+    // in this list whose building is still standing.
+    { name: "POST /auth/otp/request", method: "POST", path: () => "/auth/otp/request" },
+    { name: "POST /auth/otp/verify", method: "POST", path: () => "/auth/otp/verify" },
   ];
 
   for (const door of doors) {

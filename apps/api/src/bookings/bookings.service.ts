@@ -201,9 +201,6 @@ export class BookingsService {
     // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
 
-    if (claims.role === ROLE.GUEST) {
-      throw forbid("Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.");
-    }
     if (claims.userId === SYSTEM_ACTOR_ID) {
       throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
     }

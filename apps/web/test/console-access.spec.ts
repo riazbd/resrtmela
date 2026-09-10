@@ -29,12 +29,6 @@ describe("the console's front door", () => {
     expect(consoleGate({ loading: false, me: null, activeResort: null })).toBe("login");
   });
 
-  it("sends a guest to the login page — the console is not for them", () => {
-    expect(
-      consoleGate({ loading: false, me: { role: "GUEST" }, activeResort: null }),
-    ).toBe("login");
-  });
-
   it("lets staff in when they have a resort to work in", () => {
     expect(
       consoleGate({ loading: false, me: { role: "MANAGER" }, activeResort: resort }),

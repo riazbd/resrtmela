@@ -5,35 +5,32 @@
  * agencies, never directly to a traveller: a guest is a row in a resort's
  * register, not an account with a login. Every door that let a stranger
  * browse, book or pay as themselves is gone — `guest.controller.ts`,
- * `public-api.controller.ts` and the payment intents behind them are all
- * deleted; `a-guest-has-no-door.spec.ts` proves they answer 404, not merely
- * refuse.
+ * `public-api.controller.ts` and the payment intents behind them — and so is
+ * the login code that minted a guest account in the first place. There is no
+ * GUEST role left to hold: not in `ROLE`, not in the `users.role` column.
+ * `a-guest-has-no-door.spec.ts` proves each of those absences.
  *
- * This file used to prove those doors refused a guest's booking rather than
- * silently taking it — including the shipped mobile app's Book button and a
- * resort's own website posting through its API key. With both doors gone
- * there is nothing left at either threshold to test that way, so this file
- * now proves the rule at the layer both of them used to reach through:
- * `bookings.create` sells for the resort's own desk and for an agency, and
- * still refuses a `ROLE.GUEST` claim and a claim carrying `SYSTEM_ACTOR_ID`.
+ * This file proves the rule those doors used to reach through, at
+ * `bookings.create`: the resort's own desk sells, an agency sells, and a
+ * claim with nobody behind it is refused.
  *
- * Neither refusal is a guard left standing against a door that no longer
- * exists. OTP login (`auth.service.ts`, `verifyOtp`) still mints a `GUEST`
- * user for any phone or email it has not seen before — that path is untouched
- * by this task — and that account's token passes `AuthGuard` exactly like any
- * other. `POST /bookings` on `BookingsController` carries no role guard of
- * its own; `bookings.create` is the only thing standing between a `GUEST`
- * token and a held room. A later task removes OTP and the `GUEST` role
- * themselves and will update this file again when that check goes — until
- * then it is live, and this proves it.
+ * It used to prove one more thing — that `bookings.create` refused a
+ * `ROLE.GUEST` claim by name. That check is gone, because nothing can carry
+ * the role any more, with one exception: a session signed before the deploy
+ * still verifies for up to seven days. So one describe below follows such a
+ * session the whole way. `AuthGuard` refuses it first; and if it somehow got
+ * past, `bookings.create` would refuse it anyway — it names no resort, and
+ * holds no permission in one — without holding a night.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { UnauthorizedException, type ExecutionContext } from "@nestjs/common";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
 import { makeBookingsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { SYSTEM_ACTOR_ID } from "../../src/common/rbac";
-import { ROLE, type JwtClaims } from "@rh/shared";
+import { AuthGuard, signToken } from "../../src/common/auth.guard";
+import { ROLE, type JwtClaims, type Role } from "@rh/shared";
 
 const prisma = testPrisma();
 const asPrismaService = prisma as unknown as PrismaService;
@@ -41,26 +38,7 @@ let fx: Fixture;
 
 const bookings = () => makeBookingsService(asPrismaService);
 
-const GUEST_MESSAGE = "Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.";
 const SYSTEM_ACTOR_MESSAGE = "Online booking is off. This resort takes bookings at its desk or through its agents.";
-
-/**
- * A guest account, the way OTP login still leaves one today.
- *
- * `verifyOtp` mints a `ROLE.GUEST` user for any phone or email it has not
- * seen before, and this task did not touch it. `resortIds` is set here
- * rather than left `[]` on purpose: a real OTP-issued guest token never
- * names a resort, so it would be stopped by the ordinary `requireSellingAccess`
- * gate before reaching the `ROLE.GUEST` check this test is actually about —
- * which would end up proving the wrong rule. Granting resort access isolates
- * the one thing under test.
- */
-async function aGuestClaims(phone: string): Promise<JwtClaims> {
-  const user = await prisma.user.create({
-    data: { name: "App Guest", phone, role: "GUEST", status: "active" },
-  });
-  return { userId: user.id, role: ROLE.GUEST, resortIds: [fx.resortId] };
-}
 
 const STAY = { checkIn: "2027-03-01", checkOut: "2027-03-03" };
 const OTHER_STAY = { checkIn: "2027-04-01", checkOut: "2027-04-03" };
@@ -109,59 +87,64 @@ describe("who can still sell", () => {
   });
 });
 
-describe("a guest claim reaching bookings.create directly", () => {
-  it("is refused", async () => {
-    const claims = await aGuestClaims("8801799000001");
-
-    await expect(
-      bookings().create(claims, {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Should Not Book", phone: "8801799000001" },
-      }),
-    ).rejects.toMatchObject({ status: 403 });
+describe("a guest session signed before the deploy", () => {
+  /**
+   * What such a token carries. The account it was minted for was deleted by
+   * `20260911110000_no_guest_accounts`, so its id belongs to nobody — any id
+   * no seeded user holds stands in for it. The role has to be cast: it is
+   * exactly the value the type no longer admits.
+   */
+  const staleGuest = (resortIds: number[]): JwtClaims => ({
+    userId: 424242,
+    role: "GUEST" as unknown as Role,
+    resortIds,
   });
 
-  it("is told the exact sentence, not the generic access refusal", async () => {
-    /**
-     * `/resort|desk|agent/i` used to stand in for this. "No access to this
-     * resort" — the message `requireSellingAccess` throws for anyone with no
-     * link to the resort at all — matches that pattern too, so the loose
-     * regex would keep passing even with the `ROLE.GUEST` check deleted
-     * outright. Pinning the exact sentence is what makes this test about the
-     * refusal it claims to be about.
-     */
-    const claims = await aGuestClaims("8801799000002");
+  const aBooking = (phone: string) => ({
+    resortId: fx.resortId,
+    roomIds: [fx.rooms[0]!.id],
+    ...STAY,
+    adults: 2,
+    children: 0,
+    guest: { fullName: "Should Not Book", phone },
+  });
 
+  it("is stopped at the guard, before it reaches any booking", () => {
+    const req = { headers: { authorization: `Bearer ${signToken(staleGuest([]))}` } };
+    const ctx = { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
+
+    expect(() => new AuthGuard().canActivate(ctx)).toThrow(UnauthorizedException);
+  });
+
+  it("would still be refused by bookings.create if it got past — it names no resort", async () => {
+    /**
+     * `issueToken` fills `resortIds` from `user_resorts`, and a guest never
+     * had a row there, so this is the shape a real guest token had. The
+     * refusal is the ordinary one anyone with no link to the resort meets.
+     */
+    await expect(bookings().create(staleGuest([]), aBooking("8801799000001"))).rejects.toMatchObject({
+      status: 403,
+      message: "No access to this resort",
+    });
+  });
+
+  it("and holds no permission to sell even where it names the resort", async () => {
+    /**
+     * Naming the resort is deliberate: it gets the claim past
+     * `requireSellingAccess`, so the permission check behind it is what
+     * answers. A role that is not a role holds no permission anywhere — which
+     * is the rule the deleted `ROLE.GUEST` check was standing in for.
+     */
     await expect(
-      bookings().create(claims, {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Should Not Book", phone: "8801799000002" },
-      }),
-    ).rejects.toMatchObject({ status: 403, message: GUEST_MESSAGE });
+      bookings().create(staleGuest([fx.resortId]), aBooking("8801799000002")),
+    ).rejects.toMatchObject({ status: 403, message: "Missing permission: bookings.create" });
   });
 
   it("holds no night and leaves no guest record — a refusal must not act like a sale", async () => {
-    const claims = await aGuestClaims("8801799000003");
     const guestsBefore = await prisma.guest.count();
 
-    await bookings()
-      .create(claims, {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Should Not Book", phone: "8801799000003" },
-      })
-      .catch(() => undefined);
+    await bookings().create(staleGuest([]), aBooking("8801799000003")).catch(() => undefined);
+    await bookings().create(staleGuest([fx.resortId]), aBooking("8801799000004")).catch(() => undefined);
 
     expect(await prisma.bookingNight.count()).toBe(0);
     expect(await prisma.booking.count()).toBe(0);
@@ -177,7 +160,7 @@ describe("a claim with no human behind it reaching bookings.create directly", ()
    * route it served are both deleted, and `public-api.spec.ts` went with
    * them, which left this refusal in `bookings.create` with nothing proving
    * it any more. The check itself is untouched — the plan keeps it — so it
-   * is proven here the same way the `ROLE.GUEST` refusal above is: by
+   * is proven here the same way the stale guest session above is: by
    * constructing the claim directly, since no route can hand one out any
    * more.
    */

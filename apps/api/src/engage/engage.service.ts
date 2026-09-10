@@ -149,16 +149,20 @@ export class EngageService {
        * another resort demoted them platform-wide, and approving one from a
        * suspended account silently un-suspended it — a resort's own approval
        * screen undoing a platform ban.
+       *
+       * It also used to promote a GUEST applicant to an agency on the spot.
+       * There are no guest accounts any more (2026-09-11), so the only
+       * applicant approval can let in is one that is already an agency: this
+       * screen grants a resort to an agency, it does not make one.
        */
       const applicant = await this.prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
       if (applicant.status === "suspended") {
         throw badRequest("that account is suspended — the platform owner must lift it first");
       }
       if (applicant.role !== "AGENT") {
-        if (applicant.role !== "GUEST") {
-          throw badRequest("that account is staff at a resort and cannot also be an agency login");
-        }
-        await this.prisma.user.update({ where: { id: req.userId }, data: { role: "AGENT", status: "active" } });
+        throw badRequest(
+          "Only a travel agency's account can be approved to sell here, and this account is not one. It can stay as it is; nothing was changed.",
+        );
       }
       const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
       if (!linked) {

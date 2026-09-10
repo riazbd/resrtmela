@@ -23,8 +23,6 @@ export function consoleGate(state: {
 }): ConsoleGate {
   if (state.loading) return "loading";
   if (!state.me) return "login";
-  // guests use the app; the console would be a wall of things they cannot do
-  if (state.me.role === "GUEST") return "login";
   if (state.activeResort) return "ready";
   /**
    * The platform owner sells to resorts; an agent sells across them, and needs

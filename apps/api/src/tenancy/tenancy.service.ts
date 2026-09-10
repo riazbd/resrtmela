@@ -184,13 +184,13 @@ export class TenancyService {
 
     const roomCount = tenant.resorts.reduce((s, r) => s + r._count.rooms, 0);
     const guestCount = tenant.resorts.reduce((s, r) => s + r._count.guests, 0);
+    // every account linked to a resort is staff (or an agency selling it) — a
+    // guest is a row in the register, never a login, so there is nobody to leave out
     const staffUsers = await this.prisma.userResort.findMany({
       where: { resort: { tenantId } },
-      include: { user: { select: { role: true } } },
+      select: { userId: true },
     });
-    const staffIds = new Set(
-      staffUsers.filter((u) => u.user.role !== ROLE.GUEST).map((u) => u.userId),
-    );
+    const staffIds = new Set(staffUsers.map((u) => u.userId));
     const limits = await this.planLimits.forTenant(tenantId);
     return {
       tenantId,

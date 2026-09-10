@@ -10,7 +10,6 @@ export const ROLE = {
   FRONT_DESK: "FRONT_DESK",
   AGENT: "AGENT",
   HOUSEKEEPING: "HOUSEKEEPING",
-  GUEST: "GUEST",
 } as const;
 export type RoleKey = (typeof ROLE)[keyof typeof ROLE];
 export type Role = RoleKey;
