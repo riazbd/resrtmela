@@ -107,12 +107,11 @@ export type {
   Resort, Me, PermRole,
   BookingRow, BookingDetail, CalendarBooking,
   Room, RoomType, RatePlan, RoomAvail, AgentPricing,
-  GuestRow, GuestRoomType, GuestResort, GuestAvailability, GuestTrip,
+  GuestRow,
   Employee, PayrollSheet, FoodPackage, PLReport, ExpenseRow, ExpensePage, DuesReport, DaySheet,
   CmsRow, PlatformSettings, BillingSweepResult, ExportArchive,
   Page, PageRequest,
 } from "@rh/shared";
-import type { GuestResort, GuestAvailability, GuestTrip } from "@rh/shared";
 
 
 
@@ -154,29 +153,6 @@ export const dmy = (d: string | Date | null | undefined) =>
       });
 
 export const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-// ── guest web booking ──
-
-
-
-
-
-export const guestResorts = () => api<GuestResort[]>("/guest/resorts");
-export const guestResort = (id: number) => api<GuestResort>(`/guest/resorts/${id}`);
-export const guestAvailability = (id: number, from: string, to: string) =>
-  api<GuestAvailability[]>(`/guest/resorts/${id}/availability?from=${from}&to=${to}`);
-/**
- * There is no `guestBook`. A guest does not book directly — the resort's desk
- * and its agents do — and the API refuses the call, so a helper here would only
- * be a loaded gun for the next screen that wants one.
- */
-export const guestTrips = () => api<GuestTrip[]>("/guest/bookings");
-export const guestCancel = (id: number) =>
-  api<{ cancelled: boolean }>(`/guest/bookings/${id}/cancel`, { method: "POST" });
-export const guestOtpRequest = (phone: string) =>
-  api<{ sent: boolean; devCode?: string }>("/auth/otp/request", { method: "POST", body: { phone } });
-export const guestOtpVerify = (phone: string, code: string) =>
-  api<{ accessToken: string }>("/auth/otp/verify", { method: "POST", body: { phone, code } });
 
 // ── permissions ──
 

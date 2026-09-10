@@ -192,13 +192,6 @@ function LoginInner() {
               Sign in
             </Button>
           </form>
-          <div className="mt-6 rounded-xl bg-brand-50 px-4 py-3.5 text-xs leading-relaxed text-brand-800">
-            <b>Guest?</b> You don&apos;t need an account to book.{" "}
-            <Link href="/book" className="font-bold underline underline-offset-2">
-              Browse resorts & book here
-            </Link>
-            .
-          </div>
           <p className="mt-6 text-center text-[11px] text-slate-400">
             Staff, manager & agent sign-in · Resort Mela platform
           </p>

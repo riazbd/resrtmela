@@ -14,12 +14,10 @@ import {
   ArrowRight,
   Check,
   Star,
-  Globe,
   Smartphone,
   FileText,
   ShieldCheck,
   ChevronDown,
-  Plug,
   Menu,
   X,
   Bell,
@@ -258,8 +256,6 @@ export default function HomePage() {
             <a href="#features" className="hover:text-brand-700">Functionalities</a>
             <a href="#solutions" className="hover:text-brand-700">Solutions</a>
             <a href="#pricing" className="hover:text-brand-700">Pricing</a>
-            <a href="#api" className="hover:text-brand-700">API</a>
-            <Link href="/book" className="font-semibold text-brand-700 hover:text-brand-800">Book a stay</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link href="/login" className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">
@@ -279,7 +275,7 @@ export default function HomePage() {
         {menuOpen && (
           <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
             <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["#api", "API"], ["/book", "Book a stay"], ["/login", "Log in"]].map(([h, l]) => (
+              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["/login", "Log in"]].map(([h, l]) => (
                 <a key={h} href={h} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
                   {l}
                 </a>
@@ -519,43 +515,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── API ── */}
-      <section id="api" className="bg-white py-20">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 lg:grid-cols-2">
-          <div>
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">BOOKING API FOR YOUR WEBSITE</div>
-            <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
-              Already have a resort website? Keep it.
-            </h2>
-            <p className="mt-4 leading-relaxed text-slate-600">
-              Plug Resort Mela into your existing site — or embed our hosted booking page in minutes.
-              Live availability and rates from your console, bookings straight into your calendar. No commission, no middleman.
-            </p>
-            <ul className="mt-5 space-y-2.5 text-sm text-slate-700">
-              <li className="flex items-center gap-2"><Plug className="h-4 w-4 text-brand-600" /> REST API with per-resort keys</li>
-              <li className="flex items-center gap-2"><Globe className="h-4 w-4 text-brand-600" /> Hosted booking page you can embed</li>
-              <li className="flex items-center gap-2"><FileText className="h-4 w-4 text-brand-600" /> Availability, rates & booking endpoints</li>
-            </ul>
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-5 font-mono text-xs leading-relaxed shadow-xl">
-            <div className="mb-3 flex gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            </div>
-            <div><span className="text-slate-500"># check availability</span></div>
-            <div><span className="text-emerald-300">curl</span> https://backresort.rootcodebd.com/v1/availability \</div>
-            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_…&quot;</span></div>
-            <div className="mt-2 text-slate-500"># response</div>
-            <div className="text-sky-300">{"{"}</div>
-            <div className="pl-4 text-slate-300">&quot;roomType&quot;: <span className="text-emerald-300">&quot;Lunaria&quot;</span>,</div>
-            <div className="pl-4 text-slate-300">&quot;available&quot;: <span className="text-emerald-300">3</span>,</div>
-            <div className="pl-4 text-slate-300">&quot;pricePerNight&quot;: <span className="text-emerald-300">7500</span></div>
-            <div className="text-sky-300">{"}"}</div>
-          </div>
-        </div>
-      </section>
-
       {/* ── testimonials ── */}
       <section className="border-y border-slate-100 bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
@@ -612,7 +571,7 @@ export default function HomePage() {
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-500">
               The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
-              agents with wallets, and a booking API for your website.
+              and agents with wallets.
             </p>
             <div className="mt-4 text-xs text-slate-400">support@rootcodebd.com</div>
           </div>
@@ -622,7 +581,6 @@ export default function HomePage() {
               <a href="#features" className="hover:text-brand-700">Booking calendar</a>
               <a href="#features" className="hover:text-brand-700">Front desk & PMS</a>
               <a href="#features" className="hover:text-brand-700">Restaurant POS</a>
-              <a href="#api" className="hover:text-brand-700">Booking API</a>
             </div>
           </div>
           <div>
@@ -630,8 +588,6 @@ export default function HomePage() {
             <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-600">
               <Link href="/signup" className="hover:text-brand-700">Register</Link>
               <Link href="/login" className="hover:text-brand-700">Log in</Link>
-              <Link href="/book" className="hover:text-brand-700">Guest booking</Link>
-              <Link href="/book/trips" className="hover:text-brand-700">My trips</Link>
             </div>
           </div>
         </div>

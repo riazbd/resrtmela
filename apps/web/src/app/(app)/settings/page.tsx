@@ -137,7 +137,11 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
+// "API keys" is not on this list while nothing consumes a key: the resort-website
+// API went with the guest surface (2026-09-11 design, §4.3). The tab's code stays
+// so it can come back with the feature; a screen that mints a key opening nothing
+// is a lie told to a customer.
+const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "Your data"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, can } = useAuth();
@@ -305,7 +309,9 @@ export default function SettingsPage() {
       {tab === "Lists" && rid && <ListsTab rid={rid} />}
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
-      {tab === "API keys" && rid && <ApiKeysTab rid={rid} />}
+      {/* tab can never actually be "API keys" now it is off TABS — the cast
+          keeps this branch (and ApiKeysTab) compiling as dead code, not deleted */}
+      {(tab as string) === "API keys" && rid && <ApiKeysTab rid={rid} />}
       {tab === "Messages" && rid && <MessagesTab rid={rid} />}
       {tab === "Your data" && rid && <ExportTab rid={rid} name={d.name} />}
     </div>

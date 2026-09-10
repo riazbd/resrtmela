@@ -216,68 +216,6 @@ export interface GuestRow {
   lastStay: { code: string; checkIn: string | null; checkOut: string | null; state: string } | null;
 }
 
-// ─────────────────────── the public booking site ───────────────────────
-
-export interface GuestRoomType {
-  id: number;
-  name: string;
-  maxAdults: number;
-  maxChildren: number;
-  amenities?: string[];
-  priceFrom: number | null;
-  totalRooms?: number;
-}
-
-export interface GuestResort {
-  id: number;
-  name: string;
-  location: string | null;
-  /**
-   * How to reach the resort. Optional because the discovery list does not
-   * carry them — only the resort's own page, which is where a guest is told
-   * to call rather than book.
-   */
-  contactPhone?: string | null;
-  address?: string | null;
-  website?: string | null;
-  roomCount?: number;
-  roomTypes?: GuestRoomType[];
-  activities?: { id: number; name: string; category: string; price: number; durationMin: number }[];
-}
-
-export interface GuestAvailability {
-  roomTypeId: number;
-  name: string;
-  maxAdults: number;
-  maxChildren: number;
-  total: number;
-  available: number;
-  pricePerNight: number;
-}
-
-export interface GuestTrip {
-  id: number;
-  code: string;
-  resortId?: number;
-  resortName?: string;
-  resort?: { id: number; name: string; location: string | null };
-  state: string;
-  paymentState: string;
-  checkIn: string | null;
-  checkOut: string | null;
-  adults?: number;
-  children?: number;
-  rooms: (string | null)[];
-  remarks?: string | null;
-  activities?: { itemId: number; name: string; startsAt: string; endsAt: string; qty: number; unitPrice: number }[];
-  payments?: { id: number; amount: number; method: string; type: string; receivedAt: string }[];
-  nights: number;
-  rent: number;
-  discount: number;
-  paid: number;
-  due: number;
-}
-
 // ───────────────────────────── the front desk ─────────────────────────────
 
 export interface DaySheetCell {
