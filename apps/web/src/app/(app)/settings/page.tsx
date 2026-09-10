@@ -7,7 +7,7 @@ import { ErrorState } from "@/components/error-state";
 import { Tabs } from "@/components/patterns";
 import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
-import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
+import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 
@@ -137,7 +137,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
+const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, can } = useAuth();
@@ -302,6 +302,7 @@ export default function SettingsPage() {
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
       {tab === "Permissions" && rid && <RolesTab rid={rid} />}
       {tab === "Agent access" && rid && <AccessTab rid={rid} />}
+      {tab === "Lists" && rid && <ListsTab rid={rid} />}
       {tab === "Activity log" && rid && <ActivityTab rid={rid} />}
       {tab === "Discounts" && rid && <DiscountsTab rid={rid} />}
       {tab === "API keys" && rid && <ApiKeysTab rid={rid} />}
@@ -333,6 +334,172 @@ const TEMPLATE_LABELS: Record<string, string> = {
  * customer. The message the guest sees is the most visible part of the
  * product, and it was the part the resort had least say over.
  */
+interface OptionRow {
+  id: number;
+  code: string;
+  label: string;
+  active: boolean;
+}
+
+/**
+ * The lists a resort owns.
+ *
+ * `options.service.ts`, its lists and its migration all shipped without a
+ * screen, so the registry's promise — "editable, extendable, no migration and
+ * no deploy" — was true of the API and false of the product. Nobody could
+ * change a payment method or a booking source from the console, and expense
+ * categories were not a list at all: they were a `groupBy` over whatever had
+ * been typed into past expenses, so "Salaries", "salary" and "Salery" were
+ * three categories for ever, and three rows in every report.
+ */
+function ListsTab({ rid }: { rid: number }) {
+  const [list, setList] = useState<string>("EXPENSE_CATEGORY");
+  const [code, setCode] = useState("");
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const qc = useQueryClient();
+  const { push } = useToast();
+
+  const listsQ = useApi(["option-lists"], () => api<{ name: string; label: string }[]>("/option-lists"), {
+    staleTime: 3_600_000,
+  });
+  const rowsQ = useApi(["options", rid, list], () => api<OptionRow[]>(`/resorts/${rid}/options/${list}`));
+
+  async function act(work: () => Promise<unknown>) {
+    setBusy(true);
+    setErr("");
+    try {
+      await work();
+      await qc.invalidateQueries({ queryKey: ["options", rid, list] });
+    } catch (e) {
+      setErr(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const tidy = (v: string) => v.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+
+  const add = () =>
+    act(async () => {
+      await api(`/resorts/${rid}/options/${list}`, {
+        method: "POST",
+        body: { code: tidy(code), label: label.trim() },
+      });
+      push(`${label.trim()} added`);
+      setCode("");
+      setLabel("");
+    });
+
+  const rows = rowsQ.data ?? null;
+
+  return (
+    <div className="mt-5 space-y-4">
+      <Card title="Which list">
+        <div className="flex flex-wrap gap-2">
+          {(listsQ.data ?? []).map((l) => (
+            <button
+              key={l.name}
+              onClick={() => setList(l.name)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                list === l.name ? "bg-brand-600 text-white" : "border border-slate-300 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          These are yours to change. Renaming one leaves everything already filed under it where it
+          is; hiding one keeps the history and stops it being offered again.
+        </p>
+      </Card>
+
+      {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
+
+      <Card title="Add to this list">
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Name people will see">
+            <Input
+              value={label}
+              onChange={(e) => {
+                setLabel(e.target.value);
+                if (!code.trim()) setCode(e.target.value);
+              }}
+              placeholder="Boat fuel"
+            />
+          </Field>
+          <Field label="Code — fixed once saved">
+            <Input value={tidy(code)} onChange={(e) => setCode(e.target.value)} placeholder="BOAT_FUEL" className="font-mono" />
+          </Field>
+          <Button onClick={add} loading={busy} disabled={!label.trim() || !code.trim()}>Add</Button>
+        </div>
+      </Card>
+
+      <Card title="On this list">
+        {rows === null ? (
+          <Spinner />
+        ) : rows.length === 0 ? (
+          <Empty msg="Nothing on this list yet" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <Th>Name</Th>
+                  <Th>Code</Th>
+                  <Th>Shown</Th>
+                  <Th> </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((o) => (
+                  <tr key={o.id} className="border-t border-slate-100">
+                    <Td>
+                      <input
+                        defaultValue={o.label}
+                        onBlur={(e) => {
+                          const next = e.target.value.trim();
+                          if (next && next !== o.label) {
+                            void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "PATCH", body: { label: next } }));
+                          }
+                        }}
+                        className="w-full rounded-lg border border-transparent px-2 py-1 hover:border-slate-300 focus:border-brand-400 focus:outline-none"
+                      />
+                    </Td>
+                    <Td className="font-mono text-xs text-slate-400">{o.code}</Td>
+                    <Td>
+                      <button
+                        onClick={() => void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "PATCH", body: { active: !o.active } }))}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${o.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
+                      >
+                        {o.active ? "shown" : "hidden"}
+                      </button>
+                    </Td>
+                    <Td>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Remove "${o.label}"? Anything already filed under it keeps the code.`)) {
+                            void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "DELETE" }));
+                          }
+                        }}
+                        className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        Remove
+                      </button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function MessagesTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<TemplateRow[]>([]);

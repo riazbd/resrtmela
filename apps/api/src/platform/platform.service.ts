@@ -755,7 +755,16 @@ export class PlatformService {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
     const rows = await this.prisma.userResort.findMany({
-      where: { resortId },
+      /**
+       * The platform is not a member of anybody's staff.
+       *
+       * A super admin's account is linked to a resort — that is how they get an
+       * active resort at all — so this returned "Platform Owner" inside the
+       * resort's own team list, with a role the resort did not grant. The list
+       * is what the resort manages, and anything on it looks like theirs to
+       * change.
+       */
+      where: { resortId, user: { role: { not: "SUPER_ADMIN" } } },
       include: {
         user: {
           // no wallet here: it is the agency's account with the platform, and

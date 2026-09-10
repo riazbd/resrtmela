@@ -10,7 +10,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
+import { makeExpensesService, makeBookingsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import type { BookingsService } from "../../src/bookings/bookings.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
@@ -64,12 +64,7 @@ describe("a suspended resort", () => {
 
   it("cannot record expenses", async () => {
     await suspend();
-    const expenses = new ExpensesService(
-      asPrismaService,
-      new AuditService(asPrismaService),
-      new PermissionsService(asPrismaService),
-      new TenantStateService(asPrismaService),
-    );
+    const expenses = makeExpensesService(asPrismaService);
 
     await expect(
       expenses.create(claims, fx.resortId, { date: "2026-08-15", category: "Test", amount: 500 }),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { client, money, cur } from "@/lib/api";
+import { api, client, money, cur } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
@@ -32,9 +32,21 @@ export default function ExpensesPage() {
   );
   // the category list barely changes; an hour of staleness saves a request on
   // every day the user pages through
+  /**
+   * The categories the resort keeps, not the ones somebody happened to type.
+   *
+   * This used to read `expenses/categories`, which was a `groupBy` over the
+   * expense rows: a category could not exist until it had been spent on, and
+   * "Salaries" / "salary" / "Salery" stayed three of them for ever — three rows
+   * in every report that groups by category. They are a list the owner edits in
+   * Settings -> Lists now, and the API refuses one that is not on it.
+   */
   const categoriesQ = useApi(
     keys.expenseCategories(activeResort?.id),
-    () => client.expenses.categories(activeResort!.id) as unknown as Promise<{ category: string }[]>,
+    () =>
+      api<{ code: string; label: string; active: boolean }[]>(
+        `/resorts/${activeResort!.id}/options/EXPENSE_CATEGORY`,
+      ),
     { enabled: !!activeResort, staleTime: 3_600_000 },
   );
 
@@ -43,7 +55,7 @@ export default function ExpensesPage() {
   // with more entries than one page still shows the true figure
   const dayTotal = listQ.data?.summary.amount ?? 0;
   const entryCount = listQ.data?.total ?? 0;
-  const categories = (categoriesQ.data ?? []).map((x) => x.category);
+  const categories = (categoriesQ.data ?? []).filter((x) => x.active);
   const loading = listQ.isPending;
 
   const refresh = () => {
@@ -111,18 +123,14 @@ export default function ExpensesPage() {
         <Card title="নতুন খরচ / New entry">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="খরচের খাত / Category">
-              <>
-                <Input
-                  list="expense-categories"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="সবজি, নাস্তা, মুদি দোকান…"
-                  className="!w-56"
-                />
-                <datalist id="expense-categories">
-                  {categories.map((c) => <option key={c} value={c} />)}
-                </datalist>
-              </>
+              <Select value={category} onChange={(e) => setCategory(e.target.value)} className="!w-56">
+                <option value="">খাত বাছুন / Pick a category</option>
+                {categories.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field label="বিবরণ / Details">
               <Input value={details} onChange={(e) => setDetails(e.target.value)} className="!w-48" />

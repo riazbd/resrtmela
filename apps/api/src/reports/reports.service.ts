@@ -118,12 +118,43 @@ export class ReportsService {
   }
 
   /** Profit & Loss statement: separate resort / restaurant columns + payroll, per date range. */
-  async pl(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
+  /**
+   * The period a report covers when nobody named one.
+   *
+   * The Reports screen opens on "All time" and sends neither date, and these
+   * three reports cannot honour "all time": `pl` caps at 400 days and `daily`
+   * at 120, because both load every booking in the window, and
+   * `idleInventory` divides by the number of days. They used to answer the
+   * missing parameter with a 500 — `dateOnly(undefined)` — which is three of
+   * the six tabs on that screen broken on a resort with data in it.
+   *
+   * Thirty days ending today: one number, inside every cap, and the answer
+   * carries the dates back so a screen can say what it is showing.
+   */
+  private static readonly DEFAULT_DAYS = 30;
+
+  private period(fromStr?: string, toStr?: string): { from: Date; to: Date; fromStr: string; toStr: string } {
+    const day = 86_400_000;
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const resolvedTo = toStr ?? iso(new Date(Date.now() + day));
+    const resolvedFrom =
+      fromStr ?? iso(new Date(Date.parse(resolvedTo) - ReportsService.DEFAULT_DAYS * day));
+    return {
+      from: dateOnly(resolvedFrom),
+      to: dateOnly(resolvedTo),
+      fromStr: resolvedFrom,
+      toStr: resolvedTo,
+    };
+  }
+
+  async pl(claims: JwtClaims, resortId: number, fromStr?: string, toStr?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.pl");
     const taxRules = await this.tax.rulesFor(resortId);
-    const from = dateOnly(fromStr);
-    const to = dateOnly(toStr);
+    const period = this.period(fromStr, toStr);
+    const { from, to } = period;
+    fromStr = period.fromStr;
+    toStr = period.toStr;
     if (to <= from) throw badRequest("to must be after from");
     // `daily` has always capped its range; this one pulled a decade of bookings
     // into memory if asked
@@ -241,11 +272,10 @@ export class ReportsService {
    * A room parked for a year is the largest silent expense a small resort has,
    * and nothing in the owner's spreadsheet puts a number on it.
    */
-  async idleInventory(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
+  async idleInventory(claims: JwtClaims, resortId: number, fromStr?: string, toStr?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
-    const from = dateOnly(fromStr);
-    const to = dateOnly(toStr);
+    const { from, to } = this.period(fromStr, toStr);
     if (to <= from) throw badRequest("to must be after from");
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
 
@@ -299,11 +329,10 @@ export class ReportsService {
   }
 
   /** Daily revenue rows (sheet tabs 7/11) for a date range. */
-  async daily(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
+  async daily(claims: JwtClaims, resortId: number, fromStr?: string, toStr?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
-    const from = dateOnly(fromStr);
-    const to = dateOnly(toStr);
+    const { from, to } = this.period(fromStr, toStr);
     if (to <= from) throw badRequest("to must be after from");
     if ((to.getTime() - from.getTime()) / 86400000 > 120) {
       throw badRequest("max 120 days per query");

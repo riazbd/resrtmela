@@ -10,7 +10,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeRoomsService } from "../helpers/services";
+import { makeExpensesService, makeRoomsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { RoomsService } from "../../src/rooms/rooms.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
@@ -25,12 +25,7 @@ let fx: Fixture;
 
 const rooms = () => makeRoomsService(asPrismaService);
 const expenses = () =>
-  new ExpensesService(
-    asPrismaService,
-    new AuditService(asPrismaService),
-    new PermissionsService(asPrismaService),
-    new TenantStateService(asPrismaService),
-  );
+  makeExpensesService(asPrismaService);
 
 /** A user whose access comes from a custom role holding exactly `permissions`. */
 async function userWithPermissions(

@@ -7,6 +7,7 @@ import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { TenantStateService } from "../common/tenant-state.service";
 import { PermissionsService } from "../common/permissions";
+import { OptionsService } from "../options/options.service";
 
 @Injectable()
 export class ExpensesService {
@@ -14,6 +15,7 @@ export class ExpensesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(OptionsService) private readonly options: OptionsService,
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
   ) {}
 
@@ -84,6 +86,9 @@ export class ExpensesService {
     await this.tenantState.assertWritable(resortId);
     await this.perms.require(claims, resortId, "expenses.create");
     if (data.amount <= 0) throw badRequest("amount must be > 0");
+    // the same guard payments run through: a category is one the resort keeps,
+    // not whatever was typed, or the reports grow a row per spelling
+    await this.options.assertAccepted(resortId, "EXPENSE_CATEGORY", data.category);
     const exp = await this.prisma.expense.create({
       data: {
         resortId,

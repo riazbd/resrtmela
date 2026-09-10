@@ -51,8 +51,8 @@ export class ReportsController {
   idleInventory(
     @Req() req: AuthedRequest,
     @Param("resortId", ParseIntPipe) resortId: number,
-    @Query("from") from: string,
-    @Query("to") to: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
     return this.reports.idleInventory(req.user, resortId, from, to);
   }
@@ -61,8 +61,8 @@ export class ReportsController {
   daily(
     @Req() req: AuthedRequest,
     @Param("resortId", ParseIntPipe) resortId: number,
-    @Query("from") from: string,
-    @Query("to") to: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
     return this.reports.daily(req.user, resortId, from, to);
   }
@@ -71,8 +71,8 @@ export class ReportsController {
   pl(
     @Req() req: AuthedRequest,
     @Param("resortId", ParseIntPipe) resortId: number,
-    @Query("from") from: string,
-    @Query("to") to: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
     return this.reports.pl(req.user, resortId, from, to);
   }

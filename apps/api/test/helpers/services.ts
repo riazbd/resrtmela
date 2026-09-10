@@ -214,6 +214,7 @@ export function makeExpensesService(prisma: PrismaService): ExpensesService {
     prisma,
     new AuditService(prisma),
     new PermissionsService(prisma),
+    makeOptionsService(prisma),
     new TenantStateService(prisma),
   );
 }

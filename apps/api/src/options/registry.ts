@@ -53,6 +53,31 @@ export const OPTION_LISTS = {
       { code: "OTHER", label: "Other" },
     ],
   },
+
+  /**
+   * What a resort spends money on. Read by the expenses screen and every
+   * report that groups by category.
+   *
+   * These used to be derived with a `groupBy` over the expense rows, so the
+   * list was a memory of whatever anyone had typed: nothing could be added
+   * before it was used, nothing renamed, and "Salaries" / "salary" / "Salery"
+   * stayed three categories for ever — and three rows in every report.
+   */
+  EXPENSE_CATEGORY: {
+    label: "Expense categories",
+    reserved: [] as string[],
+    defaults: [
+      { code: "SALARY", label: "Salary & wages" },
+      { code: "FOOD", label: "Food & kitchen" },
+      { code: "UTILITY", label: "Electricity, gas & water" },
+      { code: "MAINTENANCE", label: "Repairs & maintenance" },
+      { code: "TRANSPORT", label: "Transport & fuel" },
+      { code: "SUPPLIES", label: "Housekeeping supplies" },
+      { code: "MARKETING", label: "Marketing" },
+      { code: "RENT", label: "Rent" },
+      { code: "OTHER", label: "Other" },
+    ],
+  },
 } as const;
 
 export type OptionList = keyof typeof OPTION_LISTS;

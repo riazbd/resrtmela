@@ -175,7 +175,7 @@ describe("the two sides cannot see each other", () => {
   it("keeps the resort's costs out of the agency's books", async () => {
     await makeExpensesService(asPrismaService).create(manager, fx.resortId, {
       date: "2026-09-01",
-      category: "Diesel",
+      category: "TRANSPORT",
       amount: 5000,
     });
 
