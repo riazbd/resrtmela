@@ -43,6 +43,10 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Thursday and Friday: the two days this market prices differently. */
 const WEEKEND = new Set([4, 5]);
+
+/** A hairline where the week turns over, so the eye has somewhere to land. */
+const weekEdge = (day: string) =>
+  new Date(`${day}T12:00:00Z`).getUTCDay() === 6 ? "border-l border-slate-200" : "";
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function AgencyCalendarPage() {
@@ -210,7 +214,7 @@ export default function AgencyCalendarPage() {
             <table className="border-separate border-spacing-0 text-xs">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
+                  <th className="sticky left-0 z-10 border-r border-slate-200 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
                     Room
                   </th>
                   {/* The numbers alone gave no way to tell Thursday from
@@ -272,7 +276,7 @@ export default function AgencyCalendarPage() {
                   );
                   return (
                     <tr key={room.id}>
-                      <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-0.5 pr-3 font-medium text-slate-700">
+                      <td className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 bg-white py-0.5 pr-3 font-medium text-slate-700">
                         {room.name}
                         {room.roomTypeName && (
                           <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
@@ -280,7 +284,11 @@ export default function AgencyCalendarPage() {
                       </td>
                       {runs.map((run) =>
                         run.value ? (
-                          <td key={run.from} colSpan={run.nights} className="p-[1px]">
+                          <td
+                            key={run.from}
+                            colSpan={run.nights}
+                            className={`p-[1px] ${weekEdge(run.from)}`}
+                          >
                             <div
                               title={
                                 run.value.mine
@@ -289,8 +297,8 @@ export default function AgencyCalendarPage() {
                                     ? `Taken — ${run.value.guestName}`
                                     : "Taken"
                               }
-                              className={`flex h-6 items-center overflow-hidden rounded px-1.5 ${
-                                run.value.mine ? "bg-brand-500 text-white" : "bg-slate-300"
+                              className={`flex h-7 items-center overflow-hidden rounded px-1.5 ${
+                                run.value.mine ? "bg-brand-600 text-white" : "bg-slate-300"
                               }`}
                             >
                               {run.value.mine && run.nights > 1 && (
@@ -367,7 +375,7 @@ function FreeNights({
           anchor?.roomId === room.id &&
           freeSpan(cells, room.id, anchor.night, night) !== null;
         return (
-          <td key={night} className="p-[1px]">
+          <td key={night} className={`p-[1px] ${weekEdge(night)}`}>
             <button
               type="button"
               onClick={() => onPick(room.id, night)}
@@ -376,12 +384,12 @@ function FreeNights({
                   ? `${room.name}: ${anchor.night} → ${night}`
                   : `${room.name} free on ${night} — click, then the last night`
               }
-              className={`block h-6 w-full rounded-sm border transition ${
+              className={`block h-7 w-full rounded-sm border transition ${
                 isAnchor
-                  ? "border-brand-500 bg-brand-200"
+                  ? "border-brand-500 bg-brand-300"
                   : reachable
-                    ? "border-brand-300 bg-brand-50"
-                    : "border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+                    ? "border-brand-300 bg-brand-100"
+                    : "border-slate-200/70 bg-slate-50 hover:border-brand-400 hover:bg-brand-100"
               }`}
             />
           </td>

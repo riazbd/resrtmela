@@ -94,8 +94,15 @@ export default function CalendarPage() {
    * It is drawn as a band across the row instead. Retired rooms really are
    * gone, and the API leaves them out.
    */
-  const rooms = useMemo(() => roomsQ.data ?? [], [roomsQ.data]);
-  const sellable = useMemo(() => rooms.filter((r) => r.status === "ACTIVE"), [rooms]);
+  const all = useMemo(() => roomsQ.data ?? [], [roomsQ.data]);
+  const sellable = useMemo(() => all.filter((r) => r.status === "ACTIVE"), [all]);
+  // what can be sold first; the rest sink to the bottom, still visible. A desk
+  // reads this screen for tonight, and a maintenance room interleaved between
+  // two sellable ones is four rows of hatching in the way of the answer.
+  const rooms = useMemo(
+    () => [...sellable, ...all.filter((r) => r.status !== "ACTIVE")],
+    [all, sellable],
+  );
   const bookings: CalendarBooking[] = useMemo(() => calQ.data?.bookings ?? [], [calQ.data]);
   const loading = roomsQ.isPending || calQ.isPending;
   const error = roomsQ.error ?? calQ.error;
@@ -194,7 +201,20 @@ export default function CalendarPage() {
           <p className="p-6 text-sm text-slate-500">No rooms yet — add them under Rooms.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse">
+            {/*
+              Only the room column is given a width. In a fixed layout, space
+              left over is shared out among the columns that ask for none — so
+              every day column comes out identical, whatever a bar spanning
+              four of them contains. Giving all of them a width instead shares
+              the surplus in proportion, and the days drifted apart.
+            */}
+            <table className="w-full min-w-[860px] table-fixed border-collapse">
+              <colgroup>
+                <col className="w-[150px]" />
+                {days.map((day) => (
+                  <col key={day} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
                   <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -207,7 +227,7 @@ export default function CalendarPage() {
                     return (
                       <th
                         key={day}
-                        className={`min-w-[38px] border-b border-slate-200 px-1 py-1.5 text-center ${
+                        className={`border-b border-slate-200 px-1 py-1.5 text-center ${
                           weekStart ? "border-l border-l-slate-300" : ""
                         } ${isToday ? "bg-brand-50" : ""}`}
                       >
@@ -279,10 +299,8 @@ export default function CalendarPage() {
                         <td colSpan={days.length} className="border-b border-slate-100 p-0.5">
                           <div
                             title={`${room.name} is out of service — it cannot be sold`}
-                            className="flex h-9 items-center rounded-md bg-[repeating-linear-gradient(45deg,#f1f5f9,#f1f5f9_6px,#e2e8f0_6px,#e2e8f0_12px)] px-2 text-[11px] font-semibold text-slate-400"
-                          >
-                            Out of service
-                          </div>
+                            className="h-9 rounded-md bg-[repeating-linear-gradient(45deg,#f8fafc,#f8fafc_6px,#eef2f7_6px,#eef2f7_12px)]"
+                          />
                         </td>
                       </tr>
                     );
@@ -303,22 +321,36 @@ export default function CalendarPage() {
                       </td>
 
                       {runs.map((run) => {
-                        const weekStart = weekdayOf(run.from) === 6;
-                        const edge = weekStart ? "border-l border-l-slate-300" : "";
+                        const edge = weekdayOf(run.from) === 6 ? "border-l border-l-slate-300" : "";
                         if (!run.value) {
-                          return (
-                            <td
-                              key={run.from}
-                              colSpan={run.nights}
-                              className={`border-b border-slate-100 p-0.5 ${edge}`}
-                            >
-                              <button
-                                onClick={() => bookRun(room.id, run.from, run.nights)}
-                                title={`${room.name} free — ${run.nights} night${run.nights === 1 ? "" : "s"} from ${run.from}`}
-                                className="h-9 w-full rounded-md bg-slate-50 transition hover:bg-brand-50 hover:ring-1 hover:ring-inset hover:ring-brand-300"
-                              />
-                            </td>
-                          );
+                          /**
+                           * Free nights stay one cell each.
+                           *
+                           * Merging them was the wrong call and looked it: a
+                           * row with nothing booked became a single pale bar
+                           * fourteen days wide, which took the column grid and
+                           * the week lines with it — the body of the table
+                           * stopped lining up with its own header. A stay is
+                           * one thing and reads as one bar; an empty night is
+                           * one night, and one thing to click.
+                           */
+                          return Array.from({ length: run.nights }, (_, i) => {
+                            const night = addDaysIso(run.from, i);
+                            return (
+                              <td
+                                key={night}
+                                className={`border-b border-slate-100 p-0.5 ${
+                                  weekdayOf(night) === 6 ? "border-l border-l-slate-300" : ""
+                                }`}
+                              >
+                                <button
+                                  onClick={() => bookRun(room.id, night, 1)}
+                                  title={`${room.name} free on ${night}`}
+                                  className="h-9 w-full rounded bg-slate-50 transition hover:bg-brand-100 hover:ring-1 hover:ring-inset hover:ring-brand-400"
+                                />
+                              </td>
+                            );
+                          });
                         }
                         const b = run.value;
                         const look = BAR[b.state] ?? BAR.CONFIRMED!;
