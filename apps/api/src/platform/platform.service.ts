@@ -1206,7 +1206,7 @@ export class PlatformService {
     return this.discounts.bestFor(resortId, roomTypeId, rent, at, roomId);
   }
 
-  // ─────────────────── api keys + public api ───────────────────
+  // ─────────────────── api keys ───────────────────
 
   async listApiKeys(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
@@ -1239,53 +1239,6 @@ export class PlatformService {
     await this.prisma.apiKey.update({ where: { id: BigInt(id) }, data: { active: false } });
     await this.audit.log({ actorId: claims.userId, resortId: row.resortId, action: "apikey.revoke", entity: "api_key", entityId: id });
     return { ok: true };
-  }
-
-  /** returns resortId when the X-Api-Key is valid, else null */
-  async authenticateApiKey(rawKey: string | undefined): Promise<number | null> {
-    if (!rawKey || !rawKey.includes(".")) return null;
-    const [prefix, secret] = rawKey.split(".");
-    if (!prefix || !secret) return null;
-    const row = await this.prisma.apiKey.findUnique({ where: { prefix } });
-    if (!row || !row.active) return null;
-    const hash = createHash("sha256").update(secret).digest("hex");
-    if (hash !== row.keyHash) return null;
-    await this.prisma.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
-    return row.resortId;
-  }
-
-  /** guest-style availability for a resort (public API) */
-  async publicAvailability(resortId: number, from?: string, to?: string) {
-    const roomTypes = await this.prisma.roomType.findMany({
-      where: { resortId, active: true },
-      include: { rooms: { where: { status: "ACTIVE" } } },
-    });
-    const overlapping = from && to ? await this.prisma.bookingItem.findMany({
-      where: {
-        room: { resortId },
-        booking: { state: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }, deletedAt: null, checkIn: { lt: new Date(to) }, checkOut: { gt: new Date(from) } },
-      },
-      select: { roomId: true },
-    }) : [];
-    const busy = new Set(overlapping.map((o) => o.roomId));
-    return roomTypes.map((t) => ({
-      roomTypeId: t.id,
-      name: t.name,
-      maxAdults: t.maxAdults,
-      maxChildren: t.maxChildren,
-      extraPersonAllowed: t.extraPersonAllowed,
-      extraPersonRate: Number(t.extraPersonRate),
-      total: t.rooms.length,
-      available: t.rooms.filter((r) => !busy.has(r.id)).length,
-      pricePerNight: t.rooms.length ? Number(t.rooms[0]!.baseRate) : null,
-    }));
-  }
-
-  async publicResort(resortId: number) {
-    return this.prisma.resort.findUnique({
-      where: { id: resortId },
-      select: { id: true, name: true, location: true, checkInTime: true, checkOutTime: true, address: true, website: true, contactPhone: true },
-    });
   }
 
   /** admin approves an agent booking whose full-payment deadline has passed */

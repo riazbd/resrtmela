@@ -20,10 +20,8 @@ import {
   makeBookingsService,
   makeNotificationsService,
   makeEngageService,
-  makeGuestService,
   makeTenancyService,
   makePlatformService,
-  makeIntentsService,
   makeImportService,
   makeActivitiesService,
 } from "../helpers/services";
@@ -31,7 +29,6 @@ import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ActivitiesService } from "../../src/activities/activities.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
-import { normalizePhone, phoneKey } from "../../src/common/dates";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
 const prisma = testPrisma();
@@ -145,38 +142,6 @@ describe("adding an activity to a booking", () => {
 
     const after = await prisma.activitySlot.findUniqueOrThrow({ where: { id: theirSlot.id } });
     expect(after.bookedCount).toBe(0);
-  });
-});
-
-describe("a guest with no phone number", () => {
-  it("is not handed every other phone-less guest's stays", async () => {
-    const guests = makeGuestService(asPrisma);
-    // a walk-in at their resort, taken without a phone: the code writes ""
-    const emptyKey = phoneKey(normalizePhone(""));
-    const theirWalkIn = await prisma.guest.create({
-      data: {
-        resortId: theirs.resortId,
-        fullName: "Their walk-in",
-        phone: "",
-        phoneKey: emptyKey,
-      },
-    });
-    await prisma.booking.create({
-      data: {
-        code: "THEIRS-WK", resortId: theirs.resortId, guestId: theirWalkIn.id,
-        checkIn: new Date("2026-11-01T00:00:00Z"), checkOut: new Date("2026-11-03T00:00:00Z"),
-        adults: 2, state: "CONFIRMED",
-      },
-    });
-    // someone who signed up with an email address, so their user row has no phone
-    const emailOnly = await prisma.user.create({
-      data: { name: "Email signup", email: "someone@example.com", role: "GUEST", status: "active" },
-    });
-
-    const trips = await guests.trips({ userId: emailOnly.id, role: ROLE.GUEST, resortIds: [] });
-
-    // nothing at all: this user has never stayed anywhere
-    expect(trips).toEqual([]);
   });
 });
 
@@ -299,32 +264,6 @@ describe("the activity log", () => {
     const trace = await prisma.auditLog.findFirst({ where: { action: "auditlog.delete" } });
     expect(trace).not.toBeNull();
     expect(JSON.stringify(trace!.diff)).toContain("expense.delete");
-  });
-});
-
-describe("the mock gateway's confirm button", () => {
-  it("will not settle a booking for someone who has nothing to do with it", async () => {
-    const intents = makeIntentsService(asPrisma);
-    const booking = await seedBooking(prisma as unknown as PrismaClient, ours, {
-      checkIn: "2026-11-01", checkOut: "2026-11-03",
-    });
-    const session = await intents.createCheckout(usManager, booking.id, {
-      method: "BKASH", amount: 1000,
-    });
-
-    // a signed-in stranger — an agent at the other resort — with the reference
-    const stranger: JwtClaims = {
-      userId: theirs.agentId, role: ROLE.AGENT, resortIds: [theirs.resortId],
-    };
-    await expect(
-      intents.confirmMock(stranger, session.providerRef, "trx-1"),
-    ).rejects.toMatchObject({ status: 403 });
-
-    const after = await prisma.paymentIntent.findUniqueOrThrow({
-      where: { providerRef: session.providerRef },
-    });
-    expect(after.status).toBe("pending");
-    expect(await prisma.payment.count({ where: { bookingId: booking.id } })).toBe(0);
   });
 });
 

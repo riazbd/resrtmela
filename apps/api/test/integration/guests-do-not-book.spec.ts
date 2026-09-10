@@ -1,50 +1,55 @@
 /**
- * A guest cannot book directly.
+ * A room is held only by the resort's desk or by an agency.
  *
- * This is a business decision, not a technical one, and it is worth writing
- * down because the code used to say the opposite in as many words. Until now
- * `bookings.create` refused a guest with "Guests book via the mobile app flow
- * (phase 4)" — the desk's door was shut, and the app's door was the one left
- * open. That app flow went straight to `bookRoomsTx`, so a stranger with a
- * verified phone could take a room out of a resort's inventory without anyone
- * at the resort being asked. The room was held on `PENDING`, which blocks, and
- * the resort found out afterwards.
+ * On 2026-09-11 the owner decided this platform sells to resorts and travel
+ * agencies, never directly to a traveller: a guest is a row in a resort's
+ * register, not an account with a login. Every door that let a stranger
+ * browse, book or pay as themselves is gone — `guest.controller.ts`,
+ * `public-api.controller.ts` and the payment intents behind them are all
+ * deleted; `a-guest-has-no-door.spec.ts` proves they answer 404, not merely
+ * refuse.
  *
- * The platform is a medium. A stay is sold by the resort's desk or by an agent,
- * and those two are now the only ways a room can be held.
- *
- * The refusals below are deliberately refusals rather than deleted routes. The
- * mobile app is frozen and shipped, and it still has a Book button: a 404 gives
- * whoever taps it a broken screen, while a 403 carrying a sentence gives them
- * something to read and a phone to call. The web console's own booking UI is
- * ours to change and loses the button outright, so only stale clients ever see
- * these messages.
+ * This file used to prove those doors refused a guest's booking rather than
+ * silently taking it — including the shipped mobile app's Book button and a
+ * resort's own website posting through its API key. With both doors gone
+ * there is nothing left at the threshold to test that way, so this file now
+ * proves the rule that survived them, at the one layer still standing:
+ * `bookings.create` sells for the resort's own desk and for an agency, and
+ * still refuses a `ROLE.GUEST` claim that reaches it directly. No route can
+ * construct that claim any more, but the check itself has not been deleted
+ * — so it is proven here rather than assumed silent. A later task retires the
+ * guest role itself and will update this file again when that check goes.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
-import { makeGuestService, makeBookingsService } from "../helpers/services";
+import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { makeBookingsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
-import { apiKeyClaims } from "../../src/common/rbac";
-import { normalizePhone, phoneKey } from "../../src/common/dates";
-import { ROLE } from "@rh/shared";
+import { ROLE, type JwtClaims } from "@rh/shared";
 
 const prisma = testPrisma();
 const asPrismaService = prisma as unknown as PrismaService;
 let fx: Fixture;
 
-const guests = () => makeGuestService(asPrismaService);
 const bookings = () => makeBookingsService(asPrismaService);
 
-/** A verified guest account, the way the OTP flow leaves one. */
-async function aGuestUser(phone: string) {
+/**
+ * A verified guest account, the way the (now-deleted) OTP flow used to leave
+ * one — the row can still exist; nothing that reaches it can any more.
+ * `resortIds` includes the resort deliberately, so the claim clears the
+ * ordinary access gate and the assertion below is about the `ROLE.GUEST`
+ * check specifically, not about a claim that was never allowed near the
+ * resort at all.
+ */
+async function aGuestClaims(phone: string): Promise<JwtClaims> {
   const user = await prisma.user.create({
     data: { name: "App Guest", phone, role: "GUEST", status: "active" },
   });
-  return { userId: user.id, role: ROLE.GUEST, resortIds: [] as number[] };
+  return { userId: user.id, role: ROLE.GUEST, resortIds: [fx.resortId] };
 }
 
 const STAY = { checkIn: "2027-03-01", checkOut: "2027-03-03" };
+const OTHER_STAY = { checkIn: "2027-04-01", checkOut: "2027-04-03" };
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
@@ -55,167 +60,89 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe("a guest asking to book from the app", () => {
+describe("who can still sell", () => {
+  it("the resort's own desk", async () => {
+    const desk: JwtClaims = { userId: fx.managerId, role: ROLE.MANAGER, resortIds: [fx.resortId] };
+
+    const created = await bookings().create(desk, {
+      resortId: fx.resortId,
+      roomIds: [fx.rooms[0]!.id],
+      ...STAY,
+      adults: 2,
+      children: 0,
+      guest: { fullName: "Walk In", phone: "8801744444444" },
+      source: "DIRECT",
+    });
+
+    expect(created.code).toMatch(/^BK-\d{5}$/);
+    expect(await prisma.bookingNight.count()).toBe(2);
+  });
+
+  it("an agency selling this resort", async () => {
+    const agency: JwtClaims = { userId: fx.agentId, role: ROLE.AGENT, resortIds: [fx.resortId] };
+
+    const created = await bookings().create(agency, {
+      resortId: fx.resortId,
+      roomIds: [fx.rooms[1]!.id],
+      ...OTHER_STAY,
+      adults: 2,
+      children: 0,
+      guest: { fullName: "Agency Client", phone: "8801799999999" },
+    });
+
+    expect(created.code).toMatch(/^BK-\d{5}$/);
+    expect(await prisma.bookingNight.count()).toBe(2);
+  });
+});
+
+describe("a guest claim reaching bookings.create directly", () => {
   it("is refused", async () => {
-    const claims = await aGuestUser("8801799000001");
+    const claims = await aGuestClaims("8801799000001");
 
     await expect(
-      guests().createBooking(claims, {
+      bookings().create(claims, {
         resortId: fx.resortId,
-        items: [{ roomTypeId: fx.roomTypeId, qty: 1 }],
+        roomIds: [fx.rooms[0]!.id],
         ...STAY,
         adults: 2,
         children: 0,
+        guest: { fullName: "Should Not Book", phone: "8801799000001" },
       }),
     ).rejects.toMatchObject({ status: 403 });
   });
 
   it("is told how a room is actually booked, because a frozen app can only show the message", async () => {
-    const claims = await aGuestUser("8801799000002");
+    const claims = await aGuestClaims("8801799000002");
 
     await expect(
-      guests().createBooking(claims, {
+      bookings().create(claims, {
         resortId: fx.resortId,
-        items: [{ roomTypeId: fx.roomTypeId, qty: 1 }],
+        roomIds: [fx.rooms[0]!.id],
         ...STAY,
         adults: 2,
         children: 0,
+        guest: { fullName: "Should Not Book", phone: "8801799000002" },
       }),
     ).rejects.toThrow(/resort|desk|agent/i);
   });
 
-  it("leaves the room on sale — the refusal must not hold a night on the way out", async () => {
-    const claims = await aGuestUser("8801799000003");
+  it("holds no night and leaves no guest record — a refusal must not act like a sale", async () => {
+    const claims = await aGuestClaims("8801799000003");
+    const guestsBefore = await prisma.guest.count();
 
-    await guests()
-      .createBooking(claims, {
+    await bookings()
+      .create(claims, {
         resortId: fx.resortId,
-        items: [{ roomTypeId: fx.roomTypeId, qty: 1 }],
+        roomIds: [fx.rooms[0]!.id],
         ...STAY,
         adults: 2,
         children: 0,
+        guest: { fullName: "Should Not Book", phone: "8801799000003" },
       })
       .catch(() => undefined);
 
     expect(await prisma.bookingNight.count()).toBe(0);
     expect(await prisma.booking.count()).toBe(0);
-  });
-
-  it("creates no guest record, so a refused stranger leaves no trace in the resort's book", async () => {
-    const claims = await aGuestUser("8801799000004");
-    const before = await prisma.guest.count();
-
-    await guests()
-      .createBooking(claims, {
-        resortId: fx.resortId,
-        items: [{ roomTypeId: fx.roomTypeId, qty: 1 }],
-        ...STAY,
-        adults: 2,
-        children: 0,
-      })
-      .catch(() => undefined);
-
-    expect(await prisma.guest.count()).toBe(before);
-  });
-});
-
-describe("a resort's own website posting to the public API", () => {
-  it("is refused too — an API key sells nothing a guest could not", async () => {
-    await expect(
-      bookings().create(apiKeyClaims(fx.resortId), {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Website Guest", phone: "8801722222222" },
-        source: "APP",
-      }),
-    ).rejects.toMatchObject({ status: 403 });
-  });
-
-  it("holds no night when it is turned away", async () => {
-    await bookings()
-      .create(apiKeyClaims(fx.resortId), {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Website Guest", phone: "8801722222222" },
-        source: "APP",
-      })
-      .catch(() => undefined);
-
-    expect(await prisma.bookingNight.count()).toBe(0);
-  });
-});
-
-describe("what a guest keeps", () => {
-  it("can still find a resort", async () => {
-    const found = await guests().discover();
-
-    expect(found.map((r) => r.id)).toContain(fx.resortId);
-  });
-
-  it("is given the number to ring, because the page now tells them to ring it", async () => {
-    /**
-     * Telling a guest to call the resort is only an answer if the resort's
-     * number is on the page. It was not: `resortDetail` returned rooms, prices
-     * and activities and no way to reach anybody. Closing the Book button
-     * without this would have left the page a dead end.
-     */
-    await prisma.resort.update({
-      where: { id: fx.resortId },
-      data: { contactPhone: "8801811111111" },
-    });
-
-    const detail = await guests().resortDetail(fx.resortId);
-
-    expect(detail.contactPhone).toBe("8801811111111");
-  });
-
-  it("can still see what is free before ringing up", async () => {
-    const claims = await aGuestUser("8801799000005");
-
-    const avail = await guests().availability(claims, fx.resortId, STAY.checkIn, STAY.checkOut);
-
-    expect(avail).toBeTruthy();
-  });
-
-  it("can still see the trip the desk booked for them", async () => {
-    const phone = normalizePhone("8801711111111");
-    const claims = await aGuestUser(phone);
-    // the desk's guest row and the app account are the same person, and the
-    // only thing that says so is the phone key
-    await prisma.guest.update({
-      where: { id: fx.guestId },
-      data: { phone, phoneKey: phoneKey(phone) },
-    });
-    await seedBooking(prisma as unknown as PrismaClient, fx, STAY);
-
-    const trips = await guests().trips(claims);
-
-    expect(trips.length).toBeGreaterThan(0);
-  });
-});
-
-describe("who can still sell", () => {
-  it("the desk, for the very nights the guest was refused", async () => {
-    const created = await bookings().create(
-      { userId: fx.managerId, role: ROLE.MANAGER, resortIds: [fx.resortId] },
-      {
-        resortId: fx.resortId,
-        roomIds: [fx.rooms[0]!.id],
-        ...STAY,
-        adults: 2,
-        children: 0,
-        guest: { fullName: "Walk In", phone: "8801744444444" },
-        source: "DIRECT",
-      },
-    );
-
-    expect(created.code).toMatch(/^BK-\d{5}$/);
-    expect(await prisma.bookingNight.count()).toBe(2);
+    expect(await prisma.guest.count()).toBe(guestsBefore);
   });
 });

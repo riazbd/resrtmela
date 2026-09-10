@@ -32,17 +32,14 @@ import { SalesService } from "../../src/agent/sales.service";
 import { AgencyGuestsService } from "../../src/agent/agency-guests.service";
 import { AgencyCalendarService } from "../../src/agent/agency-calendar.service";
 import { EngageService } from "../../src/engage/engage.service";
-import { GuestService } from "../../src/guest/guest.service";
 import { TenancyService } from "../../src/tenancy/tenancy.service";
 import { ImportService } from "../../src/import/import.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
 import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
 import { ReportsService } from "../../src/reports/reports.service";
-import { IntentsService } from "../../src/payments/intents.service";
 import { OptionsService } from "../../src/options/options.service";
 import { TaxService } from "../../src/common/tax.service";
-import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 import { PasswordResetService } from "../../src/auth/password-reset.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
@@ -189,15 +186,6 @@ export function makeReportsService(prisma: PrismaService): ReportsService {
   return new ReportsService(prisma, new PermissionsService(prisma), makeTaxService(prisma), makeCommissionService(prisma));
 }
 
-export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
-  return new IntentsService(
-    prisma,
-    makeBookingsService(prisma),
-    makeNotificationsService(prisma),
-    gateway ?? new MockGateway(),
-  );
-}
-
 export function makeAgentService(prisma: PrismaService): AgentService {
   return new AgentService(prisma, new AgencyContextService(prisma));
 }
@@ -258,19 +246,6 @@ export function makeEngageService(prisma: PrismaService): EngageService {
     new PermissionsService(prisma),
     makePlatformSettings(prisma),
     makePlanLimits(prisma),
-  );
-}
-
-export function makeGuestService(prisma: PrismaService): GuestService {
-  const audit = new AuditService(prisma);
-  return new GuestService(
-    prisma,
-    makeBookingsService(prisma),
-    makeRoomsService(prisma),
-    makeActivitiesService(prisma),
-    makeNotificationsService(prisma),
-    audit,
-    makeTaxService(prisma),
   );
 }
 

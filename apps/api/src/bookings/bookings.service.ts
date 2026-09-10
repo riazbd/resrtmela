@@ -201,20 +201,6 @@ export class BookingsService {
     // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
 
-    /**
-     * A guest does not book. Neither does a website standing in for one.
-     *
-     * The first line used to promise "the mobile app flow (phase 4)" — an app
-     * path that held rooms without asking the resort. That path is closed, so
-     * the promise had to go with it.
-     *
-     * The second is the public v1 API, authenticated by a resort's own API key.
-     * It has no human behind it: `apiKeyClaims` mints RESORT_ADMIN with
-     * SYSTEM_ACTOR_ID precisely because nobody at the desk pressed anything.
-     * That is a booking form on a website, which is a guest booking directly
-     * however it reaches us. The key still reads — a resort's site can show its
-     * rooms and its free nights — it just cannot close the sale.
-     */
     if (claims.role === ROLE.GUEST) {
       throw forbid("Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.");
     }

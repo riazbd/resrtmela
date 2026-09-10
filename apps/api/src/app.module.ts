@@ -18,7 +18,6 @@ import { TaxModule } from "./common/tax.module";
 import { ImportModule } from "./import/import.module";
 import { ExportModule } from "./export/export.module";
 import { AgentModule } from "./agent/agent.module";
-import { GuestModule } from "./guest/guest.module";
 import { ActivitiesModule } from "./activities/activities.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { ReportsModule } from "./reports/reports.module";
@@ -45,7 +44,6 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     ImportModule,
     ExportModule,
     AgentModule,
-    GuestModule,
     ActivitiesModule,
     NotificationsModule,
     ReportsModule,
@@ -65,11 +63,13 @@ export class AppModule implements NestModule {
     /**
      * Every door that opens without a token, not just the auth one.
      *
-     * The limiter covered `auth` alone, which left the payment webhook, the
-     * whole guest app and the public booking API unmetered — and those are the
-     * routes reachable by anyone on the internet. `cms` serves the marketing
-     * homepage's copy and is read by every visitor.
+     * `guest`, `v1` and the payment webhook used to be on this list too — the
+     * guest app, the resort-website API and the gateway callback behind it,
+     * all reachable by anyone on the internet with no token to rate-limit by
+     * name. The 2026-09-11 decision removed all three; `cms` is what is left
+     * that answers without one, and it serves the marketing homepage's copy
+     * to every visitor.
      */
-    consumer.apply(RateLimitMiddleware).forRoutes("auth", "guest", "v1", "payments/webhook", "cms");
+    consumer.apply(RateLimitMiddleware).forRoutes("auth", "cms");
   }
 }
