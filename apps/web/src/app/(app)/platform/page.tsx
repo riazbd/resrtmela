@@ -423,31 +423,79 @@ export default function PlatformPage() {
       {/* ── subscriptions calendar ── */}
       {tab === "Calendar" && (
         <div className="mt-5">
-          <div className="mb-3 flex items-center gap-3">
-            <button onClick={() => shiftMonth(-1)} className="rounded-lg border border-slate-300 p-2 hover:bg-slate-50"><ChevronLeft className="h-4 w-4" /></button>
-            <div className="text-lg font-bold">{month}</div>
-            <button onClick={() => shiftMonth(1)} className="rounded-lg border border-slate-300 p-2 hover:bg-slate-50"><ChevronRight className="h-4 w-4" /></button>
-            <span className="text-xs text-slate-400">subscription renewals & dues by date</span>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <button onClick={() => shiftMonth(-1)} className="rounded-lg border border-slate-300 p-2 hover:bg-slate-50" aria-label="Previous month"><ChevronLeft className="h-4 w-4" /></button>
+            <div className="min-w-[9rem] text-center text-lg font-bold">
+              {new Date(`${month}-01T12:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}
+            </div>
+            <button onClick={() => shiftMonth(1)} className="rounded-lg border border-slate-300 p-2 hover:bg-slate-50" aria-label="Next month"><ChevronRight className="h-4 w-4" /></button>
+            {/* What the month is worth, before anyone counts squares. */}
+            <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+              <span className="text-slate-500">
+                <b className="tabular-nums text-amber-700">{money((cal ?? []).reduce((n, c) => n + c.dues, 0))}</b> falling due
+              </span>
+              <span className="text-slate-500">
+                <b className="tabular-nums text-sky-700">{(cal ?? []).reduce((n, c) => n + c.renewals, 0)}</b> renewals
+              </span>
+            </div>
           </div>
           <div className="grid grid-cols-7 gap-1.5">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="p-1 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">{d}</div>
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+              <div
+                key={d}
+                className={`p-1 text-center text-[10px] font-bold uppercase tracking-wider ${
+                  // Thursday and Friday are this market's weekend
+                  i === 4 || i === 5 ? "text-amber-600" : "text-slate-400"
+                }`}
+              >
+                {d}
+              </div>
             ))}
             {cal && (() => {
               const [y, m] = month.split("-").map(Number);
-              const first = new Date(y!, m! - 1, 1).getDay();
-              const days = new Date(y!, m!, 0).getDate();
-              const cells = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+              const first = new Date(Date.UTC(y!, m! - 1, 1)).getUTCDay();
+              const length = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+              const days: (number | null)[] = [
+                ...Array(first).fill(null),
+                ...Array.from({ length }, (_, i) => i + 1),
+              ];
+              // finish the last week, so the month is a rectangle rather than a
+              // ragged edge that reads as a rendering fault
+              while (days.length % 7 !== 0) days.push(null);
               const byDay = new Map(cal.map((c) => [Number(c.date.slice(8)), c]));
-              return cells.map((day, i) => {
+              const todayIso = new Date().toISOString().slice(0, 10);
+              return days.map((day, i) => {
                 const c = day ? byDay.get(day) : undefined;
+                const iso = day ? `${month}-${String(day).padStart(2, "0")}` : "";
+                const isToday = iso === todayIso;
+                if (!day) return <div key={i} className="min-h-20 rounded-lg bg-slate-50/40" />;
                 return (
-                  <div key={i} className={`min-h-20 rounded-lg border p-1.5 text-xs ${c ? "border-emerald-300 bg-emerald-50/50" : "border-slate-100 bg-white"}`}>
-                    {day && <div className="font-bold text-slate-600">{day}</div>}
+                  <div
+                    key={i}
+                    className={`min-h-20 rounded-lg border p-1.5 text-xs transition ${
+                      isToday
+                        ? "border-brand-400 bg-brand-50/60 ring-1 ring-inset ring-brand-200"
+                        : c
+                          ? "border-slate-200 bg-white"
+                          : "border-slate-100 bg-white"
+                    }`}
+                  >
+                    <div className={isToday ? "font-black text-brand-700" : "font-bold text-slate-500"}>
+                      {day}
+                    </div>
                     {c && (
-                      <div className="mt-0.5 space-y-0.5">
-                        {c.dueCount > 0 && <div className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">{c.dueCount} due · {money(c.dues)}</div>}
-                        {c.renewals > 0 && <div className="rounded bg-sky-100 px-1 py-0.5 text-[10px] font-semibold text-sky-800">{c.renewals} renewal</div>}
+                      <div className="mt-1 space-y-1">
+                        {c.dueCount > 0 && (
+                          <div className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-800">
+                            <div className="tabular-nums">{money(c.dues)}</div>
+                            <div className="font-medium opacity-75">{c.dueCount} due</div>
+                          </div>
+                        )}
+                        {c.renewals > 0 && (
+                          <div className="rounded bg-sky-100 px-1 py-0.5 text-[10px] font-semibold text-sky-800">
+                            {c.renewals} renewal{c.renewals === 1 ? "" : "s"}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -455,7 +503,7 @@ export default function PlatformPage() {
               });
             })()}
           </div>
-          {cal?.length === 0 && <div className="mt-3 text-center text-sm text-slate-400">Nothing this month</div>}
+          {cal?.length === 0 && <div className="mt-3 text-center text-sm text-slate-400">Nothing falls due this month</div>}
         </div>
       )}
 

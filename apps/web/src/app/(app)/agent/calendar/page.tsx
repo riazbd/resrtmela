@@ -9,7 +9,8 @@ import { useApi, keys } from "@/lib/query";
 import { Card, Empty, Select, Spinner } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
-import { occupancyCells, freeSpan } from "@/lib/agency-calendar";
+import { occupancyCells, freeSpan, type CalendarCell } from "@/lib/agency-calendar";
+import { mergeRuns } from "@/lib/calendar-bars";
 import { todayIn, monthOf, addDaysIso } from "@/lib/resort-dates";
 import type { AgencyCalendar } from "@rh/shared";
 
@@ -223,8 +224,10 @@ export default function AgencyCalendarPage() {
                       <th
                         key={day}
                         className={`w-7 pb-2 text-center font-medium tabular-nums ${
-                          isToday ? "text-brand-700" : weekend ? "text-slate-500" : "text-slate-400"
-                        }`}
+                          // a hairline at each week boundary, so the eye has
+                          // somewhere to anchor in thirty-one identical columns
+                          d.getUTCDay() === 6 ? "border-l border-slate-200" : ""
+                        } ${isToday ? "text-brand-700" : weekend ? "text-slate-500" : "text-slate-400"}`}
                       >
                         <span
                           className={`block text-[10px] font-semibold uppercase ${
@@ -248,71 +251,70 @@ export default function AgencyCalendarPage() {
                 </tr>
               </thead>
               <tbody>
-                {chosen.rooms.map((room) => (
-                  <tr key={room.id}>
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-0.5 pr-3 font-medium text-slate-700">
-                      {room.name}
-                      {room.roomTypeName && (
-                        <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
-                      )}
-                    </td>
-                    {days.map((d) => {
-                      const cell = cells.get(`${room.id}|${iso(d)}`);
-                      const title = !cell
-                        ? `${room.name} free on ${iso(d)}`
-                        : cell.mine
-                          ? `Yours — ${cell.guestName ?? ""} ${cell.code ?? ""}`.trim()
-                          : cell.guestName
-                            ? `Taken — ${cell.guestName}`
-                            : "Taken";
-                      // a free night is the offer an agent is looking for, so
-                      // it is the thing you click: the form opens with this
-                      // resort, this room and this date already filled in
-                      if (!cell) {
-                        const night = iso(d);
-                        const isAnchor = anchor?.roomId === room.id && anchor.night === night;
-                        // once a night is marked, the nights the stay could
-                        // still reach are tinted — so how far the run of free
-                        // nights goes is visible before the second click
-                        const reachable =
-                          !isAnchor &&
-                          anchor?.roomId === room.id &&
-                          freeSpan(cells, room.id, anchor.night, night) !== null;
-                        const weekend = WEEKEND.has(d.getUTCDay());
-                        return (
-                          <td key={night} className="p-[1px]">
-                            <button
-                              type="button"
-                              onClick={() => pickNight(room.id, night)}
+                {chosen.rooms.map((room) => {
+                  /**
+                   * One bar per stay, not one square per night.
+                   *
+                   * A three-night booking used to be three disconnected blocks,
+                   * so the eye had to reassemble a stay out of a mosaic. Merged,
+                   * the agency's own booking has the width of the whole stay to
+                   * carry its guest and code, and somebody else's is one calm
+                   * grey band instead of three.
+                   *
+                   * Free nights stay individual squares on purpose: each one is
+                   * a thing to click, and the pair of clicks is how a span is
+                   * chosen.
+                   */
+                  const runs = mergeRuns(
+                    days.map(iso),
+                    (day) => cells.get(`${room.id}|${day}`) ?? null,
+                    (c) => `${c.mine}|${c.code ?? c.guestName ?? "x"}`,
+                  );
+                  return (
+                    <tr key={room.id}>
+                      <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-0.5 pr-3 font-medium text-slate-700">
+                        {room.name}
+                        {room.roomTypeName && (
+                          <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
+                        )}
+                      </td>
+                      {runs.map((run) =>
+                        run.value ? (
+                          <td key={run.from} colSpan={run.nights} className="p-[1px]">
+                            <div
                               title={
-                                anchor?.roomId === room.id
-                                  ? `${room.name}: ${anchor.night} → ${night}`
-                                  : `${room.name} free on ${night} — click, then the last night`
+                                run.value.mine
+                                  ? `Yours — ${run.value.guestName ?? ""} ${run.value.code ?? ""}`.trim()
+                                  : run.value.guestName
+                                    ? `Taken — ${run.value.guestName}`
+                                    : "Taken"
                               }
-                              className={`block h-6 w-full rounded-sm border transition ${
-                                isAnchor
-                                  ? "border-brand-500 bg-brand-200"
-                                  : reachable
-                                    ? "border-brand-300 bg-brand-50"
-                                    : weekend
-                                      ? "border-amber-100 bg-amber-50/40 hover:border-brand-400 hover:bg-brand-50"
-                                      : "border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+                              className={`flex h-6 items-center overflow-hidden rounded px-1.5 ${
+                                run.value.mine ? "bg-brand-500 text-white" : "bg-slate-300"
                               }`}
-                            />
+                            >
+                              {run.value.mine && run.nights > 1 && (
+                                <span className="truncate text-[10px] font-semibold leading-none">
+                                  {run.value.guestName ?? run.value.code}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                        );
-                      }
-                      return (
-                        <td key={iso(d)} className="p-[1px]">
-                          <div
-                            title={title}
-                            className={`h-6 rounded-sm ${cell.mine ? "bg-brand-500" : "bg-slate-300"}`}
+                        ) : (
+                          <FreeNights
+                            key={run.from}
+                            room={room}
+                            from={run.from}
+                            nights={run.nights}
+                            anchor={anchor}
+                            cells={cells}
+                            onPick={pickNight}
                           />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                        ),
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -328,5 +330,63 @@ export default function AgencyCalendarPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * A run of free nights, still one clickable square each.
+ *
+ * Taken nights merge into a bar because they are one fact. Free nights do not:
+ * each one is a thing the agent can pick, and picking two of them is how a stay
+ * is chosen. What the run buys is the tinting — once the first night is marked,
+ * every night the stay could still reach lights up, so how far the free stretch
+ * goes is visible before the second click.
+ */
+function FreeNights({
+  room,
+  from,
+  nights,
+  anchor,
+  cells,
+  onPick,
+}: {
+  room: { id: number; name: string };
+  from: string;
+  nights: number;
+  anchor: { roomId: number; night: string } | null;
+  cells: Map<string, CalendarCell>;
+  onPick: (roomId: number, night: string) => void;
+}) {
+  return (
+    <>
+      {Array.from({ length: nights }, (_, i) => {
+        const night = addDaysIso(from, i);
+        const isAnchor = anchor?.roomId === room.id && anchor.night === night;
+        const reachable =
+          !isAnchor &&
+          anchor?.roomId === room.id &&
+          freeSpan(cells, room.id, anchor.night, night) !== null;
+        return (
+          <td key={night} className="p-[1px]">
+            <button
+              type="button"
+              onClick={() => onPick(room.id, night)}
+              title={
+                anchor?.roomId === room.id
+                  ? `${room.name}: ${anchor.night} → ${night}`
+                  : `${room.name} free on ${night} — click, then the last night`
+              }
+              className={`block h-6 w-full rounded-sm border transition ${
+                isAnchor
+                  ? "border-brand-500 bg-brand-200"
+                  : reachable
+                    ? "border-brand-300 bg-brand-50"
+                    : "border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+              }`}
+            />
+          </td>
+        );
+      })}
+    </>
   );
 }

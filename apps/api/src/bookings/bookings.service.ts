@@ -7,7 +7,7 @@ import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNi
 import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
-import { assertTransition } from "./booking-state";
+import { assertTransition, LIVE_STATES } from "./booking-state";
 import { AvailabilityService } from "./availability.service";
 import { RoomsService } from "../rooms/rooms.service";
 import { ActivitiesService } from "../activities/activities.service";
@@ -947,10 +947,24 @@ export class BookingsService {
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
 
+    /**
+     * Only stays that hold a room, plus the ones that did.
+     *
+     * There was no state filter, so a cancelled or no-show booking came back
+     * with its dates and the console painted it as an occupied block — nights
+     * the resort could sell that evening, shown as taken. A front desk reading
+     * that grid turns a guest away from an empty room.
+     *
+     * `availability` has always filtered on `LIVE_STATES` and the database
+     * frees the night on cancellation; this read was the one that disagreed.
+     * CHECKED_OUT stays, because it happened and a month nobody can reconcile
+     * against is not a month.
+     */
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
         deletedAt: null,
+        state: { in: [...LIVE_STATES, "CHECKED_OUT"] },
         checkIn: { lt: to },
         checkOut: { gt: from },
       },
