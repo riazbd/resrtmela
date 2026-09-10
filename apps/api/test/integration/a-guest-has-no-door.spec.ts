@@ -166,6 +166,17 @@ describe("every door, walked over HTTP", () => {
         body: door.method === "POST" ? JSON.stringify(isWebhook ? { providerRef: webhookRef, amount: 100 } : {}) : undefined,
       });
       expect(res.status).toBe(404);
+
+      /**
+       * A handler can throw its own 404 — "booking not found", "unknown
+       * payment reference" — and this suite has several. That is a route
+       * that exists and refused; the status code alone cannot tell the two
+       * apart. Nest's own router writes a message no handler does when
+       * nothing matched the path at all: "Cannot GET /guest/resorts". Every
+       * door here must fail *that* way, or it is merely refusing, not gone.
+       */
+      const body = await res.json();
+      expect(body.message).toMatch(new RegExp(`^Cannot ${door.method} `));
     });
   }
 

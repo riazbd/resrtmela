@@ -334,21 +334,4 @@ export class ActivitiesService {
     });
     return { removed: true };
   }
-
-  /** Future slots for a catalog (public resort page / guest app). */
-  async upcomingSlots(catalogId: number, days: number, limit: number) {
-    const rows = await this.prisma.activitySlot.findMany({
-      where: { catalogId, startsAt: { gte: new Date(), lt: new Date(Date.now() + days * 86400000) } },
-      orderBy: { startsAt: "asc" },
-      take: limit,
-    });
-    return rows
-      .map((s) => ({
-        id: s.id,
-        startsAt: s.startsAt,
-        endsAt: s.endsAt,
-        remaining: Math.max(0, s.capacity - s.bookedCount),
-      }))
-      .filter((s) => s.remaining > 0);
-  }
 }

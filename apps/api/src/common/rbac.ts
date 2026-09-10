@@ -88,10 +88,15 @@ export function requireRoles(claims: JwtClaims, roles: Role[]): void {
 }
 
 /**
- * Sentinel actor for requests with no human behind them (public API key,
- * payment-gateway webhooks). It is deliberately not a real user id: anything
- * writing an actor to the database must store NULL instead, or the foreign key
- * to `users` fails. Use `actorIdOrNull()` at those write sites.
+ * Sentinel actor for an action with no human behind it — today that is only
+ * `BillingService`'s hourly sweep, which writes audit-log rows for a
+ * suspension, a reactivation or a renewal that nobody clicked. It used to
+ * also stand for a resort's own website posting through its API key and a
+ * payment gateway's webhook; both doors are gone, along with `apiKeyClaims`,
+ * which was the only thing that ever minted a `JwtClaims` carrying this id.
+ * It is deliberately not a real user id: anything writing an actor to the
+ * database must store NULL instead, or the foreign key to `users` fails. Use
+ * `actorIdOrNull()` at those write sites.
  */
 export const SYSTEM_ACTOR_ID = 0;
 
