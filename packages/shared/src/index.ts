@@ -59,8 +59,6 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "expenses.view", label: "View expenses", group: "Money" },
   { key: "expenses.create", label: "Record expenses", group: "Money" },
   { key: "expenses.delete", label: "Delete expenses", group: "Money" },
-  { key: "wallet.view", label: "View agent wallets", group: "Money" },
-  { key: "wallet.manage", label: "Top-up / payout wallets", group: "Money" },
   { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
   { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
@@ -141,7 +139,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Administrator: ALL_PERMISSIONS,
   Manager: [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
-    "payments.view", "payments.create", "expenses.view", "expenses.create", "wallet.view",
+    "payments.view", "payments.create", "expenses.view", "expenses.create",
     "rooms.view", "rooms.manage", "guests.view",
     "restaurant.view", "restaurant.create", "restaurant.menu",
     "agents.view", "agents.manage", "reports.view", "reports.pl",

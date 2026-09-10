@@ -35,6 +35,18 @@ async function ensurePlans(prisma: PrismaService) {
   }
 }
 
+/**
+ * What may move through an agency's wallet.
+ *
+ * Deliberately short. The wallet is the agency's account with the *platform* —
+ * money handed over, money handed back, and a correction when someone gets it
+ * wrong. `COMMISSION` and `BOOKING_HOLD` are in the database enum because rows
+ * were written with them, and are refused here: both describe money between an
+ * agency and a resort, which those two settle between themselves.
+ */
+export const WALLET_KINDS = ["TOPUP", "PAYOUT", "ADJUST"] as const;
+export type WalletKindName = (typeof WALLET_KINDS)[number];
+
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86_400_000);
 }
@@ -521,14 +533,15 @@ export class PlatformService {
       where: { resortId },
       include: {
         user: {
-          select: { id: true, name: true, phone: true, email: true, role: true, status: true, createdAt: true, wallet: { select: { balance: true, active: true } } },
+          // no wallet here: it is the agency's account with the platform, and
+          // a resort reading it was reading the agency's trade with everyone else
+          select: { id: true, name: true, phone: true, email: true, role: true, status: true, createdAt: true },
         },
         role: { select: { id: true, name: true } },
       },
     });
     return rows.map((r) => ({
       ...r.user,
-      wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null,
       roleId: r.roleId,
       roleName: r.role?.name ?? null,
     }));
@@ -787,37 +800,55 @@ export class PlatformService {
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: agentUserId, resortId } } });
     if (!linked) throw badRequest("agent not linked to this resort");
     const updated = await this.prisma.user.update({ where: { id: agentUserId }, data: { status } });
-    if (status === "suspended") {
-      await this.prisma.wallet.updateMany({ where: { userId: agentUserId }, data: { active: false } });
-    }
-    if (status === "active") {
-      await this.prisma.wallet.updateMany({ where: { userId: agentUserId }, data: { active: true } });
-    }
+    /**
+     * The wallet is deliberately left alone.
+     *
+     * A resort is entitled to stop an agent selling *its* rooms. It is not
+     * entitled to freeze money the agency lodged with the platform, which is
+     * what flipping `wallet.active` did — one resort of four could strand the
+     * agency's whole float, and re-activating anywhere thawed it again.
+     */
     await this.audit.log({ actorId: claims.userId, resortId, action: `agent.${status}`, entity: "user", entityId: agentUserId });
     return { id: updated.id, name: updated.name, status: updated.status };
   }
 
+  /**
+   * The statement, for the agency it belongs to or the platform that holds it.
+   *
+   * `RESORT_ADMIN` used to be admitted, and the transactions are not filtered
+   * by resort — so any resort an agent sold could read every movement the
+   * agency had made anywhere, including at the resort down the road that sells
+   * to the same agencies.
+   */
   async getWallet(claims: JwtClaims, userId: number) {
-    if (claims.userId !== userId && claims.role !== ROLE.SUPER_ADMIN && claims.role !== ROLE.RESORT_ADMIN) {
-      throw forbid("not your wallet");
-    }
-    if (claims.role === ROLE.RESORT_ADMIN) {
-      const linked = await this.prisma.userResort.findFirst({ where: { userId, resortId: { in: claims.resortIds } } });
-      if (!linked) throw forbid("user not in your resort");
+    if (claims.userId !== userId && claims.role !== ROLE.SUPER_ADMIN) {
+      throw forbid("This account is between the agency and the platform.");
     }
     const wallet = await this.prisma.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
     const txns = await this.prisma.walletTxn.findMany({ where: { walletId: wallet.id }, orderBy: { id: "desc" }, take: 100 });
     return { balance: Number(wallet.balance), active: wallet.active, txns: txns.map((t) => ({ ...t, amount: Number(t.amount), balanceAfter: Number(t.balanceAfter), id: t.id.toString() })) };
   }
 
-  async walletTxn(claims: JwtClaims, userId: number, kind: "TOPUP" | "PAYOUT" | "ADJUST" | "COMMISSION" | "BOOKING_HOLD", amount: number, note?: string, bookingId?: number) {
-    if (claims.role !== ROLE.SUPER_ADMIN && claims.role !== ROLE.RESORT_ADMIN) throw forbid("owner only");
-    if (claims.role === ROLE.RESORT_ADMIN) {
-      const linked = await this.prisma.userResort.findFirst({ where: { userId, resortId: { in: claims.resortIds } } });
-      if (!linked) throw forbid("user not in your resort");
+  /**
+   * Moves the money. Only the platform may, and only its own kinds of money.
+   *
+   * `RESORT_ADMIN` used to be allowed, so a resort could fund and drain a float
+   * the agency holds with the platform, and spend it on a rival's booking.
+   */
+  async walletTxn(claims: JwtClaims, userId: number, kind: string, amount: number, note?: string, bookingId?: number) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    if (!WALLET_KINDS.includes(kind as WalletKindName)) {
+      throw badRequest(
+        `The wallet holds the agency's account with the platform: ${WALLET_KINDS.join(", ")}. ` +
+          `What an agency owes a resort, or earns from one, is settled between them.`,
+      );
     }
     if (!Number.isFinite(amount) || amount === 0) throw badRequest("amount required");
-    const signed = kind === "PAYOUT" ? -Math.abs(amount) : kind === "ADJUST" ? amount : Math.abs(amount);
+    const moved = kind as WalletKindName;
+    // PAYOUT always leaves, TOPUP always arrives, ADJUST goes the way it is
+    // given. This used to end in `Math.abs(amount)` for every other kind, which
+    // is how paying a booking from the wallet came to *increase* the balance.
+    const signed = moved === "PAYOUT" ? -Math.abs(amount) : moved === "ADJUST" ? amount : Math.abs(amount);
     const result = await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
       if (!wallet.active) throw badRequest("wallet inactive");
@@ -825,26 +856,29 @@ export class PlatformService {
       if (next < 0) throw badRequest("insufficient wallet balance");
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance: next } });
       return tx.walletTxn.create({
-        data: { walletId: wallet.id, kind, amount: signed, balanceAfter: next, note, bookingId },
+        data: { walletId: wallet.id, kind: moved, amount: signed, balanceAfter: next, note, bookingId },
       });
     });
-    await this.audit.log({ actorId: claims.userId, action: `wallet.${kind.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });
+    await this.audit.log({ actorId: claims.userId, action: `wallet.${moved.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });
     return { ...result, amount: Number(result.amount), balanceAfter: Number(result.balanceAfter), id: result.id.toString() };
   }
 
-  /** owner/agent pays a booking due from the agent's wallet */
-  async payFromWallet(claims: JwtClaims, bookingId: number, amount: number) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { id: true, resortId: true, agentUserId: true } });
-    if (!booking) throw badRequest("booking not found");
-    const payer = booking.agentUserId ?? claims.userId;
-    if (claims.role === ROLE.AGENT && claims.userId !== payer) throw forbid("not your booking");
-    if (claims.role !== ROLE.AGENT) requireResortAccess(claims, booking.resortId);
-    const txn = await this.walletTxn(claims, payer, "BOOKING_HOLD", -Math.abs(amount), `payment for booking ${bookingId}`, bookingId);
-    // record as payment too
-    await this.prisma.payment.create({ data: { bookingId, amount: Math.abs(amount), method: "WALLET_CREDIT", paymentType: "FINAL", receivedById: claims.userId } });
-    await this.recomputePaymentState(bookingId);
-    return txn;
-  }
+  /**
+   * `payFromWallet` used to live here, and is gone rather than corrected.
+   *
+   * It settled a resort's booking out of the agency's platform float, which is
+   * the platform standing between two parties settling with each other. A
+   * booking due is the agency's account with that resort; the platform is the
+   * medium they met through, not a party to it.
+   *
+   * It was also broken in a way nobody could see, which is why it survived so
+   * long: it passed `-Math.abs(amount)` to `walletTxn`, and that function threw
+   * the sign away for every kind but PAYOUT and ADJUST — so paying a booking
+   * marked the stay paid **and increased the agent's balance**. No screen in
+   * the console called it and no test covered it. `WALLET_CREDIT` stays in the
+   * payment-method list as a reserved code, because rows recorded that way are
+   * still rows.
+   */
 
   private async recomputePaymentState(bookingId: number) {
     const b = await this.prisma.booking.findUnique({

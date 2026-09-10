@@ -89,14 +89,15 @@ class AgentStatusDto {
   @IsIn(["active", "suspended", "pending"]) status!: string;
 }
 
+/**
+ * The wallet is the agency's account with the platform, so these are the only
+ * three things that can happen in it. `COMMISSION` was accepted here and is
+ * not: what an agency earns from a resort is settled between those two.
+ */
 class WalletTxnDto {
-  @IsIn(["TOPUP", "PAYOUT", "ADJUST", "COMMISSION"]) kind!: string;
+  @IsIn(["TOPUP", "PAYOUT", "ADJUST"]) kind!: string;
   @IsNumber() amount!: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
-}
-
-class WalletPayDto {
-  @IsNumber() @Min(1) amount!: number;
 }
 
 class DiscountDto {
@@ -300,10 +301,7 @@ export class PlatformController {
     return this.platform.getWallet(req.user, userId);
   }
   @Post("wallets/:userId/txns") walletTxn(@Req() req: AuthedRequest, @Param("userId", ParseIntPipe) userId: number, @Body() dto: WalletTxnDto) {
-    return this.platform.walletTxn(req.user, userId, dto.kind as never, dto.amount, dto.note);
-  }
-  @Post("bookings/:id/pay-from-wallet") payFromWallet(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: WalletPayDto) {
-    return this.platform.payFromWallet(req.user, id, dto.amount);
+    return this.platform.walletTxn(req.user, userId, dto.kind, dto.amount, dto.note);
   }
 
   // owner — discount offers

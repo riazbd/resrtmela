@@ -101,6 +101,7 @@ export default function PlatformPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [subFor, setSubFor] = useState<ResortRow | null>(null);
+  const [walletFor, setWalletFor] = useState<AgentRow | null>(null);
   const [subPlan, setSubPlan] = useState("");
   const [subFee, setSubFee] = useState("5000");
   const [busy, setBusy] = useState(false);
@@ -368,6 +369,17 @@ export default function PlatformPage() {
                       >
                         <LogIn className="inline h-3.5 w-3.5" /> Login as
                       </button>
+                      {/* The wallet is the agency's account with the platform,
+                          and until now nothing in the console could move it:
+                          the balance was displayed on two screens and there was
+                          no top-up, no payout, no anything. */}
+                      <button
+                        onClick={() => setWalletFor(a)}
+                        title={`Wallet — ${a.name}`}
+                        className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Wallet className="inline h-3.5 w-3.5" /> Wallet
+                      </button>
                       {a.resorts[0] && a.status !== "active" && (
                         <button onClick={() => act(() => api(`/resorts/${a.resorts[0]!.id}/agents/${a.id}/status`, { method: "PATCH", body: { status: "active" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                           <CheckCircle2 className="inline h-3.5 w-3.5" /> Activate
@@ -603,6 +615,8 @@ export default function PlatformPage() {
         </Card>
       )}
 
+      {walletFor && <WalletDrawer agent={walletFor} onClose={() => setWalletFor(null)} onMoved={() => void loadAll()} />}
+
       {tab === "Email credits" && <PackPricesCard />}
 
       {tab === "Billing policy" && <PolicyTab />}
@@ -733,6 +747,192 @@ const POLICY_FIELDS: { key: string; label: string; hint: string; unit?: string }
  * on the tab where the packs are approved, because selling mail and taking the
  * money for it are one job.
  */
+/**
+ * The agency's account with the platform, and the only place it moves.
+ *
+ * The balance was shown on two screens and no screen could change it: there
+ * was no top-up, no payout, nothing. Meanwhile the API let any resort the
+ * agent sold move the money and read every line of it. Both halves of that are
+ * fixed underneath; this is the half that was simply missing.
+ *
+ * There is no gateway, so a top-up is money the agency has already handed
+ * over — the note is where the bKash reference goes, and it is the only record
+ * that will exist.
+ */
+function WalletDrawer({
+  agent,
+  onClose,
+  onMoved,
+}: {
+  agent: AgentRow;
+  onClose: () => void;
+  onMoved: () => void;
+}) {
+  const { push } = useToast();
+  const [view, setView] = useState<WalletView | null>(null);
+  const [kind, setKind] = useState("TOPUP");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api<WalletView>(`/wallets/${agent.id}`)
+      .then(setView)
+      .catch(() => setView(null));
+  }, [agent.id]);
+  useEffect(() => load(), [load]);
+
+  async function move() {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value === 0) return;
+    const verb = kind === "TOPUP" ? "Add" : kind === "PAYOUT" ? "Pay out" : "Adjust by";
+    if (!window.confirm(`${verb} ${money(Math.abs(value))} — ${agent.name}?\n\n${note || "No note"}`)) return;
+    setBusy(true);
+    try {
+      await api(`/wallets/${agent.id}/txns`, {
+        method: "POST",
+        body: { kind, amount: value, note: note || undefined },
+      });
+      push(kind === "TOPUP" ? "Money added" : kind === "PAYOUT" ? "Paid out" : "Adjusted");
+      setAmount("");
+      setNote("");
+      load();
+      onMoved();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" onClick={onClose}>
+      <div
+        className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-xl bg-white shadow-xl"
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      >
+        <div className="p-6">
+          <div className="text-lg font-bold text-slate-900">{agent.name}</div>
+          <p className="mt-0.5 text-xs text-slate-500">
+            What this agency holds with the platform. Bookings and commission are settled with the
+            resort, not here.
+          </p>
+
+          <div className="mt-4 rounded-xl bg-slate-50 p-4">
+            <div className="text-[10px] font-medium uppercase text-slate-400">Balance</div>
+            <div className="text-3xl font-black tabular-nums text-slate-900">
+              {view ? money(view.balance) : "…"}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-500">What is happening</span>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                <option value="TOPUP">Money received from the agency</option>
+                <option value="PAYOUT">Money returned to the agency</option>
+                <option value="ADJUST">Correction</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-500">
+                Amount ({cur()}){kind === "ADJUST" ? " — negative to take away" : ""}
+              </span>
+              <input
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm tabular-nums"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-semibold text-slate-500">Note</span>
+              <span className="block text-[10px] text-slate-400">
+                The bKash TrxID or bank reference — this is the only record of how it arrived.
+              </span>
+              <input
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="bKash TrxID 8X2K1M"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <Btn loading={busy} disabled={!amount} onClick={() => void move()}>
+              Record it
+            </Btn>
+          </div>
+
+          <div className="mt-5">
+            <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Statement</div>
+            {!view || view.txns.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-400">Nothing has moved yet.</p>
+            ) : (
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr>
+                    <Th>When</Th>
+                    <Th>What</Th>
+                    <Th className="text-right">Amount</Th>
+                    <Th className="text-right">Balance</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {view.txns.map((t) => (
+                    <tr key={t.id} className="border-t border-slate-100">
+                      <Td className="text-xs text-slate-400">{dmy(t.createdAt)}</Td>
+                      <Td className="text-xs">
+                        <div>{WALLET_KIND_LABELS[t.kind] ?? t.kind}</div>
+                        {t.note && <div className="text-slate-400">{t.note}</div>}
+                      </Td>
+                      <Td className={`text-right tabular-nums ${t.amount < 0 ? "text-red-600" : "text-emerald-700"}`}>
+                        {money(t.amount)}
+                      </Td>
+                      <Td className="text-right tabular-nums text-slate-500">{money(t.balanceAfter)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <Btn variant="ghost" onClick={onClose}>
+              Close
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const WALLET_KIND_LABELS: Record<string, string> = {
+  TOPUP: "Received",
+  PAYOUT: "Returned",
+  ADJUST: "Correction",
+  // written before the wallet was narrowed to the platform's own account
+  COMMISSION: "Commission (historic)",
+  BOOKING_HOLD: "Booking (historic)",
+  REFUND: "Refund (historic)",
+};
+
+interface WalletView {
+  balance: number;
+  active: boolean;
+  txns: {
+    id: string;
+    kind: string;
+    amount: number;
+    balanceAfter: number;
+    note: string | null;
+    createdAt: string;
+  }[];
+}
+
 function PackPricesCard() {
   const { push } = useToast();
   const [packs, setPacks] = useState<{ credits: string; price: string }[]>([]);

@@ -24,6 +24,24 @@ import type { AgencyRoomOffer } from "@rh/shared";
  * owed to the resort are both on screen at the moment of quoting.
  */
 
+/**
+ * The booking form, filled in as far as the agent has got.
+ *
+ * `bookingHandoff` reads all four of these; the room is the one nothing was
+ * sending, which is why picking a room out of the search still meant picking
+ * it again out of a dropdown.
+ */
+function bookHref(resortId: number, from: string, to: string, roomId?: number): string {
+  const q = new URLSearchParams({
+    resortId: String(resortId),
+    checkIn: from,
+    checkOut: to,
+    new: "1",
+  });
+  if (roomId != null) q.set("roomId", String(roomId));
+  return `/bookings?${q.toString()}`;
+}
+
 const today = () => new Date().toISOString().slice(0, 10);
 const plusDays = (iso: string, days: number) =>
   new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10);
@@ -107,7 +125,7 @@ export default function RoomSearchPage() {
               title={offer.resort.name}
               action={
                 <Link
-                  href={`/bookings?resortId=${offer.resort.id}&checkIn=${range.from}&checkOut=${range.to}&new=1`}
+                  href={bookHref(offer.resort.id, range.from, range.to)}
                   className="text-xs font-semibold text-brand-700 hover:underline"
                 >
                   Book here →
@@ -130,8 +148,28 @@ export default function RoomSearchPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {offer.rooms.map((r) => (
-                    <tr key={r.roomId}>
-                      <Td className="font-medium">{r.roomName}</Td>
+                    /**
+                     * The room is the answer, so the room is what you click.
+                     *
+                     * This table listed the free rooms and then sent the agent
+                     * to a "Book here" link at the top of the card carrying the
+                     * resort and the dates but not the room — so having found
+                     * the room, they had to find it again in a dropdown. The
+                     * booking form has read `roomId` from the URL all along;
+                     * nothing was sending it. The month calendar already does.
+                     */
+                    <tr key={r.roomId} className="group hover:bg-brand-50/40">
+                      <Td className="font-medium">
+                        <Link
+                          href={bookHref(offer.resort.id, range.from, range.to, r.roomId)}
+                          className="block hover:underline"
+                        >
+                          {r.roomName}
+                          <span className="ml-1.5 text-[11px] font-normal text-brand-700 opacity-0 transition group-hover:opacity-100">
+                            Book →
+                          </span>
+                        </Link>
+                      </Td>
                       <Td className="text-right text-slate-500">{money(r.baseRate)}</Td>
                       <Td className="text-right font-semibold text-brand-700">
                         {r.agentRate != null ? money(r.agentRate) : "—"}

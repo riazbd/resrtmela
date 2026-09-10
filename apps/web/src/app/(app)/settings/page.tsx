@@ -100,7 +100,6 @@ interface UserRow {
   role: string;
   status: string;
   createdAt: string;
-  wallet: { balance: number; active: boolean } | null;
   roleId: number | null;
   roleName: string | null;
 }
@@ -743,7 +742,7 @@ function UsersTab({ rid }: { rid: number }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Wallet</Th><Th /></tr>
+              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {(rows ?? []).map((u) => (
@@ -763,7 +762,6 @@ function UsersTab({ rid }: { rid: number }) {
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
                   </Td>
-                  <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{money(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
                   <Td>
                     <div className="flex justify-end gap-1.5">
                       {u.status !== "active" && (

@@ -8,7 +8,7 @@ import { Table } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 
 /**
- * The agency's wallet.
+ * The agency's account with the platform.
  *
  * `agent.wallet.view` has existed in the permission list since the matrix was
  * built, was granted to every agent, and nothing ever read it: money moved
@@ -38,11 +38,15 @@ interface WalletView {
 
 /** What each movement means to the person reading it, not what the enum says. */
 const KIND_LABELS: Record<string, string> = {
-  TOPUP: "Top-up",
-  PAYOUT: "Paid out",
-  ADJUST: "Adjustment",
-  COMMISSION: "Commission earned",
-  BOOKING_HOLD: "Held for a booking",
+  TOPUP: "Money received",
+  PAYOUT: "Returned to you",
+  ADJUST: "Correction",
+  // Written before the wallet was narrowed to the agency's account with the
+  // platform. What an agency owes a resort, and earns from one, is settled
+  // between those two — nothing writes these any more, and old rows still read.
+  COMMISSION: "Commission (historic)",
+  BOOKING_HOLD: "Booking (historic)",
+  REFUND: "Refund (historic)",
 };
 
 export default function AgentWalletPage() {
