@@ -35,6 +35,90 @@ async function ensurePlans(prisma: PrismaService) {
   }
 }
 
+export interface PlanInput {
+  name: string;
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  trialDays: number;
+  blurb?: string | null;
+  sortOrder?: number;
+  active?: boolean;
+}
+
+/** Every field optional, plus `name` so a rename can be refused rather than ignored. */
+export type PlanPatch = Partial<PlanInput>;
+
+/**
+ * A plan name is typed once and lived with.
+ *
+ * It travels in the URL of `PATCH /platform/plans/:name`, it is what
+ * `Subscription.plan` stores, and that column is VarChar(16). Upper case with
+ * underscores is what the seeds established and what every screen prints as a
+ * badge.
+ */
+const PLAN_NAME = /^[A-Z][A-Z0-9_]{1,15}$/;
+
+/**
+ * What the columns can actually hold.
+ *
+ * Plans used to be seeded in code, where the only author was a developer
+ * reading the schema. They are typed into a form now, so every bound the
+ * database implies has to be said out loud and refused politely — the
+ * alternative is a truncated label or a 500 from the driver, depending on the
+ * server's strict mode. The price list already learned that lesson the
+ * expensive way, silently saving 255 characters of itself.
+ */
+const PLAN_BOUNDS = {
+  label: 40, // VarChar(40)
+  blurb: 200, // VarChar(200)
+  monthlyFee: 99_999_999.99, // Decimal(10,2)
+  maxRooms: 100_000,
+  maxResorts: 1_000,
+  trialDays: 365,
+  sortOrder: 9_999,
+};
+
+function assertWholeNumber(value: number, field: string, min: number, max: number) {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw badRequest(`${field} must be a whole number between ${min} and ${max}`);
+  }
+}
+
+function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean }) {
+  if (creating) {
+    if (!input.name || !PLAN_NAME.test(input.name)) {
+      throw badRequest("Plan name must be 2–16 characters, A–Z, 0–9 or _, starting with a letter (e.g. SEASON)");
+    }
+    for (const required of ["label", "monthlyFee", "maxRooms", "maxResorts", "trialDays"] as const) {
+      if (input[required] == null) throw badRequest(`${required} is required`);
+    }
+  }
+
+  if (input.label != null) {
+    const label = input.label.trim();
+    if (!label) throw badRequest("A plan needs a label — it is the name customers read");
+    if (label.length > PLAN_BOUNDS.label) throw badRequest(`Label must be ${PLAN_BOUNDS.label} characters or fewer`);
+  }
+  if (input.blurb != null && input.blurb.length > PLAN_BOUNDS.blurb) {
+    throw badRequest(`Blurb must be ${PLAN_BOUNDS.blurb} characters or fewer`);
+  }
+  if (input.monthlyFee != null) {
+    const fee = input.monthlyFee;
+    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.monthlyFee) {
+      throw badRequest(`Monthly fee must be between 0 and ${PLAN_BOUNDS.monthlyFee}`);
+    }
+    if (Math.round(fee * 100) !== fee * 100) throw badRequest("Monthly fee cannot be finer than a paisa");
+  }
+  // a plan that sells no rooms sells nothing; a plan for no resorts reaches nobody
+  if (input.maxRooms != null) assertWholeNumber(input.maxRooms, "Room limit", 1, PLAN_BOUNDS.maxRooms);
+  if (input.maxResorts != null) assertWholeNumber(input.maxResorts, "Resort limit", 1, PLAN_BOUNDS.maxResorts);
+  // zero is a plan with no free trial, which is a real choice
+  if (input.trialDays != null) assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
+  if (input.sortOrder != null) assertWholeNumber(input.sortOrder, "Sort order", 0, PLAN_BOUNDS.sortOrder);
+}
+
 /**
  * What may move through an agency's wallet.
  *
@@ -306,22 +390,97 @@ export class PlatformService {
     return this.prisma.platformPlan.findMany({ orderBy: { sortOrder: "asc" } });
   }
 
-  async updatePlan(claims: JwtClaims, name: string, input: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
+  async createPlan(claims: JwtClaims, input: PlanInput) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
+    assertPlanFields(input, { creating: true });
+
+    if (await this.prisma.platformPlan.findUnique({ where: { name: input.name } })) {
+      throw badRequest(`A plan named ${input.name} already exists`);
+    }
+
+    const plan = await this.prisma.platformPlan.create({
+      data: {
+        name: input.name,
+        label: input.label,
+        monthlyFee: input.monthlyFee as never,
+        maxRooms: input.maxRooms,
+        maxResorts: input.maxResorts,
+        trialDays: input.trialDays,
+        blurb: input.blurb?.trim() || null,
+        sortOrder: input.sortOrder ?? 0,
+        active: input.active ?? true,
+      },
+    });
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
+    return plan;
+  }
+
+  async updatePlan(claims: JwtClaims, name: string, input: PlanPatch) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+
+    /**
+     * The name is the one thing that cannot move.
+     *
+     * `Subscription.plan` holds it as a string rather than a foreign key, so a
+     * rename does not cascade anywhere — it silently orphans every resort on
+     * the plan, and the next billing sweep finds no plan to price them by. The
+     * label is what a customer reads and changes freely.
+     */
+    if (input.name != null && input.name !== name) {
+      throw badRequest("A plan's name is fixed — subscriptions point at it by name. Change the label instead.");
+    }
+    assertPlanFields(input, { creating: false });
+
     const plan = await this.prisma.platformPlan.update({
       where: { name },
       data: {
-        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee } : {}),
+        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee as never } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
         ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
+        ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
         ...(input.label != null ? { label: input.label } : {}),
-        ...(input.blurb != null ? { blurb: input.blurb } : {}),
+        ...(input.blurb != null ? { blurb: input.blurb.trim() || null } : {}),
+        ...(input.sortOrder != null ? { sortOrder: input.sortOrder } : {}),
         ...(input.active != null ? { active: input.active } : {}),
       },
     });
-    await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input });
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
+  }
+
+  /**
+   * Delete a plan, or be told to retire it.
+   *
+   * The same shape as retiring a room, and for the same reason: a row that
+   * anything else points at is history, not clutter. A subscription names its
+   * plan by string, so deleting a plan somebody bought leaves that string
+   * pointing at nothing — including a cancelled subscription, which is the
+   * record of what they used to pay and has to stay readable.
+   */
+  async deletePlan(claims: JwtClaims, name: string) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+
+    const plan = await this.prisma.platformPlan.findUnique({ where: { name } });
+    if (!plan) throw badRequest("No such plan");
+
+    const sold = await this.prisma.subscription.count({ where: { plan: name } });
+    if (sold > 0) {
+      throw badRequest(
+        `${sold} subscription(s) name this plan. Retire it instead — it leaves the public page and its customers stay where they are.`,
+      );
+    }
+    if ((await this.prisma.platformPlan.count()) <= 1) {
+      // `ensurePlans` re-seeds an empty table, so the last deletion would
+      // resurrect STARTER, GROWTH and CHAIN at prices the owner had rejected
+      throw badRequest("A platform needs at least one plan to sell.");
+    }
+
+    await this.prisma.platformPlan.delete({ where: { name } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.delete", entity: "platform_plan", entityId: Number(plan.id), diff: { name } });
+    return { deleted: true as const, name };
   }
 
   async renewSubscription(claims: JwtClaims, subscriptionId: number, months = 1) {
