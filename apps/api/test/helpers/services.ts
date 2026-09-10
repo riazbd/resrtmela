@@ -106,6 +106,10 @@ export function makePlatformService(prisma: PrismaService): PlatformService {
     new PermissionsService(prisma),
     new PlanLimitsService(prisma),
     makeBillingService(prisma),
+    // the eighth constructor argument was simply missing, so `this.settings`
+    // was undefined on every PlatformService a spec built — anything reading a
+    // platform setting threw, and nothing was testing that path to notice
+    new PlatformSettingsService(prisma),
   );
 }
 

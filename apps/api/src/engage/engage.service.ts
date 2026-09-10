@@ -175,9 +175,20 @@ export class EngageService {
 
   // ─────────────── bulk email credits (sender.net style) ───────────────
 
+  /**
+   * The balance, and where to send money for more.
+   *
+   * There is no gateway, so a pack is paid for by hand and approved by the
+   * platform afterwards. Showing a price and a button while saying nothing
+   * about *how* to pay is the screen leaving out the only step the buyer has
+   * to take on their own.
+   */
   async myEmailCredits(claims: JwtClaims) {
     const row = await this.prisma.emailCredit.upsert({ where: { userId: claims.userId }, update: {}, create: { userId: claims.userId } });
-    return { credits: row.credits };
+    return {
+      credits: row.credits,
+      payTo: await this.settings.str("platform.paymentInstructions", ""),
+    };
   }
 
   /** What the platform is selling today — the console draws its buttons from this. */
@@ -285,7 +296,19 @@ export class EngageService {
     claims: JwtClaims,
     orderId: string | number | bigint,
     decision: "APPROVE" | "REJECT",
-    note?: string,
+    /**
+     * The platform's rule is that **approval only ever follows payment**: with
+     * no gateway, the owner approves once the bKash or the bank transfer has
+     * landed, so approving *is* issuing the receipt. `paid` therefore defaults
+     * to true, and the console never offers anything else — raising the charge
+     * as DUE put money already in hand into the platform's outstanding figure
+     * and made the owner settle it a second time in the Dues tab.
+     *
+     * `paid: false` stays in the API for the one case the rule does not cover:
+     * a pack given away, or released on a promise by someone who has decided
+     * to. It is deliberately not a button.
+     */
+    opts: { note?: string; paid?: boolean; method?: string } = {},
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const id = BigInt(orderId);
@@ -296,6 +319,13 @@ export class EngageService {
     }
 
     const now = new Date();
+    const paid = opts.paid !== false;
+    const method = opts.method?.trim();
+    // what the order says afterwards: the reason, or how the money arrived
+    const note =
+      opts.note?.trim() ||
+      (decision === "APPROVE" ? (paid ? `paid by ${method || "hand"}` : "released unpaid") : undefined);
+
     if (decision === "REJECT") {
       const rejected = await this.prisma.emailCreditOrder.update({
         where: { id },
@@ -303,8 +333,8 @@ export class EngageService {
       });
       await this.notify([order.userId], {
         title: "Email credit request declined",
-        body: note?.trim()
-          ? `${order.credits.toLocaleString("en-IN")} credits — ${note.trim()}`
+        body: opts.note?.trim()
+          ? `${order.credits.toLocaleString("en-IN")} credits — ${opts.note.trim()}`
           : `Your request for ${order.credits.toLocaleString("en-IN")} email credits was not approved.`,
         kind: "request",
         resortId: order.resortId,
@@ -333,6 +363,9 @@ export class EngageService {
           // the order's own identity, so the charge cannot be raised twice
           clientRef: `credit-order:${order.id}`,
           createdById: order.userId,
+          status: paid ? "PAID" : "DUE",
+          paidAt: paid ? now : null,
+          note: note ?? null,
         },
       });
       return tx.emailCreditOrder.update({
@@ -343,7 +376,9 @@ export class EngageService {
 
     await this.notify([order.userId], {
       title: "Email credits approved",
-      body: `${order.credits.toLocaleString("en-IN")} credits are in your account. The pack will appear on your platform bill.`,
+      body: paid
+        ? `${order.credits.toLocaleString("en-IN")} credits are in your account. Payment received — thank you.`
+        : `${order.credits.toLocaleString("en-IN")} credits are in your account. The pack is on your platform bill.`,
       kind: "request",
       resortId: order.resortId,
       link: "/mailbox",
@@ -351,7 +386,7 @@ export class EngageService {
     await this.audit.log({
       actorId: claims.userId, resortId: order.resortId,
       action: "email.credits.approve", entity: "email_credit_order", entityId: Number(id),
-      diff: { credits: order.credits, price: Number(order.price) },
+      diff: { credits: order.credits, price: Number(order.price), paid, method: method ?? null },
     });
     return this.orderView(approved);
   }

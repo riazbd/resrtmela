@@ -553,11 +553,29 @@ export default function PlatformPage() {
                       <Td>
                         {o.status === "PENDING" && (
                           <div className="flex justify-end gap-1.5">
+                            {/* Approval only ever follows payment — that is the
+                                rule this whole queue exists for. So the button
+                                asks how the money arrived, not whether it did,
+                                and the charge is settled on the spot instead of
+                                sitting in the outstanding figure waiting for a
+                                second trip to the Dues tab. */}
                             <Btn
                               disabled={busy}
                               onClick={() => {
-                                if (!window.confirm(`Approve ${o.credits.toLocaleString("en-IN")} credits for ${o.resortName}? ${money(o.price)} is charged to their platform bill.`)) return;
-                                void act(() => api(`/platform/email-credit-orders/${o.id}/decision`, { method: "POST", body: { decision: "APPROVE" } }));
+                                const how = window.prompt(
+                                  `Payment received for ${o.credits.toLocaleString("en-IN")} credits — ${o.resortName}, ${money(o.price)}.
+
+` +
+                                    `How did it arrive? bKash, bank transfer, cash…`,
+                                  "bKash",
+                                );
+                                if (how === null) return;
+                                void act(() =>
+                                  api(`/platform/email-credit-orders/${o.id}/decision`, {
+                                    method: "POST",
+                                    body: { decision: "APPROVE", method: how.trim() || undefined },
+                                  }),
+                                );
                               }}
                             >
                               Approve
@@ -584,6 +602,8 @@ export default function PlatformPage() {
           )}
         </Card>
       )}
+
+      {tab === "Email credits" && <PackPricesCard />}
 
       {tab === "Billing policy" && <PolicyTab />}
       {tab === "Website CMS" && <CmsTab />}
@@ -702,6 +722,126 @@ const POLICY_FIELDS: { key: string; label: string; hint: string; unit?: string }
   { key: "platform.supportEmail", label: "Support email", hint: "shown to tenants who need to sort out a bill." },
   { key: "platform.supportPhone", label: "Support phone", hint: "same, for the ones who would rather call." },
 ];
+
+/**
+ * What a pack costs, and where the buyer sends the money.
+ *
+ * The prices were a platform setting from the start — commercial terms belong
+ * to the person who sets them — but there was no way to edit them anywhere in
+ * the console. Changing what the platform sells meant a raw API call, so in
+ * practice it never changed. This is the screen that was missing, and it sits
+ * on the tab where the packs are approved, because selling mail and taking the
+ * money for it are one job.
+ */
+function PackPricesCard() {
+  const { push } = useToast();
+  const [packs, setPacks] = useState<{ credits: string; price: string }[]>([]);
+  const [payTo, setPayTo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api<Record<string, string>>("/platform/settings")
+      .then((v) => {
+        try {
+          const parsed = JSON.parse(v["email.creditPacks"] ?? "[]") as { credits: number; price: number }[];
+          setPacks(parsed.map((p) => ({ credits: String(p.credits), price: String(p.price) })));
+        } catch {
+          setPacks([]);
+        }
+        setPayTo(v["platform.paymentInstructions"] ?? "");
+      })
+      .catch(() => setPacks([]));
+  }, []);
+  useEffect(() => load(), [load]);
+
+  async function save() {
+    const rows = packs
+      .map((p) => ({ credits: Number(p.credits), price: Number(p.price) }))
+      .filter((p) => p.credits > 0 && p.price >= 0);
+    if (rows.length === 0) {
+      push("Keep at least one pack — an empty list falls back to the shipped prices", "err");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api("/platform/settings", {
+        method: "PATCH",
+        body: {
+          "email.creditPacks": JSON.stringify(rows),
+          "platform.paymentInstructions": payTo,
+        },
+      });
+      push("Prices saved — buyers see them straight away");
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mt-4 max-w-2xl p-5">
+      <div className="text-lg font-bold text-slate-900">What a pack costs</div>
+      <p className="mt-1 text-xs text-slate-500">
+        These are the packs a resort sees. Nothing is charged online — a request waits here until you
+        have the money, and approving it is the receipt.
+      </p>
+
+      <div className="mt-4 space-y-2">
+        {packs.map((p, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              value={p.credits}
+              onChange={(e) => setPacks(packs.map((x, j) => (i === j ? { ...x, credits: e.target.value } : x)))}
+              className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums"
+              aria-label="Emails"
+            />
+            <span className="text-xs text-slate-400">emails for</span>
+            <input
+              type="number"
+              min={0}
+              value={p.price}
+              onChange={(e) => setPacks(packs.map((x, j) => (i === j ? { ...x, price: e.target.value } : x)))}
+              className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums"
+              aria-label={`Price in ${cur()}`}
+            />
+            <span className="text-xs text-slate-400">{cur()}</span>
+            <button
+              onClick={() => setPacks(packs.filter((_, j) => j !== i))}
+              className="text-xs font-semibold text-red-500 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <Btn size="sm" variant="ghost" onClick={() => setPacks([...packs, { credits: "", price: "" }])}>
+          + Add a pack
+        </Btn>
+      </div>
+
+      <label className="mt-5 block">
+        <span className="text-xs font-semibold text-slate-500">How to pay</span>
+        <span className="block text-[10px] text-slate-400">
+          Shown to the buyer beside the packs. A bKash number, a bank account, whatever you actually use.
+        </span>
+        <textarea
+          value={payTo}
+          onChange={(e) => setPayTo(e.target.value)}
+          rows={3}
+          placeholder="bKash 01XXXXXXXXX (personal) — send the amount, then WhatsApp the TrxID"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        />
+      </label>
+
+      <div className="mt-4">
+        <Btn loading={busy} onClick={() => void save()}>Save prices</Btn>
+      </div>
+    </Card>
+  );
+}
 
 function PolicyTab() {
   const { push } = useToast();

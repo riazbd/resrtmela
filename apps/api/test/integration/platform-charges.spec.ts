@@ -51,15 +51,20 @@ afterAll(async () => {
 });
 
 /**
- * Taking a pack, end to end.
+ * Taking a pack, end to end — and deliberately *not* paying for it.
  *
- * A request no longer grants anything on its own — the platform has to
- * approve it, and that is the moment the charge is raised. These tests are
- * about the ledger, so they go through both halves.
+ * A request grants nothing on its own; the platform approves, and that is the
+ * moment the charge is raised. Approval normally means the money has already
+ * arrived by hand, so it settles the charge on the spot — see
+ * `selling-mail.spec.ts`. This file is about the ledger of what is **owed**,
+ * so it takes the other branch: a pack released on a promise, which is the
+ * only way a `PlatformCharge` sits in DUE at all.
  */
 async function buy(opts: { clientRef?: string } = {}) {
   const order = await engage().requestCredits(manager, 750, opts);
-  if (order.status === "PENDING") await engage().decideCreditOrder(superAdmin, order.id, "APPROVE");
+  if (order.status === "PENDING") {
+    await engage().decideCreditOrder(superAdmin, order.id, "APPROVE", { paid: false });
+  }
   return order;
 }
 

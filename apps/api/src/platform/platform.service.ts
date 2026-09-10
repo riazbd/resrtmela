@@ -8,7 +8,7 @@ import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { BillingService } from "./billing.service";
-import { PlatformSettingsService, SETTING_DEFAULTS } from "../common/platform-settings.service";
+import { PlatformSettingsService, SETTING_DEFAULTS, SETTING_MAX_LENGTH, assertSettingParses } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
 import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
@@ -168,9 +168,23 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const keys = Object.keys(patch);
     if (keys.length === 0) throw badRequest("nothing to update");
+    /**
+     * Values used to be sliced to 255 before writing, to fit a VARCHAR that is
+     * now TEXT. Some settings are JSON, so the slice cut a price list of more
+     * than about eight packs mid-object; `parseCreditPacks` fell back to the
+     * shipped prices and the platform sold at rates the owner never set, with
+     * the save reported as successful. Nothing is truncated now — a value too
+     * long to store is refused, and a JSON setting is parsed here rather than
+     * failing silently at read time.
+     */
     for (const key of keys) {
       if (!(key in SETTING_DEFAULTS)) throw badRequest(`Unknown setting "${key}"`);
-      await this.settings.set(key, String(patch[key] ?? "").slice(0, 255));
+      const value = String(patch[key] ?? "");
+      if (value.length > SETTING_MAX_LENGTH) {
+        throw badRequest(`"${key}" is too long (${value.length} characters, limit ${SETTING_MAX_LENGTH}).`);
+      }
+      assertSettingParses(key, value);
+      await this.settings.set(key, value);
     }
     await this.audit.log({ actorId: claims.userId, action: "platform.settings.update", entity: "platform_setting", diff: patch });
     return this.settings.all();

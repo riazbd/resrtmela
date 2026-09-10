@@ -45,7 +45,7 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **529 API tests** across 61 files (34 at the start of all this,
+Current state: **542 API tests** across 62 files (34 at the start of all this,
 all of them pure unit tests) plus **47 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
@@ -887,6 +887,28 @@ removing a room from under a booked guest is not a thing to do quietly.
 Fifteen room queries across nine services learned the difference. `rooms.delete`
 is its own permission: editing a rate and taking a room off the books are not
 the same authority.
+
+**Selling mail with no gateway.** There is no merchant account, so an email
+pack is paid for by hand — bKash, a bank transfer, cash — and **approval is the
+receipt**: the platform confirms once the money has landed. That rule made two
+more things wrong. The charge was raised as DUE even though the money was
+already in the owner's hand, so the platform's outstanding figure counted it
+and the pack had to be found in the Dues tab and settled a second time; it is
+settled at approval now, carrying how the money arrived, and the console offers
+no other path. And the buyer was shown a price and a button and told nothing
+about where to send the money — `platform.paymentInstructions` is on the screen
+they buy on.
+
+The price list had a worse problem. It was always a platform setting, correctly,
+but `platform_settings.value` is VARCHAR(255) and `updateSettings` sliced to 255
+before writing. A list of more than about eight packs was cut mid-JSON, and
+`parseCreditPacks` — which falls back rather than throws, which is right at read
+time — then quietly sold at the **shipped** prices while the console reported
+the save as successful. The column is TEXT, nothing is truncated, a value too
+long is refused, and a JSON setting is now parsed at the moment it is saved
+rather than at the moment it is needed. There was also no editor for it
+anywhere in the console: changing what the platform sells meant a raw API call,
+so in practice it never changed. Platform → Email credits is that editor.
 
 **Buying email credits charged the tenant with one click.** The button granted
 the credits and raised a billable `PlatformCharge` in the same call, with no

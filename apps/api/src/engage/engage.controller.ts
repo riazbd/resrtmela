@@ -21,6 +21,10 @@ class PurchaseCreditsDto {
 class CreditDecisionDto {
   @IsIn(["APPROVE", "REJECT"]) decision!: "APPROVE" | "REJECT";
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+  /** Approval is the receipt; false is the deliberate "released unpaid". */
+  @IsOptional() @IsBoolean() paid?: boolean;
+  /** How the money arrived — bKash, bank transfer, cash. Free text on purpose. */
+  @IsOptional() @IsString() @MaxLength(40) method?: string;
 }
 
 class CampaignDto {
@@ -95,7 +99,11 @@ export class EngageController {
     @Param("id") id: string,
     @Body() dto: CreditDecisionDto,
   ) {
-    return this.engage.decideCreditOrder(req.user, id, dto.decision, dto.note);
+    return this.engage.decideCreditOrder(req.user, id, dto.decision, {
+      note: dto.note,
+      paid: dto.paid,
+      method: dto.method,
+    });
   }
   @Post("email-campaigns") send(@Req() req: AuthedRequest, @Body() dto: CampaignDto) {
     return this.engage.sendCampaign(req.user, dto as never);

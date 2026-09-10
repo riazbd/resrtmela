@@ -1113,7 +1113,15 @@ model PlatformCharge {
 
 model PlatformSetting {
   key       String   @id @db.VarChar(64)
-  value     String   @db.VarChar(255)
+
+  /// Text, not VARCHAR(255).
+  ///
+  /// Some settings are JSON — the credit-pack price list, the option-list
+  /// defaults — and `updateSettings` used to `.slice(0, 255)` before writing.
+  /// A list of more than about eight packs was cut mid-object, the parser fell
+  /// back to the *shipped* prices, and the platform sold at rates the owner had
+  /// never agreed to while the console reported the save as successful.
+  value     String   @db.Text
   updatedAt DateTime @updatedAt
 
   @@map("platform_settings")

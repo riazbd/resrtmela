@@ -51,11 +51,13 @@ export default function MailboxPage() {
   const [busy, setBusy] = useState(false);
   const [packs, setPacks] = useState<CreditPack[]>([]);
   const [orders, setOrders] = useState<CreditOrder[]>([]);
+  const [payTo, setPayTo] = useState("");
   const isAgent = role === "AGENT";
 
   const load = useCallback(async () => {
-    const c = await api<{ credits: number }>("/email-credits").catch(() => null);
+    const c = await api<{ credits: number; payTo: string }>("/email-credits").catch(() => null);
     setCredits(c?.credits ?? 0);
+    setPayTo(c?.payTo ?? "");
     api<CreditPack[]>("/email-credits/packs").then(setPacks).catch(() => setPacks([]));
     api<CreditOrder[]>("/email-credits/orders").then(setOrders).catch(() => setOrders([]));
     api<CampaignRow[]>("/email-campaigns").then((r) => { setHistory(r); fail.clear(); }).catch(fail.onFail(() => setHistory([])));
@@ -78,7 +80,11 @@ export default function MailboxPage() {
       `Request ${pack.credits.toLocaleString("en-IN")} email credits for ${money(pack.price)}?
 
 ` +
-      `The platform reviews the request. Nothing is charged and no credits arrive until it is approved.`;
+      `Nothing is charged online. Send the money, and the credits arrive once the platform confirms it.` +
+      (payTo ? `
+
+Pay to:
+${payTo}` : "");
     if (!window.confirm(ask)) return;
     setBusy(true);
     try {
@@ -220,11 +226,23 @@ export default function MailboxPage() {
               {/* This sat in grey micro-text under a bold price, which is where
                   a disclaimer goes when nobody wants it read. No card is
                   charged here; the credits arrive and the amount is billed. */}
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-                <b>The platform approves each pack.</b> Nothing is charged and no credits arrive until
-                it does. Once approved, the amount is added to your platform bill. Emails go out through
-                your own configured SMTP account.
-              </div>
+              {/* There is no gateway: the money moves by hand and approval is
+                  the receipt. Saying so, with the account to send it to, is the
+                  only way the buyer knows what to do next. */}
+              {payTo ? (
+                <div className="rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-[11px] leading-relaxed text-brand-900">
+                  <b>How to pay</b>
+                  <div className="mt-0.5 whitespace-pre-wrap">{payTo}</div>
+                  <div className="mt-1.5 text-brand-800/80">
+                    Credits arrive once the platform confirms the payment.
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                  <b>Nothing is charged online.</b> The platform confirms each pack by hand and the
+                  credits arrive then. Emails go out through your own configured SMTP account.
+                </div>
+              )}
             </div>
           </Card>
 
@@ -251,7 +269,7 @@ export default function MailboxPage() {
                             : "bg-amber-50 text-amber-700"
                       }`}
                     >
-                      {o.status === "PENDING" ? "Waiting" : o.status === "APPROVED" ? "Approved" : "Declined"}
+                      {o.status === "PENDING" ? "Awaiting payment" : o.status === "APPROVED" ? "Approved" : "Declined"}
                     </span>
                   </div>
                 ))}
