@@ -95,23 +95,23 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const roomTypes: RoomTypeLite[] = typesQ.data?.roomTypes ?? [];
 
   /**
-   * Extra beds come from the picked rooms, not their types.
+   * Extra persons come from the picked rooms, not their types.
    *
    * A type covering nine rooms of different sizes could not say which of them
-   * takes a third bed or what it is worth, so the resort left the switch off
+   * takes a third person or what it is worth, so the resort left the switch off
    * and this box never appeared. Each room now carries its own count and rate:
-   * the beds fill the picked rooms in order, and the API charges each person at
+   * the extras fill the picked rooms in order, and the API charges each person at
    * the rate of the room they are in — so the figure shown here is the sum of
-   * what the first `extraPersons` beds actually cost, not one rate times a
+   * what the first `extraPersons` places actually cost, not one rate times a
    * count.
    */
   const pickedRooms = grid.filter((r) => picked.includes(r.roomId));
-  const bedSlots = pickedRooms.flatMap((r) =>
+  const extraSlots = pickedRooms.flatMap((r) =>
     r.extraPersonAllowed ? Array.from({ length: r.extraPersonMax ?? 0 }, () => Number(r.extraPersonRate ?? 0)) : [],
   );
-  const extraAllowed = bedSlots.length > 0;
-  const extraMax = bedSlots.length;
-  const extraCost = bedSlots.slice(0, extraPersons).reduce((sum, rate) => sum + rate, 0);
+  const extraAllowed = extraSlots.length > 0;
+  const extraMax = extraSlots.length;
+  const extraCost = extraSlots.slice(0, extraPersons).reduce((sum, rate) => sum + rate, 0);
 
 
   const [walkIn, setWalkIn] = useState(false);
@@ -265,8 +265,8 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
               label="Extra persons"
               hint={
                 extraPersons > 0
-                  ? `+${money(extraCost)} / night — ${extraMax} bed${extraMax === 1 ? "" : "s"} in these rooms`
-                  : `${extraMax} extra bed${extraMax === 1 ? "" : "s"} in these rooms`
+                  ? `+${money(extraCost)} / night — room for ${extraMax} extra person${extraMax === 1 ? "" : "s"}`
+                  : `These rooms take ${extraMax} extra person${extraMax === 1 ? "" : "s"}`
               }
             >
               <Input

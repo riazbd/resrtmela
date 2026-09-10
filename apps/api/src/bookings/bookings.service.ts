@@ -54,8 +54,8 @@ export interface RoomBookingTxParams {
   state: "PENDING" | "CONFIRMED";
   groupTag?: string;
   extraPersons?: number;
-  /** One entry per room that is taking extra beds, at that room's own rate. */
-  extraBeds?: { roomId: number; persons: number; rate: number }[];
+  /** One entry per room taking extra persons, at that room's own rate. */
+  extraPersonsPerRoom?: { roomId: number; persons: number; rate: number }[];
   rooms: { id: number; name: string; roomTypeId: number; baseRate: number }[];
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
@@ -245,7 +245,7 @@ export class BookingsService {
     }
 
     /**
-     * Extra beds, room by room.
+     * Extra persons, room by room.
      *
      * This used to ask the room *types*: it collected the types of the picked
      * rooms, kept the ones that allowed extra persons, and charged everybody
@@ -254,11 +254,11 @@ export class BookingsService {
      * is every resort — could not describe its inventory at all, so Sky Eco
      * left the feature off and the box never appeared on a booking form.
      *
-     * The beds go into the rooms that were picked, in the order they were
+     * The extra persons go into the rooms that were picked, in the order they were
      * picked, and each person is charged at the rate of the room they are
      * actually sleeping in.
      */
-    const extraBeds = this.spreadExtraBeds(roomRows, extraPersons);
+    const extraPersonsPerRoom = this.spreadExtraPersons(roomRows, extraPersons);
 
     let discount: number;
     if (isAgent) {
@@ -358,7 +358,7 @@ export class BookingsService {
         remarks: input.remarks,
         state: isAgent ? "PENDING" : "CONFIRMED",
         extraPersons,
-        extraBeds,
+        extraPersonsPerRoom,
         rooms: roomRows.map((r) => ({
           id: r.id,
           name: r.name,
@@ -414,12 +414,12 @@ export class BookingsService {
    * (UNIQUE guard; P2002 → friendly 409), optional advance payment.
    */
   /**
-   * Puts `people` extra beds into `rooms`, in order, at each room's own rate.
+   * Puts `people` extra persons into `rooms`, in order, at each room's own rate.
    *
    * Refuses by naming the room, because "extra persons not allowed" on a
    * six-room booking is not a thing anyone can act on.
    */
-  private spreadExtraBeds(
+  private spreadExtraPersons(
     rooms: { id: number; name: string; extraPersonAllowed: boolean; extraPersonMax: number; extraPersonRate: unknown }[],
     people: number,
   ): { roomId: number; persons: number; rate: number }[] {
@@ -429,7 +429,7 @@ export class BookingsService {
     if (capacity === 0) {
       const named = rooms.map((r) => r.name).join(", ");
       throw badRequest(
-        `No extra bed in ${named}. Set what the room takes on Rooms & Rates, or pick a room that has one.`,
+        `${named} does not take an extra person. Set what the room takes on Rooms & Rates, or pick a room that does.`,
       );
     }
     if (people > capacity) {
@@ -519,17 +519,17 @@ export class BookingsService {
       }
     }
 
-    // one row per room, so the invoice can say which room the bed was in and
-    // the two rooms of a booking are not averaged into one price
-    for (const bed of p.extraBeds ?? []) {
-      if (bed.persons <= 0 || bed.rate <= 0) continue;
+    // one row per room, so the invoice can say which room the extra person was
+    // in and the two rooms of a booking are not averaged into one price
+    for (const extra of p.extraPersonsPerRoom ?? []) {
+      if (extra.persons <= 0 || extra.rate <= 0) continue;
       await tx.bookingItem.create({
         data: {
           bookingId: created.id,
-          roomId: bed.roomId,
+          roomId: extra.roomId,
           itemKind: "EXTRA_PERSON",
-          qty: bed.persons * nights,
-          unitPrice: bed.rate as never,
+          qty: extra.persons * nights,
+          unitPrice: extra.rate as never,
         },
       });
     }
@@ -1339,7 +1339,7 @@ export class BookingsService {
           state: "CONFIRMED",
           groupTag,
           extraPersons: 0,
-          extraBeds: [],
+          extraPersonsPerRoom: [],
           rooms: [{ id: room.id, name: room.name, roomTypeId: room.roomTypeId, baseRate: Number(room.baseRate) }],
           advancePayment:
             input.advancePerRoom && input.advancePerRoom > 0

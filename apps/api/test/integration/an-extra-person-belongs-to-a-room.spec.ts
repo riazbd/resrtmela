@@ -1,9 +1,9 @@
 /**
- * An extra bed belongs to a room, not to a room type.
+ * An extra person belongs to a room, not to a room type.
  *
  * Extra persons were allowed, capped and priced on `RoomType`. Sky Eco has one
  * type — "Standard Garden View" — covering nine rooms that are not one size:
- * some take a third bed comfortably, some do not take one at all, and the ones
+ * some take a third person comfortably, some do not take one at all, and the ones
  * that do are not worth the same. A single number on the type could not say any
  * of that, so the resort left the whole feature switched off and the "Extra
  * persons" box never appeared on a single booking form.
@@ -13,7 +13,7 @@
  * reads.
  *
  * Which makes the price a per-room question for the first time. A booking still
- * carries one `extraPersons` count, so the beds go into the rooms that were
+ * carries one `extraPersons` count, so the extra persons go into the rooms that were
  * picked, in the order they were picked, and each person is charged at the rate
  * of the room they are actually sleeping in. `Math.max` over the types, which is
  * what it used to do, charged everyone the dearest room's rate however small the
@@ -88,7 +88,7 @@ describe("what a room will take", () => {
     await expect(book([small!.id], 1)).rejects.toThrow(new RegExp(small!.name));
   });
 
-  it("refuses more beds than the picked rooms hold, however many rooms there are", async () => {
+  it("refuses more people than the picked rooms hold, however many rooms there are", async () => {
     const [a, b] = fx.rooms;
     await roomTakes(a!.id, 1, 500);
     await roomTakes(b!.id, 1, 500);
@@ -99,7 +99,7 @@ describe("what a room will take", () => {
   });
 });
 
-describe("what an extra bed costs", () => {
+describe("what an extra person costs", () => {
   it("is the rate of the room it is in", async () => {
     const [cheap] = fx.rooms;
     await roomTakes(cheap!.id, 1, 700);
@@ -125,7 +125,7 @@ describe("what an extra bed costs", () => {
     expect(items.map((i) => Number(i.unitPrice)).sort((x, y) => x - y)).toEqual([500, 1500]);
   });
 
-  it("fills the rooms in the order they were picked, so nobody is charged for a bed they did not get", async () => {
+  it("fills the rooms in the order they were picked, so nobody is charged for a place they did not get", async () => {
     const [first, second] = fx.rooms;
     await roomTakes(first!.id, 2, 400);
     await roomTakes(second!.id, 2, 1200);
@@ -140,7 +140,7 @@ describe("what an extra bed costs", () => {
     expect(items[0]!.qty).toBe(4); // two people, two nights
   });
 
-  it("adds nothing at all when nobody asked for a bed", async () => {
+  it("adds nothing at all when nobody asked for an extra person", async () => {
     const [room] = fx.rooms;
     await roomTakes(room!.id, 2, 400);
 

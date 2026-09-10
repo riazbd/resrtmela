@@ -427,6 +427,22 @@ export class ReportsService {
       orderBy: { receivedAt: "desc" },
       take: 300,
     });
+    /**
+     * The bookings behind each collector, from the receipts already loaded.
+     *
+     * The card names a few codes under the total so the row can be checked at
+     * a glance. Grouping in the database is what makes the total exact, and a
+     * `groupBy` cannot carry codes — so they come from the recent list instead
+     * of a second unbounded read, and are named `recentCodes` rather than
+     * `codes` so nobody reads them as the whole of it.
+     */
+    const codesOf = new Map<number | null, string[]>();
+    for (const p of rows) {
+      const seen = codesOf.get(p.receivedById) ?? [];
+      if (!seen.includes(p.booking.code)) seen.push(p.booking.code);
+      codesOf.set(p.receivedById, seen);
+    }
+
     return {
       rows: grouped
         .map((g) => ({
@@ -434,6 +450,7 @@ export class ReportsService {
           name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
           advances: g._count._all,
           total: round2(Number(g._sum.amount ?? 0)),
+          recentCodes: codesOf.get(g.receivedById) ?? [],
         }))
         .sort((a, b) => b.total - a.total),
       recent: rows.map((p) => ({

@@ -19,7 +19,7 @@ export interface RoomAvailability {
   busyNights: string[]; // ISO yyyy-mm-dd within requested range
   /**
    * What this room takes, so the booking form can offer the box for the rooms
-   * that have a bed and price it at the room's own rate. It used to ask the
+   * that take an extra person and price it at the room's own rate. It used to ask the
    * room *type*, which one type covering nine rooms of different sizes could
    * not answer.
    */

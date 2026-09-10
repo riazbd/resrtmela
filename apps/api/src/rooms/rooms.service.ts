@@ -42,7 +42,7 @@ export class RoomsService {
         maxChildren: data.maxChildren ?? 0,
         extraPersonAllowed: data.extraPersonAllowed ?? false,
         extraPersonRate: data.extraPersonRate ?? 0,
-        // a type that allows extra persons and names no count means one bed
+        // a type that allows extra persons and names no count means one person
         extraPersonMax: data.extraPersonMax ?? (data.extraPersonAllowed ? 1 : 0),
         amenities: data.amenities,
       },
@@ -119,7 +119,7 @@ export class RoomsService {
     /**
      * A new room starts where its type says, and is its own answer after that.
      *
-     * Extra-bed terms live on the room, because rooms of one type are not one
+     * Extra-person terms live on the room, because rooms of one type are not one
      * size. But a resort adding its ninth Standard should not type the same
      * rate a ninth time, so the type is the starting point and the room screen
      * is where it is adjusted.

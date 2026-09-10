@@ -15,7 +15,17 @@ interface AgentRow {
 }
 interface SourceRow { source: string; bookings: number; rent: number; due: number }
 interface CollectorRow {
-  userId: number | null; name: string; advances: number; total: number; codes: string[];
+  userId: number | null; name: string; advances: number; total: number;
+  /**
+   * A sample of the bookings behind the total, not all of them.
+   *
+   * This was `codes`, and the report stopped sending it when the totals moved
+   * into the database — so the card below read `undefined.slice()` and the
+   * whole Reports page went to the error boundary. Optional here as well as
+   * present there: no screen should be one renamed field away from showing
+   * nothing at all.
+   */
+  recentCodes?: string[];
 }
 interface Collectors {
   rows: CollectorRow[];
@@ -181,7 +191,8 @@ export default function ReportsPage() {
                 <div className="text-xs text-slate-400">{r.advances} advance(s)</div>
                 <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
                 <div className="mt-1 text-[10px] text-slate-400">
-                  {r.codes.slice(0, 6).join(", ")}{r.codes.length > 6 ? "…" : ""}
+                  {(r.recentCodes ?? []).slice(0, 6).join(", ")}
+                  {(r.recentCodes ?? []).length > 6 ? "…" : ""}
                 </div>
               </div>
             ))}
