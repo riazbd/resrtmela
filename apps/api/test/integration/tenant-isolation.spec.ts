@@ -227,6 +227,60 @@ describe("approving an agency's request to sell a resort", () => {
     const after = await prisma.user.findUniqueOrThrow({ where: { id: banned.id } });
     expect(after.status).toBe("suspended");
   });
+
+  /**
+   * A refusal has to leave the request as it found it.
+   *
+   * The request used to be marked APPROVED before the applicant was looked
+   * at, and nothing undid it when the applicant was then refused. So a
+   * refused request sat APPROVED with nobody let in, `requestAccess` answered
+   * "already approved" to every later attempt, and the applicant could never
+   * ask again — while the refusal told the resort "nothing was changed".
+   */
+  it("still lets an agency in: approved and linked to the resort, together", async () => {
+    // the control for the refusals: the one approval that should succeed does
+    const engage = makeEngageService(asPrisma);
+    const request = await prisma.resortAccess.create({
+      data: { userId: theirs.agentId, resortId: ours.resortId, status: "PENDING" },
+    });
+
+    await engage.decideAccess(usManager, request.id.toString(), true);
+
+    const after = await prisma.resortAccess.findUniqueOrThrow({ where: { id: request.id } });
+    expect(after.status).toBe("APPROVED");
+    expect(
+      await prisma.userResort.findFirst({ where: { userId: theirs.agentId, resortId: ours.resortId } }),
+    ).not.toBeNull();
+  });
+
+  it("leaves a refused request pending, so nobody is shut out by a refusal", async () => {
+    const engage = makeEngageService(asPrisma);
+    const theirManager = await prisma.user.findUniqueOrThrow({ where: { id: theirs.managerId } });
+    const banned = await prisma.user.create({
+      data: { name: "Suspended agent", phone: "8801999000444", role: "AGENT", status: "suspended" },
+    });
+
+    for (const applicant of [theirManager, banned]) {
+      const request = await prisma.resortAccess.create({
+        data: { userId: applicant.id, resortId: ours.resortId, status: "PENDING" },
+      });
+
+      await expect(
+        engage.decideAccess(usManager, request.id.toString(), true),
+      ).rejects.toMatchObject({ status: 400 });
+
+      const after = await prisma.resortAccess.findUniqueOrThrow({ where: { id: request.id } });
+      expect(after.status).toBe("PENDING");
+      expect(after.decidedAt).toBeNull();
+      expect(
+        await prisma.userResort.findFirst({ where: { userId: applicant.id, resortId: ours.resortId } }),
+      ).toBeNull();
+      // and the door the refusal must not have locked: they can still ask
+      await expect(
+        engage.requestAccess({ userId: applicant.id, role: applicant.role, resortIds: [] }, ours.resortId),
+      ).rejects.not.toMatchObject({ message: "already approved" });
+    }
+  });
 });
 
 describe("the activity log", () => {

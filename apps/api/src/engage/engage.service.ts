@@ -136,10 +136,6 @@ export class EngageService {
     requireResortAccess(claims, req.resortId);
     // letting an agent in is the act of using the feature; browsing is free
     if (approve) await this.planLimits.requireFeature(req.resortId, "agents");
-    const updated = await this.prisma.resortAccess.update({
-      where: { id: req.id },
-      data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
-    });
     if (approve) {
       /**
        * Approving an agency to sell here is not a licence to rewrite them.
@@ -154,6 +150,11 @@ export class EngageService {
        * There are no guest accounts any more (2026-09-11), so the only
        * applicant approval can let in is one that is already an agency: this
        * screen grants a resort to an agency, it does not make one.
+       *
+       * Both refusals are asked before anything is written. The request used
+       * to be marked APPROVED first, so a refused one stayed APPROVED with
+       * nobody let in — and `requestAccess` then answered "already approved"
+       * to the applicant for ever, while the refusal said nothing had changed.
        */
       const applicant = await this.prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
       if (applicant.status === "suspended") {
@@ -164,12 +165,23 @@ export class EngageService {
           "Only a travel agency's account can be approved to sell here, and this account is not one. It can stay as it is; nothing was changed.",
         );
       }
-      const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
-      if (!linked) {
-        // the commission is the resort's, set once on Settings -> Agent access
-        await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId } });
-      }
     }
+    // the decision and the link it grants land together, or neither does: an
+    // APPROVED request with no link is the same lock-out by another route
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const decided = await tx.resortAccess.update({
+        where: { id: req.id },
+        data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
+      });
+      if (approve) {
+        const linked = await tx.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
+        if (!linked) {
+          // the commission is the resort's, set once on Settings -> Agent access
+          await tx.userResort.create({ data: { userId: req.userId, resortId: req.resortId } });
+        }
+      }
+      return decided;
+    });
     await this.notify([req.userId], {
       title: approve ? "Access approved" : "Access rejected",
       body: approve ? `You now have agent access to ${req.resort.name}. You can book for your clients.` : `Your access request for ${req.resort.name} was rejected.`,
