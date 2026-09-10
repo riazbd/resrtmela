@@ -4,9 +4,11 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 import { BedDouble, CalendarDays, ShieldCheck, UtensilsCrossed, ArrowLeft } from "lucide-react";
 import { landingFor } from "@/lib/console-access";
+import { RESET_REQUESTED_MESSAGE } from "@/lib/password-reset";
 
 const HIGHLIGHTS = [
   { icon: CalendarDays, text: "Booking calendar with one-click reservations" },
@@ -22,6 +24,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -36,6 +42,22 @@ export default function LoginPage() {
       setErr((ex as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // not a nested <form> — the small "forgot password" panel sits inside the
+  // sign-in <form>, and HTML does not allow a form within a form
+  async function submitForgot() {
+    setForgotBusy(true);
+    try {
+      await api("/auth/password/forgot", { method: "POST", body: { email: forgotEmail } });
+    } catch {
+      // the endpoint deliberately never reveals whether the address has an
+      // account (Task 1); a network failure here gets the same one sentence
+      // rather than a different message that would itself leak information
+    } finally {
+      setForgotBusy(false);
+      setForgotSent(true);
     }
   }
 
@@ -97,7 +119,19 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Password</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-600">Password</label>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-brand-600 hover:underline"
+                  onClick={() => {
+                    setShowForgot((v) => !v);
+                    setForgotSent(false);
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </div>
               <Input
                 type="password"
                 placeholder="••••••••"
@@ -106,6 +140,42 @@ export default function LoginPage() {
                 required
               />
             </div>
+            {showForgot && (
+              <div className="space-y-2 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+                {forgotSent ? (
+                  <p className="text-xs text-slate-600">{RESET_REQUESTED_MESSAGE}</p>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Email for your reset link
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="email"
+                        placeholder="you@email.com"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void submitForgot();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        loading={forgotBusy}
+                        disabled={!forgotEmail}
+                        onClick={() => void submitForgot()}
+                      >
+                        Send
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {err && (
               <div className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200">
                 {err}
