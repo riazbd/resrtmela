@@ -100,6 +100,33 @@ export class OptionsService {
     }
   }
 
+  /**
+   * Records `code` on the list if it is not there yet, and returns it either way.
+   *
+   * For lists a resort writes as it works rather than sets up in advance.
+   * Expense categories are the case: the live resort has forty-nine of them
+   * across seventy-eight expenses — "টমেটো", "পটল", "বাঁশ কোরাল" — because the
+   * category box is where the front desk types what was bought. Refusing an
+   * unknown one, the way `assertAccepted` does for payment methods, would stop
+   * somebody recording a purchase until an owner opened Settings, which is a
+   * worse day than the typos it prevents.
+   *
+   * The management asked for is in Settings -> Lists: rename it, hide it,
+   * remove it. This only makes sure the thing being filed under exists.
+   */
+  async accept(resortId: number, list: OptionList, code: string): Promise<void> {
+    const trimmed = code.trim();
+    if (!trimmed) throw badRequest("Pick or type a category");
+    if ((OPTION_LISTS[list].reserved as readonly string[]).includes(trimmed)) return;
+    await this.ensureSeeded(resortId, list);
+    const existing = await this.find(resortId, list, trimmed);
+    if (existing) return;
+    await this.prisma.resortOption.create({
+      // sorted after whatever the resort was given to start with
+      data: { resortId, list, code: trimmed.slice(0, 32), label: trimmed.slice(0, 60), sortOrder: 100 },
+    });
+  }
+
   async create(
     claims: JwtClaims,
     resortId: number,

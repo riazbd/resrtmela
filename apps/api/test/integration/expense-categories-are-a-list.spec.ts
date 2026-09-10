@@ -72,11 +72,44 @@ describe("expense categories", () => {
     expect(rows[0]!.category).toBe("SALARY");
   });
 
-  it("refuse a category the resort has not got", async () => {
+  it("grow when somebody files under a new one, rather than refusing the purchase", async () => {
+    /**
+     * The live resort files expenses under forty-nine categories across
+     * seventy-eight rows — "টমেটো", "পটল", "বাঁশ কোরাল" — because that box is
+     * where the front desk types what was bought. Refusing an unknown word
+     * would stop them recording a purchase until an owner opened Settings,
+     * which is a worse day than the tidiness it buys. Payment methods are
+     * checked, because a resort either takes bKash or it does not.
+     */
+    await makeExpensesService(asPrisma).create(owner, fx.resortId, {
+      date: "2027-03-01",
+      category: "বাঁশ কোরাল",
+      amount: 100,
+    });
+
+    const codes = (await options().list(owner, fx.resortId, "EXPENSE_CATEGORY")).map((o) => o.code);
+    expect(codes).toContain("বাঁশ কোরাল");
+  });
+
+  it("do not grow a second row when the same one is used again", async () => {
+    const before = (await options().list(owner, fx.resortId, "EXPENSE_CATEGORY")).length;
+
+    for (const amount of [100, 200]) {
+      await makeExpensesService(asPrisma).create(owner, fx.resortId, {
+        date: "2027-03-01",
+        category: "টমেটো",
+        amount,
+      });
+    }
+
+    expect((await options().list(owner, fx.resortId, "EXPENSE_CATEGORY")).length).toBe(before + 1);
+  });
+
+  it("still refuse an empty one — a cost has to be filed under something", async () => {
     await expect(
       makeExpensesService(asPrisma).create(owner, fx.resortId, {
         date: "2027-03-01",
-        category: "MOONBEAMS",
+        category: "   ",
         amount: 100,
       }),
     ).rejects.toMatchObject({ status: 400 });

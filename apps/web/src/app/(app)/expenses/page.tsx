@@ -123,14 +123,25 @@ export default function ExpensesPage() {
         <Card title="নতুন খরচ / New entry">
           <div className="flex flex-wrap items-end gap-3">
             <Field label="খরচের খাত / Category">
-              <Select value={category} onChange={(e) => setCategory(e.target.value)} className="!w-56">
-                <option value="">খাত বাছুন / Pick a category</option>
-                {categories.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.label}
-                  </option>
-                ))}
-              </Select>
+              {/* A dropdown of forty-nine one-off items is slower than typing
+                  and blocks the fiftieth. The list is suggestions; a new word
+                  is accepted and joins it. Tidying happens in Settings -> Lists. */}
+              <>
+                <Input
+                  list="expense-categories"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="সবজি, নাস্তা, মুদি দোকান…"
+                  className="!w-56"
+                />
+                <datalist id="expense-categories">
+                  {categories.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.label}
+                    </option>
+                  ))}
+                </datalist>
+              </>
             </Field>
             <Field label="বিবরণ / Details">
               <Input value={details} onChange={(e) => setDetails(e.target.value)} className="!w-48" />

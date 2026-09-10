@@ -86,9 +86,18 @@ export class ExpensesService {
     await this.tenantState.assertWritable(resortId);
     await this.perms.require(claims, resortId, "expenses.create");
     if (data.amount <= 0) throw badRequest("amount must be > 0");
-    // the same guard payments run through: a category is one the resort keeps,
-    // not whatever was typed, or the reports grow a row per spelling
-    await this.options.assertAccepted(resortId, "EXPENSE_CATEGORY", data.category);
+    /**
+     * The category joins the resort's list rather than being checked against it.
+     *
+     * Payments hold to PAYMENT_METHOD because a resort either takes bKash or it
+     * does not. A category is different: the live resort files expenses under
+     * forty-nine of them, most used once, because that box is where the front
+     * desk types what was bought. Refusing a new word would stop somebody
+     * recording a purchase until an owner opened Settings — a worse day than
+     * the tidiness it buys. The tidying is in Settings -> Lists, after the fact,
+     * which is what "category management" meant.
+     */
+    await this.options.accept(resortId, "EXPENSE_CATEGORY", data.category);
     const exp = await this.prisma.expense.create({
       data: {
         resortId,
