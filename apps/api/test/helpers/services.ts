@@ -43,6 +43,7 @@ import { IntentsService } from "../../src/payments/intents.service";
 import { OptionsService } from "../../src/options/options.service";
 import { TaxService } from "../../src/common/tax.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
+import { PasswordResetService } from "../../src/auth/password-reset.service";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
@@ -284,6 +285,30 @@ export function makeTenancyService(prisma: PrismaService): TenancyService {
     new PlanLimitsService(prisma),
     new PermissionsService(prisma),
   );
+}
+
+/** What `PasswordResetService` sends, in the order it sent it — a stand-in for an inbox. */
+export type Outbox = { to: string; subject: string; html: string }[];
+
+/**
+ * Records rather than delivers, so a spec can read the token out of the link
+ * the same way a recipient would click it. `PasswordResetService` has no
+ * method that hands the raw token back directly — the email is the only path
+ * it goes out by, in production and in a test.
+ */
+const stubEmailForReset = (outbox: Outbox) =>
+  ({
+    send: async (to: string, subject: string, html: string) => {
+      outbox.push({ to, subject, html });
+      return { sent: true };
+    },
+  }) as unknown as EmailService;
+
+const stubSettingsForReset = () =>
+  ({ str: async (_k: string, fallback: string) => fallback }) as unknown as PlatformSettingsService;
+
+export function makePasswordResetService(prisma: PrismaService, outbox: Outbox): PasswordResetService {
+  return new PasswordResetService(prisma, stubEmailForReset(outbox), stubSettingsForReset());
 }
 
 export function makeImportService(prisma: PrismaService): ImportService {

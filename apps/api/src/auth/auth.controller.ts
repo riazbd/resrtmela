@@ -5,6 +5,7 @@ import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PermissionsService } from "../common/permissions";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuthService } from "./auth.service";
+import { PasswordResetService } from "./password-reset.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 export class LoginDto {
@@ -41,9 +42,20 @@ class SignupDto {
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
 }
 
+class ForgotPasswordDto {
+  @IsString() @MaxLength(191) email!: string;
+}
+class ResetPasswordDto {
+  @IsString() @MaxLength(128) token!: string;
+  @IsString() @MinLength(8) @MaxLength(128) password!: string;
+}
+
 @Controller("auth")
 export class PublicAuthController {
-  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(PasswordResetService) private readonly reset: PasswordResetService,
+  ) {}
 
   @Post("login")
   @HttpCode(200)
@@ -75,6 +87,23 @@ export class PublicAuthController {
   @HttpCode(201)
   signup(@Body() dto: SignupDto) {
     return this.auth.signup(dto);
+  }
+
+  /**
+   * The deliberate replacement for OTP-as-password-recovery: a locked-out
+   * staff member has no session yet, so this — like login and OTP above —
+   * has to sit on the unauthenticated controller, not beside `me/password`.
+   */
+  @Post("password/forgot")
+  @HttpCode(200)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.reset.request(dto.email);
+  }
+
+  @Post("password/reset")
+  @HttpCode(200)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.reset.reset(dto.token, dto.password);
   }
 }
 
