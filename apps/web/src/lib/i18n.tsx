@@ -86,6 +86,8 @@ export const DICTS = {
     "st.UNPAID": "বাকি",
     "st.PARTIAL": "আংশিক",
     "st.PAID": "পরিশোধিত",
+    "st.ACTIVE": "বিক্রির জন্য",
+    "st.OUT_OF_SERVICE": "সেবার বাইরে",
 
     // ── bookings ──
     "bk.title": "বুকিং",
@@ -213,6 +215,8 @@ export const DICTS = {
     "st.UNPAID": "Unpaid",
     "st.PARTIAL": "Partial",
     "st.PAID": "Paid",
+    "st.ACTIVE": "On sale",
+    "st.OUT_OF_SERVICE": "Out of service",
 
     // ── bookings ──
     "bk.title": "Bookings",

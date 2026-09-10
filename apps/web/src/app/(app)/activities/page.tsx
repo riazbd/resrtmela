@@ -223,7 +223,7 @@ export default function ActivitiesPage() {
                         : a.schedules.map((s) => `${DAYS[s.weekday]} ${s.startTime}`).join(", ")}
                     </Td>
                     <Td className="text-xs">{a.upcomingSlots}{a.nextSlot ? <div className="text-[11px] text-slate-400">next {dmy(a.nextSlot)}</div> : null}</Td>
-                    <Td><Badge value={a.active ? "CONFIRMED" : "CANCELLED"} /></Td>
+                    <Td><Badge value={a.active ? "ACTIVE" : "OUT_OF_SERVICE"} /></Td>
                     <Td className="text-right">
                       {canManage && (
                         <>

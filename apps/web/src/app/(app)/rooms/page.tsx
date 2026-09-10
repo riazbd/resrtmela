@@ -171,7 +171,7 @@ This cannot be undone.`;
                       <span className="text-slate-300">none</span>
                     )}
                   </Td>
-                  <Td><Badge value={r.status === "ACTIVE" ? "CONFIRMED" : "CANCELLED"} /></Td>
+                  <Td><Badge value={r.status} /></Td>
                   {canEdit && (
                     <Td className="text-right">
                       <Button size="sm" variant="ghost" onClick={() => editRate(r)}>Rate</Button>{" "}

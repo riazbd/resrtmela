@@ -137,6 +137,18 @@ const STATE_STYLES: Record<string, string> = {
   UNPAID: "bg-red-50 text-red-700 ring-red-200",
   PARTIAL: "bg-orange-50 text-orange-700 ring-orange-200",
   PAID: "bg-green-50 text-green-700 ring-green-200",
+
+  /**
+   * A room is not a booking.
+   *
+   * The rooms screen borrowed CONFIRMED and CANCELLED because they happened to
+   * be green and red, so a sellable room said "Confirmed" — a word about a
+   * reservation — and a room out for a repair said "Cancelled", which reads as
+   * though it had been removed. Amber rather than red for the same reason: it
+   * is off sale today, not gone.
+   */
+  ACTIVE: "bg-green-50 text-green-700 ring-green-200",
+  OUT_OF_SERVICE: "bg-amber-50 text-amber-700 ring-amber-200",
 };
 
 /**
