@@ -126,6 +126,8 @@ export default function PlatformPage() {
   const [walletFor, setWalletFor] = useState<AgentRow | null>(null);
   const [subPlan, setSubPlan] = useState("");
   const [subFee, setSubFee] = useState("5000");
+  /** This resort's trial. Prefilled from the plan; "" means "whatever the plan says". */
+  const [subTrial, setSubTrial] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -334,6 +336,7 @@ export default function PlatformPage() {
                           setSubFor(r);
                           setSubPlan(first?.name ?? "");
                           setSubFee(first ? String(Number(first.monthlyFee)) : "");
+                          setSubTrial(first ? String(first.trialDays) : "0");
                         }}
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                       >
@@ -729,7 +732,10 @@ export default function PlatformPage() {
                 onChange={(e) => {
                   setSubPlan(e.target.value);
                   const chosen = (plansQ.data ?? []).find((pl) => pl.name === e.target.value);
-                  if (chosen) setSubFee(String(Number(chosen.monthlyFee)));
+                  if (chosen) {
+                    setSubFee(String(Number(chosen.monthlyFee)));
+                    setSubTrial(String(chosen.trialDays));
+                  }
                 }}
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
               >
@@ -739,13 +745,29 @@ export default function PlatformPage() {
               </select>
               <label className="block text-xs font-semibold text-slate-500">Monthly fee ({cur()})</label>
               <input value={subFee} onChange={(e) => setSubFee(e.target.value)} type="number" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
-              <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">Starts with a 14-day trial, first due generated on renewal.</div>
+              <label className="block text-xs font-semibold text-slate-500">Free trial (days) — 0 for none</label>
+              <input value={subTrial} onChange={(e) => setSubTrial(e.target.value)} type="number" min={0} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+              {/* this used to read "Starts with a 14-day trial" in print, which
+                  stopped being true the moment the trial length became a field */}
+              <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                {subTrial.trim() === ""
+                  ? "Whatever this plan sells."
+                  : Number(subTrial) > 0
+                    ? `Free until ${dmy(new Date(Date.now() + Number(subTrial) * 86400000))}, then ${money(Number(subFee))} a month.`
+                    : "No free trial — the first month is due today."}
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Btn variant="ghost" onClick={() => setSubFor(null)}>Cancel</Btn>
               <Btn
                 disabled={busy}
-                onClick={() => act(async () => { await api(`/platform/resorts/${subFor.id}/subscription`, { method: "POST", body: { plan: subPlan, monthlyFee: Number(subFee) } }); setSubFor(null); })}
+                onClick={() => act(async () => { await api(`/platform/resorts/${subFor.id}/subscription`, { method: "POST", body: {
+                    plan: subPlan,
+                    monthlyFee: Number(subFee),
+                    // an empty box means "whatever the plan sells", not "none":
+                    // Number("") is 0, and 0 is a real answer here
+                    ...(subTrial.trim() === "" ? {} : { trialDays: Number(subTrial) }),
+                  } }); setSubFor(null); })}
               >
                 Start subscription
               </Btn>

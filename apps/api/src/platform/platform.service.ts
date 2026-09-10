@@ -339,10 +339,14 @@ export class PlatformService {
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
-    input: { plan: string; monthlyFee?: number; note?: string },
+    input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
+    // one resort's terms, held to the same bounds as the plan's own
+    if (input.trialDays != null) {
+      assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
+    }
     // the plan table is the authority: a plan added there works with no deploy
     const def = await this.prisma.platformPlan.findUnique({ where: { name: input.plan } });
     if (!def) throw badRequest(`Unknown plan "${input.plan}"`);
@@ -378,16 +382,37 @@ export class PlatformService {
       // a trial is for someone who has not had one; a paying resort changing
       // plan carries its dates and its status across
       const fresh = !existing || existing.status === "TRIAL";
-      const trialEndsAt = fresh ? addDays(now, def.trialDays) : existing.trialEndsAt;
+
+      /**
+       * How long this resort's trial runs, and whether it has one at all.
+       *
+       * The plan's length is the offer; `input.trialDays` is the owner giving
+       * one customer different terms, the way `monthlyFee` already could.
+       *
+       * Zero means no trial, and that has to mean ACTIVE from the start rather
+       * than a TRIAL whose end date is already behind it. The money was right
+       * either way — the sweep bills from `trialEndsAt` — but the resort's own
+       * subscription page read "Trial, ends today" until the next hourly sweep
+       * corrected it, which is a strange thing to show someone who is paying.
+       * `renewsAt: now` puts them in front of `raiseRenewals` instead, which
+       * raises the first bill for a period starting today.
+       */
+      const trialDays = input.trialDays ?? def.trialDays;
+      const onTrial = fresh && trialDays > 0;
+      const trialEndsAt = fresh ? (onTrial ? addDays(now, trialDays) : null) : existing.trialEndsAt;
+
+      const status = fresh ? (onTrial ? "TRIAL" : "ACTIVE") : existing.status;
+      const renewsAt = fresh ? (onTrial ? trialEndsAt : now) : existing.renewsAt;
+
       return tx.subscription.create({
         data: {
           resortId,
           plan: input.plan,
-          status: existing && !fresh ? existing.status : "TRIAL",
+          status,
           monthlyFee,
           startedAt: existing?.startedAt ?? now,
           trialEndsAt,
-          renewsAt: existing && !fresh ? existing.renewsAt : trialEndsAt,
+          renewsAt,
           note: input.note,
         },
       });

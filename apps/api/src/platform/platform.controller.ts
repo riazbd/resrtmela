@@ -9,6 +9,8 @@ class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
+  /** This resort's trial, when it differs from the plan's. 0 means none. */
+  @IsOptional() @IsInt() @Min(0) trialDays?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
 }
 
