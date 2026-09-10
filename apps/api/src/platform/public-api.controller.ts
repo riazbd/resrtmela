@@ -84,20 +84,3 @@ export class PublicApiController {
     return this.bookings.create(this.claimsFor(resortId), input);
   }
 }
-
-/** Public homepage CMS content (no auth). */
-@Controller("cms")
-export class PublicCmsController {
-  constructor(@Inject(PlatformService) private readonly platform: PlatformService) {}
-
-  @Get()
-  all() {
-    return this.platform.publicCms();
-  }
-
-  /** The price list the homepage quotes — the same rows Platform → Plans edits. */
-  @Get("plans")
-  plans() {
-    return this.platform.publicPlans();
-  }
-}
