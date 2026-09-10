@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
 import { Card, Empty, Select, Spinner } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
-import { occupancyCells } from "@/lib/agency-calendar";
+import { occupancyCells, freeSpan } from "@/lib/agency-calendar";
+import { todayIn, monthOf, addDaysIso } from "@/lib/resort-dates";
 import type { AgencyCalendar } from "@rh/shared";
 
 /**
@@ -27,18 +29,33 @@ import type { AgencyCalendar } from "@rh/shared";
  * then the blocks are labelled here too.
  */
 
-const monthStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-const addMonths = (d: Date, n: number) =>
-  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+/**
+ * Dates here are `YYYY-MM-DD` strings, not `Date` objects.
+ *
+ * This page had its own `iso()` and `addMonths()` built on `Date.UTC`, which is
+ * the eighth copy of a helper `lib/resort-dates` already owns — and the copy
+ * decides which month the arrows land on. `monthOf` is anchored at midday so an
+ * offset cannot drift it, and `todayIn` reads the resort's own clock rather
+ * than the browser's, which from 18:00 in Dhaka is a different day.
+ */
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-export default function AgencyCalendarPage() {
-  const { role } = useAuth();
-  const [month, setMonth] = useState(() => monthStart(new Date()));
-  const [resortId, setResortId] = useState<number | null>(null);
+/** Thursday and Friday: the two days this market prices differently. */
+const WEEKEND = new Set([4, 5]);
+const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
 
-  const from = iso(month);
-  const to = iso(addMonths(month, 1));
+export default function AgencyCalendarPage() {
+  const router = useRouter();
+  const { role, activeResort } = useAuth();
+  // the resort's today, not the browser's
+  const today = todayIn(activeResort?.timezone);
+  const [month, setMonth] = useState(() => today.slice(0, 7));
+  const [resortId, setResortId] = useState<number | null>(null);
+  /** The first night of a stay being picked out, waiting for its second click. */
+  const [anchor, setAnchor] = useState<{ roomId: number; night: string } | null>(null);
+
+  const from = monthOf.firstDay(month);
+  const to = addDaysIso(monthOf.lastDay(month), 1);
 
   const { data, isLoading, error } = useApi<AgencyCalendar>(
     keys.agentCalendar(from, to),
@@ -63,9 +80,39 @@ export default function AgencyCalendarPage() {
   // decides what a square means lives in `lib/agency-calendar` with its tests
   const cells = useMemo(() => occupancyCells(chosen?.stays ?? []), [chosen]);
 
+  /**
+   * First click marks the night; second click takes the stay between them.
+   *
+   * Every free square used to be a link that opened the form for that one
+   * night, so an agent placing three nights for a group went round the loop
+   * three times. A second click in a different room, or across a night someone
+   * else has, starts again from there rather than offering a booking the engine
+   * would refuse after it had been quoted.
+   */
+  function pickNight(roomId: number, night: string) {
+    if (!chosen) return;
+    if (!anchor || anchor.roomId !== roomId) {
+      setAnchor({ roomId, night });
+      return;
+    }
+    const span = freeSpan(cells, roomId, anchor.night, night);
+    if (!span) {
+      setAnchor({ roomId, night });
+      return;
+    }
+    setAnchor(null);
+    router.push(
+      `/bookings?resortId=${chosen.resort.id}&roomId=${roomId}&checkIn=${span.from}&checkOut=${span.to}&new=1`,
+    );
+  }
+
   if (role !== "AGENT") return <Empty msg="Agents only" />;
 
-  const label = month.toLocaleString("en", { month: "long", year: "numeric", timeZone: "UTC" });
+  const label = new Date(`${from}T12:00:00Z`).toLocaleString("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   const taken = cells.size;
   const capacity = (chosen?.rooms.length ?? 0) * days.length;
   const mine = [...cells.values()].filter((c) => c.mine).length;
@@ -85,7 +132,7 @@ export default function AgencyCalendarPage() {
             <button
               type="button"
               aria-label="Previous month"
-              onClick={() => setMonth(addMonths(month, -1))}
+              onClick={() => { setMonth(monthOf(month, -1)); setAnchor(null); }}
               className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -96,7 +143,7 @@ export default function AgencyCalendarPage() {
             <button
               type="button"
               aria-label="Next month"
-              onClick={() => setMonth(addMonths(month, 1))}
+              onClick={() => { setMonth(monthOf(month, 1)); setAnchor(null); }}
               className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
             >
               <ChevronRight className="h-4 w-4" />
@@ -126,6 +173,9 @@ export default function AgencyCalendarPage() {
             </span>
             <span className="flex items-center gap-1">
               <i className="h-3 w-3 rounded-sm border border-slate-200 bg-white" /> Free
+            </span>
+            <span className="hidden sm:inline text-slate-400">
+              Click a free night, then its last night, to take the whole stay.
             </span>
           </div>
         </div>
@@ -162,14 +212,39 @@ export default function AgencyCalendarPage() {
                   <th className="sticky left-0 z-10 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
                     Room
                   </th>
-                  {days.map((d) => (
-                    <th
-                      key={iso(d)}
-                      className="w-7 pb-2 text-center font-medium tabular-nums text-slate-400"
-                    >
-                      {d.getUTCDate()}
-                    </th>
-                  ))}
+                  {/* The numbers alone gave no way to tell Thursday from
+                      Tuesday, on a calendar whose whole job is which nights are
+                      worth what. Thursday and Friday are the weekend here. */}
+                  {days.map((d) => {
+                    const day = iso(d);
+                    const isToday = day === today;
+                    const weekend = WEEKEND.has(d.getUTCDay());
+                    return (
+                      <th
+                        key={day}
+                        className={`w-7 pb-2 text-center font-medium tabular-nums ${
+                          isToday ? "text-brand-700" : weekend ? "text-slate-500" : "text-slate-400"
+                        }`}
+                      >
+                        <span
+                          className={`block text-[10px] font-semibold uppercase ${
+                            weekend ? "text-amber-600" : "text-slate-300"
+                          }`}
+                        >
+                          {WEEKDAY_INITIALS[d.getUTCDay()]}
+                        </span>
+                        <span
+                          className={
+                            isToday
+                              ? "mx-auto flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 font-bold text-white"
+                              : ""
+                          }
+                        >
+                          {d.getUTCDate()}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -194,12 +269,35 @@ export default function AgencyCalendarPage() {
                       // it is the thing you click: the form opens with this
                       // resort, this room and this date already filled in
                       if (!cell) {
+                        const night = iso(d);
+                        const isAnchor = anchor?.roomId === room.id && anchor.night === night;
+                        // once a night is marked, the nights the stay could
+                        // still reach are tinted — so how far the run of free
+                        // nights goes is visible before the second click
+                        const reachable =
+                          !isAnchor &&
+                          anchor?.roomId === room.id &&
+                          freeSpan(cells, room.id, anchor.night, night) !== null;
+                        const weekend = WEEKEND.has(d.getUTCDay());
                         return (
-                          <td key={iso(d)} className="p-[1px]">
-                            <Link
-                              href={`/bookings?resortId=${chosen.resort.id}&roomId=${room.id}&checkIn=${iso(d)}&checkOut=${iso(new Date(d.getTime() + 86_400_000))}&new=1`}
-                              title={`Book ${room.name} for ${iso(d)}`}
-                              className="block h-6 rounded-sm border border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+                          <td key={night} className="p-[1px]">
+                            <button
+                              type="button"
+                              onClick={() => pickNight(room.id, night)}
+                              title={
+                                anchor?.roomId === room.id
+                                  ? `${room.name}: ${anchor.night} → ${night}`
+                                  : `${room.name} free on ${night} — click, then the last night`
+                              }
+                              className={`block h-6 w-full rounded-sm border transition ${
+                                isAnchor
+                                  ? "border-brand-500 bg-brand-200"
+                                  : reachable
+                                    ? "border-brand-300 bg-brand-50"
+                                    : weekend
+                                      ? "border-amber-100 bg-amber-50/40 hover:border-brand-400 hover:bg-brand-50"
+                                      : "border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
+                              }`}
                             />
                           </td>
                         );

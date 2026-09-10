@@ -16,7 +16,7 @@
  * by the one next to it.
  */
 import { describe, expect, it } from "vitest";
-import { occupancyCells, type CalendarStay } from "@/lib/agency-calendar";
+import { occupancyCells, freeSpan, type CalendarStay } from "@/lib/agency-calendar";
 
 const stay = (over: Partial<CalendarStay> = {}): CalendarStay => ({
   roomId: 1,
@@ -75,5 +75,61 @@ describe("occupancyCells", () => {
       stay({ checkIn: "2026-10-08T00:00:00.000Z", checkOut: "2026-10-05T00:00:00.000Z" }),
     ]);
     expect(cells.size).toBe(0);
+  });
+});
+
+/**
+ * Picking a stay, not a night.
+ *
+ * Every free square opened the booking form for that one night. An agent
+ * planning three nights for a group clicked, booked one night, went back, and
+ * did it again — or gave up and used the form. A calendar you cannot drag a
+ * stay across is a report with links on it.
+ *
+ * The rule is deliberately strict: a span is offered only when *every* night in
+ * it is free in that room. Offering a range with a taken night in the middle
+ * would hand the agent a booking the engine is about to refuse, after they have
+ * quoted it to a guest.
+ */
+describe("choosing a span of nights", () => {
+  const taken = (roomId: number, night: string) =>
+    new Map([[`${roomId}|${night}`, { mine: false, guestName: null, code: null }]]);
+
+  it("turns two clicks into a stay", () => {
+    expect(freeSpan(new Map(), 1, "2026-10-05", "2026-10-07")).toEqual({
+      from: "2026-10-05",
+      // three nights: the 5th, 6th and 7th — so checkout is the 8th
+      to: "2026-10-08",
+    });
+  });
+
+  it("does not care which end was clicked first", () => {
+    expect(freeSpan(new Map(), 1, "2026-10-07", "2026-10-05")).toEqual({
+      from: "2026-10-05",
+      to: "2026-10-08",
+    });
+  });
+
+  it("makes one night a one-night stay", () => {
+    expect(freeSpan(new Map(), 1, "2026-10-05", "2026-10-05")).toEqual({
+      from: "2026-10-05",
+      to: "2026-10-06",
+    });
+  });
+
+  it("refuses a span with a taken night inside it", () => {
+    expect(freeSpan(taken(1, "2026-10-06"), 1, "2026-10-05", "2026-10-07")).toBeNull();
+  });
+
+  it("ignores a night taken in a different room", () => {
+    expect(freeSpan(taken(2, "2026-10-06"), 1, "2026-10-05", "2026-10-07")).toEqual({
+      from: "2026-10-05",
+      to: "2026-10-08",
+    });
+  });
+
+  it("refuses a span longer than anyone means to click", () => {
+    // a mis-click on January and then December must not offer a year-long stay
+    expect(freeSpan(new Map(), 1, "2026-01-01", "2026-12-31")).toBeNull();
   });
 });

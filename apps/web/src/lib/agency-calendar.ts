@@ -50,3 +50,46 @@ export function occupancyCells(stays: CalendarStay[]): Map<string, CalendarCell>
   }
   return cells;
 }
+
+/**
+ * The longest stay anyone means to select by clicking twice.
+ *
+ * A mis-click on the 1st and then the 31st of a later month should not offer a
+ * year-long booking, so a span past this is treated as a fresh start rather
+ * than a range.
+ */
+export const MAX_SPAN_NIGHTS = 31;
+
+/**
+ * Two clicked nights → the stay they describe, or null.
+ *
+ * Every free square used to open the booking form for that one night, so an
+ * agent placing a group went round the loop once per night. This is the rule
+ * that lets them click the first and the last instead.
+ *
+ * Strict on purpose: a span is offered only when *every* night in it is free in
+ * that room. Offering a range with a taken night in the middle hands the agent
+ * a booking the engine will refuse, after they have quoted it to a guest.
+ *
+ * `to` is the checkout date — one day past the last night, the way the booking
+ * engine counts everywhere else.
+ */
+export function freeSpan(
+  cells: Map<string, CalendarCell>,
+  roomId: number,
+  a: string,
+  b: string,
+): { from: string; to: string } | null {
+  const [first, last] = a <= b ? [a, b] : [b, a];
+  const start = new Date(`${first}T00:00:00Z`).getTime();
+  const end = new Date(`${last}T00:00:00Z`).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+
+  const nights = Math.round((end - start) / DAY_MS) + 1;
+  if (nights < 1 || nights > MAX_SPAN_NIGHTS) return null;
+
+  for (let t = start; t <= end; t += DAY_MS) {
+    if (cells.has(`${roomId}|${iso(new Date(t))}`)) return null;
+  }
+  return { from: first, to: iso(new Date(end + DAY_MS)) };
+}
