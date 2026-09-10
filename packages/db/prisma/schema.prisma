@@ -1036,10 +1036,28 @@ model PlatformPlan {
   monthlyFee Decimal @db.Decimal(10, 2)
   maxRooms   Int     @default(10)
   maxResorts Int     @default(1) // multi-resort gate: CHAIN allows several resorts per owner
+  maxStaff   Int     @default(1) // "1 staff account" / "5 staff accounts" on the pricing card
   trialDays  Int     @default(14) // free trial length for this plan
   blurb      String? @db.VarChar(200)
+
+  /// Which of `PLAN_FEATURES` this plan includes — a string[] of feature keys.
+  ///
+  /// JSON rather than a join table, following `CustomRole.permissions`: the
+  /// list is short, always read whole, and validated against a code-declared
+  /// vocabulary on the way in, so a key nobody implemented cannot be stored.
+  ///
+  /// These used to be a hardcoded map on the homepage keyed by plan name. A
+  /// plan the owner created showed no features, and no line on any card locked
+  /// anything.
+  features   Json    @default("[]")
+
   active     Boolean @default(true)
   sortOrder  Int     @default(0)
+
+  /// The one plan the pricing page recommends. At most one row is true, which
+  /// the service enforces — "at most one" is not something a unique index can
+  /// say without storing NULL for false.
+  highlight  Boolean @default(false)
 
   @@map("platform_plans")
 }

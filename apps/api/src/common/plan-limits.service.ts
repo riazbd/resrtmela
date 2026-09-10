@@ -20,14 +20,24 @@
  *   3. neither, or a name nobody sells → the cheapest plan still on sale
  */
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import { planFeatureLabel } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { forbid } from "./rbac";
 
 export interface PlanLimits {
   label: string;
   maxRooms: number;
   maxResorts: number;
+  maxStaff: number;
+  /** Keys from `PLAN_FEATURES` — what the owner ticked for this plan. */
+  features: string[];
   /** Where the numbers came from — useful in error messages and support. */
   source: "subscription" | "tenant" | "fallback";
+}
+
+/** `features` is JSON in the database, so it is whatever was written into it. */
+function featureList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((k): k is string => typeof k === "string") : [];
 }
 
 /**
@@ -42,6 +52,17 @@ const NO_CATALOGUE: PlanLimits = {
   label: "Unconfigured",
   maxRooms: 10,
   maxResorts: 1,
+  maxStaff: 1,
+  /**
+   * Everything, unlike the room count.
+   *
+   * A tight room limit on a broken install is a wall someone hits while adding
+   * their eleventh room. A missing feature list would instead present itself to
+   * a paying customer as a downgrade — their restaurant gone, their agents
+   * gone — because the catalogue failed to load. Locks are for plans that were
+   * sold; an empty table sold nothing.
+   */
+  features: [],
   source: "fallback",
 };
 
@@ -89,8 +110,39 @@ export class PlanLimitsService {
   private async planByName(name: string): Promise<Omit<PlanLimits, "source"> | null> {
     const plan = await this.prisma.platformPlan.findUnique({ where: { name } });
     return plan
-      ? { label: plan.label, maxRooms: plan.maxRooms, maxResorts: plan.maxResorts }
+      ? {
+          label: plan.label,
+          maxRooms: plan.maxRooms,
+          maxResorts: plan.maxResorts,
+          maxStaff: plan.maxStaff,
+          features: featureList(plan.features),
+        }
       : null;
+  }
+
+  /**
+   * Does this resort's plan include `key`?
+   *
+   * Only a real subscription can answer no. A resort resolved through its
+   * tenant's plan name, or through the fallback because nothing identified it,
+   * is not a downgraded customer — it is one the platform has never billed, and
+   * every resort in the live database is in exactly that state today, several
+   * of them running a restaurant. Taking a working module away from them on the
+   * strength of a plan nobody put them on would be a bug wearing a feature's
+   * clothes.
+   */
+  async hasFeature(resortId: number, key: string): Promise<boolean> {
+    const limits = await this.forResort(resortId);
+    return limits.source === "subscription" ? limits.features.includes(key) : true;
+  }
+
+  /** Throws 403 naming the feature and the plan, so the owner knows what to buy. */
+  async requireFeature(resortId: number, key: string): Promise<void> {
+    const limits = await this.forResort(resortId);
+    if (limits.source !== "subscription" || limits.features.includes(key)) return;
+    throw forbid(
+      `Your ${limits.label} plan does not include ${planFeatureLabel(key)}. Change the plan to switch it on.`,
+    );
   }
 
   /**
@@ -113,6 +165,8 @@ export class PlanLimitsService {
       label: plan.label,
       maxRooms: plan.maxRooms,
       maxResorts: plan.maxResorts,
+      maxStaff: plan.maxStaff,
+      features: featureList(plan.features),
       source: "fallback",
     };
   }

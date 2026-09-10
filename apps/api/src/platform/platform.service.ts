@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims, isPermissionKey, formatMoney, ALL_PERMISSIONS } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey, isPlanFeature, formatMoney, ALL_PERMISSIONS } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
@@ -42,9 +42,14 @@ export interface PlanInput {
   maxRooms: number;
   maxResorts: number;
   trialDays: number;
+  /** Keys from `PLAN_FEATURES` — what this plan includes. */
+  features?: string[];
+  maxStaff?: number;
   blurb?: string | null;
   sortOrder?: number;
   active?: boolean;
+  /** The one plan the pricing page recommends. */
+  highlight?: boolean;
 }
 
 /** Every field optional, plus `name` so a rename can be refused rather than ignored. */
@@ -76,6 +81,7 @@ const PLAN_BOUNDS = {
   monthlyFee: 99_999_999.99, // Decimal(10,2)
   maxRooms: 100_000,
   maxResorts: 1_000,
+  maxStaff: 10_000,
   trialDays: 365,
   sortOrder: 9_999,
 };
@@ -111,8 +117,20 @@ function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean })
     }
     if (Math.round(fee * 100) !== fee * 100) throw badRequest("Monthly fee cannot be finer than a paisa");
   }
+  if (input.features != null) {
+    if (!Array.isArray(input.features)) throw badRequest("Features must be a list");
+    /**
+     * A key the code has never heard of gates nothing, so storing one would
+     * sell a lock with no door — the owner unticks the box, the card stops
+     * promising it, and the customer carries on using it. Same reasoning as
+     * `sanitizePermissions`, and the same vocabulary discipline.
+     */
+    const unknown = input.features.filter((k) => !isPlanFeature(k));
+    if (unknown.length) throw badRequest(`Not a feature this platform can switch on: ${unknown.join(", ")}`);
+  }
   // a plan that sells no rooms sells nothing; a plan for no resorts reaches nobody
   if (input.maxRooms != null) assertWholeNumber(input.maxRooms, "Room limit", 1, PLAN_BOUNDS.maxRooms);
+  if (input.maxStaff != null) assertWholeNumber(input.maxStaff, "Staff limit", 1, PLAN_BOUNDS.maxStaff);
   if (input.maxResorts != null) assertWholeNumber(input.maxResorts, "Resort limit", 1, PLAN_BOUNDS.maxResorts);
   // zero is a plan with no free trial, which is a real choice
   if (input.trialDays != null) assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
@@ -406,12 +424,16 @@ export class PlatformService {
         monthlyFee: input.monthlyFee as never,
         maxRooms: input.maxRooms,
         maxResorts: input.maxResorts,
+        maxStaff: input.maxStaff ?? 1,
         trialDays: input.trialDays,
+        features: (input.features ?? []) as never,
         blurb: input.blurb?.trim() || null,
         sortOrder: input.sortOrder ?? 0,
         active: input.active ?? true,
+        highlight: input.highlight ?? false,
       },
     });
+    if (input.highlight) await this.featureOnly(plan.name);
     await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
   }
@@ -439,15 +461,34 @@ export class PlatformService {
         ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee as never } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
         ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
+        ...(input.maxStaff != null ? { maxStaff: input.maxStaff } : {}),
         ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
+        ...(input.features != null ? { features: input.features as never } : {}),
         ...(input.label != null ? { label: input.label } : {}),
         ...(input.blurb != null ? { blurb: input.blurb.trim() || null } : {}),
         ...(input.sortOrder != null ? { sortOrder: input.sortOrder } : {}),
         ...(input.active != null ? { active: input.active } : {}),
+        ...(input.highlight != null ? { highlight: input.highlight } : {}),
       },
     });
+    if (input.highlight) await this.featureOnly(name);
     await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
+  }
+
+  /**
+   * "Most popular" means most popular, so only one plan may wear it.
+   *
+   * Enforced here rather than by a unique index: the rule is "at most one row
+   * is true", which a UNIQUE column can only express by storing NULL for false
+   * — and then a row means true, false, or nothing, which is one meaning too
+   * many.
+   */
+  private async featureOnly(name: string) {
+    await this.prisma.platformPlan.updateMany({
+      where: { name: { not: name }, highlight: true },
+      data: { highlight: false },
+    });
   }
 
   /**
@@ -1072,6 +1113,7 @@ export class PlatformService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "discounts.manage");
+    await this.planLimits.requireFeature(resortId, "discounts");
     if (input.scope === "ROOM_TYPE" && !input.roomTypeId) throw badRequest("Pick a room type for this offer");
     if (input.scope === "ROOM" && !input.roomId) throw badRequest("Pick a room for this offer");
     if (input.kind === "PERCENT" && (input.value <= 0 || input.value > 100)) throw badRequest("percent 1-100");
@@ -1144,6 +1186,8 @@ export class PlatformService {
   async createApiKey(claims: JwtClaims, resortId: number, name: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "apikeys.manage");
+    // a key is the whole of the public API; issuing one is buying the feature
+    await this.planLimits.requireFeature(resortId, "public_api");
     const secret = randomBytes(24).toString("hex");
     const prefix = `rm_live_${randomBytes(4).toString("hex")}`;
     const keyHash = createHash("sha256").update(secret).digest("hex");
@@ -1478,10 +1522,16 @@ export class PlatformService {
       orderBy: { sortOrder: "asc" },
       select: {
         name: true, label: true, monthlyFee: true,
-        maxRooms: true, maxResorts: true, trialDays: true, blurb: true,
+        maxRooms: true, maxResorts: true, maxStaff: true, trialDays: true, blurb: true, highlight: true,
+        // the ticks on the card are drawn from this, not from a map in the page
+        features: true,
       },
     });
-    return rows.map((r) => ({ ...r, monthlyFee: Number(r.monthlyFee) }));
+    return rows.map((r) => ({
+      ...r,
+      monthlyFee: Number(r.monthlyFee),
+      features: Array.isArray(r.features) ? (r.features as string[]) : [],
+    }));
   }
 
   async putCms(claims: JwtClaims, key: string, value: string) {

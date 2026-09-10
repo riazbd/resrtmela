@@ -6,6 +6,7 @@ import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
+import { PlanLimitsService } from "../common/plan-limits.service";
 import { OptionsService } from "../options/options.service";
 import { TaxService } from "../common/tax.service";
 import { fbBillTotals } from "../common/money";
@@ -100,6 +101,7 @@ export class ImportService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(OptionsService) private readonly options: OptionsService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   private parseRows(csvText: string): SheetRow[] {
@@ -178,6 +180,7 @@ export class ImportService {
   ): Promise<ImportReport> {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     if (csvText.length > 2_000_000) throw badRequest("CSV too large (2MB max)");
 
     const rows = this.parseRows(csvText);
@@ -497,6 +500,7 @@ export class ImportService {
   async importExpenses(claims: JwtClaims, resortId: number, csvText: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());
@@ -572,6 +576,7 @@ export class ImportService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());

@@ -7,6 +7,7 @@ import { dateOnly } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { expandSchedules, slotDateTime, ScheduleRow } from "./schedule";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 const LIVE_STATES = ["PENDING", "CONFIRMED", "CHECKED_IN"];
 
@@ -16,6 +17,7 @@ export class ActivitiesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ── catalog CRUD ──
@@ -64,6 +66,7 @@ export class ActivitiesService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "activities.manage");
+    await this.planLimits.requireFeature(resortId, "activities");
     const cat = await this.prisma.activityCatalog.create({
       data: {
         resortId,

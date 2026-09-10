@@ -6,6 +6,7 @@ import { api, money, dmy, type CmsRow, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Tabs } from "@/components/patterns";
 import { useAuth } from "@/lib/auth";
+import { PLAN_FEATURES } from "@rh/shared";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
@@ -45,11 +46,32 @@ interface PlanDef {
   label: string;
   monthlyFee: string;
   maxRooms: number;
-  maxResorts?: number;
+  maxResorts: number;
+  maxStaff: number;
+  trialDays: number;
+  /** Keys from PLAN_FEATURES — what this plan includes, and what it locks. */
+  features: string[];
   blurb: string | null;
   active: boolean;
   sortOrder: number;
+  /** The one plan the pricing page recommends. */
+  highlight: boolean;
 }
+
+/** Every field the panel can send. `name` is absent on purpose: it is fixed. */
+type PlanEdit = {
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  maxStaff: number;
+  trialDays: number;
+  features: string[];
+  blurb: string;
+  active: boolean;
+  sortOrder: number;
+  highlight: boolean;
+};
 
 interface DueRow {
   id: string;
@@ -143,19 +165,28 @@ export default function PlatformPage() {
     await qc.invalidateQueries({ queryKey: ["platform"] });
   }, [qc]);
 
-  async function savePlan(name: string, monthlyFee: number, maxRooms: number) {
+  /** Runs `work`, shows whatever it throws, and refreshes. One shape for all three. */
+  async function planAction(work: () => Promise<unknown>) {
     setBusy(true);
     setErr("");
     try {
-      await api(`/platform/plans/${name}`, { method: "PATCH", body: { monthlyFee, maxRooms } });
+      await work();
       await loadAll();
-      setErr("");
     } catch (e) {
       setErr(String((e as Error).message ?? e));
     } finally {
       setBusy(false);
     }
   }
+
+  const savePlan = (name: string, patch: PlanEdit) =>
+    planAction(() => api(`/platform/plans/${name}`, { method: "PATCH", body: patch }));
+
+  const createPlan = (body: PlanEdit & { name: string }) =>
+    planAction(() => api("/platform/plans", { method: "POST", body }));
+
+  const deletePlan = (name: string) =>
+    planAction(() => api(`/platform/plans/${name}`, { method: "DELETE" }));
 
   const [calYear, calMonth] = month.split("-").map(Number);
   const calQ = useApi(
@@ -402,21 +433,33 @@ export default function PlatformPage() {
 
       {/* ── plans ── */}
       {tab === "Plans" && plans && (
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          {plans.map((p) => (
-            <PlanCard key={p.name} plan={p} busy={busy} onSave={savePlan} />
-          ))}
-          <div className="md:col-span-3">
-            <Card className="p-4">
-              <div className="text-sm font-bold">How plan billing works</div>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
-                <li>Assign a plan per resort in the <b>Resorts</b> tab — every subscription starts with a 14-day free trial.</li>
-                <li><b>Renew</b> generates the next period&apos;s due (fee × months) and extends the renewal date.</li>
-                <li>Collect the money in the <b>Dues</b> tab — marking paid keeps the subscription <b>Active</b>.</li>
-                <li>Fee edits here apply to <b>new subscriptions</b>; existing ones keep their fee until you renew them manually with the new amount in mind.</li>
-              </ul>
-            </Card>
+        <div className="mt-5 space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {plans.map((p) => (
+              <PlanCard
+                key={p.name}
+                plan={p}
+                busy={busy}
+                onSave={savePlan}
+                onDelete={deletePlan}
+              />
+            ))}
+            <NewPlanCard busy={busy} onCreate={createPlan} taken={plans.map((p) => p.name)} />
           </div>
+          <Card className="p-4">
+            <div className="text-sm font-bold">How plan billing works</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-500">
+              <li>Assign a plan per resort in the <b>Resorts</b> tab — the trial length comes from the plan.</li>
+              <li><b>Renew</b> generates the next period&apos;s due (fee × months) and extends the renewal date.</li>
+              <li>Collect the money in the <b>Dues</b> tab — marking paid keeps the subscription <b>Active</b>.</li>
+              <li>Fee edits here apply to <b>new subscriptions</b>; existing ones keep their fee until you renew them manually with the new amount in mind.</li>
+              <li>
+                Ticks are locks. Unticking a feature closes that part of the console for every resort
+                <b> on a subscription to this plan</b> — a resort with no subscription keeps everything,
+                because a plan is something you sold them.
+              </li>
+            </ul>
+          </Card>
         </div>
       )}
 
@@ -715,36 +758,302 @@ export default function PlatformPage() {
   );
 }
 
-function PlanCard({ plan, busy, onSave }: { plan: PlanDef; busy: boolean; onSave: (name: string, fee: number, rooms: number) => void }) {
-  const [fee, setFee] = useState(String(Number(plan.monthlyFee)));
-  const [rooms, setRooms] = useState(String(plan.maxRooms));
-  const dirty = Number(fee) !== Number(plan.monthlyFee) || Number(rooms) !== plan.maxRooms;
+/** A number box that keeps its own text, so a half-typed value is not fought over. */
+function NumField({ label, value, min, onChange }: { label: string; value: number; min: number; onChange: (n: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold text-slate-500">{label}</span>
+      <input
+        type="number"
+        min={min}
+        value={String(value)}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+      />
+    </label>
+  );
+}
+
+/**
+ * The tick boxes. This is the whole point of the screen.
+ *
+ * The list comes from `PLAN_FEATURES` in @rh/shared, which is also what the API
+ * locks on and what the public pricing card prints. One vocabulary, three
+ * readers — so a box unticked here is a door shut there, and neither can drift.
+ */
+function FeaturePicker({ chosen, onToggle }: { chosen: string[]; onToggle: (key: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[11px] font-semibold text-slate-500">What this plan includes</div>
+      {PLAN_FEATURES.map((f) => (
+        <label key={f.key} className="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50">
+          <input
+            type="checkbox"
+            checked={chosen.includes(f.key)}
+            onChange={() => onToggle(f.key)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-brand-600"
+          />
+          <span>
+            <span className="block text-xs font-medium text-slate-700">{f.label}</span>
+            <span className="block text-[10px] text-slate-400">{f.blurb}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function toEdit(plan: PlanDef): PlanEdit {
+  return {
+    label: plan.label,
+    monthlyFee: Number(plan.monthlyFee),
+    maxRooms: plan.maxRooms,
+    maxResorts: plan.maxResorts,
+    maxStaff: plan.maxStaff,
+    trialDays: plan.trialDays,
+    features: [...(plan.features ?? [])],
+    blurb: plan.blurb ?? "",
+    active: plan.active,
+    sortOrder: plan.sortOrder,
+    highlight: plan.highlight,
+  };
+}
+
+function PlanCard({
+  plan,
+  busy,
+  onSave,
+  onDelete,
+}: {
+  plan: PlanDef;
+  busy: boolean;
+  onSave: (name: string, patch: PlanEdit) => void;
+  onDelete: (name: string) => void;
+}) {
+  const [form, setForm] = useState<PlanEdit>(() => toEdit(plan));
+  // a save refetches the list; re-seed the form from whatever came back
+  useEffect(() => { setForm(toEdit(plan)); }, [plan]);
+
+  const set = <K extends keyof PlanEdit>(k: K, v: PlanEdit[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const toggle = (key: string) =>
+    setForm((f) => ({
+      ...f,
+      features: f.features.includes(key) ? f.features.filter((k) => k !== key) : [...f.features, key],
+    }));
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(toEdit(plan));
+
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between">
-        <div className="text-lg font-bold text-slate-900">{plan.label}</div>
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${plan.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>{plan.active ? "active" : "hidden"}</span>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-lg font-bold text-slate-900">{form.label || plan.name}</div>
+          <div className="font-mono text-[10px] uppercase tracking-wide text-slate-400">{plan.name}</div>
+        </div>
+        <button
+          onClick={() => set("active", !form.active)}
+          title={form.active ? "On sale — click to retire" : "Retired — click to sell again"}
+          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${form.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
+        >
+          {form.active ? "on sale" : "retired"}
+        </button>
       </div>
-      <div className="mt-0.5 text-xs text-slate-400">{plan.blurb}</div>
-      {plan.maxResorts != null && plan.maxResorts > 1 && (
-        <div className="mt-1 text-[11px] font-semibold text-brand-600">up to {plan.maxResorts} resorts per owner</div>
-      )}
+
       <div className="mt-4 space-y-3">
         <label className="block">
-          <span className="text-xs font-semibold text-slate-500">Monthly fee ({cur()})</span>
-          <input type="number" min={0} value={fee} onChange={(e) => setFee(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <span className="text-[11px] font-semibold text-slate-500">Name on the pricing page</span>
+          <input
+            value={form.label}
+            onChange={(e) => set("label", e.target.value)}
+            maxLength={40}
+            className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+          />
         </label>
         <label className="block">
-          <span className="text-xs font-semibold text-slate-500">Max rooms per resort</span>
-          <input type="number" min={1} value={rooms} onChange={(e) => setRooms(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <span className="text-[11px] font-semibold text-slate-500">One line under it</span>
+          <input
+            value={form.blurb}
+            onChange={(e) => set("blurb", e.target.value)}
+            maxLength={200}
+            placeholder="For small resorts leaving spreadsheets"
+            className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+          />
         </label>
-        <button
-          disabled={!dirty || busy}
-          onClick={() => onSave(plan.name, Number(fee), Number(rooms))}
-          className="w-full rounded-lg bg-brand-600 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-40"
-        >
-          {busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
-        </button>
+
+        <div className="grid grid-cols-2 gap-2">
+          <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
+          <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
+          <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
+          <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+          <NumField label="Staff accounts" value={form.maxStaff} min={1} onChange={(n) => set("maxStaff", n)} />
+          <NumField label="Shown in position" value={form.sortOrder} min={0} onChange={(n) => set("sortOrder", n)} />
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5">
+          <input
+            type="checkbox"
+            checked={form.highlight}
+            onChange={() => set("highlight", !form.highlight)}
+            className="h-4 w-4 accent-brand-600"
+          />
+          <span className="text-xs font-medium text-slate-700">
+            Recommend this one — wears the &ldquo;Most popular&rdquo; ribbon
+          </span>
+        </label>
+
+        <FeaturePicker chosen={form.features} onToggle={toggle} />
+
+        <div className="flex gap-2">
+          <button
+            disabled={!dirty || busy}
+            onClick={() => onSave(plan.name, form)}
+            className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-40"
+          >
+            {busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Delete the ${form.label || plan.name} plan? Retiring it instead keeps its customers and takes it off the pricing page.`)) {
+                onDelete(plan.name);
+              }
+            }}
+            className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const BLANK_PLAN: PlanEdit & { name: string } = {
+  name: "",
+  label: "",
+  monthlyFee: 0,
+  maxRooms: 10,
+  maxResorts: 1,
+  maxStaff: 1,
+  trialDays: 14,
+  features: [],
+  blurb: "",
+  active: true,
+  sortOrder: 0,
+  highlight: false,
+};
+
+function NewPlanCard({
+  busy,
+  onCreate,
+  taken,
+}: {
+  busy: boolean;
+  onCreate: (body: PlanEdit & { name: string }) => void;
+  taken: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(BLANK_PLAN);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => { setForm(BLANK_PLAN); setOpen(true); }}
+        className="flex min-h-[220px] items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-500 transition hover:border-brand-400 hover:text-brand-600"
+      >
+        + New plan
+      </button>
+    );
+  }
+
+  const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const name = form.name.toUpperCase().replace(/[^A-Z0-9_]/g, "");
+  const nameProblem = !/^[A-Z][A-Z0-9_]{1,15}$/.test(name)
+    ? "2–16 characters, A–Z, 0–9 or _, starting with a letter"
+    : taken.includes(name)
+      ? "A plan already has that name"
+      : null;
+
+  return (
+    <Card className="p-5">
+      <div className="text-lg font-bold text-slate-900">New plan</div>
+      <div className="mt-4 space-y-3">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-slate-500">Name — fixed once saved, because subscriptions point at it</span>
+          <input
+            value={name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder="SEASON"
+            className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 font-mono text-sm uppercase"
+          />
+          {name && nameProblem && <span className="mt-1 block text-[10px] font-medium text-red-600">{nameProblem}</span>}
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-slate-500">Name on the pricing page</span>
+          <input
+            value={form.label}
+            onChange={(e) => set("label", e.target.value)}
+            maxLength={40}
+            placeholder="Season"
+            className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-slate-500">One line under it</span>
+          <input
+            value={form.blurb}
+            onChange={(e) => set("blurb", e.target.value)}
+            maxLength={200}
+            className="mt-0.5 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
+          <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
+          <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
+          <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+          <NumField label="Staff accounts" value={form.maxStaff} min={1} onChange={(n) => set("maxStaff", n)} />
+          <NumField label="Shown in position" value={form.sortOrder} min={0} onChange={(n) => set("sortOrder", n)} />
+        </div>
+
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-2 py-1.5">
+          <input
+            type="checkbox"
+            checked={form.highlight}
+            onChange={() => set("highlight", !form.highlight)}
+            className="h-4 w-4 accent-brand-600"
+          />
+          <span className="text-xs font-medium text-slate-700">
+            Recommend this one — wears the &ldquo;Most popular&rdquo; ribbon
+          </span>
+        </label>
+
+        <FeaturePicker
+          chosen={form.features}
+          onToggle={(key) =>
+            setForm((f) => ({
+              ...f,
+              features: f.features.includes(key) ? f.features.filter((k) => k !== key) : [...f.features, key],
+            }))
+          }
+        />
+
+        <div className="flex gap-2">
+          <button
+            disabled={busy || !!nameProblem || !form.label.trim()}
+            onClick={() => { onCreate({ ...form, name }); setOpen(false); }}
+            className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-40"
+          >
+            {busy ? "Creating…" : "Create plan"}
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </Card>
   );

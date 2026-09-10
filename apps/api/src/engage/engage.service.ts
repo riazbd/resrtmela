@@ -7,6 +7,7 @@ import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 @Injectable()
 export class EngageService {
@@ -16,6 +17,7 @@ export class EngageService {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ─────────────── in-app notifications ───────────────
@@ -132,6 +134,8 @@ export class EngageService {
     if (!req) throw badRequest("request not found");
     if (!isManagement(claims.role)) throw forbid("management only");
     requireResortAccess(claims, req.resortId);
+    // letting an agent in is the act of using the feature; browsing is free
+    if (approve) await this.planLimits.requireFeature(req.resortId, "agents");
     const updated = await this.prisma.resortAccess.update({
       where: { id: req.id },
       data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
@@ -423,6 +427,7 @@ export class EngageService {
      */
     if (input.resortId != null) requireResortAccess(claims, input.resortId);
     await this.perms.require(claims, input.resortId ?? claims.resortIds[0], "marketing.send");
+    await this.planLimits.requireFeature(input.resortId ?? claims.resortIds[0]!, "bulk_email");
     const credit = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
     if (!credit || credit.credits <= 0) throw badRequest("no email credits — buy a pack first");
 

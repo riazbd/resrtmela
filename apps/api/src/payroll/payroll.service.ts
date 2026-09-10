@@ -5,6 +5,7 @@ import { requireResortAccess, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { PermissionsService } from "../common/permissions";
 import { AuditService } from "../common/audit.service";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 const MONTH_RE = /^\d{4}-\d{2}$/;
 
@@ -14,6 +15,7 @@ export class PayrollService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   private async requireView(claims: JwtClaims, resortId: number) {
@@ -23,6 +25,7 @@ export class PayrollService {
   private async requireManage(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "payroll.manage");
+    await this.planLimits.requireFeature(resortId, "payroll");
   }
 
   async employees(claims: JwtClaims, resortId: number) {

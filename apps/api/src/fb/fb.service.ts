@@ -8,6 +8,7 @@ import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { TaxService } from "../common/tax.service";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 /** Fallback only — the prefix is a per-resort setting. */
 const FB_PREFIX = "RES";
@@ -19,6 +20,7 @@ export class FbService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   private computeStatus(paid: number, total: number): "PAID" | "PARTIAL" | "UNPAID" {
@@ -43,6 +45,7 @@ export class FbService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "restaurant.create");
+    await this.planLimits.requireFeature(resortId, "restaurant");
     if (!input.items?.length) throw badRequest("At least one item required");
 
     // charge-to-room: validate the booking belongs to this resort & is live
@@ -333,6 +336,7 @@ export class FbService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "restaurant.menu");
+    await this.planLimits.requireFeature(resortId, "restaurant");
     if (!input.name.trim()) throw badRequest("package name required");
     const pkg = await this.prisma.foodPackage.create({
       data: {

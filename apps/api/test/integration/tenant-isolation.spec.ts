@@ -25,6 +25,7 @@ import {
   makePlatformService,
   makeIntentsService,
   makeImportService,
+  makeActivitiesService,
 } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ActivitiesService } from "../../src/activities/activities.service";
@@ -122,11 +123,7 @@ describe("editing a booking", () => {
 
 describe("adding an activity to a booking", () => {
   it("refuses a slot from another resort's catalogue", async () => {
-    const activities = new ActivitiesService(
-      asPrisma,
-      new AuditService(asPrisma),
-      new PermissionsService(asPrisma),
-    );
+    const activities = makeActivitiesService(asPrisma);
     const booking = await seedBooking(prisma as unknown as PrismaClient, ours, {
       checkIn: "2026-11-01", checkOut: "2026-11-03",
     });

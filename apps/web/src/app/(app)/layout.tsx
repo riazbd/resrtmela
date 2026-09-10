@@ -10,6 +10,7 @@ import {
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { consoleGate } from "@/lib/console-access";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -65,19 +66,47 @@ function Shell({ children }: { children: React.ReactNode }) {
     if (!loading && !me) router.replace("/login");
   }, [loading, me, router]);
 
+  const gate = consoleGate({ loading, me, activeResort });
+
   useEffect(() => {
     // guests don't get the console — they use the mobile app
-    if (!loading && me?.role === "GUEST") router.replace("/login");
-  }, [loading, me, router]);
+    if (gate === "login") router.replace("/login");
+  }, [gate, router]);
 
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
 
-  if (loading || !me || !activeResort) {
+  if (gate === "loading" || gate === "login" || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">
         Loading…
+      </div>
+    );
+  }
+
+  /**
+   * Locked out, not loading.
+   *
+   * Staff whose resort link was removed used to sit on the spinner above for
+   * ever, with nothing on the screen naming the problem or suggesting a way out.
+   */
+  if (gate === "no-resort") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="text-sm font-semibold text-slate-700">
+          Your account is not attached to a resort
+        </div>
+        <p className="max-w-sm text-xs text-slate-500">
+          Ask the resort owner to add you again from Settings → Team. Until they do, there is
+          nothing here for you to open.
+        </p>
+        <button
+          onClick={logout}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Sign out
+        </button>
       </div>
     );
   }
@@ -159,6 +188,8 @@ function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </button>
+            {activeResort && (
+              <>
             <span className="hidden text-xs text-slate-400 sm:inline">Resort</span>
             <Select
               className="!w-40 max-w-[45vw] sm:!w-56"
@@ -174,6 +205,8 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </option>
               ))}
             </Select>
+              </>
+            )}
             {role === "RESORT_ADMIN" && <AddResortButton />}
           </div>
           <div className="flex items-center gap-2">

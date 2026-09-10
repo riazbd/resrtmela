@@ -50,7 +50,7 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     prisma,
     new AvailabilityService(prisma, makeCommissionService(prisma)),
     makeRoomsService(prisma),
-    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
+    makeActivitiesService(prisma),
     // EmailService/SmsService fall back to console logging when unconfigured,
     // so nothing leaves the machine during a test run.
     makeNotificationsService(prisma),
@@ -76,6 +76,16 @@ export function makeNotificationsService(prisma: PrismaService): NotificationsSe
     new PlatformSettingsService(prisma),
     makeTemplatesService(prisma),
     makeTaxService(prisma),
+  );
+}
+
+/** Constructing this by hand in a spec is how helpers go stale; go through here. */
+export function makeActivitiesService(prisma: PrismaService): ActivitiesService {
+  return new ActivitiesService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makePlanLimits(prisma),
   );
 }
 
@@ -165,7 +175,13 @@ export function makeTemplatesService(prisma: PrismaService): TemplatesService {
 }
 
 export function makeFbService(prisma: PrismaService): FbService {
-  return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma), makeTaxService(prisma));
+  return new FbService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makeTaxService(prisma),
+    makePlanLimits(prisma),
+  );
 }
 
 export function makeReportsService(prisma: PrismaService): ReportsService {
@@ -203,7 +219,7 @@ export function makeExpensesService(prisma: PrismaService): ExpensesService {
 }
 
 export function makePayrollService(prisma: PrismaService): PayrollService {
-  return new PayrollService(prisma, new PermissionsService(prisma), new AuditService(prisma));
+  return new PayrollService(prisma, new PermissionsService(prisma), new AuditService(prisma), makePlanLimits(prisma));
 }
 
 export function makeSalesService(prisma: PrismaService, email?: EmailService): SalesService {
@@ -239,6 +255,7 @@ export function makeEngageService(prisma: PrismaService): EngageService {
     new EmailService(),
     new PermissionsService(prisma),
     makePlatformSettings(prisma),
+    makePlanLimits(prisma),
   );
 }
 
@@ -248,7 +265,7 @@ export function makeGuestService(prisma: PrismaService): GuestService {
     prisma,
     makeBookingsService(prisma),
     makeRoomsService(prisma),
-    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
+    makeActivitiesService(prisma),
     makeNotificationsService(prisma),
     audit,
     makeTaxService(prisma),
@@ -276,5 +293,6 @@ export function makeImportService(prisma: PrismaService): ImportService {
     new PermissionsService(prisma),
     makeOptionsService(prisma),
     makeTaxService(prisma),
+    makePlanLimits(prisma),
   );
 }

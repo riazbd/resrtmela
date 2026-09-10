@@ -178,6 +178,54 @@ describe("the fields the panel could never reach", () => {
   });
 });
 
+describe("the plan the pricing page pushes", () => {
+  /**
+   * The "Most popular" ribbon was pinned to `i === 1` — the second card on the
+   * page. With three plans that happened to be Growth and looked deliberate;
+   * with a fourth it lands wherever the sort order puts it, recommending a plan
+   * nobody chose to recommend.
+   */
+  it("is the owner's choice, not the second position in the list", async () => {
+    await platform().updatePlan(owner, "STARTER", { highlight: true });
+
+    const card = (await platform().publicPlans()).find((p) => p.name === "STARTER")!;
+
+    expect(card.highlight).toBe(true);
+  });
+
+  it("can be chosen as the plan is created, not only afterwards", async () => {
+    /**
+     * `createPlan` took the ribbon off every other plan and never put it on the
+     * new one, so a plan created with the box ticked came back with it clear.
+     * Found by posting to the endpoint and reading the reply — the create path
+     * writes a different column list from the update path, and only one of them
+     * had been taught the new column.
+     */
+    await platform().createPlan(owner, { ...A_PLAN, highlight: true });
+
+    const card = (await platform().publicPlans()).find((p) => p.name === "SEASON")!;
+    expect(card.highlight).toBe(true);
+    expect((await platform().publicPlans()).filter((p) => p.highlight)).toHaveLength(1);
+  });
+
+  it("is one plan — featuring a second stops featuring the first", async () => {
+    await platform().updatePlan(owner, "STARTER", { highlight: true });
+
+    await platform().updatePlan(owner, "CHAIN", { highlight: true });
+
+    const featured = (await platform().publicPlans()).filter((p) => p.highlight);
+    expect(featured.map((p) => p.name)).toEqual(["CHAIN"]);
+  });
+
+  it("can be nobody, which is a page with no ribbon on it", async () => {
+    await platform().updatePlan(owner, "CHAIN", { highlight: true });
+
+    await platform().updatePlan(owner, "CHAIN", { highlight: false });
+
+    expect((await platform().publicPlans()).filter((p) => p.highlight)).toEqual([]);
+  });
+});
+
 describe("retiring a plan", () => {
   it("takes it off the public page", async () => {
     await platform().updatePlan(owner, "CHAIN", { active: false });

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, API_URL } from "@/lib/api";
-import { formatMoney } from "@rh/shared";
+import { formatMoney, planFeatureLabel } from "@rh/shared";
 import {
   CalendarDays,
   BedDouble,
@@ -153,28 +153,63 @@ interface PublicPlan {
   monthlyFee: number;
   maxRooms: number;
   maxResorts: number;
+  maxStaff: number;
   trialDays: number;
   blurb: string | null;
+  /** The one plan the owner recommends — the ribbon follows this, not position. */
+  highlight: boolean;
+  /** Keys from PLAN_FEATURES — what the owner ticked for this plan. */
+  features: string[];
 }
 
 /**
- * What each plan includes.
+ * How many columns the price list needs.
  *
- * The price, the name, the room cap and the trial length are the platform's
- * commercial terms and come from `platform_plans`. These bullets are marketing
- * copy about the product, not terms — they are keyed by plan name so a plan the
- * table gains still renders, with no bullets rather than someone else's.
+ * It was `lg:grid-cols-3`, written when there were three plans and no way to
+ * make a fourth. The owner can make a fourth now, and it dropped onto a row of
+ * its own, alone and left-aligned, next to two card-widths of nothing.
+ *
+ * Tailwind reads class names out of the source, so these have to be written
+ * out rather than built from the number.
  */
+function pricingColumns(count: number): string {
+  if (count <= 1) return "mx-auto max-w-sm";
+  if (count === 2) return "mx-auto max-w-3xl sm:grid-cols-2";
+  if (count === 4) return "sm:grid-cols-2 xl:grid-cols-4";
+  // three, or more than four: three across, wrapping into full rows
+  return "sm:grid-cols-2 lg:grid-cols-3";
+}
+
 /** "Up to 10 rooms", or the honest thing when a plan has no practical cap. */
 function roomCap(p: PublicPlan): string {
   return p.maxRooms >= 1000 ? "Unlimited rooms" : `Up to ${p.maxRooms} rooms`;
 }
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  STARTER: ["Booking calendar & front desk", "Guest database", "Email invoices", "1 staff account"],
-  GROWTH: ["Everything in Starter", "Restaurant POS & room tabs", "Agents with wallets", "Discount engine", "5 staff accounts"],
-  CHAIN: ["Everything in Growth", "Public API + booking embed", "Role activity logs", "Priority support"],
-};
+/**
+ * The ticks on a card, in the order a buyer reads them.
+ *
+ * These used to be a map in this file keyed by plan name, which had two faults
+ * and the second was the expensive one. A plan the owner created from the panel
+ * matched no key and rendered with no features at all. And the bullets promised
+ * things nothing enforced — Starter's card never mentioned the restaurant, and
+ * a Starter customer could use it all month.
+ *
+ * They come from the plan now, the same list the API locks on, so what is
+ * printed here and what a customer can actually open cannot drift apart. The
+ * lines that are not features — everyone gets a calendar and a guest list —
+ * stay here as what they always were: the floor, true of every plan.
+ */
+const EVERY_PLAN = ["Booking calendar & front desk", "Guest database", "Email invoices"];
+
+function planTicks(p: PublicPlan): string[] {
+  const staff = p.maxStaff >= 1000 ? "Unlimited staff accounts" : `${p.maxStaff} staff account${p.maxStaff === 1 ? "" : "s"}`;
+  return [
+    roomCap(p),
+    ...EVERY_PLAN,
+    ...p.features.map(planFeatureLabel),
+    staff,
+  ];
+}
 
 export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -292,7 +327,9 @@ export default function HomePage() {
                 See how it works
               </a>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500">14 days free · no card required · cancel anytime</p>
+            <p className="mt-3 text-xs font-medium text-slate-500">
+              {trialDays ? `${trialDays} days free · ` : ""}no card required · cancel anytime
+            </p>
             <div className="mt-10 flex items-center gap-8">
               <div>
                 <div className="flex items-center gap-1 text-amber-400">
@@ -447,22 +484,24 @@ export default function HomePage() {
               {trialDays ? ` ${trialDays} days free on every plan.` : ""}
             </p>
           </div>
-          <div className="mt-12 grid gap-6 lg:grid-cols-3">
-            {(plans ?? []).map((p, i) => (
-              <div key={p.name} className={`relative rounded-3xl border bg-white p-8 shadow-sm ${i === 1 ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
-                {i === 1 && (
+          <div className={`mt-12 grid gap-6 ${pricingColumns((plans ?? []).length)}`}>
+            {(plans ?? []).map((p) => (
+              <div key={p.name} className={`relative flex flex-col rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
+                {p.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
                     Most popular
                   </div>
                 )}
                 <div className="text-lg font-bold text-slate-900">{p.label}</div>
                 <div className="mt-1 text-xs text-slate-500">{p.blurb ?? ""}</div>
-                <div className="mt-5 text-4xl font-black text-slate-900">
-                  {formatMoney(p.monthlyFee, { currency: "BDT", locale: "en-IN" })}
+                {/* four plans across leaves a card narrower than "৳12,000.00/month",
+                    so the price and the period are allowed to sit on two lines */}
+                <div className="mt-5 flex flex-wrap items-baseline gap-x-1 text-3xl font-black text-slate-900 sm:text-4xl">
+                  <span>{formatMoney(p.monthlyFee, { currency: "BDT", locale: "en-IN" })}</span>
                   <span className="text-sm font-medium text-slate-400">/month</span>
                 </div>
-                <ul className="mt-6 space-y-2.5">
-                  {[roomCap(p), ...(PLAN_FEATURES[p.name] ?? [])].map((f) => (
+                <ul className="mt-6 mb-8 space-y-2.5">
+                  {planTicks(p).map((f) => (
                     <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
                       <Check className="h-4 w-4 shrink-0 text-brand-600" /> {f}
                     </li>
@@ -470,7 +509,7 @@ export default function HomePage() {
                 </ul>
                 <Link
                   href="/signup"
-                  className={`mt-8 block rounded-xl py-3 text-center text-sm font-bold transition ${i === 1 ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                  className={`mt-auto block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
                   Start free trial
                 </Link>

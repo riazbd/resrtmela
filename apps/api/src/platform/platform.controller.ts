@@ -18,6 +18,44 @@ class CommissionDto {
   @IsNumber() @Min(0) rate!: number;
 }
 
+/**
+ * A plan, as the Plans tab posts it.
+ *
+ * The bounds live in the service, next to the columns they protect, so that a
+ * plan created by a script is held to the same rules as one typed into a form.
+ * This layer only says what shape may arrive.
+ */
+class PlanDto {
+  @IsString() @MaxLength(16) name!: string;
+  @IsString() @MaxLength(40) label!: string;
+  @IsNumber() @Min(0) monthlyFee!: number;
+  @IsInt() @Min(1) maxRooms!: number;
+  @IsInt() @Min(1) maxResorts!: number;
+  @IsInt() @Min(0) trialDays!: number;
+  @IsOptional() @IsInt() @Min(1) maxStaff?: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
+  @IsOptional() @IsString() @MaxLength(200) blurb?: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsBoolean() highlight?: boolean;
+}
+
+/** The same, with everything optional — `name` included, so a rename is refused rather than ignored. */
+class PlanPatchDto {
+  @IsOptional() @IsString() @MaxLength(16) name?: string;
+  @IsOptional() @IsString() @MaxLength(40) label?: string;
+  @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
+  @IsOptional() @IsInt() @Min(1) maxRooms?: number;
+  @IsOptional() @IsInt() @Min(1) maxResorts?: number;
+  @IsOptional() @IsInt() @Min(0) trialDays?: number;
+  @IsOptional() @IsInt() @Min(1) maxStaff?: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
+  @IsOptional() @IsString() @MaxLength(200) blurb?: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsBoolean() highlight?: boolean;
+}
+
 /** The owner asking to move plan. The plan table decides whether it exists. */
 class ChangePlanDto {
   @IsString() @MaxLength(16) plan!: string;
@@ -201,8 +239,14 @@ export class PlatformController {
   @Get("platform/plans") plans(@Req() req: AuthedRequest) {
     return this.platform.listPlans(req.user);
   }
-  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
+  @Post("platform/plans") createPlan(@Req() req: AuthedRequest, @Body() dto: PlanDto) {
+    return this.platform.createPlan(req.user, dto);
+  }
+  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: PlanPatchDto) {
     return this.platform.updatePlan(req.user, name, dto);
+  }
+  @Delete("platform/plans/:name") deletePlan(@Req() req: AuthedRequest, @Param("name") name: string) {
+    return this.platform.deletePlan(req.user, name);
   }
 
   // super admin — front-end CMS
