@@ -15,10 +15,12 @@ import { DiscountService } from "../../src/common/discount.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
+import { CommissionService } from "../../src/common/commission.service";
 import { TenantStateService } from "../../src/common/tenant-state.service";
 import { PlatformSettingsService } from "../../src/common/platform-settings.service";
 import { BillingService } from "../../src/platform/billing.service";
 import { PlatformService } from "../../src/platform/platform.service";
+import { SubscriptionService } from "../../src/platform/subscription.service";
 import { ExportService } from "../../src/export/export.service";
 import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
@@ -38,15 +40,17 @@ import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
 import { ReportsService } from "../../src/reports/reports.service";
 import { IntentsService } from "../../src/payments/intents.service";
+import { OptionsService } from "../../src/options/options.service";
+import { TaxService } from "../../src/common/tax.service";
 import { MockGateway, type PaymentGateway } from "../../src/payments/gateway";
 
 export function makeBookingsService(prisma: PrismaService): BookingsService {
   const audit = new AuditService(prisma);
   return new BookingsService(
     prisma,
-    new AvailabilityService(prisma),
+    new AvailabilityService(prisma, makeCommissionService(prisma)),
     makeRoomsService(prisma),
-    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
+    makeActivitiesService(prisma),
     // EmailService/SmsService fall back to console logging when unconfigured,
     // so nothing leaves the machine during a test run.
     makeNotificationsService(prisma),
@@ -55,6 +59,9 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     new EmailService(),
     new PermissionsService(prisma),
     new TenantStateService(prisma),
+    makeOptionsService(prisma),
+    makeTaxService(prisma),
+    makeCommissionService(prisma),
   );
 }
 
@@ -68,6 +75,17 @@ export function makeNotificationsService(prisma: PrismaService): NotificationsSe
     new SmsService(),
     new PlatformSettingsService(prisma),
     makeTemplatesService(prisma),
+    makeTaxService(prisma),
+  );
+}
+
+/** Constructing this by hand in a spec is how helpers go stale; go through here. */
+export function makeActivitiesService(prisma: PrismaService): ActivitiesService {
+  return new ActivitiesService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makePlanLimits(prisma),
   );
 }
 
@@ -98,11 +116,33 @@ export function makePlatformService(prisma: PrismaService): PlatformService {
     new PermissionsService(prisma),
     new PlanLimitsService(prisma),
     makeBillingService(prisma),
+    // the eighth constructor argument was simply missing, so `this.settings`
+    // was undefined on every PlatformService a spec built — anything reading a
+    // platform setting threw, and nothing was testing that path to notice
+    new PlatformSettingsService(prisma),
+  );
+}
+
+/** Constructing this by hand in a spec is how helpers go stale; go through here. */
+export function makeAvailabilityService(prisma: PrismaService): AvailabilityService {
+  return new AvailabilityService(prisma, makeCommissionService(prisma));
+}
+
+export function makeCommissionService(prisma: PrismaService): CommissionService {
+  return new CommissionService(prisma, new PermissionsService(prisma), new AuditService(prisma));
+}
+
+export function makeSubscriptionService(prisma: PrismaService): SubscriptionService {
+  return new SubscriptionService(
+    prisma,
+    new PermissionsService(prisma),
+    new PlanLimitsService(prisma),
+    new AuditService(prisma),
   );
 }
 
 export function makeExportService(prisma: PrismaService): ExportService {
-  return new ExportService(prisma, new PermissionsService(prisma));
+  return new ExportService(prisma, new PermissionsService(prisma), makeTaxService(prisma));
 }
 
 export function makePaymentsService(prisma: PrismaService): PaymentsService {
@@ -112,6 +152,21 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
     makeBookingsService(prisma),
     makeNotificationsService(prisma),
     new PermissionsService(prisma),
+    makeOptionsService(prisma),
+    makeTaxService(prisma),
+  );
+}
+
+export function makeTaxService(prisma: PrismaService): TaxService {
+  return new TaxService(prisma, new PermissionsService(prisma), new AuditService(prisma));
+}
+
+export function makeOptionsService(prisma: PrismaService): OptionsService {
+  return new OptionsService(
+    prisma,
+    new PlatformSettingsService(prisma),
+    new PermissionsService(prisma),
+    new AuditService(prisma),
   );
 }
 
@@ -120,11 +175,17 @@ export function makeTemplatesService(prisma: PrismaService): TemplatesService {
 }
 
 export function makeFbService(prisma: PrismaService): FbService {
-  return new FbService(prisma, new AuditService(prisma), new PermissionsService(prisma));
+  return new FbService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makeTaxService(prisma),
+    makePlanLimits(prisma),
+  );
 }
 
 export function makeReportsService(prisma: PrismaService): ReportsService {
-  return new ReportsService(prisma, new PermissionsService(prisma));
+  return new ReportsService(prisma, new PermissionsService(prisma), makeTaxService(prisma), makeCommissionService(prisma));
 }
 
 export function makeIntentsService(prisma: PrismaService, gateway?: PaymentGateway): IntentsService {
@@ -158,7 +219,7 @@ export function makeExpensesService(prisma: PrismaService): ExpensesService {
 }
 
 export function makePayrollService(prisma: PrismaService): PayrollService {
-  return new PayrollService(prisma, new PermissionsService(prisma), new AuditService(prisma));
+  return new PayrollService(prisma, new PermissionsService(prisma), new AuditService(prisma), makePlanLimits(prisma));
 }
 
 export function makeSalesService(prisma: PrismaService, email?: EmailService): SalesService {
@@ -174,7 +235,8 @@ export function makeGuestsService(prisma: PrismaService): AgencyGuestsService {
   return new AgencyGuestsService(
     prisma,
     new AgencyContextService(prisma),
-    new AvailabilityService(prisma),
+    new AvailabilityService(prisma, makeCommissionService(prisma)),
+    makeTaxService(prisma),
   );
 }
 
@@ -193,6 +255,7 @@ export function makeEngageService(prisma: PrismaService): EngageService {
     new EmailService(),
     new PermissionsService(prisma),
     makePlatformSettings(prisma),
+    makePlanLimits(prisma),
   );
 }
 
@@ -202,9 +265,10 @@ export function makeGuestService(prisma: PrismaService): GuestService {
     prisma,
     makeBookingsService(prisma),
     makeRoomsService(prisma),
-    new ActivitiesService(prisma, audit, new PermissionsService(prisma)),
+    makeActivitiesService(prisma),
     makeNotificationsService(prisma),
     audit,
+    makeTaxService(prisma),
   );
 }
 
@@ -227,5 +291,8 @@ export function makeImportService(prisma: PrismaService): ImportService {
     new AuditService(prisma),
     makeBookingsService(prisma),
     new PermissionsService(prisma),
+    makeOptionsService(prisma),
+    makeTaxService(prisma),
+    makePlanLimits(prisma),
   );
 }

@@ -48,8 +48,8 @@ export class IntentsController {
   /** Dev mock-gateway confirm (what the hosted checkout page would call). */
   @Post("mock-checkout/:ref/confirm")
   @UseGuards(AuthGuard)
-  mockConfirm(@Param("ref") ref: string, @Body() dto: ConfirmDto) {
-    return this.intents.confirm(ref, dto.trxId ?? `mock-${Date.now()}`, dto.outcome === "fail");
+  mockConfirm(@Req() req: AuthedRequest, @Param("ref") ref: string, @Body() dto: ConfirmDto) {
+    return this.intents.confirmMock(req.user, ref, dto.trxId ?? `mock-${Date.now()}`, dto.outcome === "fail");
   }
 
   @Get("payments/:ref/status")

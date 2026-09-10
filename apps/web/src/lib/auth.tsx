@@ -19,6 +19,8 @@ interface AuthState {
   impersonate: (accessToken: string) => Promise<void>;
   exitImpersonation: () => void;
   perms: string[];
+  /** Keys from PLAN_FEATURES that the active resort's plan includes. */
+  features: string[];
   can: (perm: string) => boolean;
   refreshPerms: () => void;
 }
@@ -30,6 +32,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeResort, setActive] = useState<Resort | null>(null);
   const [loading, setLoading] = useState(true);
   const [perms, setPerms] = useState<string[]>([]);
+  /**
+   * What the active resort's plan includes.
+   *
+   * A second reason a screen might not be theirs, alongside `perms`: the owner
+   * gave them the permission, but the resort is not on a plan that has it.
+   */
+  const [features, setFeatures] = useState<string[]>([]);
   const [permTick, setPermTick] = useState(0);
 
   useEffect(() => {
@@ -70,14 +79,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let alive = true;
     if (!me || !activeResort) {
       setPerms([]);
+      setFeatures([]);
       return;
     }
     permissionsFor(activeResort.id)
       .then((r) => {
-        if (alive) setPerms(r.permissions);
+        if (!alive) return;
+        setPerms(r.permissions);
+        setFeatures(r.features ?? []);
       })
       .catch(() => {
-        if (alive) setPerms([]);
+        if (alive) {
+          setPerms([]);
+          setFeatures([]);
+        }
       });
     return () => {
       alive = false;
@@ -106,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMe(null);
     setActive(null);
     setPerms([]);
+    setFeatures([]);
   }, []);
 
   const impersonate = useCallback(async (accessToken: string) => {
@@ -159,10 +175,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       impersonate,
       exitImpersonation,
       perms,
+      features,
       can,
       refreshPerms: () => setPermTick((t) => t + 1),
     }),
-    [me, activeResort, loading, login, logout, setActiveResort, impersonate, exitImpersonation, perms, can],
+    [me, activeResort, loading, login, logout, setActiveResort, impersonate, exitImpersonation, perms, features, can],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

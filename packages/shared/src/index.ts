@@ -59,10 +59,9 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "expenses.view", label: "View expenses", group: "Money" },
   { key: "expenses.create", label: "Record expenses", group: "Money" },
   { key: "expenses.delete", label: "Delete expenses", group: "Money" },
-  { key: "wallet.view", label: "View agent wallets", group: "Money" },
-  { key: "wallet.manage", label: "Top-up / payout wallets", group: "Money" },
   { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
+  { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
   { key: "guests.view", label: "View guests", group: "Inventory" },
   { key: "restaurant.view", label: "View restaurant bills", group: "Restaurant" },
   { key: "restaurant.create", label: "Create restaurant bills (POS)", group: "Restaurant" },
@@ -83,6 +82,8 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "roles.manage", label: "Manage roles & permissions", group: "Admin" },
   { key: "settings.manage", label: "Resort settings", group: "Admin" },
   { key: "apikeys.manage", label: "API keys", group: "Admin" },
+  { key: "billing.view", label: "See the subscription & bills", group: "Admin" },
+  { key: "billing.manage", label: "Change the subscription plan", group: "Admin" },
   { key: "import.run", label: "Import data from spreadsheets", group: "Admin" },
   { key: "export.run", label: "Export the resort's data", group: "Admin" },
   { key: "marketing.send", label: "Buy email credits & send campaigns", group: "Admin" },
@@ -133,12 +134,53 @@ export function isPermissionKey(key: string): boolean {
 
 export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
 
+/**
+ * What a plan can include — the platform's shelf.
+ *
+ * The pricing page used to carry these as a hardcoded map keyed by plan name,
+ * so a plan the owner created showed no features at all and no line on any card
+ * gated anything: a Starter customer whose card never mentioned the restaurant
+ * could open the restaurant. They are one list now, and the same list does
+ * three jobs — the ticks on the public card, the checkboxes in the platform
+ * panel, and the lock the API checks.
+ *
+ * Declared in code, chosen per plan in the database. That split is deliberate
+ * and matches PERMISSIONS above: a key the code has never heard of cannot gate
+ * anything, so letting the owner invent one would sell a lock with no door. The
+ * owner composes plans freely from this shelf; adding to the shelf is a
+ * developer's job because it means writing the gate as well.
+ */
+export const PLAN_FEATURES = [
+  { key: "restaurant", label: "Restaurant POS & room tabs", blurb: "Sell food and drink, and put it on the room" },
+  { key: "agents", label: "Agents with wallets", blurb: "Travel agents book for you, on commission" },
+  { key: "activities", label: "Activities & tours", blurb: "Sell trips and rides alongside the room" },
+  { key: "discounts", label: "Discount & offer engine", blurb: "Seasonal rates, offers and coupon rules" },
+  { key: "bulk_email", label: "Bulk guest email", blurb: "Write to your whole guest list at once" },
+  { key: "public_api", label: "Public API for your website", blurb: "Show live rooms and rates on your own site" },
+  { key: "payroll", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
+  { key: "imports", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
+] as const;
+
+export type PlanFeatureKey = (typeof PLAN_FEATURES)[number]["key"];
+
+export const ALL_PLAN_FEATURES: string[] = PLAN_FEATURES.map((f) => f.key);
+
+const PLAN_FEATURE_SET = new Set(ALL_PLAN_FEATURES);
+
+export function isPlanFeature(key: string): boolean {
+  return PLAN_FEATURE_SET.has(key);
+}
+
+export function planFeatureLabel(key: string): string {
+  return PLAN_FEATURES.find((f) => f.key === key)?.label ?? key;
+}
+
 /** Defaults for the seeded system roles, keyed by role name */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Administrator: ALL_PERMISSIONS,
   Manager: [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
-    "payments.view", "payments.create", "expenses.view", "expenses.create", "wallet.view",
+    "payments.view", "payments.create", "expenses.view", "expenses.create",
     "rooms.view", "rooms.manage", "guests.view",
     "restaurant.view", "restaurant.create", "restaurant.menu",
     "agents.view", "agents.manage", "reports.view", "reports.pl",
@@ -147,6 +189,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "auditlog.view", "discounts.manage",
     "bookings.delete", "expenses.delete", "restaurant.delete",
     "import.run", "export.run", "marketing.send", "users.manage", "settings.manage",
+    "billing.view",
   ],
   "Front Desk": [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.walkin",

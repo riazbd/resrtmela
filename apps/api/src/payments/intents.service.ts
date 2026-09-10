@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, badRequest, apiKeyClaims } from "../common/rbac";
-import { round2 } from "../common/dates";
+import { normalizePhone, phoneKey, round2 } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { bookingTotals } from "../common/money";
@@ -46,32 +46,7 @@ export class IntentsService {
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
 
-    const isGuest = claims.role === ROLE.GUEST;
-    if (isGuest) {
-      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-      const guestRows = await this.prisma.guest.findMany({ where: { phone: user.phone ?? "" }, select: { id: true } });
-      if (!guestRows.some((g) => g.id === b.guestId)) {
-        throw Object.assign(new Error("Not your booking"), { status: 403 });
-      }
-    } else if (claims.role === ROLE.AGENT) {
-      // an agency may settle the booking it made, and no other
-      requireSellingAccess(claims, b.resortId);
-      const me = await this.prisma.user.findUnique({
-        where: { id: claims.userId },
-        select: { id: true, parentAgentId: true },
-      });
-      const agencyId = me?.parentAgentId ?? claims.userId;
-      const staff = await this.prisma.user.findMany({
-        where: { parentAgentId: agencyId },
-        select: { id: true },
-      });
-      const mine = [agencyId, ...staff.map((x) => x.id)];
-      if (b.agentUserId == null || !mine.includes(b.agentUserId)) {
-        throw Object.assign(new Error("Not your booking"), { status: 403 });
-      }
-    } else {
-      requireResortAccess(claims, b.resortId);
-    }
+    await this.assertMayPay(claims, b);
     if (!["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state)) {
       throw badRequest("Booking is not payable");
     }
@@ -155,6 +130,84 @@ export class IntentsService {
       );
     }
     return this.confirm(callback.providerRef, callback.trxId);
+  }
+
+
+  /**
+   * May this caller move money on this booking?
+   *
+   * Extracted so the mock gateway's confirm route can ask the same question.
+   * It could not before: that route settled an intent by reference alone, so
+   * anyone who had started a checkout — or guessed a reference — could mark a
+   * booking paid without paying.
+   */
+  private async assertMayPay(
+    claims: JwtClaims,
+    booking: { resortId: number; guestId: number; agentUserId: number | null },
+  ): Promise<void> {
+    const isGuest = claims.role === ROLE.GUEST;
+    if (isGuest) {
+      const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
+      // the same rule the guest app uses, and by the same key: a raw `phone`
+      // compare let `""` match every phone-less guest row, so anyone who
+      // signed up by email passed the ownership check on someone else's stay
+      const normalized = normalizePhone(user.phone ?? "");
+      if (!normalized) throw Object.assign(new Error("Not your booking"), { status: 403 });
+      const guestRows = await this.prisma.guest.findMany({
+        where: { phoneKey: phoneKey(normalized) },
+        select: { id: true },
+      });
+      if (!guestRows.some((g) => g.id === booking.guestId)) {
+        throw Object.assign(new Error("Not your booking"), { status: 403 });
+      }
+    } else if (claims.role === ROLE.AGENT) {
+      // an agency may settle the booking it made, and no other
+      requireSellingAccess(claims, booking.resortId);
+      const me = await this.prisma.user.findUnique({
+        where: { id: claims.userId },
+        select: { id: true, parentAgentId: true },
+      });
+      const agencyId = me?.parentAgentId ?? claims.userId;
+      const staff = await this.prisma.user.findMany({
+        where: { parentAgentId: agencyId },
+        select: { id: true },
+      });
+      const mine = [agencyId, ...staff.map((x) => x.id)];
+      if (booking.agentUserId == null || !mine.includes(booking.agentUserId)) {
+        throw Object.assign(new Error("Not your booking"), { status: 403 });
+      }
+    } else {
+      requireResortAccess(claims, booking.resortId);
+    }
+  }
+
+  /**
+   * The dev mock gateway's "I paid" button, and only that.
+   *
+   * `confirmFromGateway` asks the real gateway what happened and checks the
+   * amount it reports against the amount we asked for. This route asks nobody:
+   * it settled an intent from a reference in the URL. It was behind AuthGuard
+   * and nothing else, and it was mounted in production whatever gateway was
+   * configured — so any signed-in user could mark a booking paid, including
+   * one that was not theirs.
+   *
+   * Two conditions now. It exists only while the mock gateway is the
+   * configured one, which is to say only while no merchant account does; and
+   * the caller must be someone who could have paid this booking.
+   */
+  async confirmMock(claims: JwtClaims, providerRef: string, trxId: string, failed = false) {
+    if (this.gateway.name !== "mock") {
+      throw Object.assign(new Error("Not found"), { status: 404 });
+    }
+    const intent = await this.prisma.paymentIntent.findUnique({ where: { providerRef } });
+    if (!intent) throw Object.assign(new Error("Unknown payment reference"), { status: 404 });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: intent.bookingId },
+      select: { resortId: true, guestId: true, agentUserId: true },
+    });
+    if (!booking) throw Object.assign(new Error("Booking not found"), { status: 404 });
+    await this.assertMayPay(claims, booking);
+    return this.confirm(providerRef, trxId, failed);
   }
 
   /** Gateway callback (webhook-shaped). Marks paid, writes ledger, notifies. */

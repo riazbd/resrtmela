@@ -1,12 +1,21 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, setToken } from "@/lib/api";
+import { api, setToken, API_URL } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 
 interface SignupResult {
   accessToken: string;
+}
+
+/** One row of the public price list — the same rows Platform → Plans edits. */
+interface PublicPlan {
+  name: string;
+  label: string;
+  maxRooms: number;
+  trialDays: number;
+  active: boolean;
 }
 
 export default function SignupPage() {
@@ -17,6 +26,16 @@ export default function SignupPage() {
   const [location, setLocation] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
+  const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  // this deployment's own host, not a domain compiled into the page
+  const workspaceHost = typeof window === "undefined" ? "" : window.location.host;
+
+  useEffect(() => {
+    fetch(`${API_URL}/cms/plans`)
+      .then((r) => r.json())
+      .then((d) => setPlans(Array.isArray(d) ? d : []))
+      .catch(() => setPlans([]));
+  }, []);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -65,13 +84,26 @@ export default function SignupPage() {
 
   const step1Ok = companyName.trim() && resortName.trim() && effectiveSlug.length >= 3;
 
+  /**
+   * The plan a new workspace actually starts on.
+   *
+   * This copy said "Free plan, 10 rooms" in two places. `signup` picks the
+   * entry plan out of `platform_plans` — it has since the plan vocabulary was
+   * unified — so the page was describing a plan the platform may no longer
+   * sell, at a room cap it may no longer have.
+   */
+  const entry = plans?.find((p) => p.active) ?? null;
+  const entryLine = entry
+    ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
+    : "";
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-700 to-emerald-600 px-4 py-10">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">R</div>
           <h1 className="text-xl font-bold text-slate-900">Create your workspace</h1>
-          <p className="mt-1 text-xs text-slate-500">Step {step} of 3 · Free plan, 10 rooms, no card needed</p>
+          <p className="mt-1 text-xs text-slate-500">Step {step} of 3{entryLine ? ` · ${entryLine}` : ""} · no card needed</p>
         </div>
 
         <div className="mb-6 flex gap-1.5">
@@ -98,7 +130,7 @@ export default function SignupPage() {
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Workspace URL</label>
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-slate-400">resortmela.app/</span>
+                  <span className="text-xs text-slate-400">{workspaceHost}/</span>
                   <Input
                     value={effectiveSlug}
                     onChange={(e) => {
@@ -151,7 +183,7 @@ export default function SignupPage() {
                   <span className="text-slate-400">Admin:</span> {name} · {phone}
                 </div>
                 <div className="text-xs">
-                  <span className="text-slate-400">Plan:</span> Free (10 rooms per resort)
+                  <span className="text-slate-400">Plan:</span> {entryLine || "—"}
                 </div>
               </div>
               {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}

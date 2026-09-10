@@ -8,6 +8,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
+import { makeReportsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ReportsService } from "../../src/reports/reports.service";
 import { PermissionsService } from "../../src/common/permissions";
@@ -18,7 +19,7 @@ const asPrismaService = prisma as unknown as PrismaService;
 let fx: Fixture;
 let claims: JwtClaims;
 
-const reports = () => new ReportsService(asPrismaService, new PermissionsService(asPrismaService));
+const reports = () => makeReportsService(asPrismaService);
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);

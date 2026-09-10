@@ -2,12 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
-import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
-import { normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
-import { bookingTotals, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
+import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
+import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
+import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
-import { assertTransition } from "./booking-state";
+import { assertTransition, LIVE_STATES } from "./booking-state";
 import { AvailabilityService } from "./availability.service";
 import { RoomsService } from "../rooms/rooms.service";
 import { ActivitiesService } from "../activities/activities.service";
@@ -15,8 +15,12 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PermissionsService } from "../common/permissions";
+import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
+import { CommissionService } from "../common/commission.service";
+import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
-import { BookingSource, type BookingState } from "@rh/db";
+import type { BookingState } from "@rh/db";
 
 export interface CreateBookingInput {
   resortId: number;
@@ -29,7 +33,7 @@ export interface CreateBookingInput {
   children: number;
   discount?: number;
   remarks?: string;
-  source?: BookingSource;
+  source?: string;
   walkIn?: boolean;
   extraPersons?: number;
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
@@ -40,7 +44,7 @@ export interface RoomBookingTxParams {
   guestId: number;
   actorUserId: number;
   agentUserId: number | null;
-  source: BookingSource;
+  source: string | null;
   checkIn: Date;
   checkOut: Date;
   adults: number;
@@ -74,6 +78,9 @@ export class BookingsService {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(TenantStateService) private readonly tenantState: TenantStateService,
+    @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -81,9 +88,16 @@ export class BookingsService {
     booking: Prisma.BookingGetPayload<{
       include: { items: true; payments: true };
     }>,
-    taxRatePct: Money = 0,
+    /**
+     * The resort's tax rules, or its single legacy rate. Both shapes are
+     * accepted because a resort that has never opened the tax screen still
+     * has only a percentage, and its bill must not move.
+     */
+    tax: TaxRule[] | Money = 0,
   ) {
-    return bookingTotals({ ...booking, taxRatePct });
+    return Array.isArray(tax)
+      ? bookingTotals({ ...booking, taxRules: tax })
+      : bookingTotals({ ...booking, taxRatePct: tax });
   }
 
   /**
@@ -127,13 +141,51 @@ export class BookingsService {
     }
   }
 
-  /** The resort's tax rate — every total shown to anyone must include it. */
-  private async taxRateFor(resortId: number): Promise<number> {
-    const r = await this.prisma.resort.findUnique({
-      where: { id: resortId },
-      select: { taxRatePct: true },
-    });
-    return Number(r?.taxRatePct ?? 0);
+
+  /**
+   * The guest behind a booking, resolved once and safely.
+   *
+   * `findFirst` then `create` is a read-then-write race: two bookings taken at
+   * the same counter at the same moment both miss and both insert. Before
+   * `UNIQUE(resortId, phoneKey)` that quietly produced two rows for one person
+   * and split their history; now it is a constraint violation, which is the
+   * database telling the truth. `upsert` asks the database to decide, and the
+   * catch covers the gap between its own check and its own write.
+   */
+  private async resolveGuest(
+    resortId: number,
+    key: string,
+    who: { fullName: string; phone: string; email?: string | null; nidPassportNo?: string | null },
+  ): Promise<number> {
+    const create = {
+      resortId,
+      fullName: who.fullName,
+      email: who.email || null,
+      phone: who.phone,
+      nidPassportNo: who.nidPassportNo,
+      phoneKey: key,
+    };
+    try {
+      const guest = await this.prisma.guest.upsert({
+        where: { resortId_phoneKey: { resortId, phoneKey: key } },
+        // an email we did not have before is worth keeping; a name we already
+        // have is the one the guest gave first, and stays
+        update: who.email ? { email: who.email } : {},
+        create,
+      });
+      return guest.id;
+    } catch {
+      const existing = await this.prisma.guest.findUnique({
+        where: { resortId_phoneKey: { resortId, phoneKey: key } },
+      });
+      if (existing) return existing.id;
+      throw badRequest("Could not resolve the guest for this booking");
+    }
+  }
+
+  /** The resort's tax rules — every total shown to anyone must include them. */
+  private taxRulesFor(resortId: number): Promise<TaxRule[]> {
+    return this.tax.rulesFor(resortId);
   }
 
   async create(claims: JwtClaims, input: CreateBookingInput) {
@@ -147,8 +199,27 @@ export class BookingsService {
 
     // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
-    const guest = claims.role === ROLE.GUEST;
-    if (guest) throw forbid("Guests book via the mobile app flow (phase 4)");
+
+    /**
+     * A guest does not book. Neither does a website standing in for one.
+     *
+     * The first line used to promise "the mobile app flow (phase 4)" — an app
+     * path that held rooms without asking the resort. That path is closed, so
+     * the promise had to go with it.
+     *
+     * The second is the public v1 API, authenticated by a resort's own API key.
+     * It has no human behind it: `apiKeyClaims` mints RESORT_ADMIN with
+     * SYSTEM_ACTOR_ID precisely because nobody at the desk pressed anything.
+     * That is a booking form on a website, which is a guest booking directly
+     * however it reaches us. The key still reads — a resort's site can show its
+     * rooms and its free nights — it just cannot close the sale.
+     */
+    if (claims.role === ROLE.GUEST) {
+      throw forbid("Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.");
+    }
+    if (claims.userId === SYSTEM_ACTOR_ID) {
+      throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
+    }
     if (isAgent) {
       const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
       if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");
@@ -166,7 +237,7 @@ export class BookingsService {
 
     // precheck rooms exist in resort
     const roomRows = await this.prisma.room.findMany({
-      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE", deletedAt: null },
     });
     if (roomRows.length !== input.roomIds.length) {
       throw badRequest("One or more rooms missing/inactive for this resort");
@@ -204,12 +275,23 @@ export class BookingsService {
     } else {
       discount = Number(input.discount);
     }
-    let source = input.source ?? BookingSource.DIRECT;
+    /**
+     * Nothing recorded is nothing recorded.
+     *
+     * This defaulted to DIRECT, so a booking taken without anybody saying where
+     * it came from was filed as a direct booking — and the source-mix report
+     * repeated that back to the owner as fact. In the client's own workbook 79
+     * of 96 rows had an empty Source column. An agent booking is different: it
+     * *is* known, because an agent made it.
+     */
+    let source: string | null = input.source ?? null;
     let agentUserId: number | null = null;
     if (isAgent) {
-      source = BookingSource.AGENT;
+      source = "AGENT";
       agentUserId = claims.userId;
     }
+    // a source the resort offers, or none — the list is theirs, so is the check
+    if (source) await this.options.assertAccepted(input.resortId, "BOOKING_SOURCE", source);
 
     // resolve guest
     let guestId = input.guestId;
@@ -217,28 +299,15 @@ export class BookingsService {
       if (!input.guest?.fullName) {
         throw badRequest("guestId or guest{fullName} required");
       }
+      // sha256("") is a constant, so every phone-less guest collided on it
       const phone = input.guest.phone ? normalizePhone(input.guest.phone) : "";
-      const key = phoneKey(phone);
-      const existing = await this.prisma.guest.findFirst({
-        where: { phoneKey: key, resortId: input.resortId },
+      const key = phone ? phoneKey(phone) : anonGuestKey();
+      guestId = await this.resolveGuest(input.resortId, key, {
+        fullName: input.guest.fullName,
+        phone,
+        email: input.guest.email,
+        nidPassportNo: input.guest.nidPassportNo,
       });
-      if (existing && input.guest.email && !existing.email) {
-        await this.prisma.guest.update({ where: { id: existing.id }, data: { email: input.guest.email } });
-      }
-      guestId = existing
-        ? existing.id
-        : (
-            await this.prisma.guest.create({
-              data: {
-                resortId: input.resortId,
-                fullName: input.guest.fullName,
-                email: input.guest.email || null,
-                phone,
-                nidPassportNo: input.guest.nidPassportNo,
-                phoneKey: key,
-              },
-            })
-          ).id;
     } else {
       const g = await this.prisma.guest.findFirst({
         where: { id: guestId, resortId: input.resortId },
@@ -443,8 +512,10 @@ export class BookingsService {
       from?: string;
       to?: string;
       guestId?: number;
-      source?: BookingSource;
+      source?: string;
       group?: string;
+      /** guest name, guest phone, or booking code */
+      search?: string;
       mine?: boolean;
       skip?: number;
       take?: number;
@@ -463,11 +534,28 @@ export class BookingsService {
       // still — correctly — seeing nothing of any other agency's.
       ...(isAgent ? { agentUserId: { in: await this.agencyActorIds(claims.userId) } } : {}),
       ...(q.group ? { groupTag: q.group } : {}),
+      /**
+       * Searching happens here, not in the browser.
+       *
+       * The console filtered the hundred rows it had already fetched, so a
+       * guest whose booking was row 101 came back "no bookings match" — and
+       * the footer underneath printed "12 of 431", which is the screen saying
+       * out loud that it is hiding the rest.
+       */
+      ...(q.search?.trim()
+        ? {
+            OR: [
+              { code: { contains: q.search.trim() } },
+              { guest: { fullName: { contains: q.search.trim() } } },
+              { guest: { phone: { contains: q.search.trim() } } },
+            ],
+          }
+        : {}),
       ...(q.from && q.to
         ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }
         : {}),
     };
-    const taxRatePct = await this.taxRateFor(q.resortId);
+    const taxRules = await this.taxRulesFor(q.resortId);
     const [rows, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -497,7 +585,7 @@ export class BookingsService {
         rooms: b.items.map((i) => i.room?.name).filter(Boolean),
         adults: b.adults,
         children: b.children,
-        ...BookingsService.computeTotals(b, taxRatePct),
+        ...BookingsService.computeTotals(b, taxRules),
       })),
     };
   }
@@ -520,7 +608,7 @@ export class BookingsService {
       where: { id: b.resortId },
       select: { showRatesToAgents: true, taxRatePct: true },
     });
-    const totals = BookingsService.computeTotals(b, Number(resort.taxRatePct));
+    const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
     // persist paymentState so filtered lists stay consistent
     if (totals.paymentState !== b.paymentState) {
       await this.prisma.booking.update({
@@ -542,11 +630,9 @@ export class BookingsService {
      */
     let agentPricing: ReturnType<typeof agentPrices> | null = null;
     if (isAgent && resort.showRatesToAgents && b.agentUserId === claims.userId) {
-      const terms = await this.prisma.userResort.findUnique({
-        where: { userId_resortId: { userId: claims.userId, resortId: b.resortId } },
-        select: { commissionKind: true, commissionRate: true },
-      });
-      if (terms) agentPricing = agentPrices(terms, totals.roomRent);
+      // the resort's terms, not the agent's row: one rate for everyone selling
+      const terms = await this.commission.termsFor(b.resortId);
+      agentPricing = agentPrices({ commissionKind: terms.kind, commissionRate: terms.rate }, totals.roomRent);
     }
     const maskedGuest = isAgent
       ? {
@@ -618,6 +704,13 @@ export class BookingsService {
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     await this.requireOwnBooking(claims, b);
+    /**
+     * The one endpoint that changes dates, rooms and the discount asked for no
+     * permission at all — while `create`, `softDelete`, `decideCancel` and
+     * even adding an activity to a booking all asked for theirs. `bookings.edit`
+     * has been in the matrix, and on the Settings screen, the whole time.
+     */
+    await this.perms.require(claims, b.resortId, "bookings.edit");
 
     const role = claims.role;
     const isAgent = role === ROLE.AGENT;
@@ -637,6 +730,26 @@ export class BookingsService {
     const newRoomIds = patch.roomIds ?? b.items.map((i) => i.roomId!).filter(Boolean);
     const nights = newCheckIn && newCheckOut ? nightsBetween(newCheckIn, newCheckOut) : 0;
     if (nights <= 0) throw badRequest("Invalid date range");
+
+    /**
+     * Every room named must belong to this booking's resort.
+     *
+     * `patch.roomIds` arrives from the request body and used to be looked up
+     * with a bare `findUniqueOrThrow`, so a clerk could attach a room from
+     * another tenant: that resort's name and rate came back on the booking,
+     * and — worse — `booking_nights` rows were written against their room, so
+     * the UNIQUE(roomId, night) guard that stops double-selling was used to
+     * block a competitor's inventory instead. `create()` has always scoped
+     * this; the edit path never did.
+     */
+    if (patch.roomIds?.length) {
+      const mine = await this.prisma.room.count({
+        where: { id: { in: patch.roomIds }, resortId: b.resortId, deletedAt: null },
+      });
+      if (mine !== new Set(patch.roomIds).size) {
+        throw badRequest("Room does not belong to this resort");
+      }
+    }
 
     const datesChanged =
       (newCheckIn?.getTime() ?? 0) !== (b.checkIn?.getTime() ?? 0) ||
@@ -733,6 +846,22 @@ export class BookingsService {
     if (b.state === to) return this.detail(claims, bookingId);
 
     assertTransition(b.state, to, claims.role);
+    /**
+     * The state machine says which moves are legal; the matrix says who may
+     * make them.
+     *
+     * `assertTransition` checks `TRANSITION_ACTORS`, the fixed role enum — so
+     * unticking "Cancel bookings" for a front-desk user changed nothing, their
+     * enum entry allows CANCELLED. The dedicated `cancel()` path does ask for
+     * `bookings.cancel`, and the console has never called it: it cancels
+     * through here. Ending a stay without revenue is the cancel permission's
+     * business; moving a live stay along is the edit permission's.
+     */
+    await this.perms.require(
+      claims,
+      b.resortId,
+      to === "CANCELLED" || to === "NO_SHOW" ? "bookings.cancel" : "bookings.edit",
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: b.id }, data: { state: to } });
@@ -830,14 +959,31 @@ export class BookingsService {
   /** Calendar data: bookings overlapping [from,to) — client paints the matrix (doc §3.3). */
   async calendar(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
 
+    /**
+     * Only stays that hold a room, plus the ones that did.
+     *
+     * There was no state filter, so a cancelled or no-show booking came back
+     * with its dates and the console painted it as an occupied block — nights
+     * the resort could sell that evening, shown as taken. A front desk reading
+     * that grid turns a guest away from an empty room.
+     *
+     * `availability` has always filtered on `LIVE_STATES` and the database
+     * frees the night on cancellation; this read was the one that disagreed.
+     * CHECKED_OUT stays, because it happened and a month nobody can reconcile
+     * against is not a month.
+     */
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
         deletedAt: null,
+        state: { in: [...LIVE_STATES, "CHECKED_OUT"] },
         checkIn: { lt: to },
         checkOut: { gt: from },
       },
@@ -873,6 +1019,9 @@ export class BookingsService {
    */
   async guests(claims: JwtClaims, resortId: number, search?: string, page?: PageRequest) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "guests.view");
     const where = {
       resortId,
       ...(search
@@ -923,14 +1072,28 @@ export class BookingsService {
    * - occupancy: BOOKED/AVAILABLE/out-of-service
    * Computed from bookings (not night holds) so history works forever.
    */
-  async daySheet(claims: JwtClaims, resortId: number, dateStr: string) {
+  async daySheet(claims: JwtClaims, resortId: number, dateStr?: string) {
     requireResortAccess(claims, resortId);
-    const date = dateOnly(dateStr);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
+    /**
+     * No date means today at *this resort*.
+     *
+     * The controller used to substitute the server's date, so before 06:00 in
+     * Dhaka the desk opened yesterday's sheet — and `civilDateIn` was written
+     * for exactly this and never called here.
+     */
+    const resortDay = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { timezone: true },
+    });
+    const date = dateStr ? dateOnly(dateStr) : todayIn(resortDay.timezone);
     const nextDay = new Date(date.getTime() + 86_400_000);
 
-    const taxRatePct = await this.taxRateFor(resortId);
+    const taxRules = await this.taxRulesFor(resortId);
     const rooms = await this.prisma.room.findMany({
-      where: { resortId },
+      where: { resortId, deletedAt: null },
       include: { roomType: { select: { maxAdults: true, maxChildren: true } } },
       orderBy: { id: "asc" },
     });
@@ -976,7 +1139,7 @@ export class BookingsService {
       const b = covering[0];
       let cell: Record<string, unknown> = { mode: room.status === "OUT_OF_SERVICE" ? "oos" : "available" };
       if (b && b.checkIn && b.checkOut) {
-        const t = BookingsService.computeTotals(b, taxRatePct);
+        const t = BookingsService.computeTotals(b, taxRules);
         const isFirstNight = b.checkIn.getTime() === date.getTime();
         const isLastNight = nextDay.getTime() === b.checkOut.getTime();
         const nightRevenue = perNightRevenue(t.roomRent, t.discount, t.nights);
@@ -1041,7 +1204,7 @@ export class BookingsService {
       advancePerRoom?: number;
       advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
       remarks?: string;
-      source?: BookingSource;
+      source?: string;
     },
   ) {
     requireResortAccess(claims, input.resortId);
@@ -1052,26 +1215,26 @@ export class BookingsService {
     if (!input.roomIds?.length) throw badRequest("At least one room required");
 
     // guest resolved once, shared by all rooms
+    /**
+     * No phone number is not an identity.
+     *
+     * This keyed a phone-less walk-in on a hash of their name, so every guest
+     * called "local" — the most common booking in the client's own workbook —
+     * became one Guest row owning hundreds of unrelated stays. Two walk-ins
+     * with the same name are two people; without a number there is nothing to
+     * say otherwise, so each gets a row of their own.
+     */
     const phone = input.guest.phone ? normalizePhone(input.guest.phone) : "";
-    const key = phone ? phoneKey(phone) : phoneKey("n:" + input.guest.fullName.toLowerCase().trim());
-    let guest = await this.prisma.guest.findFirst({
-      where: { phoneKey: key, resortId: input.resortId },
+    const key = phone ? phoneKey(phone) : anonGuestKey();
+    const guestId = await this.resolveGuest(input.resortId, key, {
+      fullName: input.guest.fullName,
+      phone,
+      email: input.guest.email,
+      nidPassportNo: input.guest.nidPassportNo,
     });
-    if (!guest) {
-      guest = await this.prisma.guest.create({
-        data: {
-          resortId: input.resortId,
-          fullName: input.guest.fullName,
-          email: input.guest.email || null,
-          phone,
-          nidPassportNo: input.guest.nidPassportNo,
-          phoneKey: key,
-        },
-      });
-    }
-
+    const guest = await this.prisma.guest.findUniqueOrThrow({ where: { id: guestId } });
     const roomRows = await this.prisma.room.findMany({
-      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE" },
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE", deletedAt: null },
     });
     if (roomRows.length !== input.roomIds.length) {
       throw badRequest("One or more rooms missing/inactive for this resort");
@@ -1118,7 +1281,7 @@ export class BookingsService {
           guestId: guest.id,
           actorUserId: claims.userId,
           agentUserId: null,
-          source: input.source ?? BookingSource.DIRECT,
+          source: input.source ?? null,
           checkIn,
           checkOut,
           adults: input.adults,
@@ -1175,18 +1338,23 @@ export class BookingsService {
           `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${i.description}${i.nights ? ` × ${i.nights}n` : ""}</td><td style="padding:6px 8px;text-align:center;border-bottom:1px solid #eee">${i.qty}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eee">${money(i.unitPrice)}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eee">${money(i.amount)}</td></tr>`,
       )
       .join("");
+    /**
+     * A guest picks their own name and it ends up inside HTML we send. The
+     * resort's own fields are no safer — an owner types them too.
+     */
+    const esc = escapeHtml;
     const html = `
       <div style="font-family:Segoe UI,Arial,sans-serif;max-width:600px;margin:auto;color:#0f172a">
-        <h2 style="color:#166534">${inv.resort.name}</h2>
-        <p>Invoice <b>${inv.invoiceNo}</b> · ${inv.booking.code}<br/>
-        ${inv.guest.fullName} · ${stayDates(inv)}<br/>
-        Check-in ${inv.resort.checkInTime} · Check-out ${inv.resort.checkOutTime}</p>
+        <h2 style="color:#166534">${esc(inv.resort.name)}</h2>
+        <p>Invoice <b>${esc(inv.invoiceNo)}</b> · ${esc(inv.booking.code)}<br/>
+        ${esc(inv.guest.fullName)} · ${stayDates(inv)}<br/>
+        Check-in ${esc(inv.resort.checkInTime)} · Check-out ${esc(inv.resort.checkOutTime)}</p>
         <table style="width:100%;border-collapse:collapse;font-size:14px">
           <tr style="background:#f0fdf4"><th style="text-align:left;padding:6px 8px">Description</th><th style="padding:6px 8px">Qty</th><th style="text-align:right;padding:6px 8px">Rate</th><th style="text-align:right;padding:6px 8px">Amount</th></tr>
           ${rows}
         </table>
-        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${inv.tax ? `Tax (${inv.taxRatePct}%) ${money(inv.tax)}<br/>Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
-        <p style="color:#64748b;font-size:12px">${[inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · ")}<br/>Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
+        <p style="text-align:right">Rent ${money(inv.rent)}<br/>${inv.discount ? `Discount ${money(inv.discount)}<br/>` : ""}${(inv.taxLines ?? []).map((l) => `${esc(l.label)} (${l.ratePct}%) ${money(l.amount)}<br/>`).join("")}${inv.tax ? `Total ${money(inv.total)}<br/>` : ""}${inv.paid ? `Paid ${money(inv.paid)}<br/>` : ""}<b style="font-size:16px">Due ${money(inv.due)}</b></p>
+        <p style="color:#64748b;font-size:12px">${esc([inv.resort.location, inv.resort.phone, inv.resort.website].filter(Boolean).join(" · "))}<br/>Thank you for staying with us! / অবস্থানের জন্য ধন্যবাদ!</p>
       </div>`;
     // The guest booked a resort, not a platform. Their invoice says so.
     const r = await this.email.send(
@@ -1261,7 +1429,7 @@ export class BookingsService {
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     await this.requireOwnBooking(claims, b);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
-    const totals = BookingsService.computeTotals(b, Number(b.resort.taxRatePct));
+    const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
     return {
       invoiceNo: b.invoiceNo,
       issuedAt: b.invoiceAt,
@@ -1272,6 +1440,8 @@ export class BookingsService {
         address: b.resort.address,
         phone: b.resort.contactPhone,
         website: b.resort.website,
+        // a VAT invoice in Bangladesh has to show the seller's BIN
+        binNumber: b.resort.binNumber,
         checkInTime: b.resort.checkInTime,
         checkOutTime: b.resort.checkOutTime,
         currency: b.resort.currency,
@@ -1313,12 +1483,15 @@ export class BookingsService {
   // today dashboard feed
   async today(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "bookings.view");
     const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
-      select: { timezone: true, taxRatePct: true },
+      select: { timezone: true },
     });
     const t = todayIn(resort.timezone);
-    const taxRatePct = Number(resort.taxRatePct);
+    const taxRules = await this.taxRulesFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -1341,12 +1514,12 @@ export class BookingsService {
       agent: b.agentUser?.name,
       rooms: b.items.map((i) => i.room?.name),
       state: b.state,
-      ...BookingsService.computeTotals(b, taxRatePct),
+      ...BookingsService.computeTotals(b, taxRules),
     }));
     const occupied = await this.prisma.bookingNight.count({
       where: { night: t, item: { booking: { resortId, state: "CHECKED_IN", deletedAt: null } } },
     });
-    const totalRooms = await this.prisma.room.count({ where: { resortId } });
+    const totalRooms = await this.prisma.room.count({ where: { resortId, deletedAt: null } });
     const dues = withTotals.filter((b) => b.arriving && b.due > 0);
     return {
       arrivals: withTotals.filter((b) => b.arriving),

@@ -82,6 +82,10 @@ export default function PayrollPage() {
 
   async function pay(employeeId: number) {
     if (!rid) return;
+    // recording a salary is money leaving the resort; Undo beside it has always
+    // asked, and the action that takes the money did not
+    const emp = sheet?.rows.find((r) => r.employeeId === employeeId);
+    if (!window.confirm(`Record ${emp ? emp.name : "this employee"}'s salary for ${month}?`)) return;
     try {
       await api(`/resorts/${rid}/payroll/employees/${employeeId}/pay`, { method: "POST", body: { month } });
       push(`Salary recorded for ${month}`);
@@ -103,6 +107,7 @@ export default function PayrollPage() {
 
   async function deactivate(emp: Employee) {
     if (!rid) return;
+    if (!window.confirm(`Remove ${emp.name} from payroll? Their payment history is kept.`)) return;
     try {
       const r = await api<{ deactivated?: boolean; deleted?: boolean }>(`/resorts/${rid}/payroll/employees/${emp.id}`, { method: "DELETE" });
       push(r.deactivated ? "Staff deactivated (history kept)" : "Staff removed");

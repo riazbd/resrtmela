@@ -1,6 +1,6 @@
 # Resort Mela — where the project stands
 
-*Last updated 2026-09-09. This is the entry point: read it before the other
+*Last updated 2026-09-10. This is the entry point: read it before the other
 planning documents, which it summarises and sequences.*
 
 | Document | What it is | Still current? |
@@ -45,11 +45,11 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **334 API tests** across 43 files (34 at the start of this pass,
-all of them pure unit tests; there are now 31 integration suites running against
-a real MySQL) plus **24 front-end tests**, which is 24 more than there were. All
-five packages typecheck clean, the console builds, and the repository can be
-provisioned from an empty database — which it could not before.
+Current state: **633 API tests** across 68 files (34 at the start of all this,
+all of them pure unit tests) plus **81 front-end tests**. Four packages
+typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
+(§3.27) — the console builds, and the repository can be provisioned from an
+empty database, which it could not before.
 
 ## 3. What was done
 
@@ -84,7 +84,9 @@ Two were wrong:
 - An agent on flat-fee terms saw their own commission as a percentage:
   **৳75,000 where the owner's report said ৳1,000.**
 
-One `common/money.ts` now, and every caller goes through it.
+One `common/money.ts` now. *Every caller* was overstated — see §3.24, which
+found four more that were still doing their own arithmetic, and a defect inside
+the shared function itself.
 
 ### The public booking API had never worked
 
@@ -141,6 +143,10 @@ resort-scoped endpoints ignored it and checked the fixed role enum instead, so a
 custom role with every box ticked could not do what the enum forbade, and one
 with no boxes could do whatever its role allowed. All forty are permission
 checks now.
+
+*That was the write surface only, and the sentence did not say so.* Eleven
+**view** permissions were still asking nothing at all, and three more endpoints
+were gated on the role enum or on nothing — see §3.25.
 
 Two things surfaced doing it. **"activities" named two different powers** —
 `activities.view` and `activities.delete` gated the *audit log* while Settings
@@ -248,7 +254,7 @@ thrown error rendered a blank white page. Now `error.tsx`, `loading.tsx`,
 `not-found.tsx` and `global-error.tsx`, in the reader's language, showing the
 request id the API returns.
 
-### "Bangla-first" was 68 keys on four screens out of twenty-five
+### The words that mattered were still in English (and see the note below)
 
 The words still in English were the ones that matter most: the state of a
 booking -- rendered as the raw enum with its underscore swapped for a hyphen,
@@ -256,6 +262,14 @@ booking -- rendered as the raw enum with its underscore swapped for a hyphen,
 when something breaks at 11pm in Sajek. 108 keys now, and the dictionary is
 typed so a key added in English and forgotten in Bangla fails the build rather
 than falling back silently in front of a customer.
+
+**Withdrawn, 10 Sep.** The owner's direction is that **English is the default
+and Bangla is the translation**, not the other way round — which the code has
+always done (`DEFAULT_LANG = "en"`). So "eighteen screens carry no translation
+key" is not a defect: those screens are in the default language. Bangla
+coverage is a feature to extend when it is wanted, not a gap to close, and the
+"Bangla-first" framing in PLAN-v2 §56 and STRATEGY §D10 no longer describes
+this product.
 
 Five missing primitives landed with it -- Tabs, Table, DateNav, Pagination,
 Drawer -- which is why the biggest pages had grown past a thousand lines: every
@@ -605,12 +619,484 @@ became the junk drawer the next feature reached for · a `db:baseline` tool that
 works out which migrations a `db push` database already has, instead of a
 hand-written list that was already wrong.
 
+### §3.23 — An audit of the resort panel, and what it found
+
+The agent-visibility work above started from one remark by someone outside the
+project and turned up twenty-seven leaking methods. That raised an obvious
+question — what does a deliberate look find? — and this is the answer: a full
+read of the console, the API, the schema, the billing layer and the mobile app,
+with every serious claim opened in the code and checked.
+
+**The finding that orders everything else: almost every dangerous defect was in
+tenant isolation.** Which is to say, in the one area that is harmless while
+there is a single customer and becomes a breach on the day there are two. They
+were not reachable *by* anybody because there was nobody to reach them. Growth
+is what arms them, so they had to be closed before growth, not after.
+
+### §3.24 — One tenant's data stops at that tenant
+
+`tenant-isolation.spec.ts` seeds two tenants, which no test had done for the
+resort surface: `second-tenant.spec.ts` proves a second resort can be
+*configured*, never that its data stays its own.
+
+- **The notification list had no resort filter**, and its controller checked
+  only the caller's role. Every tenant's admin could read every other tenant's
+  guest correspondence — `NotificationJob.payload` carries the guest's name,
+  their booking code and what they owe.
+- **A campaign asked "may you send" about the caller's first resort and "send
+  to whom" about the request body**, and never compared them. A manager could
+  name another tenant's id and mail that tenant's entire guest list, From-named
+  as them. The test watched it happen: the red run printed the delivery to the
+  other tenant's customer.
+- **Booking edit took `roomIds` on trust.** A clerk could attach another
+  resort's room — reading its rate, and writing `booking_nights` against it,
+  which turns the unique index that stops double-selling into a way to block a
+  competitor's inventory. `create()` had always scoped this; the edit path
+  never did.
+- **Adding an activity to a booking never checked the slot's resort.** The
+  guest app had always asked; only the staff path did not.
+- **`phoneKey("")` is a constant**, and the desk writes it for any walk-in
+  taken without a number — so a user who signed up by email, whose `phone` is
+  null, matched every phone-less guest row on the platform and was handed all
+  of their stays. The same bug, spelled with a raw `phone` compare, passed the
+  ownership check in the payment flow.
+- **An agency reached `resorts/:id` legitimately and got the whole row**: tax
+  rate, address, contact phone, guest and booking counts, and every room's
+  `baseRate` even with `showRatesToAgents` off. The gate was right; the
+  projection behind it was not.
+- **`updateResortUser` writes the global `users` row** and only ever checked a
+  link to *this* resort, so a `users.manage` holder could reset the password of
+  someone who also works for another tenant. It also accepted `RESORT_ADMIN`,
+  which `createResortUser` refuses — and that role resolves to `["*"]`.
+- **Approving an agency's access request rewrote that person's global role**,
+  demoting someone who manages another resort, and silently lifting a platform
+  suspension.
+- **The audit log's delete skipped the resort check for platform rows** — the
+  tenants created, plans changed and owners impersonated — and asked for
+  `activities.delete`, which is not a permission that exists, so the guard was
+  really "are you an admin". Deletions now write their own row.
+- **The mock gateway's confirm route settled an intent from a reference in the
+  URL**, behind AuthGuard and nothing else, mounted whatever gateway was
+  configured. Any signed-in user could mark any booking paid.
+- **A CSV upload gave out keys.** The importer matched the sheet's agent name
+  against every user on the platform by substring, fell back to `candidates[0]`
+  of any role, and created a `user_resorts` row for them — and login turns
+  those rows into a token's `resortIds`.
+- **The CORS allow-list was a suffix test.** `/resortmela\.app$/` matched
+  `https://evil-resortmela.app`, with `credentials: true` behind it. It is a
+  tested function now.
+- **The rate limiter was global, not per caller.** `req.ip` with no
+  `trust proxy` means every request behind the reverse proxy shares one
+  address, so one client could lock everyone out of login. It also covered
+  `auth` alone, leaving the webhook, the guest app and the public API unmetered.
+
+One of those tests passed on its first run. It was wrong: the fixture's booking
+code was thirteen characters against a twelve-character column, so the
+assertion matched a truncated string. **A test that is green before the fix is
+a test to go and read.**
+
+### §3.25 — Money, and the claim that it was already fixed
+
+`bookingTotals` computed `refunded` and then dropped it. `due` was
+`total - paid`, so **a stay refunded in full still read PAID with nothing
+outstanding**, and every report counted the returned money as collected. The
+test that existed pinned how a refund is *represented* and never asked what it
+*means* — which is how the defect survived in the one file the product treats
+as the source of truth for money.
+
+Three callers were still doing their own arithmetic:
+
+- **`rangeBookings`** — feeding the dashboard metrics, the agent report, the
+  source mix and an agent's own commission report — had its own nights
+  multiplier, its own `paid` that dropped refunds, and `due = rent - discount -
+  paid` with no tax. Every one of those disagreed with the booking screen for
+  any resort that charges tax.
+- **The agent payment-deadline alert** had no nights multiplier at all: a ROOM
+  item carries one night at qty 1, so a five-night stay was reported to the
+  owner as one. "This agent owes ৳5,000" on a ৳25,000 booking, in the alert
+  whose only job is to say what is outstanding. There were two copies of it;
+  the second had no caller and is deleted.
+- **The guest's own balance** was computed without `taxRatePct`, so the figure
+  in their SMS excluded tax while the invoice included it. No test in the suite
+  sets a non-zero tax rate on that path, which is why nothing saw it.
+
+Left alone on purpose: **agent commission is taken on rent before discount.**
+That is a commercial term, not a defect, and it is the owner's to decide.
+
+### §3.26 — The permission matrix, the rest of it
+
+Eleven **view** permissions — `bookings.view`, `guests.view`, `payments.view`,
+`expenses.view`, `rooms.view`, `restaurant.view`, `activities.view` and the
+rest — were in `ALL_PERMISSIONS` and on the Settings screen, and `perms.require`
+was never called with any of them. Every read endpoint was gated on resort
+membership alone. Unticking "View guests" for the front desk removed the menu
+link and nothing else: the clerk still had the guest directory, the dues
+ledger, the calendar and the day sheet, with a token and curl. **A hidden link
+is not access control.**
+
+Three more were worse than unused. `bookings.update` — dates, rooms and the
+**discount** — asked for nothing, while `create`, `softDelete` and even adding
+an activity each asked for theirs. `transition` asked the fixed role enum,
+which lists FRONT_DESK as a valid CANCELLED actor, so unticking "Cancel
+bookings" changed nothing; the dedicated `cancel()` path does check, and the
+console has never called it. And `metrics`, `daily` and `idleInventory` asked
+for nothing while the five reports beside them asked for `reports.view`.
+
+`permission-enforcement.spec.ts` holds both halves. Reverting the source and
+leaving the spec in place fails exactly the eleven closed doors and passes the
+three that must stay open — which is how the closure is known to have cost
+nothing.
+
+### §3.27 — Two decisions the documents had already made
+
+**The homepage quoted its own price list.** Three names and three prices in the
+markup while `platform_plans` was the editable source — a third copy of the
+plan vocabulary, one commit after two copies were reduced to one. It reads
+`GET /cms/plans` now, active rows only, so retiring a plan takes it off the
+page. STRATEGY.md D4 (per-room pricing) remains open: `platform_plans` has
+`monthlyFee` and no per-unit dimension, and that is a schema change and a
+commercial decision.
+
+**The mobile app is frozen** — out of the turbo pipelines, nothing deleted,
+`apps/mobile/FROZEN.md` saying why. Both STRATEGY.md and STATUS.md had already
+deprioritised it; the repository kept paying for it anyway. Reading it makes
+the case stronger than the documents did: no `android.package`, no
+`ios.bundleIdentifier`, no icon — it has never been built once — no push, no
+offline, no Bangla, and nine hand-rolled interfaces duplicating the typed
+client.
+
+### §3.28 — On writing "fixed" in this document
+
+Three claims in the sections above were falsified by this pass, and they are
+corrected in place rather than quietly. None was written dishonestly; each was
+written at the moment of the fix and never checked again.
+
+The lesson is cheap to act on: **a claim worth putting in this document is a
+claim worth putting in a test.** "Every resort-scoped method checks a
+permission" is not a sentence, it is an assertion that can enumerate the
+methods. `agent-visibility.spec.ts` was the only claim from the last pass that
+survived contact with this one, and it is the only one that was written as a
+spec.
+
+### §3.29 — Finishing the resort panel
+
+The audit in §3.23 produced about seventy findings and §3.24–§3.26 closed the
+ones that lose other people's data or money. This is the rest of it, done in one
+pass on the owner's instruction, and organised by the two questions that
+actually matter for this product:
+
+**Can a wrong state exist?** Five could, and now cannot — each enforced where it
+cannot be argued with rather than remembered by a service. `Guest` had no
+uniqueness on its own dedup key, so two bookings at one counter split a guest in
+two; adding the index immediately exposed the read-then-write race behind it,
+which is the index doing its job before it was even committed. A phone-less
+walk-in was keyed on a hash of their *name*, so every guest called "local" was
+one row owning hundreds of unrelated stays. `Booking.invoiceNo` was not unique
+next to a `code` that always has been. `Expense` had the offline replay guard on
+the agency side and not on the resort side, which is the side that goes offline.
+Four tenancy columns had no foreign key. And a resort could hold two live
+subscriptions — a plan change restarted the free trial and billed twice a month
+— which is now a generated column the application cannot write.
+
+**Can the owner change it without a deploy?** Three enums that described a
+business rather than a program became the resort's own lists, in one table so
+the next one costs a registry entry. Tax stopped being a single percentage and
+became rules — what each is charged on, whether it is inside the price, whether
+it stacks — which is the only shape that can express 15% VAT plus a 10% service
+charge that VAT is then charged on, plus a restaurant at its own rate, plus a
+menu price quoted gross. The restaurant could not carry tax at all before. And
+the last hardcoded things went: two rival plan vocabularies, a fee map beside
+the plan table it had already fetched, the agent deadline's three permitted
+numbers, an API example pointing at one specific server, and signup describing
+a plan it does not assign.
+
+**Dates.** `new Date().toISOString().slice(0, 10)` is today in UTC and the
+console said it seven times over. Bangladesh is UTC+6, so from 18:00 every
+default date was tomorrow — the day sheet, the expense register, a new booking's
+check-in. `Resort.timezone` had been in the schema all along and the console was
+never sent it.
+
+**Screens that were saying something untrue.** The financial-year picker looked
+its own options up by the wrong field and reported all time. Two selects sent
+their label instead of their value, so three booking states and every activity
+category were wrong. The public booking form sent `adults: 2` hardcoded and
+never asked. "Wallet on" sent the same body as the button beside it. Booking
+search filtered the hundred rows already fetched, under a footer admitting it
+was hiding the rest. The agent's own earnings page recomputed commission as a
+percentage, so flat-fee agents saw a number nobody agreed to.
+
+**Reports.** The P&L skipped February — `setUTCMonth(+1)` from a 31st lands on 3
+March — and charged whole months of payroll to part-month ranges. The collectors
+report totalled 300 rows and presented it as the answer, on the one report an
+owner opens to ask where the cash went.
+
+**And screens that lied by omission.** Fourteen `.catch(() => setRows([]))`
+turned every failure into "nothing here"; four destructive actions fired on one
+click, including a bulk email with no preview and no recipient count.
+
+### §3.30 — Five things the owner asked for
+
+A list of ten, handed over as things that ought to exist. Five already did —
+resort roles with a permission matrix, extra-person pricing on the room type
+and on the booking form, and food packages in the restaurant. These are the
+five that did not, in the order they were worth doing.
+
+**The subscription the owner could not see or change.** The console had one
+plan control and it was on the super admin's side of the wall: hidden from the
+owner, and writing `Tenant.plan` — a field the billing sweep does not read.
+Pressing it changed a label while the fee, the renewal date and the status
+stayed where they were. There was nothing to *read*, either: what am I paying,
+when does it renew, what is outstanding, what would the next plan up cost me —
+the console answered none of them for the person being billed, on a product
+that invoices monthly.
+
+A Subscription tab answers all four and moves plan under two rules. An upgrade
+applies at once and bills only the **difference**, only for the days left in
+the period — a full month would bill the month twice, nothing would give the
+dearer plan away until the renewal. A downgrade waits for the renewal, because
+the month is already invoiced; the request parks in `Subscription.pendingPlan`
+and the billing sweep applies it in the same pass that raises the first bill at
+the new price. The renewal date never moves either way — a plan change is not a
+renewal — and a change inside a trial is free, immediate, and does not hand out
+a second trial. `billing.view` and `billing.manage` separate reading the bill
+from spending money on it.
+
+**Commission belonged to the agent, not the resort.** `UserResort.commissionRate`
+was typed in per person, so two agents selling the same room could earn
+different money on it, and no screen anywhere listed the rates side by side —
+"what do we pay agents" was a query, not an answer. It is the resort's term
+now: one number, set by hand, on Settings → Agent access. The migration seeds
+each resort with the terms most of its agents were already on, so nobody's pay
+changes on the day it deploys, and ties break generously rather than quietly
+cutting someone. Six call sites read the agent's own row — booking detail, room
+availability, the owner's agent report, the agent's own report, the agency room
+search, login — and one service answers now. The old columns stay, holding what
+each agent used to be on; the export relabels them `formerCommission` so nobody
+reads them as live.
+
+**A room could be created and never removed.** There was no DELETE route at
+all, so a room typed in by mistake stayed on the calendar and in the plan's
+room cap for ever, and `OUT_OF_SERVICE` means something else — temporarily
+unsellable, still inventory. The distinction that matters is whether the room
+has ever been sold. Never sold: it was a mistake, it is deleted, its name is
+free again. Sold: it is finished, not a mistake, and deleting it would take the
+rooms out of last year's bookings and invoices — `booking_items.roomId` is the
+database saying so — so it is **retired**: off the calendar, out of the cap,
+history intact. A room with a stay still to come is refused either way, because
+removing a room from under a booked guest is not a thing to do quietly.
+Fifteen room queries across nine services learned the difference. `rooms.delete`
+is its own permission: editing a rate and taking a room off the books are not
+the same authority.
+
+**Selling mail with no gateway.** There is no merchant account, so an email
+pack is paid for by hand — bKash, a bank transfer, cash — and **approval is the
+receipt**: the platform confirms once the money has landed. That rule made two
+more things wrong. The charge was raised as DUE even though the money was
+already in the owner's hand, so the platform's outstanding figure counted it
+and the pack had to be found in the Dues tab and settled a second time; it is
+settled at approval now, carrying how the money arrived, and the console offers
+no other path. And the buyer was shown a price and a button and told nothing
+about where to send the money — `platform.paymentInstructions` is on the screen
+they buy on.
+
+The price list had a worse problem. It was always a platform setting, correctly,
+but `platform_settings.value` is VARCHAR(255) and `updateSettings` sliced to 255
+before writing. A list of more than about eight packs was cut mid-JSON, and
+`parseCreditPacks` — which falls back rather than throws, which is right at read
+time — then quietly sold at the **shipped** prices while the console reported
+the save as successful. The column is TEXT, nothing is truncated, a value too
+long is refused, and a JSON setting is now parsed at the moment it is saved
+rather than at the moment it is needed. There was also no editor for it
+anywhere in the console: changing what the platform sells meant a raw API call,
+so in practice it never changed. Platform → Email credits is that editor.
+
+**Buying email credits charged the tenant with one click.** The button granted
+the credits and raised a billable `PlatformCharge` in the same call, with no
+confirmation of any kind — the only confirm on that screen guarded *sending*.
+A misclick on the largest pack was a charge of that size, and a resort could
+raise unlimited charges against itself with nothing in between. A request
+queues an order now and does nothing else; approval by a super admin is the
+single moment credits are granted and the charge raised, in one transaction,
+because credits with no charge behind them is the platform giving its product
+away and never knowing. The price is written down when the order is placed, so
+what was quoted is what is charged however the price list moves. Platform →
+Email credits is the queue.
+
+**Reports were one long scroll.** Six of them stacked down a page, so reading
+the third meant scrolling past the first two. They are not a sequence. A tab
+each, one period picker above them all, and the three expensive reads wait
+until their tab is open instead of firing on every page load.
+
+**And a role that had been going stale since the day each resort signed up.**
+Adding two permission keys exposed it: `ensureResortRoles` writes
+`ALL_PERMISSIONS` into the Administrator role when a resort is created and
+never runs for that resort again, so the list is a snapshot. Every key added
+afterwards was missing from it, invisibly — a resort that signed up last month
+had an Administrator role that had never heard of `billing.manage` or
+`rooms.delete`, and the matrix simply had fewer boxes than the product had
+features, drifting further with every release. Administrator resolves to `*`
+now, computed rather than stored, so it cannot rot; the matrix stops offering
+boxes that decide nothing, and a role somebody names "Administrator" themselves
+is still an ordinary role holding exactly what it says.
+
+**And a test helper that had been quietly lying.** `resetDb` truncated a
+hand-written list of tables. The list drifted the moment a migration added one:
+`email_credit_orders` arrived and eleven rows from earlier tests survived into
+the next, so specs that counted rows passed or failed depending on what had run
+before them. It asks `information_schema` now. A list that has to be edited in
+step with the schema is a list that will be wrong — the same lesson as §3.28,
+one layer down.
+
+### §3.31 — The calendar, the guest, and a plan that means something
+
+Four pieces of work, and the thread running through them is the same one: a
+screen was saying something the software did not do.
+
+**The calendar was showing cancelled stays as occupied rooms.** `calendar()`
+filtered on nothing, so a cancelled booking still painted its nights — the one
+screen the front desk trusts to say what is free was hiding rooms it could
+sell. Fixed, then rebuilt: a stay is one bar rather than one box per night,
+four states have four colours, and money is a stripe under the bar rather than a
+second grid to read.
+
+Then it was opened in a browser, and three faults appeared that types, tests and
+the build had all passed. Merging free nights — done in the previous commit and
+called an improvement — destroyed the column grid: a room with nothing booked
+became one pale fortnight-wide band, so the table stopped lining up with its own
+header and there was nothing left to click. Day columns were unequal, because
+`table-fixed` shares surplus width proportionally when every column has one.
+Out-of-service rooms sat interleaved among the sellable ones. **Two of the three
+were decisions made in the previous commit, and no test could have caught any of
+them.**
+
+**A guest cannot book directly.** A business decision, and the code said the
+opposite in as many words: `bookings.create` refused a guest with "Guests book
+via the mobile app flow (phase 4)". The desk's door was shut and the app's door
+was the open one — and that flow went straight to `bookRoomsTx` with state
+PENDING, which blocks. A stranger with a verified phone could take a resort's
+rooms off the market without anyone at the resort being asked.
+
+Both doors refuse now, including the public v1 API: a booking form on a resort's
+own website is a guest booking directly however it reaches us, and
+`apiKeyClaims` records that nobody at a desk pressed anything. They refuse
+rather than 404 because the mobile app is frozen and still has the button.
+
+Which exposed the real cost of the decision. `resortDetail` returned rooms,
+prices and activities and no way to reach anybody, so "call the resort" would
+have been a dead end. It carries a phone number now.
+
+**A plan is a list of features, and the owner writes it.** The Plans tab offered
+two boxes — fee and room cap — on three rows seeded in code. Trial length,
+resort limit, label, blurb, order, whether it was still on sale: none of them
+reachable, and no way at all to add a fourth plan or retire one. Every pricing
+decision was a deployment.
+
+Worse, the ticks on the pricing cards were a map in the homepage keyed by plan
+name. A plan the owner created matched no key and rendered with no features at
+all — and no line on any card gated anything, so a Starter customer whose card
+never mentioned the restaurant could use it all month.
+
+One vocabulary now, three readers: `PLAN_FEATURES` in `@rh/shared` is the shelf,
+`platform_plans.features` is what each plan takes off it, and the public card,
+the panel's checkboxes and `requireFeature` all read the same list. Eight
+features are gated — restaurant, agents, activities, discounts, bulk email,
+public API, payroll, spreadsheet import — and a test walks `src/` and fails if
+any declared feature has no gate. Selling a lock with no door is worse than
+selling no lock.
+
+**One rule decides who is exempt, and it is the important one.** A resort with
+no subscription is not a downgraded customer, it is an unbilled one. Every
+resort in the live database is in exactly that state, and one of them runs a
+restaurant with 24 bills in it, so a lock that bit on the fallback plan would
+have taken a working module from a paying customer on the morning it deployed.
+Locks follow a subscription, because a plan is something you sold somebody.
+
+**And the trial is the owner's, including none.** A plan selling zero days
+produced a TRIAL whose end date was already behind it: the money was right, but
+the customer's own page said TRIAL until the next hourly sweep. Zero now starts
+them ACTIVE and bills from today. A single resort can also be given different
+terms from the plan's, which the fee could always do and the trial could not.
+
+**A super admin could not open the console at all.** Found by opening it. The
+layout gate was `loading || !me || !activeResort`, and the platform owner has no
+resort — that is the role. They sat on "Loading…" for ever, locked out of the
+one screen only they can use. The gate has four answers now, and staff whose
+resort link was removed are told so instead of watching a spinner.
+
+**And the menu had to learn the same answer.** Gating the API is not enough on
+its own: a resort on a plan without the restaurant still saw "Restaurant" in the
+sidebar and met a 403 on arriving, which is the defect §3.26 named, in the other
+direction. `/auth/permissions` returns two lists now — what the owner gave this
+person, and what the plan includes — because it is one question asked when a
+resort loads, and both go through the same `effective()` so the menu and the
+door cannot come to different conclusions.
+
+Doing that exposed a wrong question in the gate written the day before. Bulk
+Email is shared between a resort's management and its agents, and an agent's
+copy writes to the agency's own guest list, wherever it booked them. Asking a
+resort's plan whether an agency may mail its own list is not a stricter rule, it
+is the wrong rule; the gate now applies to the resort's own audiences only, and
+the sidebar draws the same line.
+
+Hiding a link is still not the whole job — a typed URL or an old bookmark opens
+the screen anyway — so the layout says once, above the page, which feature is
+missing. **Reads stay open.** A resort whose plan no longer includes the
+restaurant can still read the bills it took while it did: locking creation is the
+sale, locking history would be keeping their own books from them.
+
+**What this leaves open.** There is no per-resort feature override to match the
+per-resort fee and trial, so a customer who needs one extra module needs a plan
+that has it.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
 is what is genuinely still open, ordered by the same rule: **a platform earns
 money only when it can onboard a tenant without us, enforce its own terms, and
 never promise what it does not do.**
+
+### What the audit found and is still open
+
+§3.29 closed most of it. What genuinely remains, and why:
+
+**Domain gaps worth building.** A housekeeping bit, so a room is not sellable
+the instant a guest leaves — there is already a `HOUSEKEEPING` role that
+resolves to zero permissions. Dated out-of-service blocks with a reason, which
+is what would make the idle-inventory pitch true for past quarters rather than
+only today. Weekend rate plans, which is the most common pricing rule in this
+market and something `RatePlan` cannot express. A cancellation and refund
+policy: the workflow exists, the policy does not, so every refund amount is
+typed in by hand. Child pricing — `children` is stored and multiplied by
+nothing. Meal plans, since every package here is sold as room plus breakfast
+plus dinner. Group bookings as an entity rather than a `groupTag` string, which
+currently produces seven invoices for one seven-room group.
+
+**The legal one.** A guest roster. `adults: 3` records one name, and
+foreign-guest reporting in Sajek and Bandarban needs nationality, document type
+and every occupant.
+
+**Smaller, still true.** Overlapping rate plans resolve by whichever row the
+database returns first, so a resort with a season and an Eid weekend gets a
+price that depends on row order. `Payment` has no `resortId`, which is the index
+a cash-accountability feature will want first. Most tables have no `updatedAt`.
+`NotificationJob.renderedText` keeps the body of every message ever sent,
+forever, with no purge. NID and passport numbers are masked by the API and
+exported unmasked to CSV. There is no offboarding path for a tenant, and the FK
+graph makes deleting one structurally impossible.
+
+**Deliberately not done.** Occupancy, ADR and RevPAR as first-class metrics —
+two of the three are already computed inside `idleInventory` and thrown away, so
+this is cheap, but it is a feature rather than a defect. Day close. Cash
+accountability (STRATEGY D3). Per-room pricing (D4).
+
+**Left standing by §3.30, and worth naming.** Commission is read live, so
+changing the rate changes what last month's agent report says an agent earned.
+That was equally true of the per-agent field it replaced — no booking has ever
+stored the terms it was sold under — but the fix is now a smaller one: a
+commission snapshot on the booking. Until then, change the rate at a period
+boundary. Retired rooms also keep their names under `UNIQUE(resortId, name)`,
+so reusing the name of a retired room means renaming that one first; the error
+message says so rather than leaving the owner guessing.
 
 ### Next, and small
 
@@ -620,12 +1106,13 @@ never promise what it does not do.**
    and the list in one file. Splitting them is mechanical and low-risk; it was
    left until last because file size is a symptom, and the disease was the
    missing primitives.
-2. **More front-end tests.** There are 24, on the offline queue and the offline
-   read cache, which is where the risk was. The money formatter, the
+2. **More front-end tests.** There are 39, on the offline queue, the offline
+   read cache, the agency calendar and the booking hand-off. The money formatter, the
    permission-driven navigation and the outbox bar are the next three worth
    holding down.
-3. **Mobile adopts the typed client.** It still hand-rolls nine interfaces, and
-   none of the agency screens exist there. Nothing is broken; it will drift.
+3. ~~**Mobile adopts the typed client.**~~ Settled the other way: the app is
+   frozen out of the build (§3.27). If it is ever revived, this is still true
+   of it.
 4. **Agency staff resort links are copied at hire time and never again.** An
    agency approved for a new resort has staff with no link of their own to it.
    The room search works around this by running on the agency's authority; the
@@ -647,8 +1134,10 @@ release** likewise.
 capability, stop building for it. **OTA channel sync** and **embed themes** —
 both assume a maturity the platform has not reached; the offline front desk was
 worth more than either and is now the only thing in this market that does it.
-**The mobile app release** — guests already book on the web, and the offline
-work landed in the browser, so a native shell buys less than it did.
+**The mobile app release** — guests do not book at all now (§3.31), and the
+offline work landed in the browser, so a native shell buys less than it did.
+The shipped build still has its Book button; the API answers it with a sentence
+about ringing the resort.
 
 ### Kept honest
 
@@ -736,9 +1225,9 @@ them on their own:**
 ```
 pnpm install
 pnpm -F @rh/api test:setup     # creates resorthub_test and migrates it
-pnpm -F @rh/api test           # 223 tests against a real MySQL
-pnpm -F @rh/web test           # 11 tests, jsdom
-pnpm typecheck                 # all five packages
+pnpm -F @rh/api test           # 421 tests against a real MySQL
+pnpm -F @rh/web test           # 39 tests, jsdom
+pnpm typecheck                 # four packages; mobile is frozen (§3.27)
 pnpm dev                       # api :4000, web :3000
 ```
 

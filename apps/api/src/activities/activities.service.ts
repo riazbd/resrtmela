@@ -7,6 +7,7 @@ import { dateOnly } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { expandSchedules, slotDateTime, ScheduleRow } from "./schedule";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 const LIVE_STATES = ["PENDING", "CONFIRMED", "CHECKED_IN"];
 
@@ -16,11 +17,15 @@ export class ActivitiesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ── catalog CRUD ──
   async list(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "activities.view");
     const now = new Date();
     const rows = await this.prisma.activityCatalog.findMany({
       where: { resortId },
@@ -61,6 +66,7 @@ export class ActivitiesService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "activities.manage");
+    await this.planLimits.requireFeature(resortId, "activities");
     const cat = await this.prisma.activityCatalog.create({
       data: {
         resortId,
@@ -271,9 +277,14 @@ export class ActivitiesService {
     const result = await this.prisma.$transaction(async (tx) => {
       const slot = await tx.activitySlot.findUnique({
         where: { id: slotId },
-        include: { catalog: { select: { id: true, name: true, basePrice: true, active: true } } },
+        include: { catalog: { select: { id: true, name: true, basePrice: true, active: true, resortId: true } } },
       });
-      if (!slot || !slot.catalog.active) throw badRequest("Activity slot not found");
+      // the slot has to belong to this booking's resort. The guest app has
+      // always asked; the staff path took the id on trust, so a slot id from
+      // another tenant consumed their capacity and returned their catalogue.
+      if (!slot || !slot.catalog.active || slot.catalog.resortId !== booking.resortId) {
+        throw badRequest("Activity slot not found at this resort");
+      }
       if (slot.startsAt <= new Date()) throw badRequest("Slot already started");
       await this.takeSeats(tx, slotId, qty);
       const item = await tx.bookingItem.create({

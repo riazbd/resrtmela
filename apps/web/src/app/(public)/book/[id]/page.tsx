@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, getToken, setToken, money, type GuestResort, type GuestAvailability, type GuestTrip } from "@/lib/api";
+import { api, getToken, setToken, money, type GuestResort, type GuestAvailability } from "@/lib/api";
 import { Button, Card, Empty, Field, Input, Spinner, useToast } from "@/components/ui";
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
@@ -20,10 +20,8 @@ export default function ResortBookingPage() {
   const [avail, setAvail] = useState<GuestAvailability[] | null>(null);
   const [qty, setQty] = useState<Record<number, number>>({});
   const [searching, setSearching] = useState(false);
-  const [booking, setBooking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [confirmed, setConfirmed] = useState<string | null>(null);
 
   // checkout fields
   const [fullName, setFullName] = useState("");
@@ -96,23 +94,6 @@ export default function ResortBookingPage() {
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
-  async function book() {
-    const items = Object.entries(qty).map(([rt, q]) => ({ roomTypeId: Number(rt), qty: q })).filter((i) => i.qty > 0);
-    if (!items.length) return;
-    setErr(null); setBooking(true);
-    try {
-      const trip = await api<GuestTrip>("/guest/bookings", {
-        method: "POST",
-        body: {
-          resortId, items, checkIn, checkOut, adults: 2, children: 0,
-          fullName: fullName || undefined, remarks: "booked via web — pay at resort",
-        },
-      });
-      setConfirmed(`${trip.code} · due ${money(trip.due)}`);
-      setAvail(null); setQty({});
-    } catch (e) { setErr((e as Error).message); } finally { setBooking(false); }
-  }
-
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <Link href="/book" className="text-sm text-brand-600 hover:underline">← All resorts</Link>
@@ -132,14 +113,6 @@ export default function ResortBookingPage() {
           </Card>
 
           {err && <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
-
-          {confirmed && (
-            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
-              <div className="font-semibold text-green-800">Booked! {confirmed}</div>
-              <p className="mt-1 text-xs text-green-600">Find it under My trips — pay at the resort.</p>
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setConfirmed(null)}>OK</Button>
-            </div>
-          )}
 
           {avail !== null && avail.length > 0 && (
             <Card className="mt-4">
@@ -163,58 +136,68 @@ export default function ResortBookingPage() {
                 );
               })}
               {pickedCount > 0 && (
-                <div className="mt-3 space-y-3">
-                  {!verified && (
-                    <div className="rounded-lg bg-slate-50 p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-medium text-slate-500">Verify to confirm your booking</p>
-                        <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-semibold">
-                          {(["email", "phone"] as const).map((m) => (
-                            <button
-                              key={m}
-                              onClick={() => { setVerifyMode(m); setOtpSent(false); setOtpHint(null); }}
-                              className={`rounded-md px-2.5 py-1 ${verifyMode === m ? "bg-brand-600 text-white" : "text-slate-500"}`}
-                            >
-                              {m === "email" ? "Email" : "Mobile"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <Field label="Your name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full name" /></Field>
-                        {verifyMode === "email" ? (
-                          <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></Field>
-                        ) : (
-                          <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></Field>
-                        )}
-                      </div>
-                      {!otpSent ? (
-                        <Button size="sm" onClick={sendOtp} loading={busy} disabled={verifyMode === "email" ? !email.includes("@") : phone.length < 10}>
-                          Send verification code
-                        </Button>
-                      ) : (
-                        <div className="space-y-2">
-                          <Field label="Verification code"><Input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={6} placeholder="6-digit code" /></Field>
-                          {otpHint && <p className="text-xs text-brand-600 font-medium">{otpHint}</p>}
-                          <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={verifyOtp} loading={busy} disabled={otpCode.length !== 6}>Verify</Button>
-                            <button onClick={() => setOtpSent(false)} className="text-xs text-slate-400 hover:text-slate-600">Change {verifyMode === "email" ? "email" : "number"}</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">
-                      {pickedCount} room(s) × {nights}n = <b>{money(total)}</b>
-                    </span>
-                    <Button onClick={book} loading={booking} disabled={!verified}>Book — pay at resort</Button>
+                <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50 p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-sm text-slate-600">{pickedCount} room(s) × {nights} night(s)</span>
+                    <span className="text-lg font-bold text-slate-900">{money(total)}</span>
                   </div>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    An estimate at today&apos;s rates. The resort confirms the price when it takes the booking.
+                  </p>
+                  <ContactToBook resort={resort} />
                 </div>
               )}
             </Card>
           )}
           {avail !== null && avail.length === 0 && <Empty msg="No rooms available for those dates" />}
+
+          <Card title="Your trips" className="mt-4">
+            {verified ? (
+              <p className="text-sm text-slate-600">
+                Verified.{" "}
+                <Link href="/book/trips" className="font-semibold text-brand-600 hover:underline">
+                  See your trips →
+                </Link>
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500">
+                  Booked through the resort or an agent? Verify your email or mobile to see the stay,
+                  its bill and what is still due.
+                </p>
+                <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-[11px] font-semibold w-fit">
+                  {(["email", "phone"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => { setVerifyMode(m); setOtpSent(false); setOtpHint(null); }}
+                      className={`rounded-md px-2.5 py-1 ${verifyMode === m ? "bg-brand-600 text-white" : "text-slate-500"}`}
+                    >
+                      {m === "email" ? "Email" : "Mobile"}
+                    </button>
+                  ))}
+                </div>
+                {verifyMode === "email" ? (
+                  <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" /></Field>
+                ) : (
+                  <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" /></Field>
+                )}
+                {!otpSent ? (
+                  <Button size="sm" onClick={sendOtp} loading={busy} disabled={verifyMode === "email" ? !email.includes("@") : phone.length < 10}>
+                    Send verification code
+                  </Button>
+                ) : (
+                  <div className="space-y-2">
+                    <Field label="Verification code"><Input value={otpCode} onChange={(e) => setOtpCode(e.target.value)} maxLength={6} placeholder="6-digit code" /></Field>
+                    {otpHint && <p className="text-xs text-brand-600 font-medium">{otpHint}</p>}
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={verifyOtp} loading={busy} disabled={otpCode.length !== 6}>Verify</Button>
+                      <button onClick={() => setOtpSent(false)} className="text-xs text-slate-400 hover:text-slate-600">Change {verifyMode === "email" ? "email" : "number"}</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
 
           {(resort.activities ?? []).length > 0 && (
             <Card title="Activities (book on arrival)" className="mt-4">
@@ -235,4 +218,38 @@ export default function ResortBookingPage() {
 
 function Badge({ value }: { value: string }) {
   return <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-600">Sold out</span>;
+}
+
+/**
+ * How a guest books, now that they cannot do it here.
+ *
+ * The page used to end in "Book — pay at resort", which held real rooms the
+ * moment it was pressed: a stranger could take a resort's inventory off the
+ * market without anybody at the resort being asked. A stay is sold by the
+ * resort or by an agent, so this is the handoff — and a handoff without a
+ * number on it is just a closed door, which is why `resortDetail` now carries
+ * one.
+ */
+function ContactToBook({ resort }: { resort: GuestResort }) {
+  const phone = resort.contactPhone?.trim();
+  return (
+    <div className="mt-3 border-t border-brand-200 pt-3">
+      <div className="text-sm font-semibold text-slate-900">To book, contact the resort</div>
+      {phone ? (
+        <a href={`tel:${phone}`} className="mt-0.5 inline-block text-lg font-bold text-brand-700 hover:underline">
+          {phone}
+        </a>
+      ) : (
+        <p className="mt-0.5 text-sm text-slate-500">
+          This resort has not published a number yet — try its website, or ask a travel agent.
+        </p>
+      )}
+      {resort.address && <p className="mt-1 text-xs text-slate-500">{resort.address}</p>}
+      {resort.website && (
+        <a href={resort.website} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-brand-600 hover:underline">
+          {resort.website}
+        </a>
+      )}
+    </div>
+  );
 }

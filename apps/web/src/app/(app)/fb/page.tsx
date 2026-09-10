@@ -8,6 +8,8 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
 import { Package as PackageIcon, Trash2 } from "lucide-react";
+import { usePaymentMethods } from "@/lib/resort-options";
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 interface BillItem {
   name: string;
@@ -47,9 +49,9 @@ interface InHouse {
  */
 const BLANK_ITEM = { name: "", qty: 1, unitPrice: 0, total: 0 };
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function FbPage() {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { activeResort, isStaff, isManagement } = useAuth();
   const t = useT();
   const { push } = useToast();
@@ -57,9 +59,9 @@ export default function FbPage() {
   const [ticket, setTicket] = useState<BillItem[]>([{ ...BLANK_ITEM }]);
   const [paidAmount, setPaidAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
-  const [date, setDate] = useState(iso(new Date()));
-  const [from, setFrom] = useState(iso(new Date(Date.now() - 7 * 86400000)));
-  const [to, setTo] = useState(iso(new Date(Date.now() + 86400000)));
+  const [date, setDate] = useState(() => todayIn(activeResort?.timezone));
+  const [from, setFrom] = useState(() => addDaysIso(todayIn(activeResort?.timezone), -7));
+  const [to, setTo] = useState(() => addDaysIso(todayIn(activeResort?.timezone), 1));
   const [payFor, setPayFor] = useState<Bill | null>(null);
   const [payAmt, setPayAmt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -275,7 +277,7 @@ export default function FbPage() {
                   <Field label={`Paid now (${cur()})`}><Input type="number" min={0} value={paidAmount || ""} onChange={(e) => setPaidAmount(Number(e.target.value))} className="!w-28" /></Field>
                   <Field label="Method">
                     <Select value={method} onChange={(e) => setMethod(e.target.value)} className="!w-28">
-                      {["CASH", "BKASH", "NAGAD", "CARD"].map((m) => <option key={m}>{m}</option>)}
+                      {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
                     </Select>
                   </Field>
                   <Field label="Date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="!w-36" /></Field>

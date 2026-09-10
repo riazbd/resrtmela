@@ -4,19 +4,37 @@ import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
 import { requireResortAccess, requireSellingAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
-import { bookingTotals, perNightRevenue, agentCommission } from "../common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange } from "../common/money";
 import { PermissionsService } from "../common/permissions";
+import { TaxService } from "../common/tax.service";
+import { CommissionService } from "../common/commission.service";
 
 const COUNTED_STATES: BookingState[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
+
+/** The bucket for stays nobody said anything about. Not a source; the absence of one. */
+export const UNRECORDED_SOURCE = "__UNRECORDED__";
 
 @Injectable()
 export class ReportsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
   ) {}
 
+  /**
+   * The bookings in a range, with their money from the one money function.
+   *
+   * This used to reimplement `bookingTotals`: its own nights multiplier, its
+   * own `paid` that dropped refunds, and `due = rent - discount - paid` with
+   * no tax at all. So every report here disagreed with the booking screen and
+   * the invoice for any resort that charges tax, and a refunded stay still
+   * counted as collected. A second copy of a money rule is how the first one
+   * stops being true.
+   */
   private async rangeBookings(resortId: number, from?: string, to?: string) {
+    const taxRules = await this.tax.rulesFor(resortId);
     const rows = await this.prisma.booking.findMany({
       where: {
         resortId,
@@ -33,28 +51,18 @@ export class ReportsService {
       },
     });
     return rows.map((b) => {
-      const nights =
-        b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 1;
-      const rent = b.items.reduce(
-        (s, i) => s + Number(i.unitPrice) * i.qty * (i.itemKind === "ROOM" ? nights : 1),
-        0,
-      );
-      const roomRent = b.items
-        .filter((i) => i.itemKind === "ROOM")
-        .reduce((s, i) => s + Number(i.unitPrice) * i.qty * nights, 0);
-      const paid = b.payments
-        .filter((p) => p.paymentType !== "REFUND")
-        .reduce((s, p) => s + Number(p.amount), 0);
+      const t = bookingTotals({ ...b, taxRules });
       return {
         id: b.id,
         state: b.state,
         source: b.source,
         agentUserId: b.agentUserId,
         agentName: b.agentUser?.name ?? null,
-        rent,
-        roomRent,
-        paid,
-        due: round2(rent - Number(b.discount) - paid),
+        rent: t.rent,
+        roomRent: t.roomRent,
+        paid: t.paid,
+        refunded: t.refunded,
+        due: t.due,
       };
     });
   }
@@ -62,6 +70,8 @@ export class ReportsService {
   /** Management dashboard metrics (sheet tab 12): resort + F&B + expenses = net. */
   async metrics(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
+    const taxRules = await this.tax.rulesFor(resortId);
     const bookings = await this.rangeBookings(resortId, from, to);
     const gross = round2(bookings.reduce((s, b) => s + (b.roomRent ?? b.rent), 0));
     const discounts = await this.prisma.booking.aggregate({
@@ -80,7 +90,10 @@ export class ReportsService {
       include: { items: true },
     });
     const fbRevenue = round2(
-      fb.reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0),
+      // net of tax: what the resort earned, not what it collected for the
+      // government. The room side has always reported net; the restaurant
+      // could not, because a restaurant bill had nowhere to put tax.
+      fb.reduce((s, b) => s + fbBillTotals(b, taxRules).net, 0),
     );
     const expenses = await this.prisma.expense.aggregate({
       _sum: { amount: true },
@@ -108,9 +121,15 @@ export class ReportsService {
   async pl(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.pl");
+    const taxRules = await this.tax.rulesFor(resortId);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
+    // `daily` has always capped its range; this one pulled a decade of bookings
+    // into memory if asked
+    if ((to.getTime() - from.getTime()) / 86_400_000 > 400) {
+      throw badRequest("max 400 days per query");
+    }
 
     // resort revenue: ROOM + EXTRA_PERSON items on counted bookings
     const bookings = await this.prisma.booking.findMany({
@@ -140,7 +159,7 @@ export class ReportsService {
       where: { resortId, deletedAt: null, billDate: { gte: from, lt: to } },
       include: { items: true },
     });
-    const restaurantRevenue = round2(fb.reduce((s, b) => s + b.items.reduce((t, i) => t + Number(i.unitPrice) * i.qty, 0), 0));
+    const restaurantRevenue = round2(fb.reduce((s, b) => s + fbBillTotals(b, taxRules).net, 0));
 
     // expenses split by scope
     const expenses = await this.prisma.expense.findMany({
@@ -164,16 +183,24 @@ export class ReportsService {
     resortExpenses = round2(resortExpenses);
     restaurantExpenses = round2(restaurantExpenses);
 
-    // payroll for the months overlapping the range (charged to resort)
-    const months: string[] = [];
-    for (let d = new Date(from); d < to; d.setUTCMonth(d.getUTCMonth() + 1)) {
-      months.push(d.toISOString().slice(0, 7));
-    }
+    /**
+     * Payroll, for the part of each month the range actually covers.
+     *
+     * Two defects here. The month list was walked with
+     * `d.setUTCMonth(d.getUTCMonth() + 1)`, which overflows from a 31st — 31
+     * January plus a month is 3 March — so February was skipped and a whole
+     * month's wages vanished. And every month the range touched was charged in
+     * full, so a report for 1–10 September showed September's entire wage bill
+     * against ten days of revenue.
+     */
+    const months = monthsInRange(fromStr, toStr);
     const payroll = await this.prisma.payrollPayment.findMany({
       where: { resortId, month: { in: months } },
-      select: { amount: true },
+      select: { amount: true, month: true },
     });
-    const payrollTotal = round2(payroll.reduce((s, p) => s + Number(p.amount), 0));
+    const payrollTotal = round2(
+      payroll.reduce((s, p) => s + Number(p.amount) * payrollShareOfRange(p.month, fromStr, toStr), 0),
+    );
 
     const resortIncome = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
     const resortNet = round2(resortIncome - resortExpenses - payrollTotal);
@@ -216,13 +243,15 @@ export class ReportsService {
    */
   async idleInventory(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
 
     const rooms = await this.prisma.room.findMany({
-      where: { resortId },
+      // occupancy is measured against what the resort can sell today
+      where: { resortId, deletedAt: null },
       select: { id: true, name: true, status: true },
       orderBy: { name: "asc" },
     });
@@ -272,6 +301,7 @@ export class ReportsService {
   /** Daily revenue rows (sheet tabs 7/11) for a date range. */
   async daily(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "reports.view");
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) throw badRequest("to must be after from");
@@ -331,12 +361,36 @@ export class ReportsService {
   async collectors(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
+    const where = {
+      booking: { resortId, deletedAt: null },
+      paymentType: "ADVANCE" as const,
+      ...(from && to ? { receivedAt: { gte: dateOnly(from), lt: dateOnly(to) } } : {}),
+    };
+
+    /**
+     * Who collected what, over everything — not over the last 300 rows.
+     *
+     * The totals were summed in memory from a `take: 300` list and presented as
+     * the answer, so on a busy month the report quietly understated whoever had
+     * been collecting. This is the one report an owner opens to ask where the
+     * cash went; a total that stops at 300 is worse than no total. The database
+     * groups it now, and the list underneath stays capped because a list of
+     * recent receipts is meant to be recent.
+     */
+    const grouped = await this.prisma.payment.groupBy({
+      by: ["receivedById"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const names = await this.prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.receivedById).filter((id): id is number => id != null) } },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(names.map((u) => [u.id, u.name]));
+
     const rows = await this.prisma.payment.findMany({
-      where: {
-        booking: { resortId, deletedAt: null },
-        paymentType: "ADVANCE",
-        ...(from && to ? { receivedAt: { gte: dateOnly(from), lt: dateOnly(to) } } : {}),
-      },
+      where,
       include: {
         receivedBy: { select: { id: true, name: true, role: true } },
         booking: { select: { code: true, guest: { select: { fullName: true } } } },
@@ -344,23 +398,15 @@ export class ReportsService {
       orderBy: { receivedAt: "desc" },
       take: 300,
     });
-    const byUser = new Map<string, { userId: number | null; name: string; advances: number; total: number; codes: string[] }>();
-    for (const p of rows) {
-      const k = p.receivedById ? `u${p.receivedById}` : "unassigned";
-      const entry = byUser.get(k) ?? {
-        userId: p.receivedById,
-        name: p.receivedBy?.name ?? "Unassigned",
-        advances: 0,
-        total: 0,
-        codes: [],
-      };
-      entry.advances++;
-      entry.total = round2(entry.total + Number(p.amount));
-      entry.codes.push(p.booking.code);
-      byUser.set(k, entry);
-    }
     return {
-      rows: [...byUser.values()].sort((a, b) => b.total - a.total),
+      rows: grouped
+        .map((g) => ({
+          userId: g.receivedById,
+          name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
+          advances: g._count._all,
+          total: round2(Number(g._sum.amount ?? 0)),
+        }))
+        .sort((a, b) => b.total - a.total),
       recent: rows.map((p) => ({
         id: p.id,
         at: p.receivedAt,
@@ -405,14 +451,18 @@ export class ReportsService {
       where: { resortId, user: { role: ROLE.AGENT } },
       include: { user: { select: { id: true, name: true } } },
     });
+    // one rate for the resort, not one per row: this used to read
+    // `s.commissionRate`, so the report showed whatever each agent had been
+    // typed in as, and two agents on the same booking earned differently
+    const terms = await this.commission.termsFor(resortId);
 
     const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
     for (const s of staff) {
       byAgent.set(s.userId, {
         agentId: s.userId,
         name: s.user.name,
-        commissionRate: Number(s.commissionRate ?? 0),
-        commissionKind: s.commissionKind,
+        commissionRate: terms.rate,
+        commissionKind: terms.kind,
         bookings: 0,
         rent: 0,
         due: 0,
@@ -446,11 +496,14 @@ export class ReportsService {
     const bookings = await this.rangeBookings(resortId, from, to);
     const bySource = new Map<string, { source: string; bookings: number; rent: number; due: number }>();
     for (const b of bookings) {
-      const entry = bySource.get(b.source) ?? { source: b.source, bookings: 0, rent: 0, due: 0 };
+      // a booking nobody recorded a source for is its own row, not Direct's.
+      // It used to be Direct's, because the column defaulted to DIRECT.
+      const key = b.source ?? UNRECORDED_SOURCE;
+      const entry = bySource.get(key) ?? { source: key, bookings: 0, rent: 0, due: 0 };
       entry.bookings++;
       entry.rent += b.roomRent ?? b.rent;
       entry.due += b.due;
-      bySource.set(b.source, entry);
+      bySource.set(key, entry);
     }
     const rows = [...bySource.values()]
       .map((r) => ({ ...r, rent: round2(r.rent), due: round2(r.due) }))
@@ -469,11 +522,8 @@ export class ReportsService {
   async myReport(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     if (claims.role !== ROLE.AGENT) throw badRequest("Agents only");
     requireSellingAccess(claims, resortId);
-    const link = await this.prisma.userResort.findUnique({
-      where: { userId_resortId: { userId: claims.userId, resortId } },
-    });
-    const rate = Number(link?.commissionRate ?? 0);
-    const kind = link?.commissionKind ?? "PERCENT";
+    // the same terms the owner's report reads, so the two cannot disagree
+    const { rate, kind } = await this.commission.termsFor(resortId);
     const bookings = (await this.rangeBookings(resortId, from, to)).filter(
       (b) => b.agentUserId === claims.userId,
     );

@@ -8,7 +8,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
+import { makeBookingsService, makeFbService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import type { BookingsService } from "../../src/bookings/bookings.service";
 import { FbService } from "../../src/fb/fb.service";
@@ -23,7 +23,7 @@ let claims: JwtClaims;
 let bookings: BookingsService;
 
 const fbService = () =>
-  new FbService(asPrismaService, new AuditService(asPrismaService), new PermissionsService(asPrismaService));
+  makeFbService(asPrismaService);
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);

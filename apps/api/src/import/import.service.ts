@@ -6,6 +6,11 @@ import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
+import { PlanLimitsService } from "../common/plan-limits.service";
+import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
+import { fbBillTotals } from "../common/money";
+import { anonGuestKey } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import {
   parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
@@ -59,6 +64,13 @@ export interface ImportReport {
    * importer did this silently and nobody knew there was anything to fix.
    */
   roomTypeCreated: { name: string; assumed: boolean } | null;
+  /**
+   * Names in the "Advance received" column that matched no agent working with
+   * this resort. Those bookings are imported without an agent, which is the
+   * honest outcome — the alternative was what this used to do, and that is
+   * described at the match site below.
+   */
+  unmatchedAgents: string[];
   rows: ImportRowResult[];
 }
 
@@ -87,6 +99,9 @@ export class ImportService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   private parseRows(csvText: string): SheetRow[] {
@@ -165,14 +180,18 @@ export class ImportService {
   ): Promise<ImportReport> {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     if (csvText.length > 2_000_000) throw badRequest("CSV too large (2MB max)");
 
     const rows = this.parseRows(csvText);
     const report: ImportReport = {
       dryRun, totalRows: rows.length, imported: 0, skipped: 0,
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
-      paymentsCreated: 0, roomTypeCreated: null, rows: [],
+      paymentsCreated: 0, roomTypeCreated: null, rows: [], unmatchedAgents: [],
     };
+
+    // the resort's own channel list, so an import can name one it invented
+    const sourceCodes = (await this.options.active(resortId, "BOOKING_SOURCE")).map((o) => o.code);
 
     if (dryRun) {
       for (const row of rows) {
@@ -195,7 +214,7 @@ export class ImportService {
 
     // room + user caches for the batch
     const roomCache = new Map<string, { id: number; baseRate: number; roomTypeId: number }>();
-    const existingRooms = await this.prisma.room.findMany({ where: { resortId } });
+    const existingRooms = await this.prisma.room.findMany({ where: { resortId, deletedAt: null } });
     for (const r of existingRooms) roomCache.set(r.name.toLowerCase(), { id: r.id, baseRate: Number(r.baseRate), roomTypeId: r.roomTypeId });
     let defaultRoomTypeId = existingRooms[0]?.roomTypeId ?? null;
     if (!defaultRoomTypeId) {
@@ -276,7 +295,9 @@ export class ImportService {
 
           // guest dedupe
           const phone = normalizePhone(row.mobile);
-          const key = phone ? phoneKey(phone) : phoneKey("n:" + row.guestName.toLowerCase().trim());
+          // a sheet row with no number cannot be matched to anyone; hashing the
+          // name made every "local" one guest with hundreds of unrelated stays
+          const key = phone ? phoneKey(phone) : anonGuestKey();
           let guest = await tx.guest.findFirst({ where: { phoneKey: key, resortId } });
           if (!guest) {
             guest = await tx.guest.create({
@@ -298,7 +319,7 @@ export class ImportService {
           const payable = round2(rent - row.discount);
           const paymentState = row.advance >= payable - 0.01 ? "PAID" : row.advance > 0 ? "PARTIAL" : "UNPAID";
           const state = mapSheetStatus(row.statusRaw);
-          const source = mapSheetSource(row.sourceRaw);
+          const source = mapSheetSource(row.sourceRaw, sourceCodes);
           const flags: string[] = [];
           if (row.sheetRent > 0 && Math.abs(row.sheetRent - rent) > 1) {
             flags.push(`rent-adjusted (sheet said ${row.sheetRent})`);
@@ -306,30 +327,40 @@ export class ImportService {
 
           // link agent when the sheet names one (Advance received col);
           // auto-attach the agent to this resort if they aren't yet
+          /**
+           * Match the sheet's agent against agents who already work here.
+           *
+           * This used to search every user on the platform by name substring,
+           * fall back to `candidates[0]` of any role, and then — if that
+           * stranger had no link to this resort — create one. So a CSV whose
+           * "Advance received" column carried another tenant's admin name
+           * granted that person a `user_resorts` row, and login turns those
+           * rows into a token's `resortIds`: an upload handed out access.
+           *
+           * Granting access is the approval flow's job. An import that cannot
+           * find the agent leaves the booking unattributed and says so, which
+           * is a thing the owner can fix in one click; the old behaviour was a
+           * thing nobody could see.
+           */
           let agentUserId: number | null = null;
           if (source === "AGENT" && row.advanceReceiver) {
             const name = row.advanceReceiver.toLowerCase();
             const candidates = await tx.user.findMany({
-              where: { name: { contains: row.advanceReceiver } },
-              include: {
-                resorts: { select: { resortId: true, commissionRate: true } },
+              where: {
+                role: "AGENT",
+                name: { contains: row.advanceReceiver },
+                resorts: { some: { resortId } },
               },
+              select: { id: true, name: true },
             });
             const match =
-              candidates.find((u) => u.role === "AGENT" && u.name.toLowerCase() === name) ??
-              candidates.find((u) => u.role === "AGENT" && u.name.toLowerCase().includes(name)) ??
-              candidates[0];
+              candidates.find((u) => u.name.toLowerCase() === name) ??
+              candidates.find((u) => u.name.toLowerCase().includes(name)) ??
+              null;
             if (match) {
               agentUserId = match.id;
-              if (!match.resorts.some((r) => r.resortId === resortId)) {
-                await tx.userResort.create({
-                  data: {
-                    userId: match.id,
-                    resortId,
-                    commissionRate: match.resorts[0]?.commissionRate ?? 0,
-                  },
-                });
-              }
+            } else if (!report.unmatchedAgents.includes(row.advanceReceiver)) {
+              report.unmatchedAgents.push(row.advanceReceiver);
             }
           }
 
@@ -469,6 +500,7 @@ export class ImportService {
   async importExpenses(claims: JwtClaims, resortId: number, csvText: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());
@@ -544,6 +576,7 @@ export class ImportService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "import.run");
+    await this.planLimits.requireFeature(resortId, "imports");
     const table = parseCsv(csvText);
     if (table.length < 2) throw badRequest("CSV needs a header row + data rows");
     const header = table[0]!.map((h) => h.trim().toLowerCase());
@@ -570,7 +603,7 @@ export class ImportService {
 
     // room resolution via optional name map {"3": "Snow Drop"}
     const roomsByName = new Map<string, { id: number }>();
-    for (const r of await this.prisma.room.findMany({ where: { resortId }, select: { id: true, name: true } })) {
+    for (const r of await this.prisma.room.findMany({ where: { resortId, deletedAt: null }, select: { id: true, name: true } })) {
       roomsByName.set(r.name.toLowerCase(), { id: r.id });
     }
     /**
@@ -654,7 +687,7 @@ export class ImportService {
         },
         include: { items: true },
       });
-      const total = round2(created.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0));
+      const total = fbBillTotals(created, await this.tax.rulesFor(resortId)).total;
       const paidNow = Number(created.paidAmount);
       imported++;
       out.push({

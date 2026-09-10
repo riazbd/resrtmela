@@ -239,11 +239,50 @@ export class TenancyService {
     return tenant;
   }
 
-  detail(claims: JwtClaims, resortId: number) {
+  async detail(claims: JwtClaims, resortId: number) {
     // an agency sells this resort, so it may read the shop window: rooms,
     // room types, activities. Everything behind the counter goes through
     // `requireResortAccess`, which agents do not pass.
     requireSellingAccess(claims, resortId);
+
+    /**
+     * An agency gets the window, and only the window.
+     *
+     * `requireSellingAccess` answers "may you be here", so an agency reached
+     * this route legitimately — and then received the whole `resorts` row:
+     * the tax rate, the street address, the contact phone, how many guests
+     * and bookings the resort has, and every room's `baseRate` even when
+     * `showRatesToAgents` is off, which every other agent-facing path
+     * honours. The gate was right; the projection behind it was not.
+     */
+    if (claims.role === ROLE.AGENT) {
+      const resort = await this.prisma.resort.findUniqueOrThrow({
+        where: { id: resortId },
+        select: {
+          id: true, name: true, location: true, website: true,
+          currency: true, locale: true, timezone: true,
+          checkInTime: true, checkOutTime: true, showRatesToAgents: true,
+          roomTypes: {
+            select: { id: true, name: true, maxAdults: true, maxChildren: true, extraPersonAllowed: true },
+          },
+          rooms: {
+            where: { status: "ACTIVE" },
+            select: { id: true, name: true, roomTypeId: true, baseRate: true },
+            orderBy: { name: "asc" },
+          },
+          activities: {
+            where: { active: true },
+            select: { id: true, name: true, category: true, basePrice: true, durationMin: true },
+          },
+        },
+      });
+      // the rate is the one thing here the resort decides to share or not
+      const rooms = resort.showRatesToAgents
+        ? resort.rooms
+        : resort.rooms.map(({ baseRate: _hidden, ...room }) => room);
+      return { ...resort, rooms };
+    }
+
     return this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       include: {

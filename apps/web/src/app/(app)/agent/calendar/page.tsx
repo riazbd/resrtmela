@@ -2,13 +2,16 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
 import { Card, Empty, Select, Spinner } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
-import { occupancyCells } from "@/lib/agency-calendar";
+import { occupancyCells, freeSpan, type CalendarCell } from "@/lib/agency-calendar";
+import { mergeRuns } from "@/lib/calendar-bars";
+import { todayIn, monthOf, addDaysIso } from "@/lib/resort-dates";
 import type { AgencyCalendar } from "@rh/shared";
 
 /**
@@ -27,18 +30,37 @@ import type { AgencyCalendar } from "@rh/shared";
  * then the blocks are labelled here too.
  */
 
-const monthStart = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-const addMonths = (d: Date, n: number) =>
-  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+/**
+ * Dates here are `YYYY-MM-DD` strings, not `Date` objects.
+ *
+ * This page had its own `iso()` and `addMonths()` built on `Date.UTC`, which is
+ * the eighth copy of a helper `lib/resort-dates` already owns — and the copy
+ * decides which month the arrows land on. `monthOf` is anchored at midday so an
+ * offset cannot drift it, and `todayIn` reads the resort's own clock rather
+ * than the browser's, which from 18:00 in Dhaka is a different day.
+ */
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-export default function AgencyCalendarPage() {
-  const { role } = useAuth();
-  const [month, setMonth] = useState(() => monthStart(new Date()));
-  const [resortId, setResortId] = useState<number | null>(null);
+/** Thursday and Friday: the two days this market prices differently. */
+const WEEKEND = new Set([4, 5]);
 
-  const from = iso(month);
-  const to = iso(addMonths(month, 1));
+/** A hairline where the week turns over, so the eye has somewhere to land. */
+const weekEdge = (day: string) =>
+  new Date(`${day}T12:00:00Z`).getUTCDay() === 6 ? "border-l border-slate-200" : "";
+const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
+
+export default function AgencyCalendarPage() {
+  const router = useRouter();
+  const { role, activeResort } = useAuth();
+  // the resort's today, not the browser's
+  const today = todayIn(activeResort?.timezone);
+  const [month, setMonth] = useState(() => today.slice(0, 7));
+  const [resortId, setResortId] = useState<number | null>(null);
+  /** The first night of a stay being picked out, waiting for its second click. */
+  const [anchor, setAnchor] = useState<{ roomId: number; night: string } | null>(null);
+
+  const from = monthOf.firstDay(month);
+  const to = addDaysIso(monthOf.lastDay(month), 1);
 
   const { data, isLoading, error } = useApi<AgencyCalendar>(
     keys.agentCalendar(from, to),
@@ -63,9 +85,39 @@ export default function AgencyCalendarPage() {
   // decides what a square means lives in `lib/agency-calendar` with its tests
   const cells = useMemo(() => occupancyCells(chosen?.stays ?? []), [chosen]);
 
+  /**
+   * First click marks the night; second click takes the stay between them.
+   *
+   * Every free square used to be a link that opened the form for that one
+   * night, so an agent placing three nights for a group went round the loop
+   * three times. A second click in a different room, or across a night someone
+   * else has, starts again from there rather than offering a booking the engine
+   * would refuse after it had been quoted.
+   */
+  function pickNight(roomId: number, night: string) {
+    if (!chosen) return;
+    if (!anchor || anchor.roomId !== roomId) {
+      setAnchor({ roomId, night });
+      return;
+    }
+    const span = freeSpan(cells, roomId, anchor.night, night);
+    if (!span) {
+      setAnchor({ roomId, night });
+      return;
+    }
+    setAnchor(null);
+    router.push(
+      `/bookings?resortId=${chosen.resort.id}&roomId=${roomId}&checkIn=${span.from}&checkOut=${span.to}&new=1`,
+    );
+  }
+
   if (role !== "AGENT") return <Empty msg="Agents only" />;
 
-  const label = month.toLocaleString("en", { month: "long", year: "numeric", timeZone: "UTC" });
+  const label = new Date(`${from}T12:00:00Z`).toLocaleString("en", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
   const taken = cells.size;
   const capacity = (chosen?.rooms.length ?? 0) * days.length;
   const mine = [...cells.values()].filter((c) => c.mine).length;
@@ -85,7 +137,7 @@ export default function AgencyCalendarPage() {
             <button
               type="button"
               aria-label="Previous month"
-              onClick={() => setMonth(addMonths(month, -1))}
+              onClick={() => { setMonth(monthOf(month, -1)); setAnchor(null); }}
               className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -96,7 +148,7 @@ export default function AgencyCalendarPage() {
             <button
               type="button"
               aria-label="Next month"
-              onClick={() => setMonth(addMonths(month, 1))}
+              onClick={() => { setMonth(monthOf(month, 1)); setAnchor(null); }}
               className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-50"
             >
               <ChevronRight className="h-4 w-4" />
@@ -126,6 +178,9 @@ export default function AgencyCalendarPage() {
             </span>
             <span className="flex items-center gap-1">
               <i className="h-3 w-3 rounded-sm border border-slate-200 bg-white" /> Free
+            </span>
+            <span className="hidden sm:inline text-slate-400">
+              Click a free night, then its last night, to take the whole stay.
             </span>
           </div>
         </div>
@@ -159,62 +214,115 @@ export default function AgencyCalendarPage() {
             <table className="border-separate border-spacing-0 text-xs">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
+                  <th className="sticky left-0 z-10 border-r border-slate-200 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
                     Room
                   </th>
-                  {days.map((d) => (
-                    <th
-                      key={iso(d)}
-                      className="w-7 pb-2 text-center font-medium tabular-nums text-slate-400"
-                    >
-                      {d.getUTCDate()}
-                    </th>
-                  ))}
+                  {/* The numbers alone gave no way to tell Thursday from
+                      Tuesday, on a calendar whose whole job is which nights are
+                      worth what. Thursday and Friday are the weekend here. */}
+                  {days.map((d) => {
+                    const day = iso(d);
+                    const isToday = day === today;
+                    const weekend = WEEKEND.has(d.getUTCDay());
+                    return (
+                      <th
+                        key={day}
+                        className={`w-7 pb-2 text-center font-medium tabular-nums ${
+                          // a hairline at each week boundary, so the eye has
+                          // somewhere to anchor in thirty-one identical columns
+                          d.getUTCDay() === 6 ? "border-l border-slate-200" : ""
+                        } ${isToday ? "text-brand-700" : weekend ? "text-slate-500" : "text-slate-400"}`}
+                      >
+                        <span
+                          className={`block text-[10px] font-semibold uppercase ${
+                            weekend ? "text-amber-600" : "text-slate-300"
+                          }`}
+                        >
+                          {WEEKDAY_INITIALS[d.getUTCDay()]}
+                        </span>
+                        <span
+                          className={
+                            isToday
+                              ? "mx-auto flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 font-bold text-white"
+                              : ""
+                          }
+                        >
+                          {d.getUTCDate()}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {chosen.rooms.map((room) => (
-                  <tr key={room.id}>
-                    <td className="sticky left-0 z-10 whitespace-nowrap bg-white py-0.5 pr-3 font-medium text-slate-700">
-                      {room.name}
-                      {room.roomTypeName && (
-                        <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
-                      )}
-                    </td>
-                    {days.map((d) => {
-                      const cell = cells.get(`${room.id}|${iso(d)}`);
-                      const title = !cell
-                        ? `${room.name} free on ${iso(d)}`
-                        : cell.mine
-                          ? `Yours — ${cell.guestName ?? ""} ${cell.code ?? ""}`.trim()
-                          : cell.guestName
-                            ? `Taken — ${cell.guestName}`
-                            : "Taken";
-                      // a free night is the offer an agent is looking for, so
-                      // it is the thing you click: the form opens with this
-                      // resort, this room and this date already filled in
-                      if (!cell) {
-                        return (
-                          <td key={iso(d)} className="p-[1px]">
-                            <Link
-                              href={`/bookings?resortId=${chosen.resort.id}&roomId=${room.id}&checkIn=${iso(d)}&checkOut=${iso(new Date(d.getTime() + 86_400_000))}&new=1`}
-                              title={`Book ${room.name} for ${iso(d)}`}
-                              className="block h-6 rounded-sm border border-slate-200 bg-white hover:border-brand-400 hover:bg-brand-50"
-                            />
+                {chosen.rooms.map((room) => {
+                  /**
+                   * One bar per stay, not one square per night.
+                   *
+                   * A three-night booking used to be three disconnected blocks,
+                   * so the eye had to reassemble a stay out of a mosaic. Merged,
+                   * the agency's own booking has the width of the whole stay to
+                   * carry its guest and code, and somebody else's is one calm
+                   * grey band instead of three.
+                   *
+                   * Free nights stay individual squares on purpose: each one is
+                   * a thing to click, and the pair of clicks is how a span is
+                   * chosen.
+                   */
+                  const runs = mergeRuns(
+                    days.map(iso),
+                    (day) => cells.get(`${room.id}|${day}`) ?? null,
+                    (c) => `${c.mine}|${c.code ?? c.guestName ?? "x"}`,
+                  );
+                  return (
+                    <tr key={room.id}>
+                      <td className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 bg-white py-0.5 pr-3 font-medium text-slate-700">
+                        {room.name}
+                        {room.roomTypeName && (
+                          <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
+                        )}
+                      </td>
+                      {runs.map((run) =>
+                        run.value ? (
+                          <td
+                            key={run.from}
+                            colSpan={run.nights}
+                            className={`p-[1px] ${weekEdge(run.from)}`}
+                          >
+                            <div
+                              title={
+                                run.value.mine
+                                  ? `Yours — ${run.value.guestName ?? ""} ${run.value.code ?? ""}`.trim()
+                                  : run.value.guestName
+                                    ? `Taken — ${run.value.guestName}`
+                                    : "Taken"
+                              }
+                              className={`flex h-7 items-center overflow-hidden rounded px-1.5 ${
+                                run.value.mine ? "bg-brand-600 text-white" : "bg-slate-300"
+                              }`}
+                            >
+                              {run.value.mine && run.nights > 1 && (
+                                <span className="truncate text-[10px] font-semibold leading-none">
+                                  {run.value.guestName ?? run.value.code}
+                                </span>
+                              )}
+                            </div>
                           </td>
-                        );
-                      }
-                      return (
-                        <td key={iso(d)} className="p-[1px]">
-                          <div
-                            title={title}
-                            className={`h-6 rounded-sm ${cell.mine ? "bg-brand-500" : "bg-slate-300"}`}
+                        ) : (
+                          <FreeNights
+                            key={run.from}
+                            room={room}
+                            from={run.from}
+                            nights={run.nights}
+                            anchor={anchor}
+                            cells={cells}
+                            onPick={pickNight}
                           />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                        ),
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -230,5 +338,63 @@ export default function AgencyCalendarPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * A run of free nights, still one clickable square each.
+ *
+ * Taken nights merge into a bar because they are one fact. Free nights do not:
+ * each one is a thing the agent can pick, and picking two of them is how a stay
+ * is chosen. What the run buys is the tinting — once the first night is marked,
+ * every night the stay could still reach lights up, so how far the free stretch
+ * goes is visible before the second click.
+ */
+function FreeNights({
+  room,
+  from,
+  nights,
+  anchor,
+  cells,
+  onPick,
+}: {
+  room: { id: number; name: string };
+  from: string;
+  nights: number;
+  anchor: { roomId: number; night: string } | null;
+  cells: Map<string, CalendarCell>;
+  onPick: (roomId: number, night: string) => void;
+}) {
+  return (
+    <>
+      {Array.from({ length: nights }, (_, i) => {
+        const night = addDaysIso(from, i);
+        const isAnchor = anchor?.roomId === room.id && anchor.night === night;
+        const reachable =
+          !isAnchor &&
+          anchor?.roomId === room.id &&
+          freeSpan(cells, room.id, anchor.night, night) !== null;
+        return (
+          <td key={night} className={`p-[1px] ${weekEdge(night)}`}>
+            <button
+              type="button"
+              onClick={() => onPick(room.id, night)}
+              title={
+                anchor?.roomId === room.id
+                  ? `${room.name}: ${anchor.night} → ${night}`
+                  : `${room.name} free on ${night} — click, then the last night`
+              }
+              className={`block h-7 w-full rounded-sm border transition ${
+                isAnchor
+                  ? "border-brand-500 bg-brand-300"
+                  : reachable
+                    ? "border-brand-300 bg-brand-100"
+                    : "border-slate-200/70 bg-slate-50 hover:border-brand-400 hover:bg-brand-100"
+              }`}
+            />
+          </td>
+        );
+      })}
+    </>
   );
 }

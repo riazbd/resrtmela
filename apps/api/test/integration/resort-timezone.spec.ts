@@ -6,7 +6,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
+import { makeBookingsService, makeFbService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import type { BookingsService } from "../../src/bookings/bookings.service";
 import { FbService } from "../../src/fb/fb.service";
@@ -71,11 +71,7 @@ describe("today, for a resort in Asia/Dhaka", () => {
       checkOut: "2026-09-11",
     });
 
-    const fb = new FbService(
-      asPrismaService,
-      new AuditService(asPrismaService),
-      new PermissionsService(asPrismaService),
-    );
+    const fb = makeFbService(asPrismaService);
     const inHouse = await fb.inHouse(claims, fx.resortId);
 
     expect(inHouse.map((r) => r.bookingId)).toContain(booking.id);

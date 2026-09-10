@@ -50,6 +50,8 @@ import type {
   TourCategoryNode,
   TourPackageDetail,
   TourPackageRow,
+  ResortOption,
+  TaxRuleRow,
 } from "./api-types";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -82,6 +84,8 @@ export interface BookingListQuery {
   to?: string;
   skip?: number;
   take?: number;
+  /** guest name, guest phone or booking code — matched by the server, over every row */
+  search?: string;
 }
 
 export interface DateRange {
@@ -104,8 +108,10 @@ export function createApiClient(http: Fetcher) {
       create: (body: unknown) => http<BookingDetail>("/bookings", { method: "POST", body }),
       createGroup: (body: unknown) => http<{ bookings: BookingDetail[] }>("/bookings/group", { method: "POST", body }),
       update: (id: number, body: unknown) => http<BookingDetail>(`/bookings/${id}`, { method: "PATCH", body }),
-      transition: (id: number, state: string) =>
-        http<BookingDetail>(`/bookings/${id}/transition`, { method: "POST", body: { state } }),
+      // the controller reads `to`; this sent `state`, so the typed client's
+      // transition has never worked and the console hand-rolls the call
+      transition: (id: number, to: string) =>
+        http<BookingDetail>(`/bookings/${id}/transition`, { method: "POST", body: { to } }),
       cancel: (id: number, reason?: string) =>
         http<BookingDetail>(`/bookings/${id}/cancel`, { method: "POST", body: { reason } }),
       remove: (id: number) => http<{ deleted: boolean }>(`/bookings/${id}`, { method: "DELETE" }),
@@ -137,6 +143,41 @@ export function createApiClient(http: Fetcher) {
         http<RatePlan>(`/resorts/${resortId}/rate-plans`, { method: "POST", body }),
       availability: (resortId: number, from: string, to: string) =>
         http<RoomAvail[]>(`/resorts/${resortId}/availability${qs({ from, to })}`),
+    },
+
+    /**
+     * The lists a resort owns — payment methods, booking sources, activity
+     * categories. Addressed by name, so making the next thing dynamic costs a
+     * registry entry rather than four more client methods.
+     */
+    options: {
+      list: (resortId: number, list: string) =>
+        http<ResortOption[]>(`/resorts/${resortId}/options/${list}`),
+      create: (resortId: number, list: string, body: { code: string; label: string; meta?: Record<string, unknown> }) =>
+        http<ResortOption>(`/resorts/${resortId}/options/${list}`, { method: "POST", body }),
+      update: (
+        resortId: number,
+        list: string,
+        id: number,
+        body: { label?: string; active?: boolean; sortOrder?: number; meta?: Record<string, unknown> },
+      ) => http<ResortOption>(`/resorts/${resortId}/options/${list}/${id}`, { method: "PATCH", body }),
+      remove: (resortId: number, list: string, id: number) =>
+        http<{ removed: boolean; deactivated: boolean; used: number }>(
+          `/resorts/${resortId}/options/${list}/${id}`,
+          { method: "DELETE" },
+        ),
+      lists: () => http<{ name: string; label: string }[]>(`/option-lists`),
+    },
+
+    /** What a resort charges on top of its rates — VAT, service charge, whatever it has. */
+    taxRules: {
+      list: (resortId: number) => http<TaxRuleRow[]>(`/resorts/${resortId}/tax-rules`),
+      create: (resortId: number, body: { code: string; label: string; ratePct: number; appliesTo?: string; inclusive?: boolean; compound?: boolean }) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules`, { method: "POST", body }),
+      update: (resortId: number, id: number, body: Record<string, unknown>) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "PATCH", body }),
+      deactivate: (resortId: number, id: number) =>
+        http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "DELETE" }),
     },
 
     // ── the desk ──

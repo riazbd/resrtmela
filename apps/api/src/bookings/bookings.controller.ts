@@ -7,7 +7,7 @@ import {
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BookingsService, CreateBookingInput } from "./bookings.service";
 import { AvailabilityService } from "./availability.service";
-import { BookingSource, type BookingState } from "@rh/db";
+import type { BookingState } from "@rh/db";
 
 class GuestInlineDto {
   @IsString() @MaxLength(160) fullName!: string;
@@ -29,7 +29,7 @@ class CreateGroupDto {
   @IsOptional() @IsNumber() @Min(0) advancePerRoom?: number;
   @IsOptional() @IsEnum(["CASH", "BKASH", "NAGAD", "CARD", "BANK"]) advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
 }
 class AdvancePaymentDto {
   @IsNumber() @Min(1) amount!: number;
@@ -47,7 +47,7 @@ class CreateBookingDto {
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsNumber() @Min(0) discount?: number;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
   @IsOptional() @IsBoolean() walkIn?: boolean;
   @IsOptional() @IsInt() @Min(0) @Type(() => Number) extraPersons?: number;
   @IsOptional() @ValidateNested() @Type(() => AdvancePaymentDto) advancePayment?: AdvancePaymentDto;
@@ -56,13 +56,14 @@ class CreateBookingDto {
 class ListBookingsQuery {
   @IsOptional() @IsString() @MaxLength(24) group?: string;
   @Type(() => Number) @IsInt() resortId!: number;
-  @IsOptional() @IsEnum(BookingSource) source?: BookingSource;
+  @IsOptional() @IsString() @MaxLength(32) source?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @Type(() => Number) @IsInt() guestId?: number;
   @IsOptional() @IsDateString() from?: string;
   @IsOptional() @IsDateString() to?: string;
   @IsOptional() @Type(() => Number) @IsInt() skip?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Max(200) take?: number;
+  @IsOptional() @IsString() @MaxLength(80) search?: string;
 }
 
 class UpdateBookingDto {
@@ -122,7 +123,10 @@ export class BookingsController {
     @Param("resortId", ParseIntPipe) resortId: number,
     @Query("date") date: string,
   ) {
-    return this.bookings.daySheet(req.user, resortId, date || new Date().toISOString().slice(0, 10));
+    // no date means "today at this resort", which `daySheet` works out from the
+    // resort's own timezone. It used to mean today on the server, so before
+    // 06:00 in Dhaka the desk opened yesterday's sheet.
+    return this.bookings.daySheet(req.user, resortId, date);
   }
 
   @Get("resorts/:resortId/calendar")

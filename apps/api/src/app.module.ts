@@ -13,6 +13,8 @@ import { TenancyModule } from "./tenancy/tenancy.module";
 import { RoomsModule } from "./rooms/rooms.module";
 import { BookingsModule } from "./bookings/bookings.module";
 import { PaymentsModule } from "./payments/payments.module";
+import { OptionsModule } from "./options/options.module";
+import { TaxModule } from "./common/tax.module";
 import { ImportModule } from "./import/import.module";
 import { ExportModule } from "./export/export.module";
 import { AgentModule } from "./agent/agent.module";
@@ -37,6 +39,8 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     TenancyModule,
     RoomsModule,
     BookingsModule,
+    OptionsModule,
+    TaxModule,
     PaymentsModule,
     ImportModule,
     ExportModule,
@@ -58,7 +62,14 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // one structured line per request, with an id the caller can quote
     consumer.apply(RequestLogMiddleware).forRoutes("*");
-    // hardened auth surface: 30 req/min per IP (login, OTP, signup)
-    consumer.apply(RateLimitMiddleware).forRoutes("auth");
+    /**
+     * Every door that opens without a token, not just the auth one.
+     *
+     * The limiter covered `auth` alone, which left the payment webhook, the
+     * whole guest app and the public booking API unmetered — and those are the
+     * routes reachable by anyone on the internet. `cms` serves the marketing
+     * homepage's copy and is read by every visitor.
+     */
+    consumer.apply(RateLimitMiddleware).forRoutes("auth", "guest", "v1", "payments/webhook", "cms");
   }
 }

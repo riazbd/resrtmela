@@ -4,10 +4,11 @@ import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
 import { TemplatesService } from "./templates.service";
+import { TaxService } from "../common/tax.service";
 import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
 import { bookingTotals } from "../common/money";
-import { formatMoney } from "@rh/shared";
+import { formatMoney, ROLE, type JwtClaims } from "@rh/shared";
 
 const TICK_MS = 15_000;
 
@@ -33,6 +34,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
     @Inject(TemplatesService) private readonly templates: TemplatesService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   onModuleInit() {
@@ -86,13 +88,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
       where: { id: bookingId },
       include: {
         guest: { select: { phone: true, email: true } },
-        resort: { select: { id: true, name: true } },
+        resort: { select: { id: true, name: true, taxRatePct: true } },
         items: true,
         payments: true,
       },
     });
     if (!b) return;
-    const due = Math.max(0, bookingTotals(b).due);
+    /**
+     * The same number the invoice prints, tax included.
+     *
+     * `bookingTotals(b)` was called without `taxRatePct`, so the balance in the
+     * guest's SMS or email excluded tax while `invoicePayload` included it. The
+     * guest was told one figure at booking and handed another at the desk, and
+     * nothing on either side could notice — no test in the suite sets a
+     * non-zero tax rate on this path.
+     */
+    const due = Math.max(0, bookingTotals({ ...b, taxRules: await this.tax.rulesFor(b.resortId) }).due);
     const to = b.guest.email?.trim() || b.guest.phone;
     await this.enqueueJob({
       channel: b.guest.email?.trim() ? "EMAIL" : "SMS",
@@ -256,8 +267,21 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     return { sent, swept, failed };
   }
 
-  recent(take = 50) {
+  /**
+   * The messages this caller's resorts sent.
+   *
+   * This used to be every message on the platform. `NotificationJob.payload`
+   * carries the guest's name, what they owe and their booking code, and the
+   * only gate was the caller's role — so any resort admin could read every
+   * other tenant's guest correspondence. A job with no resort is the
+   * platform's own mail (subscription notices), which belongs to the super
+   * admin alone.
+   */
+  recent(claims: JwtClaims, take = 50) {
+    const mine =
+      claims.role === ROLE.SUPER_ADMIN ? {} : { resortId: { in: claims.resortIds } };
     return this.prisma.notificationJob.findMany({
+      where: mine,
       orderBy: { id: "desc" },
       take: Math.min(take, 200),
     });
@@ -265,9 +289,10 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
 
   /** flag agent bookings approaching the resort's full-payment deadline (in-app alerts to admins) */
   private async sweepAgentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
+    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true, taxRatePct: true } });
     const now = new Date();
     for (const resort of resorts) {
+      const taxRules = await this.tax.rulesFor(resort.id);
       const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
       const bookings = await this.prisma.booking.findMany({
         where: {
@@ -278,15 +303,22 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
           checkIn: { lte: horizon, gte: now },
         },
         select: {
-          id: true, code: true, checkIn: true, discount: true,
-          items: { select: { qty: true, unitPrice: true } },
+          id: true, code: true, checkIn: true, checkOut: true, discount: true,
+          items: { select: { qty: true, unitPrice: true, itemKind: true } },
           payments: { select: { amount: true, paymentType: true } },
         },
       });
       for (const b of bookings) {
-        const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-        const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
-        const due = Math.max(0, rent - Number(b.discount) - paid);
+        /**
+         * What the agent actually owes.
+         *
+         * This was `rent - discount - paid` over `unitPrice * qty` — no nights
+         * multiplier and no tax. A ROOM item carries one night's price with
+         * qty 1, so a five-night stay was reported to the owner as one night:
+         * "this agent owes ৳5,000" on a ৳25,000 booking, in the alert whose
+         * whole job is to say how much is outstanding before the deadline.
+         */
+        const due = Math.max(0, bookingTotals({ ...b, taxRules }).due);
         if (due <= 0 || !b.checkIn) continue;
         const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const existing = await this.prisma.notification.findFirst({

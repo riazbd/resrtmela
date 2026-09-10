@@ -9,16 +9,13 @@ import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { DateNav } from "@/components/patterns";
-
-function iso(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 export default function DaySheetPage() {
   const { activeResort, isStaff } = useAuth();
   const t = useT();
   const router = useRouter();
-  const [date, setDate] = useState(() => iso(new Date()));
+  const [date, setDate] = useState(() => todayIn(activeResort?.timezone));
 
   const { data: sheet, isPending, error } = useApi(
     keys.daySheet(activeResort?.id, date),

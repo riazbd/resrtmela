@@ -42,20 +42,26 @@ export function testPrisma(): PrismaClient {
  * FK checks are disabled anyway, but keeping the order honest documents the
  * graph and keeps the failure mode obvious if that ever changes.
  */
-const TABLES = [
-  "booking_nights", "booking_items", "payments", "payment_intents",
-  "fb_bill_items", "fb_bills", "bookings", "guests",
-  "activity_slots", "activity_schedules", "activity_catalog",
-  "rate_plans", "rooms", "room_types",
-  "payroll_payments", "employees", "food_packages",
-  "wallet_txns", "wallets", "subscription_dues", "subscriptions",
-  "email_campaigns", "email_credits", "notifications", "resort_access",
-  "api_keys", "discount_offers", "expenses", "expense_heads", "counters", "audit_log",
-  "sales_doc_items", "sales_docs", "tour_package_items", "tour_packages", "tour_categories",
-  "notification_jobs", "message_templates", "user_resorts", "roles", "users", "agent_roles",
-  "platform_charges",
-  "resorts", "tenants", "platform_plans", "platform_settings", "cms_settings",
-];
+/**
+ * Never truncated: the migration ledger. Everything else in the schema goes.
+ *
+ * This used to be a hand-written list of every table. It drifted the moment a
+ * migration added one — `email_credit_orders` arrived and eleven rows from
+ * earlier tests were still sitting in it, so specs that counted rows passed or
+ * failed depending on what had run before them. A list that has to be edited
+ * in step with the schema is a list that will be wrong; the database knows its
+ * own tables, so ask it.
+ */
+const NEVER_TRUNCATE = new Set(["_prisma_migrations"]);
+
+/** Every table in the test schema, from the database rather than from memory. */
+async function allTables(prisma: PrismaClient, schema: string): Promise<string[]> {
+  const rows = await prisma.$queryRawUnsafe<{ TABLE_NAME: string }[]>(
+    "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'",
+    schema,
+  );
+  return rows.map((r) => r.TABLE_NAME).filter((t) => !NEVER_TRUNCATE.has(t));
+}
 
 /** Wipes the test database. Refuses to touch anything not named *_test. */
 export async function resetDb(prisma: PrismaClient): Promise<void> {
@@ -64,7 +70,9 @@ export async function resetDb(prisma: PrismaClient): Promise<void> {
     throw new Error(`Refusing to reset "${name}" — the test database name must end in _test`);
   }
   await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
-  for (const table of TABLES) {
+  // FK checks are off, so the order does not matter — which is the other
+  // reason the hand-written list had no business existing
+  for (const table of await allTables(prisma, name)) {
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
   }
   await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
@@ -85,7 +93,7 @@ export async function seedPlatformPlans(prisma: PrismaClient): Promise<void> {
   await prisma.platformPlan.createMany({
     data: [
       { name: "STARTER", label: "Starter", monthlyFee: 2500 as never, maxRooms: 10, maxResorts: 1, sortOrder: 1 },
-      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2 },
+      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2, highlight: true },
       { name: "CHAIN", label: "Chain", monthlyFee: 12000 as never, maxRooms: 10000, maxResorts: 10, sortOrder: 3 },
       // retired names existing tenants still carry, with the limits they had
       { name: "FREE", label: "Free (legacy)", monthlyFee: 0 as never, maxRooms: 10, maxResorts: 1, active: false, sortOrder: 90 },
@@ -118,7 +126,16 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
   const uniq = `${seq}-${Math.floor(Math.random() * 1e6)}`;
   const tenant = await prisma.tenant.create({ data: { name: "Test Tenant", slug: `t-${uniq}` } });
   const resort = await prisma.resort.create({
-    data: { tenantId: tenant.id, name: "Test Resort", location: "Cox's Bazar" },
+    data: {
+      tenantId: tenant.id,
+      name: "Test Resort",
+      location: "Cox's Bazar",
+      // commission is the resort's term, not the agent's: 10% here so the
+      // specs that were written against the fixture agent's old 10% still
+      // describe the same resort
+      agentCommissionKind: "PERCENT",
+      agentCommissionRate: 10,
+    },
   });
   const roomType = await prisma.roomType.create({
     data: { resortId: resort.id, name: "Deluxe", maxAdults: 2, maxChildren: 2 },

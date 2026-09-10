@@ -2,12 +2,65 @@ import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query,
 import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
+import { SubscriptionService } from "./subscription.service";
+import { CommissionService } from "../common/commission.service";
 
 class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
+  /** This resort's trial, when it differs from the plan's. 0 means none. */
+  @IsOptional() @IsInt() @Min(0) trialDays?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+}
+
+/** What the resort pays every agent. One term, set by hand. */
+class CommissionDto {
+  @IsIn(["PERCENT", "FLAT"]) kind!: "PERCENT" | "FLAT";
+  @IsNumber() @Min(0) rate!: number;
+}
+
+/**
+ * A plan, as the Plans tab posts it.
+ *
+ * The bounds live in the service, next to the columns they protect, so that a
+ * plan created by a script is held to the same rules as one typed into a form.
+ * This layer only says what shape may arrive.
+ */
+class PlanDto {
+  @IsString() @MaxLength(16) name!: string;
+  @IsString() @MaxLength(40) label!: string;
+  @IsNumber() @Min(0) monthlyFee!: number;
+  @IsInt() @Min(1) maxRooms!: number;
+  @IsInt() @Min(1) maxResorts!: number;
+  @IsInt() @Min(0) trialDays!: number;
+  @IsOptional() @IsInt() @Min(1) maxStaff?: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
+  @IsOptional() @IsString() @MaxLength(200) blurb?: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsBoolean() highlight?: boolean;
+}
+
+/** The same, with everything optional — `name` included, so a rename is refused rather than ignored. */
+class PlanPatchDto {
+  @IsOptional() @IsString() @MaxLength(16) name?: string;
+  @IsOptional() @IsString() @MaxLength(40) label?: string;
+  @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
+  @IsOptional() @IsInt() @Min(1) maxRooms?: number;
+  @IsOptional() @IsInt() @Min(1) maxResorts?: number;
+  @IsOptional() @IsInt() @Min(0) trialDays?: number;
+  @IsOptional() @IsInt() @Min(1) maxStaff?: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
+  @IsOptional() @IsString() @MaxLength(200) blurb?: string;
+  @IsOptional() @IsInt() @Min(0) sortOrder?: number;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsBoolean() highlight?: boolean;
+}
+
+/** The owner asking to move plan. The plan table decides whether it exists. */
+class ChangePlanDto {
+  @IsString() @MaxLength(16) plan!: string;
 }
 
 class ResortStatusDto {
@@ -29,7 +82,6 @@ class CreateUserDto {
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MaxLength(128) password!: string;
   @IsIn(["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"]) role!: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
   @IsOptional() @IsNumber() roleId?: number;
 }
 
@@ -38,7 +90,6 @@ class UpdateUserDto {
   @IsOptional() @IsIn(["active", "pending", "suspended"]) status?: string;
   @IsOptional() @IsString() @MaxLength(128) password?: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
   @IsOptional() @IsNumber() roleId?: number;
 }
 
@@ -55,8 +106,6 @@ class RolePatchDto {
 class InviteAgentDto {
   @IsString() email!: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
-  @IsOptional() @IsNumber() commissionRate?: number;
-  @IsOptional() @IsIn(["PERCENT", "FLAT"]) commissionKind?: "PERCENT" | "FLAT";
 }
 
 class AgentStaffDto {
@@ -80,14 +129,15 @@ class AgentStatusDto {
   @IsIn(["active", "suspended", "pending"]) status!: string;
 }
 
+/**
+ * The wallet is the agency's account with the platform, so these are the only
+ * three things that can happen in it. `COMMISSION` was accepted here and is
+ * not: what an agency earns from a resort is settled between those two.
+ */
 class WalletTxnDto {
-  @IsIn(["TOPUP", "PAYOUT", "ADJUST", "COMMISSION"]) kind!: string;
+  @IsIn(["TOPUP", "PAYOUT", "ADJUST"]) kind!: string;
   @IsNumber() amount!: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
-}
-
-class WalletPayDto {
-  @IsNumber() @Min(1) amount!: number;
 }
 
 class DiscountDto {
@@ -120,7 +170,11 @@ class EmailInvoiceDto {
 @Controller()
 @UseGuards(AuthGuard)
 export class PlatformController {
-  constructor(@Inject(PlatformService) private readonly platform: PlatformService) {}
+  constructor(
+    @Inject(PlatformService) private readonly platform: PlatformService,
+    @Inject(SubscriptionService) private readonly subscriptions: SubscriptionService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
+  ) {}
 
   // super admin — platform
   @Get("platform/overview") overview(@Req() req: AuthedRequest) {
@@ -187,8 +241,14 @@ export class PlatformController {
   @Get("platform/plans") plans(@Req() req: AuthedRequest) {
     return this.platform.listPlans(req.user);
   }
-  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
+  @Post("platform/plans") createPlan(@Req() req: AuthedRequest, @Body() dto: PlanDto) {
+    return this.platform.createPlan(req.user, dto);
+  }
+  @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: PlanPatchDto) {
     return this.platform.updatePlan(req.user, name, dto);
+  }
+  @Delete("platform/plans/:name") deletePlan(@Req() req: AuthedRequest, @Param("name") name: string) {
+    return this.platform.deletePlan(req.user, name);
   }
 
   // super admin — front-end CMS
@@ -214,6 +274,35 @@ export class PlatformController {
   }
   @Delete("activity/:id") deleteActivity(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.platform.deleteActivity(req.user, id);
+  }
+
+  /**
+   * owner — their own subscription
+   *
+   * Distinct from `PATCH /tenants/:id/plan`, which is the super admin moving a
+   * tenant and writes `Tenant.plan`. This pair reads and writes the
+   * subscription the billing sweep actually bills, and is gated on
+   * `billing.view` / `billing.manage` rather than on being platform staff.
+   */
+  @Get("resorts/:id/subscription") subscription(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.subscriptions.detail(req.user, id);
+  }
+  @Post("resorts/:id/subscription/plan") changePlan(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ChangePlanDto) {
+    return this.subscriptions.changePlan(req.user, id, dto.plan);
+  }
+
+  /**
+   * owner — agent commission
+   *
+   * One rate for the resort, replacing a field that used to sit on every
+   * agent's row. Reading it needs only resort access, because an agent has to
+   * be able to see their own terms; setting it needs `agents.manage`.
+   */
+  @Get("resorts/:id/commission") commissionTerms(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.commission.publicTermsFor(req.user, id);
+  }
+  @Post("resorts/:id/commission") setCommission(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: CommissionDto) {
+    return this.commission.setTerms(req.user, id, dto);
   }
 
   // owner — permission roles (Paradox-style matrix)
@@ -258,10 +347,7 @@ export class PlatformController {
     return this.platform.getWallet(req.user, userId);
   }
   @Post("wallets/:userId/txns") walletTxn(@Req() req: AuthedRequest, @Param("userId", ParseIntPipe) userId: number, @Body() dto: WalletTxnDto) {
-    return this.platform.walletTxn(req.user, userId, dto.kind as never, dto.amount, dto.note);
-  }
-  @Post("bookings/:id/pay-from-wallet") payFromWallet(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: WalletPayDto) {
-    return this.platform.payFromWallet(req.user, id, dto.amount);
+    return this.platform.walletTxn(req.user, userId, dto.kind, dto.amount, dto.note);
   }
 
   // owner — discount offers

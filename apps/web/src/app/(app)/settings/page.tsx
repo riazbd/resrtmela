@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, download, money, type PermRole, cur } from "@/lib/api";
+import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs } from "@/components/patterns";
@@ -9,6 +9,7 @@ import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
+import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 
 interface ResortDetail {
   id: number;
@@ -30,6 +31,45 @@ interface ResortDetail {
   fyStartMonthDay: string;
   agentPaymentHours?: number;
   _count?: { bookings: number; guests: number };
+}
+
+interface PlanOption {
+  name: string;
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  blurb: string | null;
+  direction: "current" | "upgrade" | "downgrade" | "available";
+}
+
+interface SubscriptionDetail {
+  plan: string | null;
+  planLabel: string | null;
+  blurb: string | null;
+  status: string;
+  monthlyFee: number;
+  startedAt: string | null;
+  trialEndsAt: string | null;
+  renewsAt: string | null;
+  pendingPlan: string | null;
+  pendingPlanLabel: string | null;
+  limits: { maxRooms: number; maxResorts: number; label: string };
+  usage: { rooms: number; resorts: number };
+  outstanding: { amount: number; count: number };
+  bills: {
+    id: string; amount: number; periodStart: string; periodEnd: string;
+    dueDate: string; status: string; paidAt: string | null; note: string | null;
+  }[];
+  plans: PlanOption[];
+}
+
+interface PlanChange {
+  plan: string;
+  planLabel: string;
+  effective: "now" | "renewal" | "cancelled";
+  effectiveFrom: string | null;
+  charged: number;
 }
 
 interface Usage {
@@ -60,9 +100,6 @@ interface UserRow {
   role: string;
   status: string;
   createdAt: string;
-  wallet: { balance: number; active: boolean } | null;
-  commissionRate: number | null;
-  commissionKind: string;
   roleId: number | null;
   roleName: string | null;
 }
@@ -100,16 +137,19 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-const TABS = ["Resort info", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
+const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Activity log", "Discounts", "Messages", "API keys", "Your data"] as const;
 
 export default function SettingsPage() {
-  const { activeResort, isManagement, role } = useAuth();
+  const { activeResort, isManagement, can } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resort info");
   const [d, setD] = useState<ResortDetail | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [busy, setBusy] = useState(false);
   const rid = activeResort?.id;
+  /* the API refuses without `billing.view`; a tab that always errors is worse
+     than no tab, so it is not offered either */
+  const visibleTabs = TABS.filter((t) => t !== "Subscription" || can("billing.view"));
 
   const qc = useQueryClient();
   const infoQ = useApi(["resort", rid], () => api<ResortDetail>(`/resorts/${rid}`), { enabled: !!rid });
@@ -166,17 +206,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function changePlan(plan: string) {
-    if (!usage) return;
-    try {
-      await api(`/tenants/${usage.tenantId}/plan`, { method: "PATCH", body: { plan } });
-      push(`Plan changed to ${plan}`);
-      setUsage({ ...usage, plan, planLabel: plan });
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div>
@@ -184,7 +213,7 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500">{d.name} — team, activity, offers & integrations</p>
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} />
+      <Tabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
       {tab === "Resort info" && (
         <div className="max-w-xl space-y-4">
@@ -196,16 +225,17 @@ export default function SettingsPage() {
                 <Stat label="Staff users" value={String(usage.staffUsers)} />
                 <Stat label="Guests" value={String(usage.guests)} />
               </div>
-              {role === "SUPER_ADMIN" && (
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Change plan:</span>
-                  {["FREE", "STANDARD", "PRO"].map((p) => (
-                    <Button key={p} size="sm" variant={usage.plan === p ? "primary" : "ghost"} onClick={() => changePlan(p)}>
-                      {p}
-                    </Button>
-                  ))}
-                </div>
-              )}
+              {/*
+                A "Change plan" row used to sit here. It wrote `Tenant.plan` —
+                a field the billing sweep never reads — so the fee, the renewal
+                date and the status stayed exactly as they were: it changed a
+                label. The subscription the platform actually bills is on the
+                Subscription tab, and a super admin assigns one in Platform →
+                Resorts.
+              */}
+              <p className="mt-3 text-xs text-slate-400">
+                Plan, price and renewal date live on the <b>Subscription</b> tab.
+              </p>
             </Card>
           )}
 
@@ -214,12 +244,16 @@ export default function SettingsPage() {
               <Field label="Resort name"><Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} /></Field>
               <Field label="Location"><Input value={d.location ?? ""} onChange={(e) => setD({ ...d, location: e.target.value })} /></Field>
               <Field label="Tax rate (%)"><Input type="number" min={0} max={100} value={String(d.taxRatePct)} onChange={(e) => setD({ ...d, taxRatePct: e.target.value })} /></Field>
+          {/* 24 / 48 / 72 were three numbers somebody liked. A resort that wants
+              its agents paid up 36 hours before arrival can say so. */}
           <Field label="Agent full-payment deadline (hours before check-in)" hint="agent bookings must be fully paid this many hours before check-in">
-            <Select value={String((d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? 48)} onChange={(e) => setD({ ...d, agentPaymentHours: Number(e.target.value) } as ResortDetail)}>
-              <option value="24">24 hours</option>
-              <option value="48">48 hours</option>
-              <option value="72">72 hours</option>
-            </Select>
+            <Input
+              type="number"
+              min={1}
+              max={720}
+              value={String((d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? 48)}
+              onChange={(e) => setD({ ...d, agentPaymentHours: Math.max(1, Number(e.target.value) || 1) } as ResortDetail)}
+            />
           </Field>
               <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
                 <input type="checkbox" checked={d.showRatesToAgents} onChange={(e) => setD({ ...d, showRatesToAgents: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
@@ -264,6 +298,7 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {tab === "Subscription" && rid && can("billing.view") && <SubscriptionTab rid={rid} />}
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
       {tab === "Permissions" && rid && <RolesTab rid={rid} />}
       {tab === "Agent access" && rid && <AccessTab rid={rid} />}
@@ -473,13 +508,15 @@ function ExportTab({ rid, name }: { rid: number; name: string }) {
 
 function AccessTab({ rid }: { rid: number }) {
   const { push } = useToast();
+  // a failed load used to render as "No requests yet"
+  const fail = useLoadFailure();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [invite, setInvite] = useState({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+  const [invite, setInvite] = useState({ email: "", name: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
-    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then(setRows).catch(() => setRows([]));
+    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -501,15 +538,10 @@ function AccessTab({ rid }: { rid: number }) {
     try {
       const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agent`, {
         method: "POST",
-        body: {
-          email: invite.email,
-          name: invite.name || undefined,
-          commissionRate: Number(invite.commissionRate),
-          commissionKind: invite.commissionKind,
-        },
+        body: { email: invite.email, name: invite.name || undefined },
       });
       push(r.emailed ? "Invitation email sent — the agent can sign in with the emailed credentials" : "Agent linked — they were notified");
-      setInvite({ email: "", name: "", commissionRate: "5", commissionKind: "PERCENT" });
+      setInvite({ email: "", name: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -555,43 +587,121 @@ function AccessTab({ rid }: { rid: number }) {
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <Empty msg="No requests yet" />}
+          <LoadFailed error={fail.error} onRetry={load} />
+          {!fail.error && rows.length === 0 && <Empty msg="No requests yet" />}
         </div>
       </Card>
+
+      <div className="space-y-4">
+        <CommissionCard rid={rid} />
 
       <Card title="Invite agent by email">
         <div className="space-y-3">
           <Field label="Agent email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agent@email.com" /></Field>
           <Field label="Name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
-          <Field label="Commission type">
-            <Select value={invite.commissionKind} onChange={(e) => setInvite({ ...invite, commissionKind: e.target.value })}>
-              <option value="PERCENT">Percent of rent (%)</option>
-              <option value="FLAT">Fixed amount ({cur()} per booking)</option>
-            </Select>
-          </Field>
-          <Field label={invite.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
-            <Input type="number" min={0} max={invite.commissionKind === "PERCENT" ? 100 : undefined} value={invite.commissionRate} onChange={(e) => setInvite({ ...invite, commissionRate: e.target.value })} />
-          </Field>
+
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
             The agent receives a <b>verification email</b> with login credentials. New agents start pending — activate them below or in Users.
           </div>
           <Button onClick={sendInvite} loading={inviting} disabled={!invite.email}>Send invitation</Button>
         </div>
       </Card>
+      </div>
     </div>
   );
 }
 
+/**
+ * What the resort pays its agents — one rate, for all of them.
+ *
+ * Commission used to be a field on every agent's row, editable per person, so
+ * two agents selling the same room could earn different money on it and no
+ * screen showed the spread. It is the resort's term now, and this is the only
+ * place it is set.
+ */
+function CommissionCard({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const [kind, setKind] = useState("PERCENT");
+  const [rate, setRate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const editable = can("agents.manage");
+
+  const q = useApi(["commission", rid], () => api<{ kind: string; rate: number }>(`/resorts/${rid}/commission`), {
+    enabled: !!rid,
+  });
+  useEffect(() => {
+    if (q.data) {
+      setKind(q.data.kind);
+      setRate(String(q.data.rate));
+    }
+  }, [q.data]);
+
+  const dirty = !!q.data && (kind !== q.data.kind || Number(rate) !== q.data.rate);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await api(`/resorts/${rid}/commission`, { method: "POST", body: { kind, rate: Number(rate) } });
+      push("Commission saved — it applies to every agent");
+      await qc.invalidateQueries({ queryKey: ["commission", rid] });
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Agent commission">
+      {q.error ? (
+        <ErrorState error={q.error} reset={() => void q.refetch()} />
+      ) : (
+        <div className="space-y-3">
+          <Field label="How it is worked out">
+            <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={!editable}>
+              <option value="PERCENT">Percent of room rent</option>
+              <option value="FLAT">Fixed amount per booking</option>
+            </Select>
+          </Field>
+          <Field label={kind === "FLAT" ? `Commission (${cur()} per booking)` : "Commission (%)"}>
+            <Input
+              type="number"
+              min={0}
+              max={kind === "PERCENT" ? 100 : undefined}
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
+              disabled={!editable}
+            />
+          </Field>
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Every agent selling this resort earns on these terms. Changing them changes what agents see on
+            the booking screen and what the agent report adds up.
+          </p>
+          {editable && (
+            <Button onClick={() => void save()} loading={busy} disabled={!dirty || rate === ""}>
+              Save commission
+            </Button>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function UsersTab({ rid }: { rid: number }) {
+  // a failed load used to render as "No team members yet", on a resort with staff
+  const fail = useLoadFailure();
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
+  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     // the roles list is shared with the Permissions tab and cached under one key
-    api<UserRow[]>(`/resorts/${rid}/users`).then(setRows).catch(() => setRows([]));
+    api<UserRow[]>(`/resorts/${rid}/users`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
     api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
   }, [rid]);
   useEffect(() => load(), [load]);
@@ -604,12 +714,10 @@ function UsersTab({ rid }: { rid: number }) {
         body: {
           name: form.name, phone: form.phone, password: form.password, role: form.role,
           roleId: form.roleId ? Number(form.roleId) : undefined,
-          commissionRate: form.role === "AGENT" ? Number(form.commissionRate) : undefined,
-          commissionKind: form.role === "AGENT" ? form.commissionKind : undefined,
         },
       });
       push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
-      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", commissionRate: "5", commissionKind: "PERCENT", roleId: "" });
+      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -634,7 +742,7 @@ function UsersTab({ rid }: { rid: number }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Commission</Th><Th>Wallet</Th><Th /></tr>
+              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {(rows ?? []).map((u) => (
@@ -655,10 +763,6 @@ function UsersTab({ rid }: { rid: number }) {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
                   </Td>
                   <Td>
-                    {u.role === "AGENT" ? <CommissionEditor u={u} rid={rid} onDone={load} /> : <span className="text-xs text-slate-300">—</span>}
-                  </Td>
-                  <Td>{u.wallet ? <span className={u.wallet.active ? "text-emerald-700" : "text-slate-400"}>{money(u.wallet.balance)}</span> : <span className="text-xs text-slate-300">no wallet</span>}</Td>
-                  <Td>
                     <div className="flex justify-end gap-1.5">
                       {u.status !== "active" && (
                         <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
@@ -670,11 +774,12 @@ function UsersTab({ rid }: { rid: number }) {
                           <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
                             <Ban className="inline h-3.5 w-3.5" /> Suspend
                           </button>
-                          {!u.wallet?.active && (
-                            <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-brand-200 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50">
-                              Wallet on
-                            </button>
-                          )}
+                          {/* "Wallet on" sent the same body as Activate beside it
+                              and enabled no wallet, so it never went away however
+                              many times it was pressed. Removed rather than wired
+                              up: nothing in the product turns a wallet on, and a
+                              button for a feature that does not exist is worse
+                              than no button. */}
                         </>
                       )}
                       {u.status === "active" && u.role !== "AGENT" && (
@@ -688,7 +793,8 @@ function UsersTab({ rid }: { rid: number }) {
               ))}
             </tbody>
           </table>
-          {rows?.length === 0 && <Empty msg="No team members yet" />}
+          <LoadFailed error={fail.error} onRetry={load} />
+          {!fail.error && rows?.length === 0 && <Empty msg="No team members yet" />}
         </div>
       </Card>
 
@@ -713,25 +819,6 @@ function UsersTab({ rid }: { rid: number }) {
               ))}
             </Select>
           </Field>
-          {form.role === "AGENT" && (
-            <>
-              <Field label="Commission type">
-                <Select value={form.commissionKind} onChange={(e) => setForm({ ...form, commissionKind: e.target.value })}>
-                  <option value="PERCENT">Percent of rent (%)</option>
-                  <option value="FLAT">Fixed amount ({cur()} per booking)</option>
-                </Select>
-              </Field>
-              <Field label={form.commissionKind === "FLAT" ? `Commission (${cur()} / booking)` : "Commission (%)"}>
-                <Input
-                  type="number"
-                  min={0}
-                  max={form.commissionKind === "PERCENT" ? 100 : undefined}
-                  value={form.commissionRate}
-                  onChange={(e) => setForm({ ...form, commissionRate: e.target.value })}
-                />
-              </Field>
-            </>
-          )}
           {form.role === "AGENT" && (
             <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
               Agents start as <b>pending</b> — activate them after review. Suspended agents can't create bookings.
@@ -835,6 +922,7 @@ function RolesTab({ rid }: { rid: number }) {
 
   if (!roles) return <Empty msg="Loading…" />;
   const groups = PERMISSION_GROUPS;
+  const isAdminRole = (r: PermRole) => r.system && r.name === "Administrator";
   return (
     <div className="space-y-4">
       <Card title="Permission roles">
@@ -848,7 +936,14 @@ function RolesTab({ rid }: { rid: number }) {
               <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                 {r.permissions.includes("*") ? "all" : r.permissions.length} perms · {r.users} users
               </span>
-              <button onClick={() => openEditor(r)} className="text-xs font-semibold text-brand-700 hover:underline">Edit</button>
+              {/* Administrator resolves to every permission there is, so its
+                  boxes would decide nothing — a matrix that reads as control
+                  and is not is worse than no matrix. */}
+              {isAdminRole(r) ? (
+                <span className="text-xs text-slate-400">everything</span>
+              ) : (
+                <button onClick={() => openEditor(r)} className="text-xs font-semibold text-brand-700 hover:underline">Edit</button>
+              )}
               {!r.system && (
                 <button onClick={() => removeRole(r)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
               )}
@@ -889,37 +984,6 @@ function RolesTab({ rid }: { rid: number }) {
           </div>
         </Card>
       )}
-    </div>
-  );
-}
-
-function CommissionEditor({ u, rid, onDone }: { u: UserRow; rid: number; onDone: () => void }) {
-  const { push } = useToast();
-  const [kind, setKind] = useState(u.commissionKind === "FLAT" ? "FLAT" : "PERCENT");
-  const [value, setValue] = useState(String(u.commissionRate ?? ""));
-  const dirty = kind !== (u.commissionKind ?? "PERCENT") || Number(value) !== Number(u.commissionRate ?? 0);
-  return (
-    <div className="flex items-center gap-1.5">
-      <Select className="!w-24 !py-1" value={kind} onChange={(e) => setKind(e.target.value)}>
-        <option value="PERCENT">%</option>
-        <option value="FLAT">{cur()} fixed</option>
-      </Select>
-      <Input className="!w-16 !py-1" type="number" min={0} max={kind === "PERCENT" ? 100 : undefined} value={value} onChange={(e) => setValue(e.target.value)} />
-      <button
-        onClick={async () => {
-          try {
-            await api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body: { commissionKind: kind, commissionRate: Number(value) } });
-            push("Commission saved");
-            onDone();
-          } catch (ex) {
-            push((ex as Error).message, "err");
-          }
-        }}
-        disabled={!dirty}
-        className="rounded-lg border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-40"
-      >
-        Save
-      </button>
     </div>
   );
 }
@@ -1163,6 +1227,9 @@ function ApiKeysTab({ rid }: { rid: number }) {
   }
 
   async function revoke(id: string) {
+    // this key is a customer's own website talking to us; revoking it takes
+    // their booking form offline until they paste a new one in
+    if (!window.confirm("Revoke this API key? Anything using it stops working immediately.")) return;
     try {
       await api(`/api-keys/${id}`, { method: "DELETE" });
       load();
@@ -1223,13 +1290,17 @@ function ApiKeysTab({ rid }: { rid: number }) {
         <Card title="Use it on your website">
           <div className="overflow-x-auto rounded-lg bg-slate-900 p-4 font-mono text-[11px] leading-relaxed text-slate-300">
             <div><span className="text-slate-500"># availability</span></div>
-            <div><span className="text-emerald-300">curl</span> https://backresort.rootcodebd.com/v1/availability \</div>
+            <div><span className="text-emerald-300">curl</span> {API_URL}/v1/availability \</div>
             <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_xxxx.yoursecret&quot;</span></div>
-            <div className="mt-2"><span className="text-slate-500"># create booking</span></div>
-            <div><span className="text-emerald-300">curl</span> -X POST https://backresort.rootcodebd.com/v1/bookings \</div>
-            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: …&quot;</span> -H <span className="text-amber-300">&quot;Content-Type: application/json&quot;</span> \</div>
-            <div className="pl-4">-d <span className="text-amber-300">&apos;{"{"}&quot;roomIds&quot;:[1],&quot;checkIn&quot;:&quot;2026-10-01&quot;,&quot;checkOut&quot;:&quot;2026-10-03&quot;,&quot;adults&quot;:2,&quot;guestName&quot;:&quot;John&quot;{"}"}&apos;</span></div>
+            <div className="mt-2"><span className="text-slate-500"># your resort&apos;s details</span></div>
+            <div><span className="text-emerald-300">curl</span> {API_URL}/v1/resort \</div>
+            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: …&quot;</span></div>
           </div>
+          <p className="mt-3 text-xs text-slate-500">
+            The key reads; it does not sell. Your site can show its rooms, its rates and its free
+            nights, and send the visitor to your phone number — a booking is taken at your desk or
+            by one of your agents.
+          </p>
         </Card>
       </div>
 
@@ -1237,13 +1308,221 @@ function ApiKeysTab({ rid }: { rid: number }) {
         <div className="space-y-3">
           <Field label="Key name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My resort website" /></Field>
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            Point your existing website at the availability & booking endpoints — bookings land straight in your console calendar.
+            Point your existing website at the availability endpoint — your live rooms and rates on
+            your own site, with no second calendar to keep up to date.
           </div>
           <Button onClick={create} loading={busy} disabled={!name}>Generate key</Button>
         </div>
       </Card>
     </div>
   );
+}
+
+/**
+ * The subscription, from the side of the person paying for it.
+ *
+ * Before this tab the console could not answer "what am I paying", "when does
+ * it renew", "what do I owe" or "what would the next plan up cost me". The one
+ * plan control in the product was hidden from the owner entirely, and wrote
+ * `Tenant.plan` — a field the billing sweep does not read.
+ *
+ * Two things here are deliberate rather than decorative. An upgrade names its
+ * pro-rata charge before it is pressed, because a button that takes money must
+ * say how much. And a downgrade says which day it lands on, because a customer
+ * who expects the cheaper price this month and gets billed the old one has been
+ * misled by the interface, not the invoice.
+ */
+function SubscriptionTab({ rid }: { rid: number }) {
+  const { push } = useToast();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState("");
+
+  const q = useApi(["subscription", rid], () => api<SubscriptionDetail>(`/resorts/${rid}/subscription`), {
+    enabled: !!rid,
+  });
+  const d = q.data;
+
+  async function change(p: PlanOption) {
+    const fee = money(p.monthlyFee);
+    const ask =
+      p.direction === "upgrade"
+        ? `Move to ${p.label} (${fee}/month)?\n\nIt applies immediately, and you are billed only the difference for the days left in this month.`
+        : p.direction === "current"
+          ? `Stay on ${p.label} and call off the change?`
+          : `Move down to ${p.label} (${fee}/month)?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that month is already paid for — and ${p.label} starts from then.`;
+    if (!window.confirm(ask)) return;
+    setBusy(p.name);
+    try {
+      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name } });
+      push(
+        r.effective === "now"
+          ? r.charged > 0
+            ? `On ${r.planLabel} — ${money(r.charged)} billed for the rest of this month`
+            : `On ${r.planLabel}`
+          : r.effective === "cancelled"
+            ? `Staying on ${r.planLabel}`
+            : `${r.planLabel} starts ${when(r.effectiveFrom)}`,
+      );
+      await qc.invalidateQueries({ queryKey: ["subscription", rid] });
+      await qc.invalidateQueries({ queryKey: ["tenant-usage"] });
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // a screen that cannot load says so, rather than reading as "no subscription"
+  if (q.error) return <ErrorState error={q.error} reset={() => void q.refetch()} />;
+  if (!d) return <Empty msg="Loading…" />;
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      {d.outstanding.count > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <b>{money(d.outstanding.amount)}</b> outstanding across {d.outstanding.count} bill
+          {d.outstanding.count === 1 ? "" : "s"}. Unpaid bills eventually suspend the resort — you are
+          warned before that happens.
+        </div>
+      )}
+
+      <Card title={d.plan ? `Your plan — ${d.planLabel}` : "No subscription yet"}>
+        {d.plan ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
+              <Stat label="Status" value={STATUS_LABEL[d.status] ?? d.status} />
+              <Stat label="Monthly" value={money(d.monthlyFee)} />
+              <Stat
+                label={d.status === "TRIAL" ? "Trial ends" : "Renews"}
+                value={when(d.status === "TRIAL" ? d.trialEndsAt : d.renewsAt)}
+              />
+              <Stat
+                label="Rooms"
+                value={`${d.usage.rooms}/${d.limits.maxRooms}`}
+                sub={`${d.usage.resorts}/${d.limits.maxResorts} resorts`}
+              />
+            </div>
+            {d.pendingPlan && (
+              <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Moving to <b>{d.pendingPlanLabel}</b> on {when(d.renewsAt)}. Choose {d.planLabel} again to
+                stay where you are.
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-slate-500">
+            This resort is not on a subscription. The platform sets the first one up — the prices below are
+            what it would cost.
+          </p>
+        )}
+      </Card>
+
+      <Card title="Plans">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {d.plans.map((p) => (
+            <div
+              key={p.name}
+              className={`rounded-lg border p-3 ${p.direction === "current" ? "border-brand-300 bg-brand-50" : "border-slate-200"}`}
+            >
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-bold text-slate-800">{p.label}</span>
+                {p.direction === "current" && (
+                  <span className="text-[10px] font-bold uppercase text-brand-600">Current</span>
+                )}
+              </div>
+              <div className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {money(p.monthlyFee)}
+                <span className="text-xs font-medium text-slate-400">/mo</span>
+              </div>
+              <div className="mt-1 text-[11px] text-slate-500">
+                {p.maxRooms >= 1000 ? "Unlimited rooms" : `${p.maxRooms} rooms`} · {p.maxResorts} resort
+                {p.maxResorts === 1 ? "" : "s"}
+              </div>
+              {p.blurb && <div className="mt-1 text-[11px] text-slate-400">{p.blurb}</div>}
+              {d.plan && p.direction !== "current" && (
+                <Button
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant={p.direction === "upgrade" ? "primary" : "ghost"}
+                  loading={busy === p.name}
+                  onClick={() => void change(p)}
+                >
+                  {p.direction === "upgrade" ? "Upgrade" : "Move down"}
+                </Button>
+              )}
+              {d.plan && p.direction === "current" && d.pendingPlan && (
+                <Button
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant="ghost"
+                  loading={busy === p.name}
+                  onClick={() => void change(p)}
+                >
+                  Stay on {p.label}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Bills" className="!p-0">
+        {d.bills.length === 0 ? (
+          <div className="p-4">
+            <Empty msg="No bills yet" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead>
+                <tr>
+                  <Th>Period</Th>
+                  <Th>Amount</Th>
+                  <Th>Due</Th>
+                  <Th>Status</Th>
+                  <Th>Note</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.bills.map((b) => (
+                  <tr key={b.id} className="border-t border-slate-100">
+                    <Td>
+                      {when(b.periodStart)} → {when(b.periodEnd)}
+                    </Td>
+                    <Td className="tabular-nums">{money(b.amount)}</Td>
+                    <Td>{when(b.dueDate)}</Td>
+                    <Td>
+                      {b.status === "PAID" ? (
+                        <span className="text-emerald-600">Paid {when(b.paidAt)}</span>
+                      ) : (
+                        <span className={b.status === "OVERDUE" ? "text-red-600" : "text-slate-600"}>
+                          {b.status}
+                        </span>
+                      )}
+                    </Td>
+                    <Td className="text-xs text-slate-400">{b.note ?? ""}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  TRIAL: "Free trial",
+  ACTIVE: "Active",
+  PAST_DUE: "Past due",
+  NONE: "None",
+};
+
+/** A date the owner reads, rather than an ISO string. */
+function when(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {

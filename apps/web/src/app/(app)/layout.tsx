@@ -10,6 +10,8 @@ import {
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { consoleGate, navVisible, missingFeature } from "@/lib/console-access";
+import { planFeatureLabel } from "@rh/shared";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -23,7 +25,7 @@ import { Select, Button, Input, useToast } from "@/components/ui";
  * refuse is worse than hiding it. `roles` remains only for the two audiences a
  * permission cannot describe: the platform team and agents.
  */
-const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string }[] = [
+const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string; feature?: string }[] = [
   { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
   { href: "/agent/search", label: "Find a room", icon: Search, roles: ["AGENT"], perm: "agent.book" },
@@ -35,7 +37,7 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   { href: "/agent/payroll", label: "Payroll", icon: Banknote, roles: ["AGENT"], perm: "agent.payroll.manage" },
   { href: "/agent/wallet", label: "Wallet", icon: Wallet, roles: ["AGENT"], perm: "agent.wallet.view" },
   { href: "/agent/team", label: "My team", icon: Users, roles: ["AGENT"], perm: "agent.staff.manage" },
-  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send" },
+  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send", feature: "bulk_email" },
   { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"], perm: "bookings.view" },
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"], perm: "bookings.view" },
   { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"], perm: "bookings.view" },
@@ -43,18 +45,42 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   { href: "/payments", labelKey: "nav.dues", icon: Wallet, roles: ["STAFF"], perm: "payments.view" },
   { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"], perm: "guests.view" },
   { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"], perm: "expenses.view" },
-  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"], perm: "restaurant.view" },
-  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"], perm: "payroll.view" },
+  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"], perm: "restaurant.view", feature: "restaurant" },
+  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"], perm: "payroll.view", feature: "payroll" },
   { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"], perm: "reports.view" },
   { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"], perm: "rooms.view" },
-  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"], perm: "activities.view" },
-  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"], perm: "import.run" },
+  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"], perm: "activities.view", feature: "activities" },
+  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"], perm: "import.run", feature: "imports" },
   { href: "/profile", labelKey: "nav.profile", icon: User, roles: ["AGENT"] },
   { href: "/settings", labelKey: "nav.settings", icon: Settings, roles: ["MGMT"], perm: "settings.manage" },
 ];
 
+/**
+ * Says why a button on this screen is about to refuse.
+ *
+ * Reached by a typed URL or an old bookmark: the link is gone from the menu,
+ * but the screen still opens and still offers its actions. What is already
+ * recorded stays readable — a resort's own books are not the platform's to
+ * withhold — so this explains rather than blocks.
+ */
+function NotInPlan({ feature }: { feature: string | null }) {
+  if (!feature) return null;
+  const label = planFeatureLabel(feature);
+  return (
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+      <div className="text-sm font-semibold text-amber-900">{label} is not in this resort&apos;s plan</div>
+      {/* the label is printed as written: lower-casing it turned "Restaurant POS
+          & room tabs" into "restaurant pos & room tabs" */}
+      <p className="mt-0.5 text-xs text-amber-800">
+        What is already here stays readable. Adding anything new needs a plan that includes it —
+        ask the platform to change the plan.
+      </p>
+    </div>
+  );
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
-  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout, isImpersonating, exitImpersonation, can } = useAuth();
+  const { me, loading, role, isStaff, isManagement, activeResort, setActiveResort, logout, isImpersonating, exitImpersonation, can, features } = useAuth();
   const { lang, setLang } = useLang();
   const t = (k: DictKey) => (lang === "bn" ? k : k);
   const router = useRouter();
@@ -65,16 +91,18 @@ function Shell({ children }: { children: React.ReactNode }) {
     if (!loading && !me) router.replace("/login");
   }, [loading, me, router]);
 
+  const gate = consoleGate({ loading, me, activeResort });
+
   useEffect(() => {
     // guests don't get the console — they use the mobile app
-    if (!loading && me?.role === "GUEST") router.replace("/login");
-  }, [loading, me, router]);
+    if (gate === "login") router.replace("/login");
+  }, [gate, router]);
 
   useEffect(() => {
     setNavOpen(false);
   }, [pathname]);
 
-  if (loading || !me || !activeResort) {
+  if (gate === "loading" || gate === "login" || !me) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">
         Loading…
@@ -82,17 +110,36 @@ function Shell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const allowed = (n: { roles: string[]; perm?: string }) => {
-    if (n.roles.includes("SUPER")) return role === "SUPER_ADMIN";
-    // agent-only links are gated by the agency's own permission set, so a
-    // junior who may only book does not see the wallet or the team screen
-    if (n.roles.length === 1 && n.roles[0] === "AGENT") {
-      return role === "AGENT" && (n.perm ? can(n.perm) : true);
-    }
-    if (n.roles.includes("AGENT") && !n.perm) return role === "AGENT";
-    // a link the server would refuse should not be on screen
-    return n.perm ? can(n.perm) : true;
-  };
+  /**
+   * Locked out, not loading.
+   *
+   * Staff whose resort link was removed used to sit on the spinner above for
+   * ever, with nothing on the screen naming the problem or suggesting a way out.
+   */
+  if (gate === "no-resort") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="text-sm font-semibold text-slate-700">
+          Your account is not attached to a resort
+        </div>
+        <p className="max-w-sm text-xs text-slate-500">
+          Ask the resort owner to add you again from Settings → Team. Until they do, there is
+          nothing here for you to open.
+        </p>
+        <button
+          onClick={logout}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
+
+  // a link the server would refuse should not be on screen — whether it would
+  // refuse on the permission or on the plan
+  const allowed = (n: { roles: string[]; perm?: string; feature?: string }) =>
+    navVisible(n, { role, can, features });
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -159,6 +206,8 @@ function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </button>
+            {activeResort && (
+              <>
             <span className="hidden text-xs text-slate-400 sm:inline">Resort</span>
             <Select
               className="!w-40 max-w-[45vw] sm:!w-56"
@@ -174,6 +223,8 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </option>
               ))}
             </Select>
+              </>
+            )}
             {role === "RESORT_ADMIN" && <AddResortButton />}
           </div>
           <div className="flex items-center gap-2">
@@ -190,7 +241,10 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <OutboxBar />
-        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">{children}</main>
+        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
+          <NotInPlan feature={missingFeature(pathname, NAV, features)} />
+          {children}
+        </main>
       </div>
       </div>
     </div>

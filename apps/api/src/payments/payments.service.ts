@@ -7,6 +7,8 @@ import { AuditService } from "../common/audit.service";
 import { BookingsService } from "../bookings/bookings.service";
 import { PermissionsService } from "../common/permissions";
 import { NotificationsService } from "../notifications/notifications.service";
+import { OptionsService } from "../options/options.service";
+import { TaxService } from "../common/tax.service";
 
 @Injectable()
 export class PaymentsService {
@@ -16,6 +18,8 @@ export class PaymentsService {
     @Inject(BookingsService) private readonly bookings: BookingsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(OptionsService) private readonly options: OptionsService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   /**
@@ -27,7 +31,8 @@ export class PaymentsService {
     bookingId: number,
     input: {
       amount: number;
-      method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
+      /** a code from this resort's own list — see methods.service.ts */
+      method: string;
       type?: "ADVANCE" | "FINAL" | "REFUND";
       note?: string;
       /**
@@ -50,6 +55,10 @@ export class PaymentsService {
     requireResortAccess(claims, b.resortId);
     await this.perms.require(claims, b.resortId, "payments.create");
     if (input.amount <= 0) throw badRequest("amount must be > 0");
+    // the method has to be one this resort actually takes. `@IsEnum` used to
+    // accept BKASH for a resort that has never taken bKash, because the enum
+    // was global; the question is per resort, so the check is too.
+    await this.options.assertAccepted(b.resortId, "PAYMENT_METHOD", input.method);
     if (b.state === "CANCELLED" && input.type !== "REFUND") {
       throw badRequest("Cancelled bookings accept refunds only");
     }
@@ -113,18 +122,17 @@ export class PaymentsService {
   /** Outstanding dues across a resort (doc §3.6) */
   async dues(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
-    const resort = await this.prisma.resort.findUnique({
-      where: { id: resortId },
-      select: { taxRatePct: true },
-    });
-    const taxRatePct = Number(resort?.taxRatePct ?? 0);
+    // the matrix showed this box and nothing asked for it: hiding the menu
+    // link is not access control, and a token plus curl was the whole gap
+    await this.perms.require(claims, resortId, "payments.view");
+    const taxRules = await this.tax.rulesFor(resortId);
     const bookings = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null, state: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] } },
       include: { payments: true, guest: { select: { fullName: true, phone: true } }, items: true },
       orderBy: { checkIn: "asc" },
     });
     const rows = bookings
-      .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRatePct) }))
+      .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRules) }))
       .filter(({ t }) => t.due > 0.001)
       .map(({ b, t }) => ({
         id: b.id,

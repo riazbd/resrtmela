@@ -11,7 +11,7 @@ interface InvoiceData {
   issuedAt: string;
   resort: {
     name: string; location: string | null; address: string | null;
-    phone: string | null; website: string | null;
+    phone: string | null; website: string | null; binNumber?: string | null;
     checkInTime: string; checkOutTime: string;
   };
   booking: {
@@ -23,6 +23,7 @@ interface InvoiceData {
   payments: { date: string; method: string; type: string; amount: number; receivedBy: string | null }[];
   rent: number; discount: number; paid: number; due: number;
   taxable: number; taxRatePct: number; tax: number; total: number;
+  taxLines?: { code: string; label: string; ratePct: number; amount: number }[];
 }
 
 /** Bilingual (BN/EN) hotel invoice — print-ready A5/A4. */
@@ -91,7 +92,9 @@ export default function InvoicePage() {
       <div className="flex items-start justify-between border-b-2 border-brand-700 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{inv.resort.name}</h1>
-          <p className="text-sm text-slate-600" lang="bn">রিসোর্টহাব — আপনার অবস্থানের রসিদ</p>
+          {/* the platform's name has no business on a bill the resort hands
+              its own guest — and this one was the *old* platform's name */}
+          <p className="text-sm text-slate-600" lang="bn">আপনার অবস্থানের রসিদ</p>
           <p className="mt-1 text-xs text-slate-500">
             {inv.resort.location}
             {inv.resort.address ? ` · ${inv.resort.address}` : ""}
@@ -99,6 +102,12 @@ export default function InvoicePage() {
           <p className="text-xs text-slate-500">
             {[inv.resort.phone, inv.resort.website].filter(Boolean).join(" · ")}
           </p>
+          {/* a VAT invoice in Bangladesh has to show the seller's BIN */}
+          {inv.resort.binNumber && (
+            <p className="text-xs text-slate-500">
+              BIN · <span lang="bn">বিআইএন</span> {inv.resort.binNumber}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -179,7 +188,12 @@ export default function InvoicePage() {
         {inv.tax > 0 && (
           <>
             <Row en="Taxable amount" bn="করযোগ্য" value={money(inv.taxable)} />
-            <Row en={`Tax (${inv.taxRatePct}%)`} bn={`কর (${inv.taxRatePct}%)`} value={money(inv.tax)} />
+            {/* one line per charge: a bill showing a single "Tax (15%)" cannot
+                show a service charge and the VAT charged on top of it, which is
+                how a hotel bill in this market actually reads */}
+            {(inv.taxLines ?? []).map((l) => (
+              <Row key={l.code} en={`${l.label} (${l.ratePct}%)`} bn={`${l.label} (${l.ratePct}%)`} value={money(l.amount)} />
+            ))}
             <Row en="Total" bn="সর্বমোট" value={money(inv.total)} />
           </>
         )}

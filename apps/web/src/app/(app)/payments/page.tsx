@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
+import { usePaymentMethods } from "@/lib/resort-options";
 
 type DueRow = DuesReport["rows"][number];
 
@@ -89,6 +90,7 @@ function CollectModal({ row, onClose, onDone }: {
   onClose: () => void;
   onDone: () => void;
 }) {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { push } = useToast();
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
@@ -136,7 +138,7 @@ function CollectModal({ row, onClose, onDone }: {
             <Field label={`Amount (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} /></Field>
             <Field label="Method">
               <Select value={method} onChange={(e) => setMethod(e.target.value)}>
-                {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
+                {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
               </Select>
             </Field>
           </div>

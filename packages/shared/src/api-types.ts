@@ -45,6 +45,12 @@ export interface Resort {
   status: string;
   currency?: string;
   locale?: string;
+  /**
+   * The resort's own day. It has been in the schema all along and the console
+   * never received it, so every default date was UTC — which in Bangladesh
+   * means tomorrow from 18:00, the shift the front desk actually works.
+   */
+  timezone?: string;
 }
 
 export interface Me {
@@ -52,7 +58,7 @@ export interface Me {
   name: string;
   phone: string;
   role: string;
-  resorts: { resort: Resort; commissionRate: number | null }[];
+  resorts: { resort: Resort }[];
 }
 
 export interface PermRole {
@@ -209,6 +215,14 @@ export interface GuestResort {
   id: number;
   name: string;
   location: string | null;
+  /**
+   * How to reach the resort. Optional because the discovery list does not
+   * carry them — only the resort's own page, which is where a guest is told
+   * to call rather than book.
+   */
+  contactPhone?: string | null;
+  address?: string | null;
+  website?: string | null;
   roomCount?: number;
   roomTypes?: GuestRoomType[];
   activities?: { id: number; name: string; category: string; price: number; durationMin: number }[];
@@ -601,4 +615,47 @@ export interface AgencyRoomOffer {
     /** what the agency would owe the resort; absent when the resort hides rates */
     agentRate?: number;
   }[];
+}
+
+/**
+ * One value on a list a resort owns: how it takes money, where a booking came
+ * from, what kind of thing an activity is. These were Prisma enums, which made
+ * each set a fact about the software rather than about the business.
+ */
+export interface ResortOption {
+  id: number;
+  resortId: number;
+  list: string;
+  code: string;
+  label: string;
+  sortOrder: number;
+  active: boolean;
+  meta?: Record<string, unknown> | null;
+}
+
+/**
+ * One charge a resort adds to a bill. `Resort.taxRatePct` was a single
+ * percentage, which could not describe 15% VAT plus a 10% service charge that
+ * VAT is then charged on, nor a restaurant taxed at its own rate, nor a menu
+ * price quoted with the tax already inside it.
+ */
+export interface TaxRuleRow {
+  id: number;
+  resortId: number;
+  code: string;
+  label: string;
+  ratePct: number | string;
+  appliesTo: string;
+  inclusive: boolean;
+  compound: boolean;
+  sortOrder: number;
+  active: boolean;
+}
+
+/** One tax as an invoice prints it. */
+export interface TaxLineRow {
+  code: string;
+  label: string;
+  ratePct: number;
+  amount: number;
 }

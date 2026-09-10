@@ -15,6 +15,8 @@ import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
+import { usePaymentMethods } from "@/lib/resort-options";
+import { useDebounced } from "@/lib/use-debounced";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
 interface RoomTypeLite {
@@ -45,6 +47,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   open: boolean; onClose: () => void; onCreated: (code: string) => void;
   preset?: { roomId?: number | null; checkIn?: string | null; checkOut?: string | null } | null;
 }) {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { activeResort, isStaff, role, isAgent } = useAuth();
   const { push } = useToast();
   const [checkIn, setCheckIn] = useState(iso(new Date()));
@@ -259,7 +262,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Field label={`Advance (${cur()})`}><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
           <Field label="Method">
             <Select value={advMethod} onChange={(e) => setAdvMethod(e.target.value)}>
-              {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
+              {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
             </Select>
           </Field>
           <Field label="Remarks"><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></Field>
@@ -283,6 +286,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
 }
 
 function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => void }) {
+  const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { push } = useToast();
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
@@ -308,7 +312,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
     <div className="flex items-end gap-2">
       <Field label={`Record payment (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} className="!w-28" /></Field>
       <Select value={method} onChange={(e) => setMethod(e.target.value)} className="!w-24">
-        {["CASH", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => <option key={m}>{m}</option>)}
+        {methodChoices.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
       </Select>
       <Button size="sm" onClick={pay} loading={busy} disabled={amount <= 0}>Add</Button>
     </div>
@@ -679,6 +683,8 @@ function BookingsInner() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
+  // a keystroke is not a query: the guest list settled on this and so does this
+  const dq = useDebounced(q, 300);
   const [group, setGroup] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [presetOn, setPresetOn] = useState(false);
@@ -690,13 +696,16 @@ function BookingsInner() {
   }, [handoff.openNew]);
   const [openId, setOpenId] = useState<number | null>(null);
 
-  const filters = { state, source, group, from, to };
+  // the search goes to the server; filtering the fetched page meant a guest
+  // on row 101 came back "no bookings match"
+  const filters = { state, source, group, from, to, search: dq };
   const listQ = useApi(
     keys.bookings(activeResort?.id, filters),
     () =>
       client.bookings.list({
         resortId: activeResort!.id,
         take: 100,
+        search: dq || undefined,
         state: state || undefined,
         source: source || undefined,
         group: group || undefined,
@@ -732,18 +741,8 @@ function BookingsInner() {
     if (focusId) setOpenId(Number(focusId));
   }, [focusId]);
 
-  const filtered = useMemo(
-    () =>
-      q
-        ? rows.filter(
-            (r) =>
-              r.guest?.fullName?.toLowerCase().includes(q.toLowerCase()) ||
-              r.guest?.phone?.includes(q) ||
-              r.code.toLowerCase().includes(q.toLowerCase()),
-          )
-        : rows,
-    [rows, q],
-  );
+  // the server did the matching; these are the rows it matched
+  const filtered = rows;
 
   return (
     <div className="space-y-4">
@@ -753,7 +752,10 @@ function BookingsInner() {
         <Field label="Status">
           <Select value={state} onChange={(e) => setState(e.target.value)} className="!w-36">
             <option value="">All</option>
-            {STATES.map((s) => <option key={s}>{s.replace(/_/g, "-")}</option>)}
+            {/* without an explicit value an option sends its *text*, so this filter
+                asked the API for "CHECKED-IN" where the enum is CHECKED_IN and three
+                of the six states silently returned the wrong set */}
+            {STATES.map((s) => <option key={s} value={s}>{s.replace(/_/g, "-")}</option>)}
           </Select>
         </Field>
         <Field label="Source">

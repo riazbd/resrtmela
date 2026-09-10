@@ -13,11 +13,34 @@ interface StaffRow {
   status: string;
 }
 
+/** What `agents/me/report` answers — computed by the server, not here. */
+interface AgentReport {
+  commissionRate: number;
+  commissionKind: string;
+  bookings: number;
+  rent: number;
+  due: number;
+  commission: number;
+}
+
 /** Agent portal home — doc §3 "Agent Portal": profile, commission, my stats, agency staff. */
 export default function ProfilePage() {
   const { me, activeResort, isAgent } = useAuth();
   const { push } = useToast();
   const [rows, setRows] = useState<BookingRow[] | null>(null);
+  /**
+   * The commission the owner's books say, not one worked out here.
+   *
+   * This page multiplied rent by the rate — a percentage, always — so an agent
+   * on FLAT terms saw a number the resort had never agreed to. That exact bug
+   * was found and fixed on the booking screen and survived on the agent's own
+   * earnings page. It also totalled only the 200 rows it had fetched, so
+   * anyone busier than that was reading a partial figure.
+   *
+   * `agents/me/report` is the server's answer, over the whole period, through
+   * the one commission function.
+   */
+  const [report, setReport] = useState<AgentReport | null>(null);
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
@@ -27,6 +50,13 @@ export default function ProfilePage() {
     api<{ rows: BookingRow[] }>(`/bookings?resortId=${activeResort.id}&take=200`)
       .then((r) => setRows(r.rows))
       .catch(() => setRows([]));
+  }, [activeResort, isAgent]);
+
+  useEffect(() => {
+    if (!activeResort || !isAgent) return;
+    api<AgentReport>(`/agents/me/report?resortId=${activeResort.id}`)
+      .then(setReport)
+      .catch(() => setReport(null));
   }, [activeResort, isAgent]);
 
   const loadStaff = useCallback(() => {
@@ -55,8 +85,6 @@ export default function ProfilePage() {
 
   if (!isAgent) return <Empty msg="Agent portal only" />;
 
-  const commissionEntry = me?.resorts.find((r) => r.resort.id === activeResort?.id);
-  const rate = commissionEntry?.commissionRate ?? 0;
 
   const stats = (rows ?? []).reduce(
     (acc, b) => {
@@ -68,7 +96,6 @@ export default function ProfilePage() {
     },
     { count: 0, rent: 0, due: 0, active: 0 },
   );
-  const commission = (stats.rent * rate) / 100;
 
   return (
     <div className="space-y-4">
@@ -82,8 +109,12 @@ export default function ProfilePage() {
             <div className="text-xs text-slate-500">{me?.phone} · Agent · {activeResort?.name}</div>
           </div>
           <div className="ml-auto text-right">
-            <div className="text-[11px] font-medium text-slate-400">Commission rate</div>
-            <div className="text-xl font-bold text-brand-700">{rate}%</div>
+            <div className="text-[11px] font-medium text-slate-400">Commission terms</div>
+            {/* a flat fee is not a percentage, and printing one as the other is
+                how an agent came to see 75,000 where the owner's report said 1,000 */}
+            <div className="text-xl font-bold text-brand-700">
+              {report ? (report.commissionKind === 'FLAT' ? money(report.commissionRate) : `${report.commissionRate}%`) : '—'}
+            </div>
           </div>
         </div>
       </Card>
@@ -93,10 +124,15 @@ export default function ProfilePage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Stat label="My bookings" value={String(stats.count)} />
+            <Stat label="My bookings" value={String(report ? report.bookings : stats.count)} />
             <Stat label="Active" value={String(stats.active)} tone="green" />
-            <Stat label="Sold rent" value={money(stats.rent)} />
-            <Stat label="Est. commission" value={money(commission)} tone="green" sub={`${rate}% of rent`} />
+            <Stat label="Sold rent" value={money(report ? report.rent : stats.rent)} />
+            <Stat
+              label="Commission"
+              value={report ? money(report.commission) : "—"}
+              tone="green"
+              sub={report ? (report.commissionKind === "FLAT" ? `${money(report.commissionRate)} per booking` : `${report.commissionRate}% of rent`) : "loading"}
+            />
           </div>
 
           <Card title="My recent bookings" className="!p-0">

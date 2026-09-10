@@ -14,7 +14,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { agentPricing, bookingTotals } from "../common/money";
+import { COMMISSION_SELECT, termsOf } from "../common/commission.service";
 import { AvailabilityService } from "../bookings/availability.service";
+import { TaxService } from "../common/tax.service";
 import { AgencyContextService } from "./agency-context.service";
 import type { JwtClaims } from "@rh/shared";
 
@@ -39,6 +41,7 @@ export class AgencyGuestsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AgencyContextService) private readonly agency: AgencyContextService,
     @Inject(AvailabilityService) private readonly availability: AvailabilityService,
+    @Inject(TaxService) private readonly tax: TaxService,
   ) {}
 
   /**
@@ -112,7 +115,7 @@ export class AgencyGuestsService {
         })),
         discount: b.discount,
         payments: b.payments,
-        taxRatePct: Number(b.resort?.taxRatePct ?? 0),
+        taxRules: await this.tax.rulesFor(b.resortId),
       });
 
       row.bookings += 1;
@@ -158,9 +161,13 @@ export class AgencyGuestsService {
       },
       select: {
         resortId: true,
-        commissionKind: true,
-        commissionRate: true,
-        resort: { select: { id: true, name: true, location: true, showRatesToAgents: true } },
+        resort: {
+          select: {
+            id: true, name: true, location: true, showRatesToAgents: true,
+            // the commission is the resort's, one rate for every agent selling
+            ...COMMISSION_SELECT,
+          },
+        },
       },
     });
 
@@ -189,7 +196,7 @@ export class AgencyGuestsService {
           roomTypeId: r.roomTypeId,
           baseRate: r.baseRate,
           ...(link.resort.showRatesToAgents
-            ? { agentRate: agentPricing(link, r.baseRate).agentPrice }
+            ? { agentRate: agentPricing(termsOf(link.resort), r.baseRate).agentPrice }
             : {}),
         }));
       if (free.length > 0) {

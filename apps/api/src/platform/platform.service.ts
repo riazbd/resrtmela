@@ -1,17 +1,17 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims, isPermissionKey, formatMoney } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey, isPlanFeature, formatMoney, ALL_PERMISSIONS } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { BillingService } from "./billing.service";
-import { PlatformSettingsService, SETTING_DEFAULTS } from "../common/platform-settings.service";
+import { PlatformSettingsService, SETTING_DEFAULTS, SETTING_MAX_LENGTH, assertSettingParses } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
-import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
+import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
@@ -34,6 +34,120 @@ async function ensurePlans(prisma: PrismaService) {
     await prisma.platformPlan.createMany({ data: PLAN_SEEDS as never });
   }
 }
+
+export interface PlanInput {
+  name: string;
+  label: string;
+  monthlyFee: number;
+  maxRooms: number;
+  maxResorts: number;
+  trialDays: number;
+  /** Keys from `PLAN_FEATURES` — what this plan includes. */
+  features?: string[];
+  maxStaff?: number;
+  blurb?: string | null;
+  sortOrder?: number;
+  active?: boolean;
+  /** The one plan the pricing page recommends. */
+  highlight?: boolean;
+}
+
+/** Every field optional, plus `name` so a rename can be refused rather than ignored. */
+export type PlanPatch = Partial<PlanInput>;
+
+/**
+ * A plan name is typed once and lived with.
+ *
+ * It travels in the URL of `PATCH /platform/plans/:name`, it is what
+ * `Subscription.plan` stores, and that column is VarChar(16). Upper case with
+ * underscores is what the seeds established and what every screen prints as a
+ * badge.
+ */
+const PLAN_NAME = /^[A-Z][A-Z0-9_]{1,15}$/;
+
+/**
+ * What the columns can actually hold.
+ *
+ * Plans used to be seeded in code, where the only author was a developer
+ * reading the schema. They are typed into a form now, so every bound the
+ * database implies has to be said out loud and refused politely — the
+ * alternative is a truncated label or a 500 from the driver, depending on the
+ * server's strict mode. The price list already learned that lesson the
+ * expensive way, silently saving 255 characters of itself.
+ */
+const PLAN_BOUNDS = {
+  label: 40, // VarChar(40)
+  blurb: 200, // VarChar(200)
+  monthlyFee: 99_999_999.99, // Decimal(10,2)
+  maxRooms: 100_000,
+  maxResorts: 1_000,
+  maxStaff: 10_000,
+  trialDays: 365,
+  sortOrder: 9_999,
+};
+
+function assertWholeNumber(value: number, field: string, min: number, max: number) {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw badRequest(`${field} must be a whole number between ${min} and ${max}`);
+  }
+}
+
+function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean }) {
+  if (creating) {
+    if (!input.name || !PLAN_NAME.test(input.name)) {
+      throw badRequest("Plan name must be 2–16 characters, A–Z, 0–9 or _, starting with a letter (e.g. SEASON)");
+    }
+    for (const required of ["label", "monthlyFee", "maxRooms", "maxResorts", "trialDays"] as const) {
+      if (input[required] == null) throw badRequest(`${required} is required`);
+    }
+  }
+
+  if (input.label != null) {
+    const label = input.label.trim();
+    if (!label) throw badRequest("A plan needs a label — it is the name customers read");
+    if (label.length > PLAN_BOUNDS.label) throw badRequest(`Label must be ${PLAN_BOUNDS.label} characters or fewer`);
+  }
+  if (input.blurb != null && input.blurb.length > PLAN_BOUNDS.blurb) {
+    throw badRequest(`Blurb must be ${PLAN_BOUNDS.blurb} characters or fewer`);
+  }
+  if (input.monthlyFee != null) {
+    const fee = input.monthlyFee;
+    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.monthlyFee) {
+      throw badRequest(`Monthly fee must be between 0 and ${PLAN_BOUNDS.monthlyFee}`);
+    }
+    if (Math.round(fee * 100) !== fee * 100) throw badRequest("Monthly fee cannot be finer than a paisa");
+  }
+  if (input.features != null) {
+    if (!Array.isArray(input.features)) throw badRequest("Features must be a list");
+    /**
+     * A key the code has never heard of gates nothing, so storing one would
+     * sell a lock with no door — the owner unticks the box, the card stops
+     * promising it, and the customer carries on using it. Same reasoning as
+     * `sanitizePermissions`, and the same vocabulary discipline.
+     */
+    const unknown = input.features.filter((k) => !isPlanFeature(k));
+    if (unknown.length) throw badRequest(`Not a feature this platform can switch on: ${unknown.join(", ")}`);
+  }
+  // a plan that sells no rooms sells nothing; a plan for no resorts reaches nobody
+  if (input.maxRooms != null) assertWholeNumber(input.maxRooms, "Room limit", 1, PLAN_BOUNDS.maxRooms);
+  if (input.maxStaff != null) assertWholeNumber(input.maxStaff, "Staff limit", 1, PLAN_BOUNDS.maxStaff);
+  if (input.maxResorts != null) assertWholeNumber(input.maxResorts, "Resort limit", 1, PLAN_BOUNDS.maxResorts);
+  // zero is a plan with no free trial, which is a real choice
+  if (input.trialDays != null) assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
+  if (input.sortOrder != null) assertWholeNumber(input.sortOrder, "Sort order", 0, PLAN_BOUNDS.sortOrder);
+}
+
+/**
+ * What may move through an agency's wallet.
+ *
+ * Deliberately short. The wallet is the agency's account with the *platform* —
+ * money handed over, money handed back, and a correction when someone gets it
+ * wrong. `COMMISSION` and `BOOKING_HOLD` are in the database enum because rows
+ * were written with them, and are refused here: both describe money between an
+ * agency and a resort, which those two settle between themselves.
+ */
+export const WALLET_KINDS = ["TOPUP", "PAYOUT", "ADJUST"] as const;
+export type WalletKindName = (typeof WALLET_KINDS)[number];
 
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86_400_000);
@@ -66,7 +180,7 @@ export class PlatformService {
       this.prisma.user.findMany({ where: { role: "AGENT" }, select: { status: true } }),
       this.prisma.subscription.findMany({ select: { status: true, monthlyFee: true } }),
       this.prisma.subscriptionDue.findMany({ where: { status: { in: ["DUE", "OVERDUE"] } }, select: { amount: true } }),
-      this.prisma.room.count(),
+      this.prisma.room.count({ where: { deletedAt: null } }),
     ]);
     const activeSubs = subs.filter((s) => s.status === "ACTIVE");
     return {
@@ -168,9 +282,23 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const keys = Object.keys(patch);
     if (keys.length === 0) throw badRequest("nothing to update");
+    /**
+     * Values used to be sliced to 255 before writing, to fit a VARCHAR that is
+     * now TEXT. Some settings are JSON, so the slice cut a price list of more
+     * than about eight packs mid-object; `parseCreditPacks` fell back to the
+     * shipped prices and the platform sold at rates the owner never set, with
+     * the save reported as successful. Nothing is truncated now — a value too
+     * long to store is refused, and a JSON setting is parsed here rather than
+     * failing silently at read time.
+     */
     for (const key of keys) {
       if (!(key in SETTING_DEFAULTS)) throw badRequest(`Unknown setting "${key}"`);
-      await this.settings.set(key, String(patch[key] ?? "").slice(0, 255));
+      const value = String(patch[key] ?? "");
+      if (value.length > SETTING_MAX_LENGTH) {
+        throw badRequest(`"${key}" is too long (${value.length} characters, limit ${SETTING_MAX_LENGTH}).`);
+      }
+      assertSettingParses(key, value);
+      await this.settings.set(key, value);
     }
     await this.audit.log({ actorId: claims.userId, action: "platform.settings.update", entity: "platform_setting", diff: patch });
     return this.settings.all();
@@ -211,28 +339,90 @@ export class PlatformService {
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
-    input: { plan: string; monthlyFee?: number; note?: string },
+    input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
+    // one resort's terms, held to the same bounds as the plan's own
+    if (input.trialDays != null) {
+      assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
+    }
     // the plan table is the authority: a plan added there works with no deploy
     const def = await this.prisma.platformPlan.findUnique({ where: { name: input.plan } });
     if (!def) throw badRequest(`Unknown plan "${input.plan}"`);
     if (!def.active) throw badRequest(`Plan "${def.label}" is not available`);
     const now = new Date();
-    const trialEndsAt = addDays(now, def.trialDays);
-    const sub = await this.prisma.subscription.create({
-      data: {
-        resortId,
-        plan: input.plan,
-        status: "TRIAL",
-        monthlyFee: input.monthlyFee ?? Number(def.monthlyFee),
-        trialEndsAt,
-        renewsAt: trialEndsAt,
-        note: input.note,
-      },
+
+    /**
+     * A resort has one live subscription, and changing plan changes it.
+     *
+     * This used to create a new row in TRIAL every time and never cancel the
+     * old one. So changing plan restarted the free trial — a way to never
+     * pay — and once the second trial ended the billing sweep, which walks
+     * every ACTIVE and PAST_DUE subscription, invoiced the resort twice a
+     * month. MRR counted both too.
+     *
+     * A resort that has already started paying keeps paying: only a genuinely
+     * new subscription gets a trial. The old row is cancelled rather than
+     * deleted, because what a resort used to pay is a thing to be able to say.
+     */
+    const existing = await this.prisma.subscription.findFirst({
+      where: { resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+      orderBy: { id: "desc" },
     });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "platform.subscription.create", entity: "subscription", entityId: Number(sub.id), diff: input });
+
+    const monthlyFee = input.monthlyFee ?? Number(def.monthlyFee);
+    const sub = await this.prisma.$transaction(async (tx) => {
+      if (existing) {
+        await tx.subscription.update({
+          where: { id: existing.id },
+          data: { status: "CANCELLED", cancelledAt: now },
+        });
+      }
+      // a trial is for someone who has not had one; a paying resort changing
+      // plan carries its dates and its status across
+      const fresh = !existing || existing.status === "TRIAL";
+
+      /**
+       * How long this resort's trial runs, and whether it has one at all.
+       *
+       * The plan's length is the offer; `input.trialDays` is the owner giving
+       * one customer different terms, the way `monthlyFee` already could.
+       *
+       * Zero means no trial, and that has to mean ACTIVE from the start rather
+       * than a TRIAL whose end date is already behind it. The money was right
+       * either way — the sweep bills from `trialEndsAt` — but the resort's own
+       * subscription page read "Trial, ends today" until the next hourly sweep
+       * corrected it, which is a strange thing to show someone who is paying.
+       * `renewsAt: now` puts them in front of `raiseRenewals` instead, which
+       * raises the first bill for a period starting today.
+       */
+      const trialDays = input.trialDays ?? def.trialDays;
+      const onTrial = fresh && trialDays > 0;
+      const trialEndsAt = fresh ? (onTrial ? addDays(now, trialDays) : null) : existing.trialEndsAt;
+
+      const status = fresh ? (onTrial ? "TRIAL" : "ACTIVE") : existing.status;
+      const renewsAt = fresh ? (onTrial ? trialEndsAt : now) : existing.renewsAt;
+
+      return tx.subscription.create({
+        data: {
+          resortId,
+          plan: input.plan,
+          status,
+          monthlyFee,
+          startedAt: existing?.startedAt ?? now,
+          trialEndsAt,
+          renewsAt,
+          note: input.note,
+        },
+      });
+    });
+    await this.audit.log({
+      actorId: claims.userId, resortId,
+      action: existing ? "platform.subscription.change" : "platform.subscription.create",
+      entity: "subscription", entityId: Number(sub.id),
+      diff: { ...input, from: existing?.plan ?? null, replaced: existing ? Number(existing.id) : null },
+    });
     return sub;
   }
 
@@ -243,22 +433,120 @@ export class PlatformService {
     return this.prisma.platformPlan.findMany({ orderBy: { sortOrder: "asc" } });
   }
 
-  async updatePlan(claims: JwtClaims, name: string, input: { monthlyFee?: number; maxRooms?: number; maxResorts?: number; label?: string; blurb?: string; active?: boolean }) {
+  async createPlan(claims: JwtClaims, input: PlanInput) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
+    assertPlanFields(input, { creating: true });
+
+    if (await this.prisma.platformPlan.findUnique({ where: { name: input.name } })) {
+      throw badRequest(`A plan named ${input.name} already exists`);
+    }
+
+    const plan = await this.prisma.platformPlan.create({
+      data: {
+        name: input.name,
+        label: input.label,
+        monthlyFee: input.monthlyFee as never,
+        maxRooms: input.maxRooms,
+        maxResorts: input.maxResorts,
+        maxStaff: input.maxStaff ?? 1,
+        trialDays: input.trialDays,
+        features: (input.features ?? []) as never,
+        blurb: input.blurb?.trim() || null,
+        sortOrder: input.sortOrder ?? 0,
+        active: input.active ?? true,
+        highlight: input.highlight ?? false,
+      },
+    });
+    if (input.highlight) await this.featureOnly(plan.name);
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
+    return plan;
+  }
+
+  async updatePlan(claims: JwtClaims, name: string, input: PlanPatch) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+
+    /**
+     * The name is the one thing that cannot move.
+     *
+     * `Subscription.plan` holds it as a string rather than a foreign key, so a
+     * rename does not cascade anywhere — it silently orphans every resort on
+     * the plan, and the next billing sweep finds no plan to price them by. The
+     * label is what a customer reads and changes freely.
+     */
+    if (input.name != null && input.name !== name) {
+      throw badRequest("A plan's name is fixed — subscriptions point at it by name. Change the label instead.");
+    }
+    assertPlanFields(input, { creating: false });
+
     const plan = await this.prisma.platformPlan.update({
       where: { name },
       data: {
-        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee } : {}),
+        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee as never } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
         ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
+        ...(input.maxStaff != null ? { maxStaff: input.maxStaff } : {}),
+        ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
+        ...(input.features != null ? { features: input.features as never } : {}),
         ...(input.label != null ? { label: input.label } : {}),
-        ...(input.blurb != null ? { blurb: input.blurb } : {}),
+        ...(input.blurb != null ? { blurb: input.blurb.trim() || null } : {}),
+        ...(input.sortOrder != null ? { sortOrder: input.sortOrder } : {}),
         ...(input.active != null ? { active: input.active } : {}),
+        ...(input.highlight != null ? { highlight: input.highlight } : {}),
       },
     });
-    await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input });
+    if (input.highlight) await this.featureOnly(name);
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
+  }
+
+  /**
+   * "Most popular" means most popular, so only one plan may wear it.
+   *
+   * Enforced here rather than by a unique index: the rule is "at most one row
+   * is true", which a UNIQUE column can only express by storing NULL for false
+   * — and then a row means true, false, or nothing, which is one meaning too
+   * many.
+   */
+  private async featureOnly(name: string) {
+    await this.prisma.platformPlan.updateMany({
+      where: { name: { not: name }, highlight: true },
+      data: { highlight: false },
+    });
+  }
+
+  /**
+   * Delete a plan, or be told to retire it.
+   *
+   * The same shape as retiring a room, and for the same reason: a row that
+   * anything else points at is history, not clutter. A subscription names its
+   * plan by string, so deleting a plan somebody bought leaves that string
+   * pointing at nothing — including a cancelled subscription, which is the
+   * record of what they used to pay and has to stay readable.
+   */
+  async deletePlan(claims: JwtClaims, name: string) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    await ensurePlans(this.prisma);
+
+    const plan = await this.prisma.platformPlan.findUnique({ where: { name } });
+    if (!plan) throw badRequest("No such plan");
+
+    const sold = await this.prisma.subscription.count({ where: { plan: name } });
+    if (sold > 0) {
+      throw badRequest(
+        `${sold} subscription(s) name this plan. Retire it instead — it leaves the public page and its customers stay where they are.`,
+      );
+    }
+    if ((await this.prisma.platformPlan.count()) <= 1) {
+      // `ensurePlans` re-seeds an empty table, so the last deletion would
+      // resurrect STARTER, GROWTH and CHAIN at prices the owner had rejected
+      throw badRequest("A platform needs at least one plan to sell.");
+    }
+
+    await this.prisma.platformPlan.delete({ where: { name } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.delete", entity: "platform_plan", entityId: Number(plan.id), diff: { name } });
+    return { deleted: true as const, name };
   }
 
   async renewSubscription(claims: JwtClaims, subscriptionId: number, months = 1) {
@@ -290,6 +578,7 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const sub = await this.prisma.subscription.update({
       where: { id: BigInt(subscriptionId) },
+      // the generated column frees the live slot on its own
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
     await this.audit.log({ actorId: claims.userId, resortId: sub.resortId, action: "platform.subscription.cancel", entity: "subscription", entityId: subscriptionId });
@@ -469,16 +758,15 @@ export class PlatformService {
       where: { resortId },
       include: {
         user: {
-          select: { id: true, name: true, phone: true, email: true, role: true, status: true, createdAt: true, wallet: { select: { balance: true, active: true } } },
+          // no wallet here: it is the agency's account with the platform, and
+          // a resort reading it was reading the agency's trade with everyone else
+          select: { id: true, name: true, phone: true, email: true, role: true, status: true, createdAt: true },
         },
         role: { select: { id: true, name: true } },
       },
     });
     return rows.map((r) => ({
       ...r.user,
-      wallet: r.user.wallet ? { balance: Number(r.user.wallet.balance), active: r.user.wallet.active } : null,
-      commissionRate: r.commissionRate != null ? Number(r.commissionRate) : null,
-      commissionKind: r.commissionKind,
       roleId: r.roleId,
       roleName: r.role?.name ?? null,
     }));
@@ -487,7 +775,13 @@ export class PlatformService {
   async createResortUser(
     claims: JwtClaims,
     resortId: number,
-    input: { name: string; phone: string; password: string; role: string; commissionRate?: number; commissionKind?: string; roleId?: number },
+    /**
+     * No commission here any more. It was a per-agent field, so two agents
+     * selling the same room could earn different money on it; the rate is the
+     * resort's now, on Settings -> Agent access, and `CommissionService` is the
+     * only thing that sets it.
+     */
+    input: { name: string; phone: string; password: string; role: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -497,10 +791,6 @@ export class PlatformService {
     if (input.roleId != null) {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
       if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
-    }
-    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
-    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-      throw badRequest("percent commission 1-100");
     }
     const phone = input.phone.replace(/\D/g, "");
     const exists = await this.prisma.user.findUnique({ where: { phone } });
@@ -516,15 +806,9 @@ export class PlatformService {
       },
     });
     await this.prisma.userResort.create({
-      data: {
-        userId: user.id,
-        resortId,
-        roleId: input.roleId,
-        commissionRate: isAgent ? (input.commissionRate ?? 5) : null,
-        commissionKind: isAgent ? kind : "PERCENT",
-      },
+      data: { userId: user.id, resortId, roleId: input.roleId },
     });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, commissionKind: kind, roleId: input.roleId } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, roleId: input.roleId } });
     return { id: user.id, name: user.name, phone: user.phone, role: user.role, status: user.status };
   }
 
@@ -532,15 +816,42 @@ export class PlatformService {
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; commissionRate?: number; commissionKind?: string; name?: string; roleId?: number },
+    input: { role?: string; status?: string; password?: string; name?: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId, resortId } } });
     if (!linked) throw badRequest("user not in this resort");
+
+    /**
+     * This route is resort-scoped; the row it writes is not.
+     *
+     * `users` is global — one person, one row, however many resorts they work
+     * at. Only a link to *this* resort was ever checked, so a `users.manage`
+     * holder could reset the password, flip the role or suspend the account of
+     * someone who also works for another tenant, and own that tenant's account
+     * on the next login. Changing what the person is stays with the platform
+     * when the person is not this resort's alone; naming them and giving them
+     * a role inside this resort does not.
+     */
+    const account = input.role != null || input.status != null || input.password != null;
+    if (account && claims.role !== ROLE.SUPER_ADMIN) {
+      const elsewhere = await this.prisma.userResort.count({
+        where: { userId, resortId: { not: resortId } },
+      });
+      if (elsewhere > 0) {
+        throw forbid("This person also works at another resort — only the platform owner can change their account");
+      }
+    }
+
     const data: Prisma.UserUpdateInput = {};
     if (input.role) {
-      if (!["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING", "RESORT_ADMIN"].includes(input.role)) throw badRequest("bad role");
+      // the same list `createResortUser` accepts. RESORT_ADMIN resolves to
+      // ["*"], so allowing it only on update was a way to make an owner out of
+      // a colleague in two calls rather than one.
+      const allowed = ["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"];
+      if (claims.role === ROLE.SUPER_ADMIN) allowed.push("RESORT_ADMIN");
+      if (!allowed.includes(input.role)) throw badRequest("bad role");
       data.role = input.role as never;
     }
     if (input.status) {
@@ -559,20 +870,7 @@ export class PlatformService {
         await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: input.roleId } });
       }
     }
-    if (input.commissionRate != null || input.commissionKind != null) {
-      const kind = input.commissionKind === "FLAT" ? "FLAT" : input.commissionKind === "PERCENT" ? "PERCENT" : linked.commissionKind;
-      if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-        throw badRequest("percent commission 1-100");
-      }
-      await this.prisma.userResort.update({
-        where: { userId_resortId: { userId, resortId } },
-        data: {
-          ...(input.commissionRate != null ? { commissionRate: input.commissionRate } : {}),
-          commissionKind: kind,
-        },
-      });
-    }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, commissionKind: input.commissionKind, roleId: input.roleId } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, roleId: input.roleId } });
     return { id: user.id, name: user.name, role: user.role, status: user.status };
   }
 
@@ -615,9 +913,34 @@ export class PlatformService {
     if (!/^\d+$/.test(id)) throw badRequest("bad id");
     const row = await this.prisma.auditLog.findUnique({ where: { id: BigInt(id) } });
     if (!row) throw badRequest("activity not found");
-    if (row.resortId != null) requireResortAccess(claims, row.resortId);
-    await this.perms.require(claims, row.resortId ?? undefined, "activities.delete");
+
+    /**
+     * A row with no resort is the platform's own history — a tenant created, a
+     * plan changed, an owner impersonated. The old code skipped the resort
+     * check entirely for exactly those rows and then resolved the permission
+     * against `claims.resortIds[0]`, so any resort admin could erase them.
+     *
+     * The permission it asked for, `activities.delete`, is not a key that
+     * exists: `validPermissions` strips it, so it could never be granted and
+     * the guard was really "are you an admin". The key in the matrix — the one
+     * the settings screen shows an owner — is `auditlog.delete`.
+     */
+    if (row.resortId == null) {
+      requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    } else {
+      requireResortAccess(claims, row.resortId);
+      await this.perms.require(claims, row.resortId, "auditlog.delete");
+    }
     await this.prisma.auditLog.delete({ where: { id: BigInt(id) } });
+    // an audit trail whose deletions leave no trace is not an audit trail
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: row.resortId ?? undefined,
+      action: "auditlog.delete",
+      entity: "auditLog",
+      entityId: Number(row.id),
+      diff: { action: row.action, entity: row.entity, entityId: row.entityId?.toString() ?? null, at: row.createdAt },
+    });
     return { deleted: true };
   }
 
@@ -636,7 +959,13 @@ export class PlatformService {
       name: r.name,
       system: r.system,
       users: r._count.users,
-      permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
+      // what it resolves to, not what was written down years ago
+      permissions:
+        r.system && r.name === ADMIN_ROLE
+          ? ALL_PERMISSIONS
+          : Array.isArray(r.permissions)
+            ? (r.permissions as string[])
+            : [],
     }));
   }
 
@@ -655,6 +984,16 @@ export class PlatformService {
     if (!role) throw badRequest("role not found");
     requireResortAccess(claims, role.resortId);
     await this.perms.require(claims, role.resortId, "roles.manage");
+    /**
+     * Administrator resolves to `*`, so its stored list decides nothing.
+     * Letting it be edited would be a matrix full of boxes that change no
+     * behaviour — worse than no boxes, because it reads as control.
+     */
+    if (role.system && role.name === ADMIN_ROLE && input.permissions != null) {
+      throw badRequest(
+        "Administrator always holds every permission. Create a role of your own for anything narrower.",
+      );
+    }
     const data: { name?: string; permissions?: string[] } = {};
     if (input.name?.trim()) data.name = input.name.trim();
     if (input.permissions != null) data.permissions = validPermissions(input.permissions);
@@ -686,37 +1025,55 @@ export class PlatformService {
     const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: agentUserId, resortId } } });
     if (!linked) throw badRequest("agent not linked to this resort");
     const updated = await this.prisma.user.update({ where: { id: agentUserId }, data: { status } });
-    if (status === "suspended") {
-      await this.prisma.wallet.updateMany({ where: { userId: agentUserId }, data: { active: false } });
-    }
-    if (status === "active") {
-      await this.prisma.wallet.updateMany({ where: { userId: agentUserId }, data: { active: true } });
-    }
+    /**
+     * The wallet is deliberately left alone.
+     *
+     * A resort is entitled to stop an agent selling *its* rooms. It is not
+     * entitled to freeze money the agency lodged with the platform, which is
+     * what flipping `wallet.active` did — one resort of four could strand the
+     * agency's whole float, and re-activating anywhere thawed it again.
+     */
     await this.audit.log({ actorId: claims.userId, resortId, action: `agent.${status}`, entity: "user", entityId: agentUserId });
     return { id: updated.id, name: updated.name, status: updated.status };
   }
 
+  /**
+   * The statement, for the agency it belongs to or the platform that holds it.
+   *
+   * `RESORT_ADMIN` used to be admitted, and the transactions are not filtered
+   * by resort — so any resort an agent sold could read every movement the
+   * agency had made anywhere, including at the resort down the road that sells
+   * to the same agencies.
+   */
   async getWallet(claims: JwtClaims, userId: number) {
-    if (claims.userId !== userId && claims.role !== ROLE.SUPER_ADMIN && claims.role !== ROLE.RESORT_ADMIN) {
-      throw forbid("not your wallet");
-    }
-    if (claims.role === ROLE.RESORT_ADMIN) {
-      const linked = await this.prisma.userResort.findFirst({ where: { userId, resortId: { in: claims.resortIds } } });
-      if (!linked) throw forbid("user not in your resort");
+    if (claims.userId !== userId && claims.role !== ROLE.SUPER_ADMIN) {
+      throw forbid("This account is between the agency and the platform.");
     }
     const wallet = await this.prisma.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
     const txns = await this.prisma.walletTxn.findMany({ where: { walletId: wallet.id }, orderBy: { id: "desc" }, take: 100 });
     return { balance: Number(wallet.balance), active: wallet.active, txns: txns.map((t) => ({ ...t, amount: Number(t.amount), balanceAfter: Number(t.balanceAfter), id: t.id.toString() })) };
   }
 
-  async walletTxn(claims: JwtClaims, userId: number, kind: "TOPUP" | "PAYOUT" | "ADJUST" | "COMMISSION" | "BOOKING_HOLD", amount: number, note?: string, bookingId?: number) {
-    if (claims.role !== ROLE.SUPER_ADMIN && claims.role !== ROLE.RESORT_ADMIN) throw forbid("owner only");
-    if (claims.role === ROLE.RESORT_ADMIN) {
-      const linked = await this.prisma.userResort.findFirst({ where: { userId, resortId: { in: claims.resortIds } } });
-      if (!linked) throw forbid("user not in your resort");
+  /**
+   * Moves the money. Only the platform may, and only its own kinds of money.
+   *
+   * `RESORT_ADMIN` used to be allowed, so a resort could fund and drain a float
+   * the agency holds with the platform, and spend it on a rival's booking.
+   */
+  async walletTxn(claims: JwtClaims, userId: number, kind: string, amount: number, note?: string, bookingId?: number) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    if (!WALLET_KINDS.includes(kind as WalletKindName)) {
+      throw badRequest(
+        `The wallet holds the agency's account with the platform: ${WALLET_KINDS.join(", ")}. ` +
+          `What an agency owes a resort, or earns from one, is settled between them.`,
+      );
     }
     if (!Number.isFinite(amount) || amount === 0) throw badRequest("amount required");
-    const signed = kind === "PAYOUT" ? -Math.abs(amount) : kind === "ADJUST" ? amount : Math.abs(amount);
+    const moved = kind as WalletKindName;
+    // PAYOUT always leaves, TOPUP always arrives, ADJUST goes the way it is
+    // given. This used to end in `Math.abs(amount)` for every other kind, which
+    // is how paying a booking from the wallet came to *increase* the balance.
+    const signed = moved === "PAYOUT" ? -Math.abs(amount) : moved === "ADJUST" ? amount : Math.abs(amount);
     const result = await this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.upsert({ where: { userId }, update: {}, create: { userId } });
       if (!wallet.active) throw badRequest("wallet inactive");
@@ -724,26 +1081,29 @@ export class PlatformService {
       if (next < 0) throw badRequest("insufficient wallet balance");
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance: next } });
       return tx.walletTxn.create({
-        data: { walletId: wallet.id, kind, amount: signed, balanceAfter: next, note, bookingId },
+        data: { walletId: wallet.id, kind: moved, amount: signed, balanceAfter: next, note, bookingId },
       });
     });
-    await this.audit.log({ actorId: claims.userId, action: `wallet.${kind.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });
+    await this.audit.log({ actorId: claims.userId, action: `wallet.${moved.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });
     return { ...result, amount: Number(result.amount), balanceAfter: Number(result.balanceAfter), id: result.id.toString() };
   }
 
-  /** owner/agent pays a booking due from the agent's wallet */
-  async payFromWallet(claims: JwtClaims, bookingId: number, amount: number) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, select: { id: true, resortId: true, agentUserId: true } });
-    if (!booking) throw badRequest("booking not found");
-    const payer = booking.agentUserId ?? claims.userId;
-    if (claims.role === ROLE.AGENT && claims.userId !== payer) throw forbid("not your booking");
-    if (claims.role !== ROLE.AGENT) requireResortAccess(claims, booking.resortId);
-    const txn = await this.walletTxn(claims, payer, "BOOKING_HOLD", -Math.abs(amount), `payment for booking ${bookingId}`, bookingId);
-    // record as payment too
-    await this.prisma.payment.create({ data: { bookingId, amount: Math.abs(amount), method: "WALLET_CREDIT", paymentType: "FINAL", receivedById: claims.userId } });
-    await this.recomputePaymentState(bookingId);
-    return txn;
-  }
+  /**
+   * `payFromWallet` used to live here, and is gone rather than corrected.
+   *
+   * It settled a resort's booking out of the agency's platform float, which is
+   * the platform standing between two parties settling with each other. A
+   * booking due is the agency's account with that resort; the platform is the
+   * medium they met through, not a party to it.
+   *
+   * It was also broken in a way nobody could see, which is why it survived so
+   * long: it passed `-Math.abs(amount)` to `walletTxn`, and that function threw
+   * the sign away for every kind but PAYOUT and ADJUST — so paying a booking
+   * marked the stay paid **and increased the agent's balance**. No screen in
+   * the console called it and no test covered it. `WALLET_CREDIT` stays in the
+   * payment-method list as a reserved code, because rows recorded that way are
+   * still rows.
+   */
 
   private async recomputePaymentState(bookingId: number) {
     const b = await this.prisma.booking.findUnique({
@@ -778,6 +1138,7 @@ export class PlatformService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "discounts.manage");
+    await this.planLimits.requireFeature(resortId, "discounts");
     if (input.scope === "ROOM_TYPE" && !input.roomTypeId) throw badRequest("Pick a room type for this offer");
     if (input.scope === "ROOM" && !input.roomId) throw badRequest("Pick a room for this offer");
     if (input.kind === "PERCENT" && (input.value <= 0 || input.value > 100)) throw badRequest("percent 1-100");
@@ -850,6 +1211,8 @@ export class PlatformService {
   async createApiKey(claims: JwtClaims, resortId: number, name: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "apikeys.manage");
+    // a key is the whole of the public API; issuing one is buying the feature
+    await this.planLimits.requireFeature(resortId, "public_api");
     const secret = randomBytes(24).toString("hex");
     const prefix = `rm_live_${randomBytes(4).toString("hex")}`;
     const keyHash = createHash("sha256").update(secret).digest("hex");
@@ -998,7 +1361,7 @@ export class PlatformService {
   async inviteAgentByEmail(
     claims: JwtClaims,
     resortId: number,
-    input: { email: string; name?: string; commissionRate?: number; commissionKind?: "PERCENT" | "FLAT" },
+    input: { email: string; name?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
@@ -1021,17 +1384,11 @@ export class PlatformService {
           status: "pending",
         },
       }));
-    const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
-    if (kind === "PERCENT" && input.commissionRate != null && (input.commissionRate <= 0 || input.commissionRate > 100)) {
-      throw badRequest("percent commission 1-100");
-    }
     await this.prisma.userResort.create({
       data: {
         userId: user.id,
         resortId,
         roleId: (await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" } }))?.id ?? null,
-        commissionRate: input.commissionRate ?? 5,
-        commissionKind: kind,
       },
     });
     const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
@@ -1060,7 +1417,7 @@ export class PlatformService {
         data: { userId: user.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
       });
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to, commissionKind: kind, commissionRate: input.commissionRate ?? 5 } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to } });
     return { id: user.id, name: user.name, email: to, status: user.status, emailed: !existingUser };
   }
 
@@ -1117,8 +1474,6 @@ export class PlatformService {
           userId: user.id,
           resortId: link.resortId,
           roleId: link.roleId,
-          commissionRate: link.commissionRate,
-          commissionKind: link.commissionKind,
         },
       });
     }
@@ -1172,6 +1527,36 @@ export class PlatformService {
   async publicCms(): Promise<Record<string, string>> {
     const rows = await this.prisma.cmsSetting.findMany();
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  }
+
+  /**
+   * The price list, for the page that quotes it.
+   *
+   * The homepage carried its own copy — three names and three prices written
+   * into the markup — while `platform_plans` was the editable source and the
+   * screen that edits it. So changing what the platform charges left the
+   * public page selling the old number, and there was no way to tell which
+   * one a customer had read. A price belongs in one place.
+   *
+   * Only what is actually being sold: an inactive plan is one the owner has
+   * stopped offering, and it should leave the page when they say so.
+   */
+  async publicPlans() {
+    const rows = await this.prisma.platformPlan.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        name: true, label: true, monthlyFee: true,
+        maxRooms: true, maxResorts: true, maxStaff: true, trialDays: true, blurb: true, highlight: true,
+        // the ticks on the card are drawn from this, not from a map in the page
+        features: true,
+      },
+    });
+    return rows.map((r) => ({
+      ...r,
+      monthlyFee: Number(r.monthlyFee),
+      features: Array.isArray(r.features) ? (r.features as string[]) : [],
+    }));
   }
 
   async putCms(claims: JwtClaims, key: string, value: string) {

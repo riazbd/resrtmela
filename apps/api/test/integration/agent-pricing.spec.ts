@@ -14,8 +14,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
-import { AvailabilityService } from "../../src/bookings/availability.service";
+import { makeBookingsService, makeAvailabilityService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
@@ -65,9 +64,9 @@ describe("both prices on a booking", () => {
   });
 
   it("works the same for a flat fee per booking", async () => {
-    await prisma.userResort.update({
-      where: { userId_resortId: { userId: fx.agentId, resortId: fx.resortId } },
-      data: { commissionKind: "FLAT", commissionRate: 1200 },
+    await prisma.resort.update({
+      where: { id: fx.resortId },
+      data: { agentCommissionKind: "FLAT", agentCommissionRate: 1200 },
     });
     const b = await agentBooking();
 
@@ -96,7 +95,7 @@ describe("both prices on a booking", () => {
 
 describe("both prices while choosing a room", () => {
   it("puts the agent's own rate beside the published one", async () => {
-    const grid = await new AvailabilityService(asPrismaService).roomsGrid(
+    const grid = await makeAvailabilityService(asPrismaService).roomsGrid(
       agent,
       fx.resortId,
       "2026-04-01",
@@ -109,7 +108,7 @@ describe("both prices while choosing a room", () => {
   });
 
   it("shows the resort's own staff one rate, because there is only one", async () => {
-    const grid = await new AvailabilityService(asPrismaService).roomsGrid(
+    const grid = await makeAvailabilityService(asPrismaService).roomsGrid(
       manager,
       fx.resortId,
       "2026-04-01",

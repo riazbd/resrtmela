@@ -24,7 +24,7 @@ export class NotificationsController {
     if (!allowed.includes(req.user.role)) {
       throw Object.assign(new Error("Staff only"), { status: 403 });
     }
-    const rows = await this.notifications.recent(q.take ?? 50);
+    const rows = await this.notifications.recent(req.user, q.take ?? 50);
     return rows.map((j) => ({
       id: Number(j.id),
       channel: j.channel,

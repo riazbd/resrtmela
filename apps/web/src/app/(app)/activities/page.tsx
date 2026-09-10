@@ -8,8 +8,9 @@ import { useAuth } from "@/lib/auth";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
+import { useResortOptions } from "@/lib/resort-options";
 
-const CATEGORIES = ["TOUR", "WATER_SPORTS", "WELLNESS", "DINING", "ENTERTAINMENT", "OTHER"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 interface Schedule {
@@ -45,16 +46,17 @@ interface Slot {
   remaining: number;
 }
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 export default function ActivitiesPage() {
   const { activeResort, isManagement, isStaff } = useAuth();
+  // the resort's own list, not six values compiled into the page
+  const categoryChoices = useResortOptions(activeResort?.id, "ACTIVITY_CATEGORY");
   const { push } = useToast();
   const [selected, setSelected] = useState<Activity | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<Activity> & { schedules: Schedule[] } | null>(null);
-  const [genFrom, setGenFrom] = useState(iso(new Date()));
-  const [genTo, setGenTo] = useState(iso(new Date(Date.now() + 14 * 86400000)));
+  const [genFrom, setGenFrom] = useState(() => todayIn(activeResort?.timezone));
+  const [genTo, setGenTo] = useState(() => addDaysIso(todayIn(activeResort?.timezone), 14));
   const [busy, setBusy] = useState(false);
 
   const canManage = isManagement;
@@ -69,7 +71,8 @@ export default function ActivitiesPage() {
 
   // slots are per activity, so each one caches separately: clicking between
   // two activities to compare their schedules is now two requests, not four
-  const slotRange = { from: iso(new Date()), to: iso(new Date(Date.now() + 14 * 86400000)) };
+  const today = todayIn(activeResort?.timezone);
+  const slotRange = { from: today, to: addDaysIso(today, 14) };
   const slotsQ = useApi(
     ["activity-slots", activeResort?.id, selected?.id] as const,
     () =>
@@ -98,7 +101,7 @@ export default function ActivitiesPage() {
     try {
       const body = {
         name: editing.name,
-        category: editing.category ?? "TOUR",
+        category: editing.category || null,
         basePrice: Number(editing.basePrice ?? 0),
         durationMin: Number(editing.durationMin ?? 60),
         minPerSlot: Number(editing.minPerSlot ?? 1),
@@ -169,7 +172,10 @@ export default function ActivitiesPage() {
 
   function openNew() {
     setEditing({
-      name: "", category: "TOUR", basePrice: 800, durationMin: 60,
+      // no invented price: 800 was a number nobody chose, and the restaurant
+      // screen shipped exactly this mistake as three fake dishes at three fake
+      // prices before it was taken out
+      name: "", category: categoryChoices[0]?.code ?? "", basePrice: 0, durationMin: 60,
       minPerSlot: 1, maxPerSlot: 12, description: "", schedules: [{ weekday: 5, startTime: "10:00", endTime: "11:00", capacity: 12 }],
     });
     setEditOpen(true);
@@ -291,8 +297,11 @@ export default function ActivitiesPage() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Name"><Input value={editing.name ?? ""} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
               <Field label="Category">
-                <Select value={editing.category} onChange={(e) => setEditing({ ...editing, category: e.target.value })}>
-                  {CATEGORIES.map((c) => <option key={c}>{c.replace(/_/g, " ")}</option>)}
+                {/* the resort's own list, and options that carry a value: this
+                    sent "WATER SPORTS" with a space where the code is
+                    WATER_SPORTS, so the save either failed or stored nonsense */}
+                <Select value={editing.category ?? ""} onChange={(e) => setEditing({ ...editing, category: e.target.value })}>
+                  {categoryChoices.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </Select>
               </Field>
               <Field label={`Price (${cur()}/person)`}><Input type="number" min={0} value={editing.basePrice ?? 0} onChange={(e) => setEditing({ ...editing, basePrice: Number(e.target.value) })} /></Field>

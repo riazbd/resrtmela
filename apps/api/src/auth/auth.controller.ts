@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PermissionsService } from "../common/permissions";
+import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuthService } from "./auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -84,6 +85,7 @@ export class AuthedAuthController {
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   @Get("me")
@@ -91,11 +93,22 @@ export class AuthedAuthController {
     return this.auth.me(req.user.userId);
   }
 
-  /** permission keys for the active resort (UI gating) */
+  /**
+   * What this person may do in the active resort, for the console to draw with.
+   *
+   * Two answers, because there are two reasons a screen might not be theirs:
+   * `permissions` is what the owner gave them, `features` is what the resort's
+   * plan includes. The console used to know only the first, so a resort on a
+   * plan without the restaurant still had "Restaurant" in its sidebar and met a
+   * 403 on arriving. One request, since it is one question.
+   */
   @Get("permissions")
   async permissions(@Req() req: AuthedRequest, @Query("resortId") resortIdRaw?: string) {
     const resortId = resortIdRaw ? Number(resortIdRaw) : undefined;
-    return { permissions: await this.perms.resolve(req.user, resortId) };
+    return {
+      permissions: await this.perms.resolve(req.user, resortId),
+      features: resortId ? await this.planLimits.featuresFor(resortId) : [],
+    };
   }
 
   @Post("me/password")

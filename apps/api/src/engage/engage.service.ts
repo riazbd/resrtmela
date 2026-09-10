@@ -7,6 +7,7 @@ import { AuditService } from "../common/audit.service";
 import { PermissionsService } from "../common/permissions";
 import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
+import { PlanLimitsService } from "../common/plan-limits.service";
 
 @Injectable()
 export class EngageService {
@@ -16,6 +17,7 @@ export class EngageService {
     @Inject(EmailService) private readonly email: EmailService,
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
+    @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
   ) {}
 
   // ─────────────── in-app notifications ───────────────
@@ -132,15 +134,36 @@ export class EngageService {
     if (!req) throw badRequest("request not found");
     if (!isManagement(claims.role)) throw forbid("management only");
     requireResortAccess(claims, req.resortId);
+    // letting an agent in is the act of using the feature; browsing is free
+    if (approve) await this.planLimits.requireFeature(req.resortId, "agents");
     const updated = await this.prisma.resortAccess.update({
       where: { id: req.id },
       data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
     });
     if (approve) {
-      await this.prisma.user.update({ where: { id: req.userId }, data: { role: "AGENT", status: "active" } });
+      /**
+       * Approving an agency to sell here is not a licence to rewrite them.
+       *
+       * This used to set `role: "AGENT", status: "active"` unconditionally on
+       * a global `users` row. So approving a request from someone who manages
+       * another resort demoted them platform-wide, and approving one from a
+       * suspended account silently un-suspended it — a resort's own approval
+       * screen undoing a platform ban.
+       */
+      const applicant = await this.prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+      if (applicant.status === "suspended") {
+        throw badRequest("that account is suspended — the platform owner must lift it first");
+      }
+      if (applicant.role !== "AGENT") {
+        if (applicant.role !== "GUEST") {
+          throw badRequest("that account is staff at a resort and cannot also be an agency login");
+        }
+        await this.prisma.user.update({ where: { id: req.userId }, data: { role: "AGENT", status: "active" } });
+      }
       const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
       if (!linked) {
-        await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId, commissionRate: 5 } });
+        // the commission is the resort's, set once on Settings -> Agent access
+        await this.prisma.userResort.create({ data: { userId: req.userId, resortId: req.resortId } });
       }
     }
     await this.notify([req.userId], {
@@ -156,9 +179,20 @@ export class EngageService {
 
   // ─────────────── bulk email credits (sender.net style) ───────────────
 
+  /**
+   * The balance, and where to send money for more.
+   *
+   * There is no gateway, so a pack is paid for by hand and approved by the
+   * platform afterwards. Showing a price and a button while saying nothing
+   * about *how* to pay is the screen leaving out the only step the buyer has
+   * to take on their own.
+   */
   async myEmailCredits(claims: JwtClaims) {
     const row = await this.prisma.emailCredit.upsert({ where: { userId: claims.userId }, update: {}, create: { userId: claims.userId } });
-    return { credits: row.credits };
+    return {
+      credits: row.credits,
+      payTo: await this.settings.str("platform.paymentInstructions", ""),
+    };
   }
 
   /** What the platform is selling today — the console draws its buttons from this. */
@@ -167,24 +201,28 @@ export class EngageService {
   }
 
   /**
-   * Takes a pack.
+   * Asks for a pack. Nothing is granted and nothing is charged here.
    *
-   * No card is charged here: the credits arrive at once and the amount lands on
-   * the tenant's platform bill as a one-off charge. The grant and the charge go
-   * in one transaction, because credits with no charge behind them is the
-   * platform giving its product away and never knowing.
+   * This used to be `purchaseCredits`, and it did both in one call: pressing
+   * the button granted the credits and raised a billable charge on the
+   * tenant's platform bill. There was no confirmation and no review, so a
+   * misclick on the largest pack was a charge of that size, and a resort could
+   * raise unlimited charges against itself with nothing in between.
    *
-   * A `clientRef` makes the whole thing replayable: a retried request finds the
-   * charge already raised and neither grants nor bills a second time.
+   * The order waits for the platform. `price` is written down now rather than
+   * looked up at approval, so what was quoted is what gets charged however the
+   * price list moves in between.
+   *
+   * A `clientRef` makes the submit replayable: a retried request finds its own
+   * order instead of queuing a second one.
    */
-  async purchaseCredits(
+  async requestCredits(
     claims: JwtClaims,
     credits: number,
     opts: { clientRef?: string } = {},
   ) {
     // the charge has to land on a resort's bill; someone with no resort at all
-    // has nowhere to send it, and silently skipping the charge would be the
-    // platform giving credits away
+    // has nowhere to send it
     const resortId = claims.resortIds[0];
     if (resortId == null) throw badRequest("No resort on this account to bill the pack to");
     await this.perms.require(claims, resortId, "marketing.send");
@@ -195,51 +233,209 @@ export class EngageService {
     }
 
     if (opts.clientRef) {
-      const seen = await this.prisma.platformCharge.findUnique({
+      const seen = await this.prisma.emailCreditOrder.findUnique({
         where: { resortId_clientRef: { resortId, clientRef: opts.clientRef } },
-        select: { id: true },
       });
-      if (seen) {
-        const current = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
-        return { credits: current?.credits ?? 0, added: 0, price: pack.price };
-      }
+      if (seen) return this.orderView(seen);
     }
 
-    const row = await this.prisma.$transaction(async (tx) => {
-      const credit = await tx.emailCredit.upsert({
-        where: { userId: claims.userId },
-        update: { credits: { increment: credits }, purchasedAt: new Date() },
-        create: { userId: claims.userId, credits, purchasedAt: new Date() },
-      });
-      await tx.platformCharge.create({
-        data: {
-          resortId,
-          kind: "EMAIL_CREDITS",
-          description: `${credits.toLocaleString("en-IN")} email credits`,
-          amount: pack.price as never,
-          clientRef: opts.clientRef ?? null,
-          createdById: claims.userId,
-        },
-      });
-      return credit;
+    const order = await this.prisma.emailCreditOrder.create({
+      data: {
+        userId: claims.userId,
+        resortId,
+        credits,
+        price: pack.price as never,
+        clientRef: opts.clientRef ?? null,
+      },
     });
-
     await this.audit.log({
       actorId: claims.userId,
       resortId,
-      action: "email.credits.purchase",
-      entity: "email_credit",
-      entityId: Number(row.id),
+      action: "email.credits.request",
+      entity: "email_credit_order",
+      entityId: Number(order.id),
       diff: { credits, price: pack.price },
     });
-    return { credits: row.credits, added: credits, price: pack.price };
+    return this.orderView(order);
+  }
+
+  /** The orders this account has placed, newest first. */
+  async myCreditOrders(claims: JwtClaims, take = 20) {
+    const rows = await this.prisma.emailCreditOrder.findMany({
+      where: { userId: claims.userId },
+      orderBy: { id: "desc" },
+      take: Math.min(take, 100),
+    });
+    return rows.map((r) => this.orderView(r));
+  }
+
+  /** The platform's queue. */
+  async listCreditOrders(claims: JwtClaims, status?: string, take = 100) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.emailCreditOrder.findMany({
+      where: status ? { status } : {},
+      orderBy: { id: "desc" },
+      take: Math.min(take, 200),
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        resort: { select: { id: true, name: true } },
+      },
+    });
+    return rows.map((r) => ({
+      ...this.orderView(r),
+      buyer: r.user.name,
+      buyerContact: r.user.email ?? r.user.phone ?? "",
+      resortName: r.resort.name,
+    }));
+  }
+
+  /**
+   * The platform's decision.
+   *
+   * Approval is the only moment credits come into being, and it grants them
+   * and raises the charge in one transaction — credits with no charge behind
+   * them is the platform giving its product away and never knowing.
+   */
+  async decideCreditOrder(
+    claims: JwtClaims,
+    orderId: string | number | bigint,
+    decision: "APPROVE" | "REJECT",
+    /**
+     * The platform's rule is that **approval only ever follows payment**: with
+     * no gateway, the owner approves once the bKash or the bank transfer has
+     * landed, so approving *is* issuing the receipt. `paid` therefore defaults
+     * to true, and the console never offers anything else — raising the charge
+     * as DUE put money already in hand into the platform's outstanding figure
+     * and made the owner settle it a second time in the Dues tab.
+     *
+     * `paid: false` stays in the API for the one case the rule does not cover:
+     * a pack given away, or released on a promise by someone who has decided
+     * to. It is deliberately not a button.
+     */
+    opts: { note?: string; paid?: boolean; method?: string } = {},
+  ) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const id = BigInt(orderId);
+    const order = await this.prisma.emailCreditOrder.findUnique({ where: { id } });
+    if (!order) throw badRequest("credit order not found");
+    if (order.status !== "PENDING") {
+      throw badRequest(`This order has already been ${order.status.toLowerCase()}.`);
+    }
+
+    const now = new Date();
+    const paid = opts.paid !== false;
+    const method = opts.method?.trim();
+    // what the order says afterwards: the reason, or how the money arrived
+    const note =
+      opts.note?.trim() ||
+      (decision === "APPROVE" ? (paid ? `paid by ${method || "hand"}` : "released unpaid") : undefined);
+
+    if (decision === "REJECT") {
+      const rejected = await this.prisma.emailCreditOrder.update({
+        where: { id },
+        data: { status: "REJECTED", decidedById: claims.userId, decidedAt: now, note: note ?? null },
+      });
+      await this.notify([order.userId], {
+        title: "Email credit request declined",
+        body: opts.note?.trim()
+          ? `${order.credits.toLocaleString("en-IN")} credits — ${opts.note.trim()}`
+          : `Your request for ${order.credits.toLocaleString("en-IN")} email credits was not approved.`,
+        kind: "request",
+        resortId: order.resortId,
+        link: "/mailbox",
+      });
+      await this.audit.log({
+        actorId: claims.userId, resortId: order.resortId,
+        action: "email.credits.reject", entity: "email_credit_order", entityId: Number(id),
+        diff: { credits: order.credits, note: note ?? null },
+      });
+      return this.orderView(rejected);
+    }
+
+    const approved = await this.prisma.$transaction(async (tx) => {
+      await tx.emailCredit.upsert({
+        where: { userId: order.userId },
+        update: { credits: { increment: order.credits }, purchasedAt: now },
+        create: { userId: order.userId, credits: order.credits, purchasedAt: now },
+      });
+      await tx.platformCharge.create({
+        data: {
+          resortId: order.resortId,
+          kind: "EMAIL_CREDITS",
+          description: `${order.credits.toLocaleString("en-IN")} email credits`,
+          amount: order.price,
+          // the order's own identity, so the charge cannot be raised twice
+          clientRef: `credit-order:${order.id}`,
+          createdById: order.userId,
+          status: paid ? "PAID" : "DUE",
+          paidAt: paid ? now : null,
+          note: note ?? null,
+        },
+      });
+      return tx.emailCreditOrder.update({
+        where: { id },
+        data: { status: "APPROVED", decidedById: claims.userId, decidedAt: now, note: note ?? null },
+      });
+    });
+
+    await this.notify([order.userId], {
+      title: "Email credits approved",
+      body: paid
+        ? `${order.credits.toLocaleString("en-IN")} credits are in your account. Payment received — thank you.`
+        : `${order.credits.toLocaleString("en-IN")} credits are in your account. The pack is on your platform bill.`,
+      kind: "request",
+      resortId: order.resortId,
+      link: "/mailbox",
+    });
+    await this.audit.log({
+      actorId: claims.userId, resortId: order.resortId,
+      action: "email.credits.approve", entity: "email_credit_order", entityId: Number(id),
+      diff: { credits: order.credits, price: Number(order.price), paid, method: method ?? null },
+    });
+    return this.orderView(approved);
+  }
+
+  private orderView(o: {
+    id: bigint; credits: number; price: unknown; status: string;
+    note: string | null; createdAt: Date; decidedAt: Date | null;
+  }) {
+    return {
+      id: o.id.toString(),
+      credits: o.credits,
+      price: Number(o.price),
+      status: o.status,
+      note: o.note,
+      createdAt: o.createdAt.toISOString(),
+      decidedAt: o.decidedAt?.toISOString() ?? null,
+    };
   }
 
   async sendCampaign(
     claims: JwtClaims,
     input: { subject: string; body: string; audience: "RESORT_GUESTS" | "MY_GUESTS" | "AGENTS"; resortId?: number },
   ) {
-    await this.perms.require(claims, claims.resortIds[0], "marketing.send");
+    /**
+     * The permission is checked against the resort being mailed, not the
+     * caller's first one.
+     *
+     * It used to be `claims.resortIds[0]`, while the audience below was read
+     * from `input.resortId` and never compared to anything the caller holds.
+     * A manager of one resort could therefore name another tenant's id and mail
+     * that tenant's entire guest list, From-named as them. The two questions —
+     * "may you send" and "send to whom" — have to be asked about the same
+     * resort or they are not asking anything.
+     */
+    if (input.resortId != null) requireResortAccess(claims, input.resortId);
+    await this.perms.require(claims, input.resortId ?? claims.resortIds[0], "marketing.send");
+    /**
+     * The plan gate is the resort's, so it is asked only about the resort's own
+     * lists. `MY_GUESTS` is an agency writing to people it booked, wherever it
+     * booked them — asking a resort's plan whether an agency may mail its own
+     * list is the wrong question, and the first version of this asked it.
+     */
+    if (input.audience !== "MY_GUESTS") {
+      await this.planLimits.requireFeature(input.resortId ?? claims.resortIds[0]!, "bulk_email");
+    }
     const credit = await this.prisma.emailCredit.findUnique({ where: { userId: claims.userId } });
     if (!credit || credit.credits <= 0) throw badRequest("no email credits — buy a pack first");
 
@@ -304,60 +500,6 @@ export class EngageService {
   async myCampaigns(claims: JwtClaims) {
     const rows = await this.prisma.emailCampaign.findMany({ where: { userId: claims.userId }, orderBy: { id: "desc" }, take: 50 });
     return rows.map((r) => ({ ...r, id: r.id.toString() }));
-  }
-
-  // ─────────────── agent payment deadline sweep ───────────────
-
-  /** sweep: flag agent bookings whose full-payment deadline is near/past; alert resort admins once per booking per day */
-  async sweepPaymentDeadlines() {
-    const resorts = await this.prisma.resort.findMany({ where: { status: "active" }, select: { id: true, name: true, agentPaymentHours: true, currency: true, locale: true } });
-    const now = new Date();
-    for (const resort of resorts) {
-      const horizon = new Date(now.getTime() + resort.agentPaymentHours * 3_600_000);
-      const bookings = await this.prisma.booking.findMany({
-        where: {
-          resortId: resort.id,
-          agentUserId: { not: null },
-          state: { in: ["PENDING", "CONFIRMED"] },
-          deletedAt: null,
-          checkIn: { lte: horizon, gte: now },
-        },
-        select: {
-          id: true, code: true, checkIn: true, discount: true, agentUserId: true,
-          items: { select: { qty: true, unitPrice: true } },
-          payments: { select: { amount: true, paymentType: true } },
-        },
-      });
-      for (const b of bookings) {
-        const rent = b.items.reduce((s, i) => s + Number(i.unitPrice) * i.qty, 0);
-        const paid = b.payments.filter((p) => p.paymentType !== "REFUND").reduce((s, p) => s + Number(p.amount), 0);
-        const due = Math.max(0, rent - Number(b.discount) - paid);
-        if (due <= 0) continue;
-        // dedupe: one alert per booking per day
-        const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const existing = await this.prisma.notification.findFirst({
-          where: {
-            kind: "alert",
-            link: `/bookings?id=${b.id}`,
-            createdAt: { gte: dayStart },
-            title: { contains: b.code },
-          },
-        });
-        if (existing) continue;
-        const admins = await this.prisma.userResort.findMany({
-          where: { resortId: resort.id, user: { role: { in: ["RESORT_ADMIN", "MANAGER"] } } },
-          select: { userId: true },
-        });
-        const hoursLeft = Math.max(0, Math.round((b.checkIn!.getTime() - now.getTime()) / 3_600_000));
-        await this.notify(admins.map((a) => a.userId), {
-          title: `${b.code} unpaid — ${hoursLeft}h to check-in`,
-          body: `Agent booking ${b.code}: ${formatMoney(due, { currency: resort.currency, locale: resort.locale })} due. Full payment needed ${resort.agentPaymentHours}h before check-in, or approve late payment.`,
-          kind: "alert",
-          link: `/bookings?id=${b.id}`,
-          resortId: resort.id,
-        });
-      }
-    }
   }
 }
 

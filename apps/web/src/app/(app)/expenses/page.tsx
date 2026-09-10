@@ -8,17 +8,14 @@ import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { DateNav } from "@/components/patterns";
-
-function iso(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
+import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 /** Daily cashbook register — the sheet's expense tab, with a live day total. */
 export default function ExpensesPage() {
   const { activeResort, isManagement } = useAuth();
   const t = useT();
   const { push } = useToast();
-  const [date, setDate] = useState(iso(new Date()));
+  const [date, setDate] = useState(() => todayIn(activeResort?.timezone));
   const [category, setCategory] = useState("");
   const [details, setDetails] = useState("");
   const [amount, setAmount] = useState<number | "">("");
@@ -26,7 +23,7 @@ export default function ExpensesPage() {
   const qc = useQueryClient();
 
   const canManage = isManagement;
-  const to = iso(new Date(new Date(date).getTime() + 86400000));
+  const to = addDaysIso(date, 1);
 
   const listQ = useApi(
     keys.expenses(activeResort?.id, date),

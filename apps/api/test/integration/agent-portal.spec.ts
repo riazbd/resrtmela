@@ -104,9 +104,19 @@ describe("agency roles", () => {
   });
 });
 
+/** The platform itself — the only authority that may move an agency's wallet. */
+async function platformClaims(): Promise<JwtClaims> {
+  const su = await prisma.user.create({
+    data: { name: "Platform", phone: `8895${Math.floor(Math.random() * 1e8)}`, role: "SUPER_ADMIN" },
+  });
+  return { userId: su.id, role: ROLE.SUPER_ADMIN, resortIds: [] };
+}
+
 describe("agency wallet", () => {
   it("shows the agency its balance and every movement", async () => {
-    const admin: JwtClaims = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
+    // the platform funds it, not a resort: the wallet is the agency's account
+    // with the platform, and `platform-wallet.spec.ts` is where that is held
+    const admin = await platformClaims();
     await prisma.wallet.upsert({ where: { userId: agencyId }, update: { active: true }, create: { userId: agencyId, active: true } });
     await platform().walletTxn(admin, agencyId, "TOPUP", 5000, "advance against sales");
 
@@ -119,8 +129,7 @@ describe("agency wallet", () => {
   it("shows a staff member the agency's wallet, not a wallet of their own", async () => {
     const senior = await hire("Senior", ["agent.book", "agent.wallet.view"]);
     await prisma.wallet.upsert({ where: { userId: agencyId }, update: { active: true }, create: { userId: agencyId, active: true } });
-    const admin: JwtClaims = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
-    await platform().walletTxn(admin, agencyId, "TOPUP", 1200);
+    await platform().walletTxn(await platformClaims(), agencyId, "TOPUP", 1200);
 
     // the money belongs to the agency; staff spend it, they do not each hold some
     expect((await agents().wallet(senior.claims)).balance).toBe(1200);
