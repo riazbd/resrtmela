@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims, isPermissionKey, formatMoney } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey, formatMoney, ALL_PERMISSIONS } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
@@ -11,7 +11,7 @@ import { BillingService } from "./billing.service";
 import { PlatformSettingsService, SETTING_DEFAULTS } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
-import { PermissionsService, ensureResortRoles, validPermissions } from "../common/permissions";
+import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
@@ -707,7 +707,13 @@ export class PlatformService {
       name: r.name,
       system: r.system,
       users: r._count.users,
-      permissions: Array.isArray(r.permissions) ? (r.permissions as string[]) : [],
+      // what it resolves to, not what was written down years ago
+      permissions:
+        r.system && r.name === ADMIN_ROLE
+          ? ALL_PERMISSIONS
+          : Array.isArray(r.permissions)
+            ? (r.permissions as string[])
+            : [],
     }));
   }
 
@@ -726,6 +732,16 @@ export class PlatformService {
     if (!role) throw badRequest("role not found");
     requireResortAccess(claims, role.resortId);
     await this.perms.require(claims, role.resortId, "roles.manage");
+    /**
+     * Administrator resolves to `*`, so its stored list decides nothing.
+     * Letting it be edited would be a matrix full of boxes that change no
+     * behaviour — worse than no boxes, because it reads as control.
+     */
+    if (role.system && role.name === ADMIN_ROLE && input.permissions != null) {
+      throw badRequest(
+        "Administrator always holds every permission. Create a role of your own for anything narrower.",
+      );
+    }
     const data: { name?: string; permissions?: string[] } = {};
     if (input.name?.trim()) data.name = input.name.trim();
     if (input.permissions != null) data.permissions = validPermissions(input.permissions);

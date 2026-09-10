@@ -1,12 +1,13 @@
 /**
  * The owner's own subscription.
  *
- * The console has had a "Change plan" row on Settings since the beginning. It
- * calls `PATCH /tenants/:id/plan`, which is `requireRoles(SUPER_ADMIN)` — so
- * for the person whose subscription it is, every one of those buttons returns
- * 403. And on the way past it writes `Tenant.plan`, a field the billing sweep
- * never reads: even for a super admin it changed a label, not a subscription.
- * The fee, the renewal date and the status stayed exactly as they were.
+ * The console has had a "Change plan" row on Settings since the beginning, and
+ * it was never the owner's: the buttons render only for `SUPER_ADMIN`, and the
+ * endpoint behind them, `PATCH /tenants/:id/plan`, is `requireRoles(SUPER_ADMIN)`
+ * too. So the person whose subscription it is had no control at all. And on the
+ * way past it writes `Tenant.plan`, a field the billing sweep never reads: even
+ * for a super admin it changed a label, not a subscription. The fee, the
+ * renewal date and the status stayed exactly as they were.
  *
  * There was also nowhere to *look*. An owner could not see what they pay, when
  * it renews, what is outstanding, or what the other plans cost — the platform
@@ -138,6 +139,17 @@ describe("what the owner can see", () => {
     expect(d.plans.find((p) => p.name === "GROWTH")!.direction).toBe("current");
     expect(d.plans.find((p) => p.name === "CHAIN")!.direction).toBe("upgrade");
     expect(d.plans.find((p) => p.name === "STARTER")!.direction).toBe("downgrade");
+  });
+
+  it("measures each plan against what they actually pay, not the list price", async () => {
+    // the platform discounted this customer's GROWTH to 2,000
+    await paying("GROWTH", 2000);
+
+    const d = await makeSubscriptionService(asPrisma).detail(owner, fx.resortId);
+
+    // STARTER's list price is 2,500 — more than they pay, so moving there
+    // costs money, and `changePlan` bills it as one. The label has to agree.
+    expect(d.plans.find((p) => p.name === "STARTER")!.direction).toBe("upgrade");
   });
 
   it("shows what is outstanding, and the bills behind it", async () => {

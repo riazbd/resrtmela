@@ -45,8 +45,8 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **421 API tests** across 53 files (34 at the start of all this,
-all of them pure unit tests) plus **39 front-end tests**. Four packages
+Current state: **529 API tests** across 61 files (34 at the start of all this,
+all of them pure unit tests) plus **47 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
 empty database, which it could not before.
@@ -834,6 +834,97 @@ owner opens to ask where the cash went.
 turned every failure into "nothing here"; four destructive actions fired on one
 click, including a bulk email with no preview and no recipient count.
 
+### §3.30 — Five things the owner asked for
+
+A list of ten, handed over as things that ought to exist. Five already did —
+resort roles with a permission matrix, extra-person pricing on the room type
+and on the booking form, and food packages in the restaurant. These are the
+five that did not, in the order they were worth doing.
+
+**The subscription the owner could not see or change.** The console had one
+plan control and it was on the super admin's side of the wall: hidden from the
+owner, and writing `Tenant.plan` — a field the billing sweep does not read.
+Pressing it changed a label while the fee, the renewal date and the status
+stayed where they were. There was nothing to *read*, either: what am I paying,
+when does it renew, what is outstanding, what would the next plan up cost me —
+the console answered none of them for the person being billed, on a product
+that invoices monthly.
+
+A Subscription tab answers all four and moves plan under two rules. An upgrade
+applies at once and bills only the **difference**, only for the days left in
+the period — a full month would bill the month twice, nothing would give the
+dearer plan away until the renewal. A downgrade waits for the renewal, because
+the month is already invoiced; the request parks in `Subscription.pendingPlan`
+and the billing sweep applies it in the same pass that raises the first bill at
+the new price. The renewal date never moves either way — a plan change is not a
+renewal — and a change inside a trial is free, immediate, and does not hand out
+a second trial. `billing.view` and `billing.manage` separate reading the bill
+from spending money on it.
+
+**Commission belonged to the agent, not the resort.** `UserResort.commissionRate`
+was typed in per person, so two agents selling the same room could earn
+different money on it, and no screen anywhere listed the rates side by side —
+"what do we pay agents" was a query, not an answer. It is the resort's term
+now: one number, set by hand, on Settings → Agent access. The migration seeds
+each resort with the terms most of its agents were already on, so nobody's pay
+changes on the day it deploys, and ties break generously rather than quietly
+cutting someone. Six call sites read the agent's own row — booking detail, room
+availability, the owner's agent report, the agent's own report, the agency room
+search, login — and one service answers now. The old columns stay, holding what
+each agent used to be on; the export relabels them `formerCommission` so nobody
+reads them as live.
+
+**A room could be created and never removed.** There was no DELETE route at
+all, so a room typed in by mistake stayed on the calendar and in the plan's
+room cap for ever, and `OUT_OF_SERVICE` means something else — temporarily
+unsellable, still inventory. The distinction that matters is whether the room
+has ever been sold. Never sold: it was a mistake, it is deleted, its name is
+free again. Sold: it is finished, not a mistake, and deleting it would take the
+rooms out of last year's bookings and invoices — `booking_items.roomId` is the
+database saying so — so it is **retired**: off the calendar, out of the cap,
+history intact. A room with a stay still to come is refused either way, because
+removing a room from under a booked guest is not a thing to do quietly.
+Fifteen room queries across nine services learned the difference. `rooms.delete`
+is its own permission: editing a rate and taking a room off the books are not
+the same authority.
+
+**Buying email credits charged the tenant with one click.** The button granted
+the credits and raised a billable `PlatformCharge` in the same call, with no
+confirmation of any kind — the only confirm on that screen guarded *sending*.
+A misclick on the largest pack was a charge of that size, and a resort could
+raise unlimited charges against itself with nothing in between. A request
+queues an order now and does nothing else; approval by a super admin is the
+single moment credits are granted and the charge raised, in one transaction,
+because credits with no charge behind them is the platform giving its product
+away and never knowing. The price is written down when the order is placed, so
+what was quoted is what is charged however the price list moves. Platform →
+Email credits is the queue.
+
+**Reports were one long scroll.** Six of them stacked down a page, so reading
+the third meant scrolling past the first two. They are not a sequence. A tab
+each, one period picker above them all, and the three expensive reads wait
+until their tab is open instead of firing on every page load.
+
+**And a role that had been going stale since the day each resort signed up.**
+Adding two permission keys exposed it: `ensureResortRoles` writes
+`ALL_PERMISSIONS` into the Administrator role when a resort is created and
+never runs for that resort again, so the list is a snapshot. Every key added
+afterwards was missing from it, invisibly — a resort that signed up last month
+had an Administrator role that had never heard of `billing.manage` or
+`rooms.delete`, and the matrix simply had fewer boxes than the product had
+features, drifting further with every release. Administrator resolves to `*`
+now, computed rather than stored, so it cannot rot; the matrix stops offering
+boxes that decide nothing, and a role somebody names "Administrator" themselves
+is still an ordinary role holding exactly what it says.
+
+**And a test helper that had been quietly lying.** `resetDb` truncated a
+hand-written list of tables. The list drifted the moment a migration added one:
+`email_credit_orders` arrived and eleven rows from earlier tests survived into
+the next, so specs that counted rows passed or failed depending on what had run
+before them. It asks `information_schema` now. A list that has to be edited in
+step with the schema is a list that will be wrong — the same lesson as §3.28,
+one layer down.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -874,6 +965,15 @@ graph makes deleting one structurally impossible.
 two of the three are already computed inside `idleInventory` and thrown away, so
 this is cheap, but it is a feature rather than a defect. Day close. Cash
 accountability (STRATEGY D3). Per-room pricing (D4).
+
+**Left standing by §3.30, and worth naming.** Commission is read live, so
+changing the rate changes what last month's agent report says an agent earned.
+That was equally true of the per-agent field it replaced — no booking has ever
+stored the terms it was sold under — but the fix is now a smaller one: a
+commission snapshot on the booking. Until then, change the rate at a period
+boundary. Retired rooms also keep their names under `UNIQUE(resortId, name)`,
+so reusing the name of a retired room means renaming that one first; the error
+message says so rather than leaving the owner guessing.
 
 ### Next, and small
 

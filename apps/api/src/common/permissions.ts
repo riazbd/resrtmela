@@ -4,6 +4,16 @@ import { PrismaService } from "../prisma/prisma.service";
 import { agentPermissionsFor } from "./agency-permissions";
 import { forbid } from "./rbac";
 
+/**
+ * The system role that means "everything", by name.
+ *
+ * Its stored permission list is a snapshot taken the day the resort was
+ * created, and `ensureResortRoles` never runs again for that resort — so every
+ * key added afterwards is missing from it for ever, invisibly. Administrator
+ * is a definition, not a list, so it is computed rather than read.
+ */
+export const ADMIN_ROLE = "Administrator";
+
 /** Seeds the three system roles for a resort (idempotent). */
 export async function ensureResortRoles(prisma: PrismaService, resortId: number) {
   const count = await prisma.customRole.count({ where: { resortId } });
@@ -57,6 +67,9 @@ export class PermissionsService {
       include: { role: true },
     });
     if (linked?.role) {
+      // `system` as well as the name: a role somebody called "Administrator"
+      // themselves is an ordinary role and holds exactly what it says
+      if (linked.role.system && linked.role.name === ADMIN_ROLE) return ["*"];
       const perms = linked.role.permissions;
       return Array.isArray(perms) ? (perms as string[]) : [];
     }

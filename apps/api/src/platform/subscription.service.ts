@@ -2,12 +2,13 @@
  * The owner's own subscription — read it, and change it.
  *
  * Everything about a resort's subscription used to live on the super admin's
- * side of the wall. The owner's Settings screen had a "Change plan" row, but
- * it called `PATCH /tenants/:id/plan`, which is `requireRoles(SUPER_ADMIN)`:
- * the person whose subscription it was got a 403 from every button. And the
- * field that endpoint writes, `Tenant.plan`, is not the one the billing sweep
- * reads — so even for a super admin it changed a label while the fee, the
- * renewal date and the status stayed where they were.
+ * side of the wall. The Settings screen had a "Change plan" row, but it
+ * rendered only for `SUPER_ADMIN` and called `PATCH /tenants/:id/plan`, which
+ * is `requireRoles(SUPER_ADMIN)` as well — so the person whose subscription it
+ * was had no control at all. And the field that endpoint writes, `Tenant.plan`,
+ * is not the one the billing sweep reads, so even for a super admin it changed
+ * a label while the fee, the renewal date and the status stayed where they
+ * were.
  *
  * There was also nothing to read. What am I paying, when does it renew, what
  * is outstanding, what would the next plan up cost me — none of it was
@@ -146,9 +147,17 @@ export class SubscriptionService {
     ]);
 
     const current = sub ? onSale.find((p) => p.name === sub.plan) : undefined;
-    // the plan row's price decides direction, not the subscription's own fee,
-    // which a super admin may have discounted for this one customer
-    const currentFee = current ? Number(current.monthlyFee) : sub ? Number(sub.monthlyFee) : null;
+    /**
+     * Direction is measured against what the resort actually pays, not against
+     * the plan row's list price.
+     *
+     * A super admin can discount a subscription for one customer, and
+     * `changePlan` decides immediate-and-billed vs wait-for-renewal on
+     * `sub.monthlyFee`. Labelling the button from the price list instead would
+     * let it read "Upgrade" on a move the service then schedules as a
+     * downgrade — the screen and the charge disagreeing about the same click.
+     */
+    const currentFee = sub ? Number(sub.monthlyFee) : null;
     const pending = sub?.pendingPlan ? onSale.find((p) => p.name === sub.pendingPlan) : undefined;
 
     return {

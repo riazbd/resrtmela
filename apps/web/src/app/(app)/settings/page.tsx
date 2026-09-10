@@ -924,6 +924,7 @@ function RolesTab({ rid }: { rid: number }) {
 
   if (!roles) return <Empty msg="Loading…" />;
   const groups = PERMISSION_GROUPS;
+  const isAdminRole = (r: PermRole) => r.system && r.name === "Administrator";
   return (
     <div className="space-y-4">
       <Card title="Permission roles">
@@ -937,7 +938,14 @@ function RolesTab({ rid }: { rid: number }) {
               <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                 {r.permissions.includes("*") ? "all" : r.permissions.length} perms · {r.users} users
               </span>
-              <button onClick={() => openEditor(r)} className="text-xs font-semibold text-brand-700 hover:underline">Edit</button>
+              {/* Administrator resolves to every permission there is, so its
+                  boxes would decide nothing — a matrix that reads as control
+                  and is not is worse than no matrix. */}
+              {isAdminRole(r) ? (
+                <span className="text-xs text-slate-400">everything</span>
+              ) : (
+                <button onClick={() => openEditor(r)} className="text-xs font-semibold text-brand-700 hover:underline">Edit</button>
+              )}
               {!r.system && (
                 <button onClick={() => removeRole(r)} className="text-xs font-semibold text-red-500 hover:underline">Delete</button>
               )}
@@ -1312,8 +1320,8 @@ function ApiKeysTab({ rid }: { rid: number }) {
  *
  * Before this tab the console could not answer "what am I paying", "when does
  * it renew", "what do I owe" or "what would the next plan up cost me". The one
- * plan control in the product wrote `Tenant.plan`, a field the billing sweep
- * does not read.
+ * plan control in the product was hidden from the owner entirely, and wrote
+ * `Tenant.plan` — a field the billing sweep does not read.
  *
  * Two things here are deliberate rather than decorative. An upgrade names its
  * pro-rata charge before it is pressed, because a button that takes money must
