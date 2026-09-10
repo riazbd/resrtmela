@@ -45,8 +45,16 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const WEEKEND = new Set([4, 5]);
 
 /** A hairline where the week turns over, so the eye has somewhere to land. */
+/**
+ * The hairline at each week boundary.
+ *
+ * `border-slate-200` on a white card was invisible, which is the same as not
+ * having one: thirty-one identical columns with nothing for the eye to count
+ * from. Saturday starts the week here.
+ */
 const weekEdge = (day: string) =>
-  new Date(`${day}T12:00:00Z`).getUTCDay() === 6 ? "border-l border-slate-200" : "";
+  new Date(`${day}T12:00:00Z`).getUTCDay() === 6 ? "border-l border-l-slate-300" : "";
+
 const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export default function AgencyCalendarPage() {
@@ -211,10 +219,20 @@ export default function AgencyCalendarPage() {
           </p>
 
           <div className="overflow-x-auto p-4">
-            <table className="border-separate border-spacing-0 text-xs">
+            {/* `table-fixed` with a width only on the room column: the surplus
+                is then shared equally between the day columns, so a month of
+                thirty and a month of thirty-one both fill the card and neither
+                drifts out of step with its own header. */}
+            <table className="w-full min-w-[820px] table-fixed border-collapse text-xs">
+              <colgroup>
+                <col className="w-[150px]" />
+                {days.map((d) => (
+                  <col key={iso(d)} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 border-r border-slate-200 bg-white pb-2 pr-3 text-left font-semibold text-slate-500">
+                  <th className="sticky left-0 z-10 border-b border-r border-slate-200 bg-white px-2 pb-2 text-left font-semibold text-slate-500">
                     Room
                   </th>
                   {/* The numbers alone gave no way to tell Thursday from
@@ -227,15 +245,17 @@ export default function AgencyCalendarPage() {
                     return (
                       <th
                         key={day}
-                        className={`w-7 pb-2 text-center font-medium tabular-nums ${
+                        className={`border-b border-slate-200 pb-1.5 text-center font-medium tabular-nums ${
                           // a hairline at each week boundary, so the eye has
                           // somewhere to anchor in thirty-one identical columns
-                          d.getUTCDay() === 6 ? "border-l border-slate-200" : ""
-                        } ${isToday ? "text-brand-700" : weekend ? "text-slate-500" : "text-slate-400"}`}
+                          d.getUTCDay() === 6 ? "border-l border-l-slate-300" : ""
+                        } ${weekend ? "bg-amber-50/60" : ""} ${
+                          isToday ? "text-brand-700" : weekend ? "text-slate-600" : "text-slate-500"
+                        }`}
                       >
                         <span
                           className={`block text-[10px] font-semibold uppercase ${
-                            weekend ? "text-amber-600" : "text-slate-300"
+                            weekend ? "text-amber-600" : "text-slate-400"
                           }`}
                         >
                           {WEEKDAY_INITIALS[d.getUTCDay()]}
@@ -276,10 +296,12 @@ export default function AgencyCalendarPage() {
                   );
                   return (
                     <tr key={room.id}>
-                      <td className="sticky left-0 z-10 whitespace-nowrap border-r border-slate-200 bg-white py-0.5 pr-3 font-medium text-slate-700">
+                      <td className="sticky left-0 z-10 truncate border-b border-r border-slate-100 bg-white px-2 py-1 font-medium text-slate-700">
                         {room.name}
                         {room.roomTypeName && (
-                          <span className="ml-1 font-normal text-slate-400">{room.roomTypeName}</span>
+                          <span className="ml-1 block truncate text-[10px] font-normal text-slate-400">
+                            {room.roomTypeName}
+                          </span>
                         )}
                       </td>
                       {runs.map((run) =>
@@ -287,7 +309,7 @@ export default function AgencyCalendarPage() {
                           <td
                             key={run.from}
                             colSpan={run.nights}
-                            className={`p-[1px] ${weekEdge(run.from)}`}
+                            className={`border-b border-slate-100 p-0.5 ${weekEdge(run.from)}`}
                           >
                             <div
                               title={
@@ -297,8 +319,10 @@ export default function AgencyCalendarPage() {
                                     ? `Taken — ${run.value.guestName}`
                                     : "Taken"
                               }
-                              className={`flex h-7 items-center overflow-hidden rounded px-1.5 ${
-                                run.value.mine ? "bg-brand-600 text-white" : "bg-slate-300"
+                              className={`flex h-8 items-center overflow-hidden rounded-md px-1.5 ${
+                                run.value.mine
+                                  ? "bg-brand-600 text-white shadow-sm"
+                                  : "bg-slate-300/90 ring-1 ring-inset ring-slate-400/30"
                               }`}
                             >
                               {run.value.mine && run.nights > 1 && (
@@ -375,7 +399,14 @@ function FreeNights({
           anchor?.roomId === room.id &&
           freeSpan(cells, room.id, anchor.night, night) !== null;
         return (
-          <td key={night} className={`p-[1px] ${weekEdge(night)}`}>
+          <td
+            key={night}
+            /* The weekend is marked in the header and nowhere else. Tinting
+               the cell as well left amber slivers around every button, which
+               is noise rather than information — the same mistake the resort
+               calendar made and had removed. */
+            className={`border-b border-slate-100 p-0.5 ${weekEdge(night)}`}
+          >
             <button
               type="button"
               onClick={() => onPick(room.id, night)}
@@ -384,12 +415,15 @@ function FreeNights({
                   ? `${room.name}: ${anchor.night} → ${night}`
                   : `${room.name} free on ${night} — click, then the last night`
               }
-              className={`block h-7 w-full rounded-sm border transition ${
+              /* `bg-slate-50` on a white card read as nothing at all: ten rows
+                 of free nights blurred into one empty slab with no grid in it.
+                 A free night is a thing you click, so it looks like one. */
+              className={`block h-8 w-full rounded-md border transition ${
                 isAnchor
-                  ? "border-brand-500 bg-brand-300"
+                  ? "border-brand-600 bg-brand-400"
                   : reachable
-                    ? "border-brand-300 bg-brand-100"
-                    : "border-slate-200/70 bg-slate-50 hover:border-brand-400 hover:bg-brand-100"
+                    ? "border-brand-400 bg-brand-200"
+                    : "border-slate-200 bg-slate-100 hover:border-brand-400 hover:bg-brand-100"
               }`}
             />
           </td>
