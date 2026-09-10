@@ -69,9 +69,11 @@ function NotInPlan({ feature }: { feature: string | null }) {
   return (
     <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
       <div className="text-sm font-semibold text-amber-900">{label} is not in this resort&apos;s plan</div>
+      {/* the label is printed as written: lower-casing it turned "Restaurant POS
+          & room tabs" into "restaurant pos & room tabs" */}
       <p className="mt-0.5 text-xs text-amber-800">
-        What is already here stays readable. Adding anything new needs a plan that includes{" "}
-        {label.toLowerCase()} — ask the platform to change it.
+        What is already here stays readable. Adding anything new needs a plan that includes it —
+        ask the platform to change the plan.
       </p>
     </div>
   );
