@@ -82,6 +82,24 @@ describe("the advance-collectors report", () => {
     expect(rows[0].total).toBe(4000);
   });
 
+  it("gives the unassigned row its codes too — production has one, with five receipts in it", async () => {
+    /**
+     * `receivedById` is nullable, and the live resort has five advances
+     * totalling twenty-one thousand taka that nobody is recorded against.
+     * They group under one row called "Unassigned", which the card draws like
+     * any other — so it needs the field like any other. A `Map` keyed by a
+     * number is the easy way to lose exactly this row.
+     */
+    const b = await withAdvance("BK-COLL-7", 4, 900);
+    await prisma.payment.updateMany({ where: { bookingId: b.id }, data: { receivedById: null } });
+
+    const { rows } = await reports().collectors(admin, fx.resortId);
+
+    const unassigned = rows.find((r) => r.userId === null);
+    expect(unassigned?.name).toBe("Unassigned");
+    expect(unassigned?.recentCodes).toEqual(["BK-COLL-7"]);
+  });
+
   it("names a booking once, however many advances were taken against it", async () => {
     const b = await withAdvance("BK-COLL-6", 7, 800);
     await prisma.payment.create({
