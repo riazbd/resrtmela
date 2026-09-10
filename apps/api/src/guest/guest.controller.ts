@@ -55,19 +55,17 @@ export class GuestController {
     return this.guest.availability(req.user, id, q.from, q.to);
   }
 
+  /**
+   * Kept, and refused — see `GuestService.createBooking`.
+   *
+   * The shipped mobile app still has a Book button and cannot be updated, so
+   * the route answers with a 403 and a sentence rather than a 404 and a broken
+   * screen. The web console's own booking UI lost the button outright.
+   */
   @UseGuards(AuthGuard)
   @Post("bookings")
   book(@Req() req: AuthedRequest, @Body() dto: GuestBookingDto) {
-    return this.guest.createBooking(req.user, {
-      resortId: dto.resortId,
-      items: dto.items,
-      checkIn: dto.checkIn,
-      checkOut: dto.checkOut,
-      adults: dto.adults,
-      children: dto.children ?? 0,
-      fullName: dto.fullName,
-      remarks: dto.remarks,
-    });
+    return this.guest.createBooking(req.user, dto);
   }
 
   @UseGuards(AuthGuard)

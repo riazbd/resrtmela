@@ -165,7 +165,11 @@ export const guestResorts = () => api<GuestResort[]>("/guest/resorts");
 export const guestResort = (id: number) => api<GuestResort>(`/guest/resorts/${id}`);
 export const guestAvailability = (id: number, from: string, to: string) =>
   api<GuestAvailability[]>(`/guest/resorts/${id}/availability?from=${from}&to=${to}`);
-export const guestBook = (body: unknown) => api<GuestTrip>("/guest/bookings", { method: "POST", body });
+/**
+ * There is no `guestBook`. A guest does not book directly — the resort's desk
+ * and its agents do — and the API refuses the call, so a helper here would only
+ * be a loaded gun for the next screen that wants one.
+ */
 export const guestTrips = () => api<GuestTrip[]>("/guest/bookings");
 export const guestCancel = (id: number) =>
   api<{ cancelled: boolean }>(`/guest/bookings/${id}/cancel`, { method: "POST" });

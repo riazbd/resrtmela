@@ -53,6 +53,20 @@ export class PublicApiController {
     return this.platform.publicAvailability(resortId, from, to);
   }
 
+  /**
+   * Kept, and refused.
+   *
+   * A guest cannot book directly, and a booking form on a resort's own website
+   * is a guest booking directly however it reaches us — there is no human at
+   * the desk in the loop, which is exactly what `apiKeyClaims` records by
+   * minting SYSTEM_ACTOR_ID. `bookings.create` turns it away.
+   *
+   * The route stays because a live website is already posting to it. Deleting
+   * it would answer with a 404 the site cannot explain to the visitor standing
+   * in front of it; this answers with a sentence about ringing the resort. The
+   * key's read endpoints above are untouched, so the site keeps its rooms, its
+   * rates and its free nights.
+   */
   @Post("bookings")
   async createBooking(@Req() req: ApiKeyRequest, @Body() dto: PublicBookingDto) {
     const resortId = await this.resortId(req);
@@ -67,11 +81,7 @@ export class PublicApiController {
       remarks: dto.remarks,
       source: "APP",
     };
-    const created = await this.bookings.create(this.claimsFor(resortId), input);
-    // apply the best active discount offer for the first room's type
-    const items = await this.platform.publicAvailability(resortId, dto.checkIn, dto.checkOut);
-    void items;
-    return created;
+    return this.bookings.create(this.claimsFor(resortId), input);
   }
 }
 

@@ -1292,11 +1292,15 @@ function ApiKeysTab({ rid }: { rid: number }) {
             <div><span className="text-slate-500"># availability</span></div>
             <div><span className="text-emerald-300">curl</span> {API_URL}/v1/availability \</div>
             <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: rm_live_xxxx.yoursecret&quot;</span></div>
-            <div className="mt-2"><span className="text-slate-500"># create booking</span></div>
-            <div><span className="text-emerald-300">curl</span> -X POST {API_URL}/v1/bookings \</div>
-            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: …&quot;</span> -H <span className="text-amber-300">&quot;Content-Type: application/json&quot;</span> \</div>
-            <div className="pl-4">-d <span className="text-amber-300">&apos;{"{"}&quot;roomIds&quot;:[1],&quot;checkIn&quot;:&quot;2026-10-01&quot;,&quot;checkOut&quot;:&quot;2026-10-03&quot;,&quot;adults&quot;:2,&quot;guestName&quot;:&quot;John&quot;{"}"}&apos;</span></div>
+            <div className="mt-2"><span className="text-slate-500"># your resort&apos;s details</span></div>
+            <div><span className="text-emerald-300">curl</span> {API_URL}/v1/resort \</div>
+            <div className="pl-4">-H <span className="text-amber-300">&quot;X-Api-Key: …&quot;</span></div>
           </div>
+          <p className="mt-3 text-xs text-slate-500">
+            The key reads; it does not sell. Your site can show its rooms, its rates and its free
+            nights, and send the visitor to your phone number — a booking is taken at your desk or
+            by one of your agents.
+          </p>
         </Card>
       </div>
 
@@ -1304,7 +1308,8 @@ function ApiKeysTab({ rid }: { rid: number }) {
         <div className="space-y-3">
           <Field label="Key name"><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="My resort website" /></Field>
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            Point your existing website at the availability & booking endpoints — bookings land straight in your console calendar.
+            Point your existing website at the availability endpoint — your live rooms and rates on
+            your own site, with no second calendar to keep up to date.
           </div>
           <Button onClick={create} loading={busy} disabled={!name}>Generate key</Button>
         </div>

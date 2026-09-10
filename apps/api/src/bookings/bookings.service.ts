@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
-import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull } from "../common/rbac";
+import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
@@ -199,8 +199,27 @@ export class BookingsService {
 
     // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
-    const guest = claims.role === ROLE.GUEST;
-    if (guest) throw forbid("Guests book via the mobile app flow (phase 4)");
+
+    /**
+     * A guest does not book. Neither does a website standing in for one.
+     *
+     * The first line used to promise "the mobile app flow (phase 4)" — an app
+     * path that held rooms without asking the resort. That path is closed, so
+     * the promise had to go with it.
+     *
+     * The second is the public v1 API, authenticated by a resort's own API key.
+     * It has no human behind it: `apiKeyClaims` mints RESORT_ADMIN with
+     * SYSTEM_ACTOR_ID precisely because nobody at the desk pressed anything.
+     * That is a booking form on a website, which is a guest booking directly
+     * however it reaches us. The key still reads — a resort's site can show its
+     * rooms and its free nights — it just cannot close the sale.
+     */
+    if (claims.role === ROLE.GUEST) {
+      throw forbid("Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.");
+    }
+    if (claims.userId === SYSTEM_ACTOR_ID) {
+      throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
+    }
     if (isAgent) {
       const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
       if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");

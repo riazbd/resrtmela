@@ -215,6 +215,14 @@ export interface GuestResort {
   id: number;
   name: string;
   location: string | null;
+  /**
+   * How to reach the resort. Optional because the discovery list does not
+   * carry them — only the resort's own page, which is where a guest is told
+   * to call rather than book.
+   */
+  contactPhone?: string | null;
+  address?: string | null;
+  website?: string | null;
   roomCount?: number;
   roomTypes?: GuestRoomType[];
   activities?: { id: number; name: string; category: string; price: number; durationMin: number }[];

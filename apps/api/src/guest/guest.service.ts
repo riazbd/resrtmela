@@ -95,6 +95,17 @@ export class GuestService {
       name: resort.name,
       location: resort.location,
       currency: resort.currency,
+      /**
+       * How to reach the resort.
+       *
+       * Added when guests stopped being able to book for themselves. The page
+       * now says "call the resort", and a page that says that without a number
+       * on it is a dead end. Public detail already carried these for the v1
+       * API; the guest app was the one screen that could not see them.
+       */
+      contactPhone: resort.contactPhone,
+      address: resort.address,
+      website: resort.website,
       roomTypes: resort.roomTypes.map((t) => ({
         id: t.id,
         name: t.name,
@@ -185,118 +196,24 @@ export class GuestService {
     return out;
   }
 
-  /** Book from the app: picks free rooms of the requested types. PENDING + pay-at-resort. */
-  async createBooking(
-    claims: JwtClaims,
-    input: {
-      resortId: number;
-      items: { roomTypeId: number; qty: number }[];
-      checkIn: string;
-      checkOut: string;
-      adults: number;
-      children: number;
-      fullName?: string;
-      remarks?: string;
-    },
-  ) {
+  /**
+   * The app cannot book. It asks, and is told who can.
+   *
+   * This used to pick free rooms and call `bookRoomsTx` directly, which put a
+   * PENDING hold on real nights — inventory off the market on a stranger's say
+   * so, with nobody at the resort consulted. A stay is sold by the resort or by
+   * an agent; the platform carries the conversation, it does not make the sale.
+   *
+   * Kept as a refusal rather than deleted because the shipped mobile app still
+   * has the button and cannot be updated. It gets a sentence it can display.
+   */
+  async createBooking(claims: JwtClaims, _input: unknown): Promise<never> {
     await this.assertGuest(claims);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: claims.userId } });
-    const resort = await this.prisma.resort.findFirst({
-      where: { id: input.resortId, status: "active" },
-    });
-    if (!resort) throw badRequest("Resort not available");
-
-    const checkIn = dateOnly(input.checkIn);
-    const checkOut = dateOnly(input.checkOut);
-    const nights = nightsBetween(checkIn, checkOut);
-    if (nights <= 0) throw badRequest("Check-out must be after check-in");
-    if (!input.items?.length) throw badRequest("Select at least one room");
-
-    // my guest identity in this resort. A user with no phone has none to share,
-    // so they get their own row rather than joining every other phone-less one
-    const phone = normalizePhone(user.phone ?? "");
-    const key = phone ? phoneKey(phone) : anonGuestKey();
-    let guest = await this.prisma.guest.findFirst({
-      where: { phoneKey: key, resortId: input.resortId },
-    });
-    if (!guest) {
-      guest = await this.prisma.guest.create({
-        data: {
-          resortId: input.resortId,
-          fullName: input.fullName?.trim() || user.name,
-          phone,
-          phoneKey: key,
-          isGuestUser: true,
-        },
-      });
-    } else if (input.fullName?.trim() && input.fullName.trim() !== guest.fullName) {
-      await this.prisma.guest.update({ where: { id: guest.id }, data: { fullName: input.fullName.trim() } });
-    }
-    if (user.name === user.phone && input.fullName?.trim()) {
-      await this.prisma.user.update({ where: { id: user.id }, data: { name: input.fullName.trim() } });
-    }
-
-    // pick free rooms per requested type/qty
-    const wanted = Array.from({ length: nights }, (_, i) => new Date(checkIn.getTime() + i * 86_400_000));
-    const picked: { id: number; name: string; roomTypeId: number; baseRate: number }[] = [];
-    for (const item of input.items) {
-      if (item.qty <= 0) continue;
-      const typeRooms = await this.prisma.room.findMany({
-        where: { resortId: input.resortId, roomTypeId: item.roomTypeId, status: "ACTIVE", deletedAt: null },
-        orderBy: { id: "asc" },
-      });
-      if (typeRooms.length === 0) throw badRequest("Room type not available");
-      const holds = await this.prisma.bookingNight.findMany({
-        where: {
-          roomId: { in: typeRooms.map((r) => r.id) },
-          night: { in: wanted },
-          item: { booking: { state: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] }, deletedAt: null } },
-        },
-        select: { roomId: true },
-      });
-      const busySet = new Set(holds.map((h) => h.roomId));
-      const free = typeRooms.filter((r) => !busySet.has(r.id));
-      if (free.length < item.qty) {
-        throw Object.assign(
-          new Error(`Only ${free.length} × ${typeRooms[0]!.name} left for those dates`),
-          { status: 409 },
-        );
-      }
-      for (const r of free.slice(0, item.qty)) {
-        picked.push({ id: r.id, name: r.name, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) });
-      }
-    }
-
-    const booking = await this.prisma.$transaction((tx) =>
-      this.bookings.bookRoomsTx(tx, {
-        resortId: input.resortId,
-        guestId: guest.id,
-        actorUserId: user.id,
-        agentUserId: null,
-        source: "APP",
-        checkIn,
-        checkOut,
-        adults: input.adults,
-        children: input.children ?? 0,
-        discount: 0,
-        remarks: input.remarks ?? "booked via app — pay at resort",
-        state: "PENDING",
-        rooms: picked,
-      }),
+    throw forbid(
+      "Rooms are booked by the resort. Call the resort or your travel agent to hold these dates.",
     );
-
-    await this.audit.log({
-      actorId: user.id,
-      resortId: input.resortId,
-      action: "guest.booking.create",
-      entity: "booking",
-      entityId: booking.id,
-      diff: { code: booking.code, rooms: picked.map((r) => r.name) },
-    });
-
-    await this.notifications.notifyBooking(booking.id, "booking_received");
-    return this.tripDetail(claims, booking.id);
   }
+
 
 
   /** Tax rules for several resorts at once — a guest's trips can span them. */
