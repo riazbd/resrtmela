@@ -206,7 +206,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            {activeResort && (
+            {/* the platform owner's sidebar has no resort screens in it, so a
+                switcher here would change nothing they can see */}
+            {activeResort && role !== "SUPER_ADMIN" && (
               <>
             <span className="hidden text-xs text-slate-400 sm:inline">Resort</span>
             <Select

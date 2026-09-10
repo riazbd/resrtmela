@@ -16,7 +16,7 @@
  * useful way to say so.
  */
 import { describe, expect, it } from "vitest";
-import { consoleGate, navVisible, missingFeature } from "../src/lib/console-access";
+import { consoleGate, navVisible, missingFeature, landingFor } from "../src/lib/console-access";
 
 const resort = { id: 1, name: "Sky Eco" };
 
@@ -173,5 +173,55 @@ describe("opening a screen the plan does not include", () => {
 
   it("says nothing for a screen nothing in the menu claims", () => {
     expect(missingFeature("/somewhere-else", nav, [])).toBeNull();
+  });
+});
+
+/**
+ * Where a person lands, and whose sidebar they get.
+ *
+ * The platform owner logged in and arrived at a resort's front desk. Three
+ * things did that at once: login sent everybody to `/dashboard`, their account
+ * happened to be linked to a resort so the console treated that resort as
+ * theirs, and SUPER_ADMIN resolves to `["*"]` — so every resort link passed the
+ * permission check and "Platform" was one item among fifteen.
+ *
+ * A platform owner's home is the platform. A resort's screens are reached by
+ * "Login as" from the Resorts tab, which is audited and shows a banner — which
+ * is the right way for the platform to act inside a tenant anyway.
+ */
+describe("where someone lands after logging in", () => {
+  it("takes the platform owner to the platform", () => {
+    expect(landingFor("SUPER_ADMIN")).toBe("/platform");
+  });
+
+  it("takes an agent to their own screens, not a resort's dashboard", () => {
+    expect(landingFor("AGENT")).toBe("/agent/discover");
+  });
+
+  it("takes resort staff to the dashboard", () => {
+    expect(landingFor("MANAGER")).toBe("/dashboard");
+    expect(landingFor("FRONT_DESK")).toBe("/dashboard");
+    expect(landingFor("RESORT_ADMIN")).toBe("/dashboard");
+  });
+});
+
+describe("the platform owner's sidebar", () => {
+  const owner = { role: "SUPER_ADMIN", can: () => true, features: [] };
+
+  it("is the platform's", () => {
+    expect(navVisible({ roles: ["SUPER"] }, owner)).toBe(true);
+  });
+
+  it("is not a resort's, even though their permissions allow everything", () => {
+    expect(navVisible({ roles: ["STAFF"], perm: "bookings.view" }, owner)).toBe(false);
+    expect(navVisible({ roles: ["*"], perm: "bookings.view" }, owner)).toBe(false);
+    expect(navVisible({ roles: ["MGMT"], perm: "settings.manage" }, owner)).toBe(false);
+  });
+
+  it("still belongs to whoever they are impersonating", () => {
+    // impersonation swaps the token's role, so the sidebar follows the tenant
+    const asManager = { role: "MANAGER", can: () => true, features: ["restaurant"] };
+    expect(navVisible({ roles: ["STAFF"], perm: "bookings.view" }, asManager)).toBe(true);
+    expect(navVisible({ roles: ["SUPER"] }, asManager)).toBe(false);
   });
 });

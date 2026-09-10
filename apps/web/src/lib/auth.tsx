@@ -8,7 +8,7 @@ interface AuthState {
   me: Me | null;
   activeResort: Resort | null;
   loading: boolean;
-  login: (identifier: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<Me>;
   logout: () => void;
   setActiveResort: (r: Resort) => void;
   role: string;
@@ -110,6 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const resort = meData.resorts.map((r) => r.resort)[0] ?? null;
     setActive(resort);
     if (resort) window.localStorage.setItem("rh.resortId", String(resort.id));
+    // handed back so the caller can send them somewhere that is theirs: state
+    // set here is not readable until the next render
+    return meData;
   }, []);
 
   const logout = useCallback(() => {

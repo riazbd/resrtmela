@@ -62,6 +62,21 @@ export function navVisible(
   who: { role: string; can: (perm: string) => boolean; features: string[] },
 ): boolean {
   if (entry.roles.includes("SUPER")) return who.role === "SUPER_ADMIN";
+  /**
+   * The platform owner's sidebar is the platform's, and only the platform's.
+   *
+   * SUPER_ADMIN resolves to `["*"]`, so every permission check below says yes
+   * and the whole resort console appeared in their sidebar — with "Platform" as
+   * one item among fifteen. Worse, it was a *particular* resort's console,
+   * whichever one their account happened to be linked to, which made a resort
+   * they do not run look like theirs.
+   *
+   * A resort's screens are reached by "Login as" from the Resorts tab. That
+   * swaps the role on the token, so the sidebar below follows the tenant — and
+   * it is audited and banner-marked, which is how the platform ought to be
+   * acting inside someone else's business anyway.
+   */
+  if (who.role === "SUPER_ADMIN") return false;
   // agent-only links are gated by the agency's own permission set, so a junior
   // who may only book does not see the wallet or the team screen
   if (entry.roles.length === 1 && entry.roles[0] === "AGENT") {
@@ -104,4 +119,23 @@ export function missingFeature(
   );
   if (!screen?.feature) return null;
   return features.includes(screen.feature) ? null : screen.feature;
+}
+
+/**
+ * The screen someone should land on after signing in.
+ *
+ * Everybody used to be sent to `/dashboard`, which is a resort's front desk.
+ * For the platform owner that meant logging in to somebody else's resort; for
+ * an agent it meant a page their permissions refuse, since `bookings.view` is
+ * not an agency permission.
+ *
+ * A table rather than "the first link they can see": permissions have not been
+ * fetched yet at the moment of the redirect — they arrive with the active
+ * resort — and guessing from an empty set would send everyone to the same
+ * wrong place for a different reason.
+ */
+export function landingFor(role: string): string {
+  if (role === "SUPER_ADMIN") return "/platform";
+  if (role === "AGENT") return "/agent/discover";
+  return "/dashboard";
 }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Button, Input } from "@/components/ui";
 import { BedDouble, CalendarDays, ShieldCheck, UtensilsCrossed, ArrowLeft } from "lucide-react";
+import { landingFor } from "@/lib/console-access";
 
 const HIGHLIGHTS = [
   { icon: CalendarDays, text: "Booking calendar with one-click reservations" },
@@ -27,8 +28,10 @@ export default function LoginPage() {
     setErr(null);
     setBusy(true);
     try {
-      await login(phone, password);
-      router.replace("/dashboard");
+      const me = await login(phone, password);
+      // "/dashboard" for everyone sent the platform owner into somebody else's
+      // resort, and an agent to a page their permissions refuse
+      router.replace(landingFor(me.role));
     } catch (ex) {
       setErr((ex as Error).message);
     } finally {
