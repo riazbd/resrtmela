@@ -1,6 +1,6 @@
 # Resort Mela — where the project stands
 
-*Last updated 2026-09-10. This is the entry point: read it before the other
+*Last updated 2026-09-11. This is the entry point: read it before the other
 planning documents, which it summarises and sequences.*
 
 | Document | What it is | Still current? |
@@ -45,8 +45,8 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **633 API tests** across 68 files (34 at the start of all this,
-all of them pure unit tests) plus **81 front-end tests**. Four packages
+Current state: **678 API tests** across 72 files (34 at the start of all this,
+all of them pure unit tests) plus **100 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
 empty database, which it could not before.
@@ -103,6 +103,9 @@ OTP codes lived in a per-process `Map`, in the clear, seeded from `Math.random`.
 An API restart silently invalidated every code in flight. They are in the
 database now, SHA-256 hashed, generated from the CSPRNG, compared in constant
 time, and consumed on use.
+
+**Superseded 2026-09-11.** OTP login was removed entirely, not merely
+hardened — see §3.32. Nothing mints or reads a code any more.
 
 ### The interface made promises the system did not keep
 
@@ -981,6 +984,11 @@ own website is a guest booking directly however it reaches us, and
 `apiKeyClaims` records that nobody at a desk pressed anything. They refuse
 rather than 404 because the mobile app is frozen and still has the button.
 
+**Superseded 2026-09-11.** Phase 1 (§3.32) removed the doors this section
+describes refusing — the guest API, `/v1` and `apiKeyClaims` among them —
+entirely. What answered 400 here now answers 404, including for the mobile
+app's own Book button.
+
 Which exposed the real cost of the decision. `resortDetail` returned rooms,
 prices and activities and no way to reach anybody, so "call the resort" would
 have been a dead end. It carries a phone number now.
@@ -1048,6 +1056,83 @@ sale, locking history would be keeping their own books from them.
 per-resort fee and trial, so a customer who needs one extra module needs a plan
 that has it.
 
+### §3.32 — Guests leave: phase 1 of a two-customer platform
+
+On 2026-09-11 the owner settled a question that had been half-open for weeks:
+**Resort Mela sells to resorts and to travel agencies, and nobody else has an
+account.** A guest is a row in a resort's register, not a login. The decision
+and the five-phase plan it produced are recorded in
+`docs/superpowers/specs/2026-09-11-two-sided-platform-design.md`; this section
+covers phase 1, `docs/superpowers/plans/2026-09-11-phase-1-guests-leave.md`,
+executed as nine tasks on this branch.
+
+**Removed, not merely gated.** The guest API (`apps/api/src/guest/`, ten
+endpoints), the `/v1` resort-website API and the API-key claims it minted,
+guest online payment (`payments/intents.*` and the payment gateway adapter —
+the mock gateway and the SSLCommerz integration that never had a merchant
+account both went with it), phone/email OTP login and the `GUEST` role it
+minted, the `OtpCode` table, and the web guest pages (`/book`, `/book/trips`,
+`/book/[id]`) with every link to them. `a-guest-has-no-door.spec.ts` walks
+every one of those doors over a live, booted `AppModule` and shows a 404 where
+a 401/400/200 used to answer — proving the handler is gone, not merely
+guarded — and shows the guest module cannot even be imported any more.
+`book-doors-are-gone.spec.ts` reads the whole `apps/web/src` tree and fails the
+moment a `/book` link or a `guest*`/`/v1` call reappears anywhere in it, naming
+the file and line.
+
+**Two things needed building or preserving, not just deleting, so the removal
+did not silently take something else with it.** `public-api.controller.ts`
+declared the resort-website API beside the platform's own `/cms/plans` — the
+same rows the homepage's pricing cards read — so deleting the file outright
+would have taken the platform's own shopfront down while closing somebody
+else's door. The CMS half moved to `marketing.controller.ts` first;
+`the-pricing-page-still-has-prices.spec.ts` proves the homepage's price list
+still answers after `/v1` is gone.
+
+OTP was never only a guest door: `verifyOtp` minted a token for whatever role
+an identifier already had, so a manager with a phone number could sign in with
+a code instead of a password — the only account recovery a locked-out staff
+member had, because there was no forgot-password flow. Removing OTP without
+replacing that would have removed a working capability as a side effect.
+`PasswordResetService` replaces it: a single-use, short-lived, emailed token
+that can only reset a password for an account that already exists — it mints
+nobody. `a-password-can-be-reset.spec.ts` proves the actual emailed link works,
+by lifting the token out of the stubbed outbox the way a recipient would click
+it, rather than through a test-only method that hands one back.
+
+`guests-do-not-book.spec.ts` re-proves the rule the deleted `ROLE.GUEST` check
+used to stand in for — a room is held only by a resort's own desk or by an
+agency selling on its behalf — including through a `GUEST`-role session token
+signed before this deploy: `AuthGuard` now refuses any token whose role the
+platform no longer holds ("This sign-in is for a kind of account the platform
+no longer has"), so a session minted the day before the deploy does not outlive
+the account it was issued to by riding out its unexpired seven days.
+
+`a-plan-that-locks.spec.ts` proves `public_api` is gone from `PLAN_FEATURES`
+and every plan row, and that `createApiKey` mints no key on any plan — there is
+no `/v1` left for one to open. `listApiKeys` and `revokeApiKey` still work and
+`api_keys` keeps its rows, on the owner's decision to leave a resort-website
+integration room to return to rather than delete the shelf it would stand on
+(spec §4.3).
+
+The mobile app is not merely frozen any more — it is formally retired
+(`apps/mobile/README.md`; `FROZEN.md`'s "if it comes back" section now says its
+endpoints are gone). Its code is untouched, and the shipped build's own Book
+button now meets the same 404 wall a browser does, in place of the refusal
+§3.31 described — that section described a door refusing, not a door removed,
+and phase 1 is the removal.
+
+**What this proves, and what it does not.** The 404 walk proves the routes are
+gone from the running application. It does not prove production's `sql_mode`
+refuses a `GUEST` row the way the local suite's session — pinned to strict mode
+on purpose — does: the column definition itself is proven
+(`information_schema.COLUMNS` no longer lists `GUEST` on `users.role`), but a
+lax production server would still store an out-of-range value as `''` with a
+warning rather than refusing it outright, and that has not been checked
+against the live server. Neither the reset page nor the homepage has been
+opened in a browser yet — this pass is proven by an HTTP walk and a
+source-tree scan, not by a screenshot. Nothing from this branch is deployed.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -1111,8 +1196,8 @@ message says so rather than leaving the owner guessing.
    permission-driven navigation and the outbox bar are the next three worth
    holding down.
 3. ~~**Mobile adopts the typed client.**~~ Settled the other way: the app is
-   frozen out of the build (§3.27). If it is ever revived, this is still true
-   of it.
+   retired, not merely frozen (§3.27, §3.32). If it is ever revived, this is
+   still true of it.
 4. **Agency staff resort links are copied at hire time and never again.** An
    agency approved for a new resort has staff with no link of their own to it.
    The room search works around this by running on the agency's authority; the
@@ -1136,8 +1221,10 @@ both assume a maturity the platform has not reached; the offline front desk was
 worth more than either and is now the only thing in this market that does it.
 **The mobile app release** — guests do not book at all now (§3.31), and the
 offline work landed in the browser, so a native shell buys less than it did.
-The shipped build still has its Book button; the API answers it with a sentence
-about ringing the resort.
+The app is formally retired as of 2026-09-11 (§3.32); its shipped build still
+has its Book button, and the API now answers it with a 404 like every other
+guest door removed in phase 1, rather than the refusal sentence it used to
+answer with.
 
 ### Kept honest
 
@@ -1163,10 +1250,13 @@ These are not code problems and cannot be fixed from the repository.
    and per crash (§3), so there is finally something worth watching — but
    nothing is watching it. Anything that tails the log for `"level":"error"`
    and messages a phone will do.
-4. **SSLCommerz merchant account.** The integration is written and tested; it
-   is inert until `SSLCOMMERZ_STORE_ID` and `SSLCOMMERZ_STORE_PASSWORD` exist.
-   Requires a trade licence, TIN and a bank account. Until then the mock
-   gateway runs the whole flow, so nothing is blocked but real money.
+4. ~~**SSLCommerz merchant account.**~~ Moot as of 2026-09-11: guest online
+   payment, the mock gateway and the SSLCommerz adapter were all removed with
+   the rest of the guest surface (§3.32) — there is no online payment path
+   left to turn on. Every payment is now recorded by hand at the desk
+   (`payments.service.ts`: cash, bKash, Nagad, card or bank transfer logged
+   against a booking), the same as the platform's own subscription and
+   one-off charges (§4 item 5).
 5. **SMS sender ID** — the SSL Wireless adapter is written and dormant; only
    `SMS_SENDER_ID` is missing.
 
@@ -1219,6 +1309,41 @@ them on their own:**
   bill, and a tenant far enough past due is suspended. Look at
   Platform → Billing policy and Platform → Dues *before* deploying, and run
   the sweep by hand from that screen so the first one is watched.
+
+### 6.1 Deploying this branch (phase 1 — guests leave), not yet done
+
+Everything above describes the audit branch's deploy on 9 Sep, already live.
+**This branch has not been deployed.** Two of its migrations are destructive
+in a way none above were: `20260911110000_no_guest_accounts` deletes every
+`users` row with `role = 'GUEST'` and narrows the `role` enum to exclude it,
+and `20260911110500_login_codes_are_gone` drops the `otp_codes` table
+outright. **Back up first** — `mariadb-dump ... | gzip`, and check the gzip
+before trusting it. There is no undo once those run.
+
+Sequence: `git pull`, `pnpm install`, then `pnpm -F @rh/api db:baseline` and
+read the dry run's list before doing anything else. Then `pm2 stop api`
+*before* `db:baseline -- --apply`, so a request in flight cannot hit the old
+OTP routes against a half-migrated database while the migration runs. Then
+`prisma migrate deploy`, `prisma generate`, `pnpm build`, `pm2 restart api
+web`.
+
+`PUBLIC_WEB_URL` must be set in production's `.env` before this deploys — the
+password-reset email builds its reset link from it, and an unset value means
+every reset link is silently broken, for every resort, until someone notices.
+
+The GUEST-deletion migration is two statements (`DELETE` then `MODIFY`), and
+MySQL/MariaDB DDL is not fully transactional, so a failure partway through can
+leave the `DELETE` applied and the enum `MODIFY` not. That is safe to repeat:
+`npx prisma migrate resolve --rolled-back 20260911110000_no_guest_accounts`,
+fix whatever the error named, and re-apply.
+
+Verify **by opening the pages**, not by curling the API — a 200 is not proof a
+screen works (the last deploy's reports fix was verified with curl, reported
+done, and the page was still broken). Open the homepage and check the pricing
+cards are there; open the login page and check the "Forgot password?" link
+actually sends an email whose reset link works. The shipped mobile build's own
+Book button will now 404 instead of showing its old refusal message —
+expected, the app is retired (§3.32), not merely frozen.
 
 ## 7. Working on it
 
