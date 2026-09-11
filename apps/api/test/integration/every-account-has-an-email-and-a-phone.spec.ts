@@ -623,3 +623,55 @@ describe("a placeholder, wherever contact details are read", () => {
     expect(order?.buyerContact).toBe(TAKEN_PHONE);
   });
 });
+
+describe("a marketing campaign to an agent audience", () => {
+  /**
+   * Characterisation, not red-first: the filter this proves already exists
+   * (engage.service.ts's AGENTS branch, `NOT: { email: { endsWith:
+   * PLACEHOLDER_EMAIL_SUFFIX } } }` in the `userResort.findMany` where-clause),
+   * so this passes on the first run. Nothing had exercised it far enough to
+   * say so — every existing sendCampaign spec (a-plan-that-locks,
+   * tenant-isolation, credit-approval) stops at an earlier refusal (the plan
+   * gate, cross-tenant access, no credits bought yet), never reaching the
+   * recipient list at all. Checked by temporarily deleting the `NOT` clause
+   * and re-running this test: it failed (both assertions), confirming it is
+   * this filter holding the line, not something upstream. Reverted before
+   * committing — see the report's "Final fix wave" section for the red output.
+   */
+  it("does not mail an agent stuck with a placeholder email, and spends no credit on them", async () => {
+    const outbox: { to: string }[] = [];
+    const recordingEmail = {
+      send: async (to: string) => {
+        outbox.push({ to });
+        return { sent: true };
+      },
+    } as unknown as EmailService;
+    const engage = makeEngageService(asPrisma, recordingEmail);
+
+    const stuck = await prisma.user.create({
+      data: {
+        name: "Stuck Agent",
+        email: "user-77001@placeholder.invalid",
+        phone: "8801611222555",
+        role: "AGENT",
+        status: "active",
+      },
+    });
+    await prisma.userResort.create({ data: { userId: stuck.id, resortId: fx.resortId } });
+    await prisma.emailCredit.create({ data: { userId: admin.userId, credits: 500 } });
+
+    const result = await engage.sendCampaign(admin, {
+      subject: "New season rates",
+      body: "Hello agents",
+      audience: "AGENTS",
+      resortId: fx.resortId,
+    });
+
+    // fx.agentId's real email is the only one that went out
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.to).not.toBe(stuck.email);
+    // used = sent + failed, and only one recipient was ever attempted — a
+    // credit spent on the placeholder would show up here as 498, not 499
+    expect(result.remaining).toBe(500 - 1);
+  });
+});

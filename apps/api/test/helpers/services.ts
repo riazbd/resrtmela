@@ -244,11 +244,17 @@ export function makePlatformSettings(prisma: PrismaService): PlatformSettingsSer
   return new PlatformSettingsService(prisma);
 }
 
-export function makeEngageService(prisma: PrismaService): EngageService {
+/**
+ * `email` is for a campaign spec that needs to see who was actually mailed —
+ * an unconfigured `EmailService` answers `sent: false` for everyone, which
+ * hides whether a recipient list was filtered correctly before the loop that
+ * spends credits ever ran.
+ */
+export function makeEngageService(prisma: PrismaService, email?: EmailService): EngageService {
   return new EngageService(
     prisma,
     new AuditService(prisma),
-    new EmailService(),
+    email ?? new EmailService(),
     new PermissionsService(prisma),
     makePlatformSettings(prisma),
     makePlanLimits(prisma),
