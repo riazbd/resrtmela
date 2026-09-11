@@ -2,7 +2,8 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { BookingState } from "@rh/db";
 import { ROLE, type Role, type JwtClaims } from "@rh/shared";
-import { requireResortAccess, requireSellingAccess, requireRoles, badRequest } from "../common/rbac";
+import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
+import { agencyOf } from "../common/selling-access";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
 import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange } from "../common/money";
 import { PermissionsService } from "../common/permissions";
@@ -493,20 +494,24 @@ export class ReportsService {
     await this.perms.require(claims, resortId, "reports.view");
     const bookings = await this.rangeBookings(resortId, from, to);
 
-    const staff = await this.prisma.userResort.findMany({
-      where: { resortId, user: { role: ROLE.AGENT } },
-      include: { user: { select: { id: true, name: true } } },
+    // the agents who sold here in the range. Selling access is no longer a row
+    // in user_resorts (2026-09-11 design, §8), so this is who booked, not who
+    // was once approved
+    const agentIds = [...new Set(bookings.map((b) => b.agentUserId).filter((id): id is number => id != null))];
+    const agents = await this.prisma.user.findMany({
+      where: { id: { in: agentIds }, role: ROLE.AGENT },
+      select: { id: true, name: true, accountId: true, parentAgent: { select: { accountId: true } } },
     });
-    // one rate for the resort, not one per row: this used to read
-    // `s.commissionRate`, so the report showed whatever each agent had been
-    // typed in as, and two agents on the same booking earned differently
-    const terms = await this.commission.termsFor(resortId);
 
     const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
-    for (const s of staff) {
-      byAgent.set(s.userId, {
-        agentId: s.userId,
-        name: s.user.name,
+    for (const a of agents) {
+      // the resort's rate, or the one it struck with this agent's agency —
+      // never a per-person figure, which is how two agents once earned
+      // differently on the same booking
+      const terms = await this.commission.termsFor(resortId, a.accountId ?? a.parentAgent?.accountId ?? null);
+      byAgent.set(a.id, {
+        agentId: a.id,
+        name: a.name,
         commissionRate: terms.rate,
         commissionKind: terms.kind,
         bookings: 0,
@@ -560,16 +565,16 @@ export class ReportsService {
   /**
    * Agent's own commission report.
    *
-   * The one report an agency is entitled to, and the only reason this file
-   * needs selling access at all: every row below is filtered to the caller's
-   * own bookings, so what it adds up is money the agency earned. Everything
-   * else in this service is the resort's own trading figures.
+   * The one report an agency is entitled to. Every row below is filtered to
+   * the caller's own bookings, so what it adds up is money the agency earned —
+   * which is why it needs no selling access: like the bookings themselves, it
+   * stays readable after a resort closes its door. Everything else in this
+   * service is the resort's own trading figures.
    */
   async myReport(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     if (claims.role !== ROLE.AGENT) throw badRequest("Agents only");
-    requireSellingAccess(claims, resortId);
     // the same terms the owner's report reads, so the two cannot disagree
-    const { rate, kind } = await this.commission.termsFor(resortId);
+    const { rate, kind } = await this.commission.termsFor(resortId, (await agencyOf(this.prisma, claims.userId)).accountId);
     const bookings = (await this.rangeBookings(resortId, from, to)).filter(
       (b) => b.agentUserId === claims.userId,
     );

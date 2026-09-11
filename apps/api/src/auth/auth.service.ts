@@ -6,6 +6,7 @@ import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
 import { openingSubscription, redeemOffer } from "../common/offers";
+import { agencyOf, sellableFor } from "../common/selling-access";
 import { ROLE, type Role } from "@rh/shared";
 
 /**
@@ -35,8 +36,8 @@ export class AuthService {
     return this.issueToken(user.id, user.role);
   }
 
-  me(userId: number) {
-    return this.prisma.user.findUnique({
+  async me(userId: number) {
+    const me = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -59,6 +60,24 @@ export class AuthService {
         },
       },
     });
+    if (!me || (me.role !== "AGENT" && me.role !== "SUPER_ADMIN")) return me;
+    /**
+     * Neither is linked to a resort any more (2026-09-11 design, §8.3). An
+     * agency's resorts are the ones it may sell right now, by the rule every
+     * selling request is checked against; the platform owner passes every
+     * resort, so every resort is theirs to pick.
+     */
+    let ids: number[] | undefined;
+    if (me.role === "AGENT") {
+      const agency = await agencyOf(this.prisma, userId);
+      ids = agency.refusal ? [] : await sellableFor(this.prisma, agency.accountId);
+    }
+    const resorts = await this.prisma.resort.findMany({
+      where: ids ? { id: { in: ids } } : {},
+      select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true, timezone: true },
+      orderBy: { id: "asc" },
+    });
+    return { ...me, resorts: resorts.map((resort) => ({ resort })) };
   }
 
   /**
@@ -76,6 +95,8 @@ export class AuthService {
     slug?: string;
     /** an offer code — the plan and trial the workspace starts on */
     offer?: string;
+    /** the onboarding question: open to travel agencies? Unanswered is closed. */
+    agentsOpen?: boolean;
   }) {
     // both, stored the way login reads them. Signup used to keep only the
     // phone, so the owner who signed up alone was the one person a password
@@ -117,6 +138,7 @@ export class AuthService {
           tenantId: tenant.id,
           name: input.resortName,
           location: input.location,
+          agentsOpen: input.agentsOpen === true,
           // timezone, currency and locale come from the schema's defaults;
           // repeating them here was a second place to change when a resort
           // outside Bangladesh signs up, and the one nobody would remember
@@ -213,13 +235,9 @@ export class AuthService {
       const u = await tx.user.create({
         data: { name: input.name.trim() || agencyName, phone, email, role: "AGENT", passwordHash, accountId: account.id },
       });
+      // no link to the resort that invited it: once verified it sells every
+      // open resort, that one included (the offer keeps who invited it)
       await tx.subscription.create({ data: openingSubscription(account.id, plan, redeemed?.offer) });
-      // the resort that invited it gets it as an agent, to sell for once verified
-      const invitedBy = redeemed?.offer.resortId;
-      if (invitedBy) {
-        const role = await tx.customRole.findFirst({ where: { resortId: invitedBy, name: "Agent" }, select: { id: true } });
-        await tx.userResort.create({ data: { userId: u.id, resortId: invitedBy, roleId: role?.id ?? null } });
-      }
       await tx.auditLog.create({
         data: { actorId: u.id, action: "agency.signup", entity: "tenant", entityId: BigInt(account.id), diff: { slug, plan: plan.name, offer: offerCode ?? null } },
       });

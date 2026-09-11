@@ -35,6 +35,12 @@ beforeEach(async () => {
     create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 2, trialDays: 14 },
     update: { monthlyFee: 2500, maxRooms: 10, maxResorts: 2, trialDays: 14 },
   });
+  // an agency is sold from its own shelf (phase 3), so the agency here needs a plan from it
+  await prisma.platformPlan.upsert({
+    where: { name: "AGENCY_START" },
+    create: { name: "AGENCY_START", label: "Agency Start", monthlyFee: 1000, maxRooms: 0, maxResorts: 0, trialDays: 14, audience: "AGENCY" } as never,
+    update: {},
+  });
 });
 
 afterAll(async () => {
@@ -52,7 +58,7 @@ describe("an account with no resort", () => {
   it("can hold a subscription", async () => {
     const account = await agencyAccount();
 
-    const sub = await makePlatformService(asPrisma).setAccountSubscription(superAdmin, account.id, { plan: "STARTER" });
+    const sub = await makePlatformService(asPrisma).setAccountSubscription(superAdmin, account.id, { plan: "AGENCY_START" });
 
     expect((sub as unknown as { accountId: number }).accountId).toBe(account.id);
     expect(sub.status).toBe("TRIAL");

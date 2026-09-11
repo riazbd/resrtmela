@@ -301,9 +301,10 @@ export class PlatformService {
       where: { role: "AGENT" },
       select: {
         id: true, name: true, phone: true, status: true, createdAt: true,
-        agentBookings: { select: { id: true, resortId: true } },
+        // where it has sold — an agent is linked to no resort any more
+        // (2026-09-11 design, §8), so this is the only list of resorts it has
+        agentBookings: { select: { id: true, resort: { select: { id: true, name: true } } } },
         wallet: { select: { balance: true, active: true } },
-        resorts: { select: { resort: { select: { id: true, name: true } } } },
       },
       orderBy: { id: "asc" },
     });
@@ -314,7 +315,7 @@ export class PlatformService {
       status: a.status,
       createdAt: a.createdAt,
       bookings: a.agentBookings.length,
-      resorts: a.resorts.map((r) => r.resort),
+      resorts: [...new Map(a.agentBookings.map((b) => [b.resort.id, b.resort])).values()],
       wallet: a.wallet ? { balance: Number(a.wallet.balance), active: a.wallet.active } : null,
     }));
   }
@@ -869,15 +870,16 @@ export class PlatformService {
     await this.perms.require(claims, resortId, "users.manage");
     const rows = await this.prisma.userResort.findMany({
       /**
-       * The platform is not a member of anybody's staff.
+       * Staff, by construction (2026-09-11 design, §8.3).
        *
-       * A super admin's account is linked to a resort — that is how they get an
-       * active resort at all — so this returned "Platform Owner" inside the
-       * resort's own team list, with a role the resort did not grant. The list
-       * is what the resort manages, and anything on it looks like theirs to
-       * change.
+       * This query used to exclude roles: the platform owner, because a super
+       * admin got an active resort by being linked to one, and then agents,
+       * because approving an agency wrote a row here too — the only place the
+       * login token read access from. Neither is linked any more: an agency's
+       * selling access is computed, and the platform owner passes every resort
+       * without a row. So the table means "works here", and nothing is filtered.
        */
-      where: { resortId, user: { role: { not: "SUPER_ADMIN" } } },
+      where: { resortId },
       include: {
         user: {
           // no wallet here: it is the agency's account with the platform, and
@@ -907,8 +909,14 @@ export class PlatformService {
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
-    if (!["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"].includes(input.role)) {
-      throw badRequest("role must be MANAGER | FRONT_DESK | AGENT | HOUSEKEEPING");
+    if (input.role === "AGENT") {
+      // an agency sells a resort; it does not work there (2026-09-11 design, §8.3)
+      throw badRequest(
+        "An agency is not a colleague. Invite the agency from Settings → Agents instead: it signs itself up, and sells for you once the platform has verified it.",
+      );
+    }
+    if (!["MANAGER", "FRONT_DESK", "HOUSEKEEPING"].includes(input.role)) {
+      throw badRequest("role must be MANAGER | FRONT_DESK | HOUSEKEEPING");
     }
     if (input.roleId != null) {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
@@ -920,7 +928,6 @@ export class PlatformService {
     const phone = contactPhone(input.phone);
     const taken = await contactTaken(this.prisma, { email, phone });
     if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
-    const isAgent = input.role === "AGENT";
     const user = await this.prisma.user.create({
       data: {
         name: input.name,
@@ -928,11 +935,7 @@ export class PlatformService {
         phone,
         passwordHash: await bcrypt.hash(input.password, 12),
         role: input.role as never,
-        status: isAgent ? "pending" : "active",
-        // an agency is a customer with an account of its own; this one was
-        // vouched for by the resort that added it, so it is not held for
-        // platform verification the way a self-signed-up agency is
-        ...(isAgent ? { account: { create: { name: input.name, slug: `agency-${randomBytes(5).toString("hex")}`, kind: "AGENCY", status: "active" } } } : {}),
+        status: "active",
       },
     });
     await this.prisma.userResort.create({
@@ -1181,14 +1184,24 @@ export class PlatformService {
 
   // ─────────────────── agent activation + wallet ───────────────────
 
+  /**
+   * A resort stopping one agency selling *its* rooms — or letting it back.
+   *
+   * This used to flip the agent's own `status`, which is platform-wide: one
+   * resort of four could switch an agency off everywhere, and switching it back
+   * anywhere undid the other three. What a resort decides is its own door, so
+   * this is the block on that agency at this resort (2026-09-11 design, §8.2),
+   * and nothing else.
+   */
   async setAgentStatus(claims: JwtClaims, resortId: number, agentUserId: number, status: "active" | "suspended" | "pending") {
-    requireResortAccess(claims, resortId);
-    await this.perms.require(claims, resortId, "agents.manage");
-    const agent = await this.prisma.user.findFirst({ where: { id: agentUserId, role: "AGENT" } });
+    const agent = await this.prisma.user.findFirst({
+      where: { id: agentUserId, role: "AGENT" },
+      select: { id: true, name: true, accountId: true, parentAgent: { select: { accountId: true } } },
+    });
     if (!agent) throw badRequest("not an agent");
-    const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: agentUserId, resortId } } });
-    if (!linked) throw badRequest("agent not linked to this resort");
-    const updated = await this.prisma.user.update({ where: { id: agentUserId }, data: { status } });
+    const accountId = agent.accountId ?? agent.parentAgent?.accountId;
+    if (accountId == null) throw badRequest("this agent belongs to no agency account");
+    await this.setAgencyTerms(claims, resortId, accountId, { blocked: status === "suspended" });
     /**
      * The wallet is deliberately left alone.
      *
@@ -1197,8 +1210,98 @@ export class PlatformService {
      * what flipping `wallet.active` did — one resort of four could strand the
      * agency's whole float, and re-activating anywhere thawed it again.
      */
-    await this.audit.log({ actorId: claims.userId, resortId, action: `agent.${status}`, entity: "user", entityId: agentUserId });
-    return { id: updated.id, name: updated.name, status: updated.status };
+    return { id: agent.id, name: agent.name, status };
+  }
+
+  // ─────────────────── the open door: a resort and the agencies ───────────────────
+
+  /** Open or close this resort to agencies — one switch, felt on the next request (§8.2). */
+  async setAgentsOpen(claims: JwtClaims, resortId: number, open: boolean) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "agents.manage");
+    // letting agents in is the act of using the feature; closing always works
+    if (open) await this.planLimits.requireFeature(resortId, "agents");
+    await this.prisma.resort.update({ where: { id: resortId }, data: { agentsOpen: open } });
+    await this.audit.log({ actorId: claims.userId, resortId, action: open ? "agents.open" : "agents.close", entity: "resort", entityId: resortId });
+    return { agentsOpen: open };
+  }
+
+  /**
+   * Every verified agency, with this resort's terms beside it: blocked or not,
+   * and any commission struck with it. An agency this resort has terms with is
+   * listed whatever its standing, so a block can always be seen and lifted.
+   */
+  async resortAgencies(claims: JwtClaims, resortId: number) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "agents.manage");
+    const [accounts, terms] = await Promise.all([
+      this.prisma.tenant.findMany({
+        where: { kind: "AGENCY", OR: [{ status: "active" }, { resortTerms: { some: { resortId } } }] },
+        select: { id: true, name: true, status: true },
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.resortAgency.findMany({ where: { resortId } }),
+    ]);
+    return accounts.map((a) => {
+      const t = terms.find((x) => x.accountId === a.id);
+      return {
+        accountId: a.id,
+        name: a.name,
+        status: a.status,
+        blocked: t?.blocked ?? false,
+        commissionKind: t?.commissionRate != null ? t.commissionKind : null,
+        commissionRate: t?.commissionRate != null ? Number(t.commissionRate) : null,
+      };
+    });
+  }
+
+  /**
+   * This resort's terms with one agency: block it, lift the block, strike a
+   * commission of its own, or clear that (a `commissionRate` of null) so the
+   * resort's rate applies again.
+   */
+  async setAgencyTerms(
+    claims: JwtClaims,
+    resortId: number,
+    accountId: number,
+    input: { blocked?: boolean; commissionKind?: string | null; commissionRate?: number | null },
+  ) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "agents.manage");
+    const account = await this.prisma.tenant.findFirst({ where: { id: accountId, kind: "AGENCY" }, select: { id: true } });
+    if (!account) throw badRequest("no such agency");
+    const data: { blocked?: boolean; commissionKind?: string | null; commissionRate?: number | null } = {};
+    if (input.blocked !== undefined) data.blocked = input.blocked;
+    if (input.commissionRate === null) {
+      data.commissionKind = null;
+      data.commissionRate = null;
+    } else if (input.commissionRate !== undefined) {
+      const kind = input.commissionKind === "FLAT" ? "FLAT" : "PERCENT";
+      const rate = Number(input.commissionRate);
+      // the same bounds as the resort's own rate (CommissionService.setTerms)
+      if (!Number.isFinite(rate) || rate < 0) throw badRequest("Commission cannot be negative.");
+      if (kind === "PERCENT" && rate > 100) throw badRequest("A percentage commission cannot be more than 100% of the rent.");
+      if (kind === "FLAT" && rate > 1_000_000) throw badRequest("That flat fee looks like a typo.");
+      data.commissionKind = kind;
+      data.commissionRate = rate;
+    }
+    const row = await this.prisma.resortAgency.upsert({
+      where: { resortId_accountId: { resortId, accountId } },
+      update: data as never,
+      create: { resortId, accountId, ...data } as never,
+    });
+    await this.audit.log({ actorId: claims.userId, resortId, action: "agency.terms", entity: "tenant", entityId: accountId, diff: data });
+    return {
+      accountId,
+      blocked: row.blocked,
+      commissionKind: row.commissionRate != null ? row.commissionKind : null,
+      commissionRate: row.commissionRate != null ? Number(row.commissionRate) : null,
+    };
+  }
+
+  /** How many agencies are verified and selling — the number onboarding shows a new resort. Public. */
+  async liveAgencyCount() {
+    return { agencies: await this.prisma.tenant.count({ where: { kind: "AGENCY", status: "active" } }) };
   }
 
   /**
@@ -1558,28 +1661,27 @@ export class PlatformService {
    * This used to make the account itself and mail its password in the clear
    * (2026-09-11 design, §7: "should not exist"). It now sends a link to sign
    * up — a one-use offer bound to that address, on the cheapest agency plan.
-   * The agency sets its own sign-in, lands pending like every agency, and is
-   * linked to this resort when it signs up. Someone who already sells as an
-   * agent is linked straight away, as before.
+   * The agency sets its own sign-in and lands pending like every agency; once
+   * verified it sells this resort, and every other open one, with no approval
+   * (2026-09-11 design, §8). An agency already on the platform is told.
    */
   async inviteAgency(claims: JwtClaims, resortId: number, input: { email: string; name?: string }) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
     const to = contactEmail(input.email);
-    const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
+    const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true, agentsOpen: true } });
+    // an invited agency could not sell a closed resort, so the invitation would be a promise the resort is not keeping
+    if (!resort.agentsOpen) throw badRequest("Open the resort to agencies first — an invited agency cannot sell it while it is closed.");
 
     const existing = await this.prisma.user.findFirst({ where: { email: to } });
     if (existing) {
       if (existing.role !== "AGENT") throw badRequest("This email belongs to someone who is not an agent");
-      const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: existing.id, resortId } } });
-      if (linked) throw badRequest("This email already has access to the resort");
-      const role = await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" }, select: { id: true } });
-      await this.prisma.userResort.create({ data: { userId: existing.id, resortId, roleId: role?.id ?? null } });
+      // nothing to create and nothing to link: it sells every open resort that has not blocked it
       await this.prisma.notification.create({
-        data: { userId: existing.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
+        data: { userId: existing.id, resortId, title: `${resort.name} invites you to sell its rooms`, body: "It is open to agencies — find it under Discover resorts.", kind: "info", link: "/agent/discover" },
       });
-      await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: existing.id, diff: { email: to, linked: true } });
-      return { linked: true, emailed: false };
+      await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: existing.id, diff: { email: to, notified: true } });
+      return { notified: true, emailed: false };
     }
 
     const plan = await this.prisma.platformPlan.findFirst({
@@ -1615,7 +1717,7 @@ export class PlatformService {
       throw badRequest(`invitation email could not be sent: ${r.error}`);
     }
     await this.audit.log({ actorId: claims.userId, resortId, action: "agency.invite", entity: "offer", entityId: offer.id, diff: { email: to, plan: plan.name } });
-    return { linked: false, emailed: true };
+    return { notified: false, emailed: true };
   }
 
   // ─────────────────── agent agency staff (agent's own users & roles) ───────────────────
@@ -1646,9 +1748,8 @@ export class PlatformService {
     const phone = contactPhone(input.phone);
     const taken = await contactTaken(this.prisma, { email, phone });
     if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
-    // copy the agency's approved resort links so staff book at the same resorts
-    const myLinks = await this.prisma.userResort.findMany({ where: { userId: claims.userId } });
-    // staff sell for their agency's account — verified, billed and stopped with it
+    // staff sell for their agency's account — verified, billed, blocked and
+    // stopped with it; there are no resort links to copy (2026-09-11, §8)
     const agency = claims.role === ROLE.AGENT
       ? await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { accountId: true } })
       : null;
@@ -1665,15 +1766,6 @@ export class PlatformService {
         accountId: agency?.accountId ?? null,
       },
     });
-    for (const link of myLinks) {
-      await this.prisma.userResort.create({
-        data: {
-          userId: user.id,
-          resortId: link.resortId,
-          roleId: link.roleId,
-        },
-      });
-    }
     await this.audit.log({ actorId: claims.userId, action: "agent.staff.create", entity: "user", entityId: user.id, diff: { name: input.name } });
     return { id: user.id, name: user.name, email, phone, status: user.status };
   }

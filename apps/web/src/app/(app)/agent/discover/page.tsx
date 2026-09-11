@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, money } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
-import { Button, Card, Empty, Spinner, useToast } from "@/components/ui";
-import { Building2, MapPin, Send, Check, Clock } from "lucide-react";
+import { Card, Empty, Spinner } from "@/components/ui";
+import { Building2, MapPin, Check, Clock } from "lucide-react";
 
 interface DiscoverRow {
   id: number;
@@ -14,56 +13,41 @@ interface DiscoverRow {
   roomCount: number;
   roomTypeCount: number;
   priceFrom: number | null;
-  access: "APPROVED" | "PENDING" | "REJECTED" | null;
+  /** OPEN: yours to sell now. WAITING: the platform has not verified the agency yet. */
+  access: "OPEN" | "WAITING";
+  reason: string | null;
 }
 
+/**
+ * The resorts open to agencies.
+ *
+ * There used to be a "Request access" button on every card and a manager on
+ * the other end clicking Approve, once per agency per resort. The platform
+ * verifies an agency once now, and every resort that is open to agents is
+ * then the agency's to sell (2026-09-11 design, §8) — so this page lists them,
+ * and asks for nothing.
+ */
 export default function AgentDiscoverPage() {
-  const { me, role } = useAuth();
-  const { push } = useToast();
   const [rows, setRows] = useState<DiscoverRow[] | null>(null);
-  const [busy, setBusy] = useState<number | null>(null);
-  const [note, setNote] = useState("");
 
-  const load = useCallback(() => {
+  useEffect(() => {
     api<DiscoverRow[]>("/agent/discover").then(setRows).catch(() => setRows([]));
   }, []);
-  useEffect(() => load(), [load]);
-
-  async function request(resortId: number) {
-    setBusy(resortId);
-    try {
-      await api(`/agent/resorts/${resortId}/access-request`, { method: "POST", body: { note: note || undefined } });
-      push("Access request sent — the resort will review it");
-      setNote("");
-      load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   if (!rows) return <Spinner />;
+  const waiting = rows.find((r) => r.access === "WAITING")?.reason ?? null;
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Discover resorts</h1>
-        <p className="text-sm text-slate-500">Search resorts and request agent access — once approved you can book for your clients.</p>
+        <p className="text-sm text-slate-500">Every resort here is open to agencies — book for your clients at any of them, on the resort&apos;s commission.</p>
       </div>
 
-      {rows.length > 0 && (
-        <Card>
-          <div className="flex items-center gap-2">
-            <Send className="h-4 w-4 text-brand-600" />
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional note to resorts with your request (agency name, expected volume…)"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
-            />
-          </div>
-        </Card>
+      {waiting && (
+        <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-200">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0" /> {waiting}
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -73,18 +57,10 @@ export default function AgentDiscoverPage() {
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                 <Building2 className="h-5 w-5" />
               </div>
-              {r.access === "APPROVED" && (
+              {r.access === "OPEN" && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
-                  <Check className="h-3 w-3" /> Access approved
+                  <Check className="h-3 w-3" /> Open to you
                 </span>
-              )}
-              {r.access === "PENDING" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
-                  <Clock className="h-3 w-3" /> Pending
-                </span>
-              )}
-              {r.access === "REJECTED" && (
-                <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-bold text-red-700">Rejected</span>
               )}
             </div>
             <div className="mt-3 text-lg font-bold text-slate-900">{r.name}</div>
@@ -100,27 +76,18 @@ export default function AgentDiscoverPage() {
               </div>
             )}
             <div className="mt-auto pt-4">
-              {r.access === "APPROVED" ? (
-                <Link href="/bookings" className="block rounded-lg bg-brand-600 py-2 text-center text-sm font-semibold text-white hover:bg-brand-700">
-                  Book for client
+              {r.access === "OPEN" ? (
+                <Link href="/agent/search" className="block rounded-lg bg-brand-600 py-2 text-center text-sm font-semibold text-white hover:bg-brand-700">
+                  Find a room for a client
                 </Link>
-              ) : r.access === "PENDING" ? (
-                <div className="rounded-lg bg-slate-100 py-2 text-center text-sm font-semibold text-slate-500">Waiting for approval</div>
               ) : (
-                <Button className="w-full" loading={busy === r.id} onClick={() => request(r.id)}>
-                  {r.access === "REJECTED" ? "Request again" : "Request access"}
-                </Button>
+                <div className="rounded-lg bg-slate-100 py-2 text-center text-sm font-semibold text-slate-500">Waiting for verification</div>
               )}
             </div>
           </Card>
         ))}
       </div>
-      {rows.length === 0 && <Empty msg="No resorts listed yet" />}
-      {role !== "AGENT" && me && (
-        <div className="rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
-          Requests are reviewed by each resort. Once approved, your account becomes an agent with commission tracking and a wallet.
-        </div>
-      )}
+      {rows.length === 0 && <Empty msg="No resort is open to agencies yet" />}
     </div>
   );
 }

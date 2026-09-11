@@ -28,6 +28,12 @@ export class MarketingController {
     return this.platform.publicPlans(audience === "AGENCY" ? "AGENCY" : "RESORT");
   }
 
+  /** How many agencies are verified and selling — resort onboarding shows it before asking. */
+  @Get("agencies/count")
+  agencies() {
+    return this.platform.liveAgencyCount();
+  }
+
   /** What a signup page shows for `?offer=` — the plan and terms it lands on. */
   @Get("offers/:code")
   offer(@Param("code") code: string) {

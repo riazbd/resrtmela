@@ -2,7 +2,8 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
-import { requireResortAccess, requireSellingAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
+import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
+import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
 import { bookingTotals, type TaxRule, perNightRevenue, type Money, agentPricing as agentPrices } from "../common/money";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
@@ -122,16 +123,15 @@ export class BookingsService {
   /**
    * One booking, and whether this agent may see it.
    *
-   * `requireSellingAccess` answers "may you be at this resort at all"; it
-   * cannot answer "is this row yours", and a booking id is a small number that
-   * anyone can count through. Without this, an agent reading their own booking
-   * by id could read the resort's — and a rival agency's — just as easily.
+   * A booking id is a small number that anyone can count through, so "is
+   * this row yours" is the whole question for an agent — not whether it may
+   * sell the resort today. What an agency already sold stays readable after
+   * the resort closes its door or blocks it; the guest is still coming.
    */
   private async requireOwnBooking(
     claims: JwtClaims,
     booking: { resortId: number; agentUserId: number | null },
   ): Promise<void> {
-    requireSellingAccess(claims, booking.resortId);
     if (claims.role !== ROLE.AGENT) {
       requireResortAccess(claims, booking.resortId);
       return;
@@ -189,36 +189,10 @@ export class BookingsService {
     return this.tax.rulesFor(resortId);
   }
 
-  /**
-   * An agency sells only while the platform says it may (2026-09-11 design, §6).
-   *
-   * Pending: signed up, not yet verified — it can look around, not sell.
-   * Suspended: behind on its bill (or stopped by the platform) — it stops
-   * selling, and only that. This guards new bookings and nothing else, so what
-   * it already sold stays live, readable and honoured: the guest did nothing
-   * wrong, and the resort is expecting them.
-   */
-  private async assertAgencyMaySell(agentUserId: number): Promise<void> {
-    const agent = await this.prisma.user.findUnique({
-      where: { id: agentUserId },
-      select: { account: { select: { status: true, suspendedReason: true } }, parentAgent: { select: { account: { select: { status: true, suspendedReason: true } } } } },
-    });
-    const account = agent?.account ?? agent?.parentAgent?.account ?? null;
-    // every agency was given an account when accounts arrived; one without is
-    // older than that and was admitted by the resorts it sells for
-    if (!account || account.status === "active") return;
-    if (account.status === "pending") {
-      throw forbid("This agency has not been verified yet. The platform verifies each agency once — until then it can look around, but not sell.");
-    }
-    throw forbid(
-      account.suspendedReason === "billing"
-        ? "This agency's account is suspended for an unpaid bill, so it cannot make new bookings. Bookings it has already made are unaffected."
-        : "This agency's account is suspended, so it cannot make new bookings. Bookings it has already made are unaffected.",
-    );
-  }
-
   async create(claims: JwtClaims, input: CreateBookingInput) {
-    requireSellingAccess(claims, input.resortId);
+    // for an agent this is the whole door: verified and paid up, the resort
+    // open, the agency not blocked — asked now, not read from the token
+    await requireSellingAccess(this.prisma, claims, input.resortId);
     await this.tenantState.assertWritable(input.resortId);
     const checkIn = dateOnly(input.checkIn);
     const checkOut = dateOnly(input.checkOut);
@@ -233,12 +207,6 @@ export class BookingsService {
       throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
     }
     if (isAgent) {
-      const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
-      if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");
-      await this.assertAgencyMaySell(claims.userId);
-      // live access check (token may be stale after approval)
-      const linked = await this.prisma.userResort.findFirst({ where: { userId: claims.userId, resortId: input.resortId } });
-      if (!linked) throw forbid("No access to this resort — request access from the resorts page");
       await this.perms.require(claims, input.resortId, "agent.book");
     } else {
       await this.perms.require(claims, input.resortId, "bookings.create");
@@ -581,8 +549,10 @@ export class BookingsService {
       take?: number;
     },
   ) {
-    requireSellingAccess(claims, q.resortId);
     const isAgent = claims.role === ROLE.AGENT;
+    // an agency's list is narrowed to its own bookings below, and stays
+    // readable whatever the resort decides about its door today
+    if (!isAgent) requireResortAccess(claims, q.resortId);
     const where: Prisma.BookingWhereInput = {
       resortId: q.resortId,
       deletedAt: null,
@@ -690,8 +660,8 @@ export class BookingsService {
      */
     let agentPricing: ReturnType<typeof agentPrices> | null = null;
     if (isAgent && resort.showRatesToAgents && b.agentUserId === claims.userId) {
-      // the resort's terms, not the agent's row: one rate for everyone selling
-      const terms = await this.commission.termsFor(b.resortId);
+      // the resort's terms, or the ones it struck with this agency
+      const terms = await this.commission.termsFor(b.resortId, (await agencyOf(this.prisma, claims.userId)).accountId);
       agentPricing = agentPrices({ commissionKind: terms.kind, commissionRate: terms.rate }, totals.roomRent);
     }
     const maskedGuest = isAgent

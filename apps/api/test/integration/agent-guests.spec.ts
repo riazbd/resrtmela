@@ -195,13 +195,13 @@ describe("finding a room by date", () => {
     expect(free[0]!.rooms[0]).toMatchObject({ baseRate: 5000, agentRate: 4500 });
   });
 
-  it("shows staff every resort the agency sells, not only the ones they were hired with", async () => {
-    // an agency approved for a resort after someone was hired: the staff
-    // member has no link of their own to it, but the agency does, and it is
-    // the agency's approval that decides what may be sold
+  it("shows staff every resort the agency sells, not only the ones open when they were hired", async () => {
+    // a resort that opens to agencies after someone was hired: nobody is
+    // linked to it — selling access is the agency's, computed on the request
+    // (2026-09-11 design, §8), so the junior sells it the moment it opens
     const junior = await hire("Junior4", ["agent.book"]);
     const second = await prisma.resort.create({
-      data: { tenantId: fx.tenantId, name: "Second Resort", location: "Sajek" },
+      data: { tenantId: fx.tenantId, name: "Second Resort", location: "Sajek", agentsOpen: true },
     });
     const type = await prisma.roomType.create({
       data: { resortId: second.id, name: "Cottage", maxAdults: 2, maxChildren: 1 },
@@ -209,8 +209,6 @@ describe("finding a room by date", () => {
     await prisma.room.create({
       data: { resortId: second.id, roomTypeId: type.id, name: "C1", baseRate: 4000 },
     });
-    await prisma.userResort.create({ data: { userId: fx.agentId, resortId: second.id } });
-
     const free = await guests().rooms(junior, { from: "2026-07-01", to: "2026-07-03" });
 
     expect(free.map((r) => r.resort.name).sort()).toEqual(["Second Resort", "Test Resort"]);

@@ -107,8 +107,32 @@ model Tenant {
   offerId Int?
   offer   Offer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
 
+  /// an agency's terms with the resorts that set any
+  resortTerms ResortAgency[]
+
   @@index([offerId])
   @@map("tenants")
+}
+
+/// One resort's terms with one agency (2026-09-11 design, §8.2) — the
+/// exception, not the rule. `blocked` keeps this agency out of a resort that is
+/// open to agents; a commission here overrides the resort's own rate for this
+/// agency alone, where a deal was struck.
+model ResortAgency {
+  id             Int      @id @default(autoincrement())
+  resortId       Int
+  resort         Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// the agency's account (a tenant of kind AGENCY)
+  accountId      Int
+  account        Tenant   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  blocked        Boolean  @default(false)
+  commissionKind String?  @db.VarChar(8)
+  commissionRate Decimal? @db.Decimal(10, 2)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([resortId, accountId])
+  @@index([accountId])
+  @@map("resort_agencies")
 }
 
 /// A way in (2026-09-11 design, §7). One object, three jobs: a private
@@ -153,6 +177,10 @@ model Resort {
   // agents planning a group need to see which nights are taken; whose
   // booking it is stays the resort's to give away, and starts closed
   showGuestNamesToAgents Boolean @default(false)
+  /// Open to agencies (2026-09-11 design, §8): every verified agency in good
+  /// standing may sell this resort, unless the resort has blocked it. Asked at
+  /// onboarding; starts closed.
+  agentsOpen        Boolean   @default(false)
   /// the fallback when a resort has defined no tax rules; see TaxRule
   taxRatePct        Decimal   @default(0.00) @db.Decimal(5, 2)
   /// Business Identification Number — a VAT invoice in Bangladesh must show it
@@ -185,6 +213,7 @@ model Resort {
   createdAt         DateTime  @default(now())
 
   roomTypes        RoomType[]
+  agencyTerms      ResortAgency[]
   rooms            Room[]
   ratePlans        RatePlan[]
   guests           Guest[]

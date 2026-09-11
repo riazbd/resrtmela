@@ -56,8 +56,21 @@ export class CommissionService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  /** The resort's terms. Falls back to the schema default for a resort that is gone. */
-  async termsFor(resortId: number): Promise<CommissionTerms> {
+  /**
+   * The terms an agency sells this resort on: the rate the resort struck with
+   * that agency where it struck one (2026-09-11 design, §8.2), else the
+   * resort's own. Falls back to the schema default for a resort that is gone.
+   */
+  async termsFor(resortId: number, accountId?: number | null): Promise<CommissionTerms> {
+    if (accountId != null) {
+      const deal = await this.prisma.resortAgency.findUnique({
+        where: { resortId_accountId: { resortId, accountId } },
+        select: { commissionKind: true, commissionRate: true },
+      });
+      if (deal?.commissionRate != null) {
+        return { kind: deal.commissionKind === "FLAT" ? "FLAT" : "PERCENT", rate: Number(deal.commissionRate) };
+      }
+    }
     const resort = await this.prisma.resort.findUnique({
       where: { id: resortId },
       select: COMMISSION_SELECT,

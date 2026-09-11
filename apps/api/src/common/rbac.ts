@@ -45,10 +45,11 @@ export function canAccessResort(claims: JwtClaims, resortId: number): boolean {
  * an outside business and often a competitor of the next agency along; handing
  * it the resort's customer list is the one thing a resort would never agree to.
  *
- * So the default is closed. A link means an agent may **sell** the resort, and
- * the paths where selling is genuinely enough call `requireSellingAccess` by
- * name — which makes each of them a decision somebody made, rather than the
- * silent consequence of two different ideas sharing a list.
+ * So the default is closed, and an agent never passes. Selling access is not a
+ * list at all any more (2026-09-11 design, §8): the paths where selling is
+ * genuinely enough call `requireSellingAccess` in `selling-access.ts` by name —
+ * which makes each of them a decision somebody made, rather than the silent
+ * consequence of two different ideas sharing a list.
  */
 export function requireResortAccess(claims: JwtClaims, resortId: number): void {
   if (!canAccessResort(claims, resortId)) {
@@ -58,24 +59,6 @@ export function requireResortAccess(claims: JwtClaims, resortId: number): void {
   }
   if (claims.role === ROLE.AGENT) {
     throw Object.assign(new Error("Agents cannot read this resort's records"), {
-      status: 403,
-    });
-  }
-}
-
-/**
- * The caller may sell this resort: an approved agent, or the resort's own staff.
- *
- * Use this only where an agency genuinely needs the data to do its job —
- * searching for a free room, making a booking, reading back a booking it made.
- * Anything that returns another party's bookings, money or guests belongs to
- * `requireResortAccess` instead, and anything returning the agency's *own*
- * bookings must still narrow the query to the agency: this check answers "may
- * you be here", never "is this yours".
- */
-export function requireSellingAccess(claims: JwtClaims, resortId: number): void {
-  if (!canAccessResort(claims, resortId)) {
-    throw Object.assign(new Error("No access to this resort"), {
       status: 403,
     });
   }

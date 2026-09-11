@@ -111,6 +111,8 @@ export interface Fixture {
   rooms: { id: number; name: string }[];
   managerId: number;
   agentId: number;
+  /** the agent's agency account — verified, so it sells the (open) fixture resort */
+  agencyId: number;
   guestId: number;
 }
 
@@ -135,6 +137,9 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
       // describe the same resort
       agentCommissionKind: "PERCENT",
       agentCommissionRate: 10,
+      // open to agencies, so the fixture agent sells it the way every agent
+      // does now: by being verified, not by holding a row in user_resorts
+      agentsOpen: true,
     },
   });
   const roomType = await prisma.roomType.create({
@@ -165,10 +170,8 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
       email: `agent-${uniq}@example.com`,
       role: "AGENT",
       status: "active",
+      account: { create: { name: "Test Agency", slug: `agency-${uniq}`, kind: "AGENCY", status: "active" } },
     },
-  });
-  await prisma.userResort.create({
-    data: { userId: agent.id, resortId: resort.id, commissionRate: 10, commissionKind: "PERCENT" },
   });
   const guest = await prisma.guest.create({
     data: {
@@ -188,6 +191,7 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
     rooms: rooms.map((r) => ({ id: r.id, name: r.name })),
     managerId: manager.id,
     agentId: agent.id,
+    agencyId: agent.accountId!,
     guestId: guest.id,
   };
 }

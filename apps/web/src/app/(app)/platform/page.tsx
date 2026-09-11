@@ -393,7 +393,7 @@ export default function PlatformPage() {
         <Card className="mt-5 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Agent</Th><Th>Resorts</Th><Th>Bookings</Th><Th>Wallet</Th><Th>Status</Th><Th /></tr>
+              <tr><Th>Agent</Th><Th>Sold at</Th><Th>Bookings</Th><Th>Wallet</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {agents.map((a) => (
@@ -428,16 +428,10 @@ export default function PlatformPage() {
                       >
                         <Wallet className="inline h-3.5 w-3.5" /> Wallet
                       </button>
-                      {a.resorts[0] && a.status !== "active" && (
-                        <button onClick={() => act(() => api(`/resorts/${a.resorts[0]!.id}/agents/${a.id}/status`, { method: "PATCH", body: { status: "active" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
-                          <CheckCircle2 className="inline h-3.5 w-3.5" /> Activate
-                        </button>
-                      )}
-                      {a.resorts[0] && a.status === "active" && (
-                        <button onClick={() => act(() => api(`/resorts/${a.resorts[0]!.id}/agents/${a.id}/status`, { method: "PATCH", body: { status: "suspended" } }))} className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
-                          <Ban className="inline h-3.5 w-3.5" /> Suspend
-                        </button>
-                      )}
+                      {/* No Activate/Suspend here: those were one resort's
+                          switch, borrowed through the agent's first linked
+                          resort. The platform's lever is verification in the
+                          agencies queue above; a resort's is its own block. */}
                     </div>
                   </Td>
                 </tr>

@@ -45,7 +45,7 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **729 API tests** across 73 files (34 at the start of all this,
+Current state: **759 API tests** across 77 files (34 at the start of all this,
 all of them pure unit tests) plus **117 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
@@ -1202,6 +1202,89 @@ the person also works at another resort, in which case only `SUPER_ADMIN` may,
 the same gate a password or role change already sits behind, because changing
 the address changes who the account belongs to.
 
+### §3.33 — Phases 2–5: the account, the agency, offers, the open door
+
+The rest of the 2026-09-11 design, on four stacked branches, each cut from
+the one before so the owner can stop after any of them (spec §11):
+`feat/account-subscriber` (phase 2), `feat/agency-customer` (3),
+`feat/offers` (4), `feat/open-door` (5). Written inline, test-first — each
+phase's gate spec was run red before the code it describes. None of it is
+deployed (§6.2).
+
+**Phase 2 — the subscriber is an account.** A subscription and its dues
+belong to the `Tenant` (the account), not to a resort; `Tenant.kind` is
+`RESORT_OWNER` or `AGENCY`; `Tenant.plan`, a second answer to "what plan is
+this customer on", is gone. One live subscription per account is enforced by
+the database (a generated `accountLiveKey` column under a unique index). The
+billing sweep bills, suspends and resumes accounts: suspending a resort owner
+stops its resorts taking new entries, suspending an agency stops it selling.
+`an-account-is-the-subscriber.spec.ts` is the gate — an account with no resort
+is billed, falls overdue, is suspended and resumes when it pays. The gate
+said existing billing specs must pass unchanged; they could not, because their
+fixtures created a subscription *for a resort* — the meaning moved from resort
+to account, which is the finding, and the fixtures now say so. The same move
+changed `platform/outstanding` from one row per resort to one per account.
+
+**Phase 3 — the agency is a customer.** An agency signs itself up
+(`/signup/agency`), lands **pending** on a trial of a plan from its own shelf
+(`PlatformPlan.audience`, and `audience` on every `PLAN_FEATURES` entry — a
+resort never sees an agency plan, nor the reverse), and is verified once by
+the platform (Platform → Agents, the agencies queue). Pending or suspended, it
+cannot create a booking; what it already sold still reads and still checks
+in. Billing notices for an agency go to the agency. The migration gave every
+existing agency an account of its own, **active** — they were admitted by the
+resorts they sell for, and taking that away on deploy day would be a change of
+terms nobody decided. `the-agency-is-a-customer.spec.ts`.
+
+**Phase 4 — offers.** An `Offer` is a code with an audience, the plan the
+signup lands on, an optional trial and discount, an expiry, a use limit and an
+optional address it is bound to: a campaign, a private invitation, and what
+`invite-agent` used to do, in one object. Signup spends it inside its own
+transaction with a conditional update, so a refused offer leaves nothing
+behind and two signups cannot share the last use; the account remembers the
+offer it came through, and Platform → Offers counts signups per offer — the
+first answer to "which channel brought this customer". `invite-agent` —
+which made the agent's account and mailed its password in the clear — is
+gone: a resort's invitation is a one-use, 30-day offer for that address on the
+cheapest agency plan, and the agency sets its own sign-in.
+`an-offer-brings-a-customer.spec.ts`. Rulings: an offer may land on a plan
+that is not on sale (that is half of what an offer is for); a discount lives
+in the subscription's fee, so it lasts until a plan change.
+
+**Phase 5 — the open door.** Selling access is computed on every request, in
+one place (`common/selling-access.ts`): the agency verified and paid up, the
+resort open to agents (`Resort.agentsOpen`, asked at resort signup with the
+number of agencies live), and the agency not blocked by that resort
+(`resort_agencies`, which also holds a commission struck with one agency).
+Closing a resort or blocking an agency is felt on the agency's next click, not
+its next login. The request-and-approve flow is **removed, by the owner's
+decision (2026-09-11)**: the agent's "Request access" button, the resort's
+Approve/Reject queue, their three routes, and — by migration — every agent's
+`user_resorts` row. So the team list is staff by construction and its query
+filters no role. `the-door-is-open.spec.ts`. Rulings, each recorded here
+because each is a choice someone may want back:
+
+- **The platform owner's `user_resorts` rows are deleted too.** The gate
+  forbids the role exclusion that hid them from team lists; `/auth/me` now
+  offers a super admin every resort instead, since they pass every resort
+  anyway. Not in the owner's question — the spec's gate required it.
+- An agency's own bookings, its booking list and its commission report need
+  **no** selling access, so they stay readable after a door closes — phase 3's
+  promise, kept.
+- Opening a resort from Settings needs the plan's `agents` feature; the answer
+  given at signup is kept as given.
+- `setAgentStatus` (a resort suspending an agent) now blocks that agency at
+  that resort. It used to flip the agent's status platform-wide.
+- A resort cannot add an agent as a colleague, and cannot invite an agency
+  while it is closed to agencies. An agency already on the platform that is
+  invited is told, not linked.
+- The per-agent report lists agents who booked in the range, not agents once
+  approved. The per-agency commission in the console is a percentage; the API
+  also takes a flat fee.
+- A pending agency sees the open resorts in Discover, with the reason it
+  cannot sell; its room search and calendar are empty until it is verified.
+- The old requests in `resort_access` are left in the database, unread.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -1475,6 +1558,42 @@ cards are there; open the login page and check the "Forgot password?" link
 actually sends an email whose reset link works. The shipped mobile build's own
 Book button will now 404 instead of showing its old refusal message —
 expected, the app is retired (§3.32), not merely frozen.
+
+### 6.2 Deploying phases 2–5, not yet done
+
+Each phase is its own branch and may be deployed on its own, in order, after
+§6.1. The same sequence as §6.1 applies (back up, dry run, `pm2 stop api`,
+`db:baseline -- --apply`, `prisma generate`, build, restart); what differs is
+what the migrations do:
+
+- `20260912100000_the_subscriber_is_an_account` — **destructive.** Moves each
+  subscription and due onto its resort's tenant, keeps the newest live
+  subscription per account and marks the rest `CANCELLED`, then drops `subscriptions.resortId`,
+  `subscription_dues.resortId` and `tenants.plan`. Read the dry run's list and
+  the backup before it.
+- `20260913100000_the_agency_is_a_customer` — gives every agency an `AGENCY`
+  account, active. Additive.
+- `20260914100000_an_offer_brings_a_customer` — the `offers` table and
+  `tenants.offerId`. Additive.
+- `20260915100000_the_open_door` — **deletes rows**: every `user_resorts` row
+  of an agent or the platform owner. Resorts that had an agent selling are
+  opened first, so nobody who sells today stops.
+
+Ship each phase's API and web together: phase 4 renames `invite-agent` to
+`invite-agency`, and phase 5 removes the access-request routes and the
+"Agent" option in the team form.
+
+**Before agencies can sign up, create their plans.** Production's
+`platform_plans` holds resort plans only; until Platform → Plans has at least
+one plan with the audience *Agency*, `/signup/agency` says agency plans are
+not on sale, and a resort's invitation refuses for the same reason. The
+agency shelf's prices are the owner's decision — spec §9 advises that an
+agency plan sell tools, not admission.
+
+Verify by opening the pages: resort signup's last step asks the agencies
+question; Settings → Agent access shows the door, the verified agencies and
+the invite; Platform → Agents shows the queue; Platform → Offers makes a link
+that lands a signup on its plan.
 
 ## 7. Working on it
 

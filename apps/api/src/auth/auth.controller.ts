@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Req, UseGuards, Inject, HttpCode, Query } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PermissionsService } from "../common/permissions";
 import { PlanLimitsService } from "../common/plan-limits.service";
@@ -33,6 +33,7 @@ class SignupDto {
   @IsString() @MinLength(8) password!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
   @IsOptional() @IsString() @MaxLength(32) offer?: string;
+  @IsOptional() @IsBoolean() agentsOpen?: boolean;
 }
 
 class SignupAgencyDto {

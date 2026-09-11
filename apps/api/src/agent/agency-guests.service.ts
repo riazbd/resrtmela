@@ -15,6 +15,7 @@ import { badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
 import { agentPricing, bookingTotals } from "../common/money";
 import { COMMISSION_SELECT, termsOf } from "../common/commission.service";
+import { agencyOf, sellableFor } from "../common/selling-access";
 import { AvailabilityService } from "../bookings/availability.service";
 import { TaxService } from "../common/tax.service";
 import { AgencyContextService } from "./agency-context.service";
@@ -152,23 +153,28 @@ export class AgencyGuestsService {
       throw badRequest("Check-out must be after check-in");
     }
 
-    // the agency's approved resorts, not the individual's: staff sell what the
-    // agency sells
-    const links = await this.prisma.userResort.findMany({
-      where: {
-        userId: ctx.agencyId,
-        ...(query.resortId ? { resortId: query.resortId } : {}),
-      },
+    // the resorts the agency may sell right now, by the one rule — not the
+    // individual's, since staff sell what the agency sells
+    const agency = await agencyOf(this.prisma, ctx.agencyId);
+    const ids = agency.refusal ? [] : await sellableFor(this.prisma, agency.accountId, query.resortId);
+    const deals = agency.accountId == null
+      ? []
+      : await this.prisma.resortAgency.findMany({ where: { accountId: agency.accountId, resortId: { in: ids }, commissionRate: { not: null } } });
+    const resorts = await this.prisma.resort.findMany({
+      where: { id: { in: ids } },
       select: {
-        resortId: true,
-        resort: {
-          select: {
-            id: true, name: true, location: true, showRatesToAgents: true,
-            // the commission is the resort's, one rate for every agent selling
-            ...COMMISSION_SELECT,
-          },
-        },
+        id: true, name: true, location: true, showRatesToAgents: true,
+        // the resort's commission, unless it struck another with this agency
+        ...COMMISSION_SELECT,
       },
+      orderBy: { id: "asc" },
+    });
+    const links = resorts.map((resort) => {
+      const deal = deals.find((d) => d.resortId === resort.id);
+      return {
+        resortId: resort.id,
+        resort: deal ? { ...resort, agentCommissionKind: deal.commissionKind ?? "PERCENT", agentCommissionRate: deal.commissionRate } : resort,
+      };
     });
 
     /**

@@ -3,14 +3,6 @@ import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, Max, Min } fro
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { EngageService } from "./engage.service";
 
-class AccessRequestDto {
-  @IsOptional() @IsString() @MaxLength(255) note?: string;
-}
-
-class AccessDecisionDto {
-  @IsIn(["APPROVE", "REJECT"]) decision!: string;
-}
-
 class PurchaseCreditsDto {
   // which sizes exist is the platform's commercial decision, read at request
   // time from settings; a list here would be a fourth copy going stale
@@ -54,20 +46,9 @@ export class EngageController {
     return this.engage.markRead(req.user, id);
   }
 
-  // agent — discover & request access
+  // agent — the resorts open to it; there is nothing to request (2026-09-11 design, §8)
   @Get("agent/discover") discover(@Req() req: AuthedRequest) {
     return this.engage.discoverResorts(req.user);
-  }
-  @Post("agent/resorts/:id/access-request") requestAccess(@Req() req: AuthedRequest, @Param("id") id: string, @Body() dto: AccessRequestDto) {
-    return this.engage.requestAccess(req.user, Number(id), dto.note);
-  }
-
-  // owner — access requests
-  @Get("resorts/:id/access-requests") accessRequests(@Req() req: AuthedRequest, @Param("id") id: string) {
-    return this.engage.listAccessRequests(req.user, Number(id));
-  }
-  @Post("access-requests/:id/decision") decide(@Req() req: AuthedRequest, @Param("id") id: string, @Body() dto: AccessDecisionDto) {
-    return this.engage.decideAccess(req.user, id, dto.decision === "APPROVE");
   }
 
   // bulk email

@@ -4,7 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CommissionService } from "../common/commission.service";
 import { JwtClaims, Role, ROLE } from "@rh/shared";
 import { agentPricing } from "../common/money";
-import { requireSellingAccess } from "../common/rbac";
+import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { dateOnly, eachNight } from "../common/dates";
 import { LIVE_STATES } from "./booking-state";
 
@@ -45,7 +45,7 @@ export class AvailabilityService {
     fromStr: string,
     toStr: string,
   ): Promise<RoomAvailability[]> {
-    requireSellingAccess(claims, resortId);
+    await requireSellingAccess(this.prisma, claims, resortId);
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (to <= from) {
@@ -80,7 +80,10 @@ export class AvailabilityService {
      * at the moment they are quoting a guest — not in a commission report at
      * the end of the month.
      */
-    const resortTerms = claims.role === ROLE.AGENT ? await this.commission.termsFor(resortId) : null;
+    const resortTerms =
+      claims.role === ROLE.AGENT
+        ? await this.commission.termsFor(resortId, (await agencyOf(this.prisma, claims.userId)).accountId)
+        : null;
     const terms = resortTerms
       ? { commissionKind: resortTerms.kind, commissionRate: resortTerms.rate }
       : null;

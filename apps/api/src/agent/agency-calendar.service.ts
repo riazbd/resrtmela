@@ -24,6 +24,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { AgencyContextService } from "./agency-context.service";
 import { badRequest } from "../common/rbac";
+import { agencyOf, sellableFor } from "../common/selling-access";
 import type { JwtClaims } from "@rh/shared";
 
 /** A span of nights one room is not free, from the agency's side of the desk. */
@@ -75,21 +76,17 @@ export class AgencyCalendarService {
       throw badRequest(`Range cannot exceed ${MAX_RANGE_DAYS} days`);
     }
 
-    // the agency's approved resorts, not the caller's — staff hired after an
-    // approval carry a stale copy of the list (same reason as the room search)
-    const links = await this.prisma.userResort.findMany({
-      where: {
-        userId: ctx.agencyId,
-        ...(query.resortId ? { resortId: query.resortId } : {}),
-      },
-      select: {
-        resortId: true,
-        resort: {
-          select: { id: true, name: true, location: true, showGuestNamesToAgents: true },
-        },
-      },
-      orderBy: { resortId: "asc" },
-    });
+    // the resorts the agency may sell right now, by the one rule — the
+    // agency's, not the caller's (same reason as the room search)
+    const agency = await agencyOf(this.prisma, ctx.agencyId);
+    const ids = agency.refusal ? [] : await sellableFor(this.prisma, agency.accountId, query.resortId);
+    const links = (
+      await this.prisma.resort.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, name: true, location: true, showGuestNamesToAgents: true },
+        orderBy: { id: "asc" },
+      })
+    ).map((resort) => ({ resortId: resort.id, resort }));
     if (links.length === 0) return { from, to, resorts: [] };
 
     const resortIds = links.map((l) => l.resortId);

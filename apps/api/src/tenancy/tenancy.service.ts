@@ -1,7 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type Role, JwtClaims } from "@rh/shared";
-import { requireRoles, requireResortAccess, requireSellingAccess } from "../common/rbac";
+import { requireRoles, requireResortAccess } from "../common/rbac";
+import { requireSellingAccess } from "../common/selling-access";
 import { AuditService } from "../common/audit.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService } from "../common/permissions";
@@ -184,8 +185,8 @@ export class TenancyService {
 
     const roomCount = tenant.resorts.reduce((s, r) => s + r._count.rooms, 0);
     const guestCount = tenant.resorts.reduce((s, r) => s + r._count.guests, 0);
-    // every account linked to a resort is staff (or an agency selling it) — a
-    // guest is a row in the register, never a login, so there is nobody to leave out
+    // every account linked to a resort is staff: an agency sells a resort
+    // without a row here, and a guest is a register entry, never a login
     const staffUsers = await this.prisma.userResort.findMany({
       where: { resort: { tenantId } },
       select: { userId: true },
@@ -217,7 +218,7 @@ export class TenancyService {
     // an agency sells this resort, so it may read the shop window: rooms,
     // room types, activities. Everything behind the counter goes through
     // `requireResortAccess`, which agents do not pass.
-    requireSellingAccess(claims, resortId);
+    await requireSellingAccess(this.prisma, claims, resortId);
 
     /**
      * An agency gets the window, and only the window.

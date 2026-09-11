@@ -9,6 +9,7 @@ import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PLACEHOLDER_EMAIL_SUFFIX, reachableEmail, reachablePhone } from "../common/contact";
+import { agencyOf } from "../common/selling-access";
 
 @Injectable()
 export class EngageService {
@@ -55,22 +56,27 @@ export class EngageService {
     return { ok: true };
   }
 
-  // ─────────────── agent resort discovery & access ───────────────
+  // ─────────────── agent resort discovery ───────────────
 
+  /**
+   * The resorts open to this agency, to look around.
+   *
+   * There is nothing to request any more (2026-09-11 design, §8): a verified
+   * agency sells every resort that is open to agents and has not blocked it.
+   * One still waiting for verification sees the same list, and why it cannot
+   * sell yet.
+   */
   async discoverResorts(claims: JwtClaims) {
+    const agency = await agencyOf(this.prisma, claims.userId);
     const resorts = await this.prisma.resort.findMany({
-      where: { status: "active" },
-      select: {
-        id: true, name: true, location: true,
-        roomTypes: { select: { id: true, name: true, maxAdults: true, maxChildren: true }, take: 3 },
-        _count: { select: { rooms: true } },
+      where: {
+        status: "active",
+        agentsOpen: true,
+        ...(agency.accountId != null ? { agencyTerms: { none: { accountId: agency.accountId, blocked: true } } } : {}),
       },
+      select: { id: true, name: true, location: true, _count: { select: { rooms: true } } },
       orderBy: { id: "asc" },
-    }).catch(() => []);
-    const myAccess = await this.prisma.resortAccess.findMany({ where: { userId: claims.userId } });
-    const accessMap = new Map(myAccess.map((a) => [a.resortId, a]));
-    const linked = await this.prisma.userResort.findMany({ where: { userId: claims.userId }, select: { resortId: true } });
-    const linkedSet = new Set(linked.map((l) => l.resortId));
+    });
     const priced = await Promise.all(
       resorts.map(async (r) => {
         const types = await this.prisma.roomType.findMany({
@@ -85,113 +91,13 @@ export class EngageService {
           roomCount: r._count.rooms,
           roomTypeCount: types.length,
           priceFrom: prices.length ? Math.min(...prices) : null,
-          access: linkedSet.has(r.id) ? "APPROVED" : (accessMap.get(r.id)?.status ?? null),
+          // sellable today, or waiting on the platform's verification (the reason says which)
+          access: agency.refusal ? "WAITING" : "OPEN",
+          reason: agency.refusal,
         };
       }),
     );
     return priced;
-  }
-
-  async requestAccess(claims: JwtClaims, resortId: number, note?: string) {
-    const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { id: true, name: true, status: true } });
-    if (!resort || resort.status !== "active") throw badRequest("resort not available");
-    const linked = await this.prisma.userResort.findFirst({ where: { userId: claims.userId, resortId } });
-    if (linked) throw badRequest("you already have access to this resort");
-    const existing = await this.prisma.resortAccess.findUnique({ where: { userId_resortId: { userId: claims.userId, resortId } } });
-    if (existing && existing.status === "PENDING") throw badRequest("request already pending");
-    if (existing && existing.status === "APPROVED") throw badRequest("already approved");
-    const req = existing
-      ? await this.prisma.resortAccess.update({ where: { id: existing.id }, data: { status: "PENDING", note: note ?? existing.note, decidedAt: null } })
-      : await this.prisma.resortAccess.create({ data: { userId: claims.userId, resortId, note: note ?? null } });
-    // notify resort admins
-    const admins = await this.prisma.userResort.findMany({
-      where: { resortId, user: { role: { in: ["RESORT_ADMIN", "MANAGER"] } } },
-      select: { userId: true },
-    });
-    await this.notify(admins.map((a) => a.userId), {
-      title: "Agent access request",
-      body: `${claims.userId} requested agent access to ${resort.name}.`,
-      kind: "request",
-      link: `/settings?tab=agent-access`,
-      resortId,
-    });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "access.request", entity: "resort_access", entityId: Number(req.id) });
-    return req;
-  }
-
-  async listAccessRequests(claims: JwtClaims, resortId: number) {
-    if (!isManagement(claims.role)) throw forbid("management only");
-    requireResortAccess(claims, resortId);
-    return this.prisma.resortAccess.findMany({
-      where: { resortId },
-      include: { user: { select: { id: true, name: true, phone: true, role: true, status: true } } },
-      orderBy: { id: "desc" },
-      take: 100,
-    });
-  }
-
-  async decideAccess(claims: JwtClaims, requestId: string, approve: boolean) {
-    const req = await this.prisma.resortAccess.findUnique({ where: { id: BigInt(requestId) }, include: { resort: { select: { id: true, name: true } } } });
-    if (!req) throw badRequest("request not found");
-    if (!isManagement(claims.role)) throw forbid("management only");
-    requireResortAccess(claims, req.resortId);
-    // letting an agent in is the act of using the feature; browsing is free
-    if (approve) await this.planLimits.requireFeature(req.resortId, "agents");
-    if (approve) {
-      /**
-       * Approving an agency to sell here is not a licence to rewrite them.
-       *
-       * This used to set `role: "AGENT", status: "active"` unconditionally on
-       * a global `users` row. So approving a request from someone who manages
-       * another resort demoted them platform-wide, and approving one from a
-       * suspended account silently un-suspended it — a resort's own approval
-       * screen undoing a platform ban.
-       *
-       * It also used to promote a GUEST applicant to an agency on the spot.
-       * There are no guest accounts any more (2026-09-11), so the only
-       * applicant approval can let in is one that is already an agency: this
-       * screen grants a resort to an agency, it does not make one.
-       *
-       * Both refusals are asked before anything is written. The request used
-       * to be marked APPROVED first, so a refused one stayed APPROVED with
-       * nobody let in — and `requestAccess` then answered "already approved"
-       * to the applicant for ever, while the refusal said nothing had changed.
-       */
-      const applicant = await this.prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
-      if (applicant.status === "suspended") {
-        throw badRequest("that account is suspended — the platform owner must lift it first");
-      }
-      if (applicant.role !== "AGENT") {
-        throw badRequest(
-          "Only a travel agency's account can be approved to sell here, and this account is not one. It can stay as it is; nothing was changed.",
-        );
-      }
-    }
-    // the decision and the link it grants land together, or neither does: an
-    // APPROVED request with no link is the same lock-out by another route
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const decided = await tx.resortAccess.update({
-        where: { id: req.id },
-        data: { status: approve ? "APPROVED" : "REJECTED", decidedAt: new Date() },
-      });
-      if (approve) {
-        const linked = await tx.userResort.findUnique({ where: { userId_resortId: { userId: req.userId, resortId: req.resortId } } });
-        if (!linked) {
-          // the commission is the resort's, set once on Settings -> Agent access
-          await tx.userResort.create({ data: { userId: req.userId, resortId: req.resortId } });
-        }
-      }
-      return decided;
-    });
-    await this.notify([req.userId], {
-      title: approve ? "Access approved" : "Access rejected",
-      body: approve ? `You now have agent access to ${req.resort.name}. You can book for your clients.` : `Your access request for ${req.resort.name} was rejected.`,
-      kind: "request",
-      link: approve ? "/agent/discover" : undefined,
-      resortId: req.resortId,
-    });
-    await this.audit.log({ actorId: claims.userId, resortId: req.resortId, action: approve ? "access.approve" : "access.reject", entity: "resort_access", entityId: Number(req.id) });
-    return updated;
   }
 
   // ─────────────── bulk email credits (sender.net style) ───────────────
@@ -460,14 +366,25 @@ export class EngageService {
     let recipients: { email: string; name?: string }[] = [];
     if (input.audience === "AGENTS") {
       if (!input.resortId || !isManagement(claims.role)) throw badRequest("resortId required for owners");
-      // every account has an email now, but an agent who had none was given a
+      // the agencies that may sell this resort now — verified, in good
+      // standing, not blocked here — each reached through its owner. Every
+      // account has an email now, but an agent who had none was given a
       // `.invalid` placeholder, which never delivers — mailing it would spend
       // a credit on nobody
-      const agents = await this.prisma.userResort.findMany({
-        where: { resortId: input.resortId, user: { role: "AGENT", NOT: { email: { endsWith: PLACEHOLDER_EMAIL_SUFFIX } } } },
-        select: { user: { select: { email: true, name: true } } },
-      });
-      recipients = agents.map((a) => ({ email: a.user.email, name: a.user.name }));
+      const resort = await this.prisma.resort.findUnique({ where: { id: input.resortId }, select: { agentsOpen: true } });
+      const agents = resort?.agentsOpen
+        ? await this.prisma.user.findMany({
+            where: {
+              role: "AGENT",
+              parentAgentId: null,
+              status: "active",
+              account: { status: "active", resortTerms: { none: { resortId: input.resortId, blocked: true } } },
+              NOT: { email: { endsWith: PLACEHOLDER_EMAIL_SUFFIX } },
+            },
+            select: { email: true, name: true },
+          })
+        : [];
+      recipients = agents.map((a) => ({ email: a.email, name: a.name }));
     } else if (input.audience === "RESORT_GUESTS") {
       if (!input.resortId || !isManagement(claims.role)) throw badRequest("resortId required for owners");
       const guests = await this.prisma.guest.findMany({

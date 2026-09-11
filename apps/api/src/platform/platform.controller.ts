@@ -110,6 +110,17 @@ class RolePatchDto {
   @IsOptional() @IsArray() permissions?: string[];
 }
 
+class AgentsOpenDto {
+  @IsBoolean() open!: boolean;
+}
+
+class AgencyTermsDto {
+  @IsOptional() @IsBoolean() blocked?: boolean;
+  @IsOptional() @IsIn(["PERCENT", "FLAT"]) commissionKind?: string;
+  // null clears the deal, and the resort's own rate applies again
+  @IsOptional() @IsNumber() commissionRate?: number | null;
+}
+
 // no phone and no password: the agency signs itself up from the link
 class InviteAgencyDto {
   @IsString() @MaxLength(191) email!: string;
@@ -352,6 +363,20 @@ export class PlatformController {
   }
 
   // owner — invite agent by email
+  @Post("resorts/:id/agents-open") setAgentsOpen(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: AgentsOpenDto) {
+    return this.platform.setAgentsOpen(req.user, id, dto.open);
+  }
+  @Get("resorts/:id/agencies") resortAgencies(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.resortAgencies(req.user, id);
+  }
+  @Patch("resorts/:id/agencies/:accountId") setAgencyTerms(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Param("accountId", ParseIntPipe) accountId: number,
+    @Body() dto: AgencyTermsDto,
+  ) {
+    return this.platform.setAgencyTerms(req.user, id, accountId, dto);
+  }
   @Post("resorts/:id/invite-agency") inviteAgency(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: InviteAgencyDto) {
     return this.platform.inviteAgency(req.user, id, dto);
   }

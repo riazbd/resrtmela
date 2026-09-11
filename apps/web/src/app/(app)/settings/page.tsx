@@ -680,25 +680,46 @@ function ExportTab({ rid, name }: { rid: number; name: string }) {
   );
 }
 
+interface AgencyTermsRow {
+  accountId: number;
+  name: string;
+  status: string;
+  blocked: boolean;
+  commissionKind: string | null;
+  commissionRate: number | null;
+}
+
+/**
+ * Agents: the open door (2026-09-11 design, §8).
+ *
+ * This was a queue of access requests — one Approve per agency per resort, by
+ * someone who cannot vet a travel agency by reading its name. The platform
+ * verifies agencies now. What is left here is the resort's own commercial
+ * decisions: is it open to agents, which agency does it refuse, and did it
+ * strike a different commission with one of them.
+ */
 function AccessTab({ rid }: { rid: number }) {
   const { push } = useToast();
-  // a failed load used to render as "No requests yet"
+  // a failed load must not read as "no agencies"
   const fail = useLoadFailure();
-  const [rows, setRows] = useState<AccessRow[] | null>(null);
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [rows, setRows] = useState<AgencyTermsRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deal, setDeal] = useState<Record<number, string>>({});
   const [invite, setInvite] = useState({ email: "", name: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
-    api<AccessRow[]>(`/resorts/${rid}/access-requests`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
+    api<{ agentsOpen?: boolean }>(`/resorts/${rid}`).then((r) => setOpen(!!r.agentsOpen)).catch(() => setOpen(null));
+    api<AgencyTermsRow[]>(`/resorts/${rid}/agencies`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
   }, [rid]);
   useEffect(() => load(), [load]);
 
-  async function decide(id: string, decision: "APPROVE" | "REJECT") {
-    setBusy(id);
+  async function run(key: string, fn: () => Promise<unknown>, ok: string) {
+    setBusy(key);
     try {
-      await api(`/access-requests/${id}/decision`, { method: "POST", body: { decision } });
-      push(decision === "APPROVE" ? "Agent approved — they can now book" : "Request rejected");
+      await fn();
+      push(ok);
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -706,6 +727,26 @@ function AccessTab({ rid }: { rid: number }) {
       setBusy(null);
     }
   }
+  const toggleDoor = () =>
+    run(
+      "door",
+      () => api(`/resorts/${rid}/agents-open`, { method: "POST", body: { open: !open } }),
+      open ? "Closed to agencies — they stop selling on their next click" : "Open to agencies — every verified agency can now sell your rooms",
+    );
+  const toggleBlock = (a: AgencyTermsRow) =>
+    run(
+      `b${a.accountId}`,
+      () => api(`/resorts/${rid}/agencies/${a.accountId}`, { method: "PATCH", body: { blocked: !a.blocked } }),
+      a.blocked ? `${a.name} can sell your rooms again` : `${a.name} is blocked from selling your rooms`,
+    );
+  const saveDeal = (a: AgencyTermsRow) => {
+    const v = (deal[a.accountId] ?? "").trim();
+    return run(
+      `d${a.accountId}`,
+      () => api(`/resorts/${rid}/agencies/${a.accountId}`, { method: "PATCH", body: { commissionKind: "PERCENT", commissionRate: v === "" ? null : Number(v) } }),
+      v === "" ? `${a.name} is back on your standard rate` : `${a.name} now earns ${v}% with you`,
+    );
+  };
 
   async function sendInvite() {
     setInviting(true);
@@ -714,7 +755,7 @@ function AccessTab({ rid }: { rid: number }) {
         method: "POST",
         body: { email: invite.email, name: invite.name || undefined },
       });
-      push(r.emailed ? "Invitation sent — the agency signs itself up from the link" : "Agent linked — they were notified");
+      push(r.emailed ? "Invitation sent — the agency signs itself up from the link" : "Agency told — it is already on the platform");
       setInvite({ email: "", name: "" });
       load();
     } catch (ex) {
@@ -727,44 +768,82 @@ function AccessTab({ rid }: { rid: number }) {
   if (!rows) return <Empty msg="Loading…" />;
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-      <Card title={`Agent access requests (${rows.length})`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr><Th>Agent</Th><Th>Phone</Th><Th>Status</Th><Th>Note</Th><Th>Requested</Th><Th /></tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t border-slate-100">
-                  <Td>
-                    <div className="font-semibold text-slate-800">{r.user.name}</div>
-                    <div className="text-xs text-slate-400">{r.user.role.replace(/_/g, " ")} · {r.user.status}</div>
-                  </Td>
-                  <Td className="text-xs">{displayPhone(r.user.phone)}</Td>
-                  <Td>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : r.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
-                  </Td>
-                  <Td className="text-xs text-slate-500">{r.note ?? "—"}</Td>
-                  <Td className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString("en-GB")}</Td>
-                  <Td>
-                    <div className="flex justify-end gap-1.5">
-                      {r.status === "PENDING" && (
-                        <>
-                          <button onClick={() => decide(r.id, "APPROVE")} disabled={busy === r.id} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Approve</button>
-                          <button onClick={() => decide(r.id, "REJECT")} disabled={busy === r.id} className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Reject</button>
-                        </>
+      <div className="space-y-4">
+        <Card title="Open to travel agencies?">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="max-w-lg text-sm text-slate-600">
+              {open
+                ? "Open: every agency the platform has verified can find your resort and book for its clients, on your commission. Block any agency below — it takes effect on its next click."
+                : "Closed: no agency can sell your rooms. Open it to let every verified agency book for its clients; you can still block any one of them."}
+            </p>
+            <Button onClick={toggleDoor} loading={busy === "door"} disabled={open === null} variant={open ? "ghost" : undefined}>
+              {open ? "Close to agencies" : "Open to agencies"}
+            </Button>
+          </div>
+        </Card>
+
+        <Card title={`Verified agencies (${rows.length})`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr><Th>Agency</Th><Th>Selling here</Th><Th>Commission</Th><Th /></tr>
+              </thead>
+              <tbody>
+                {rows.map((a) => (
+                  <tr key={a.accountId} className="border-t border-slate-100">
+                    <Td>
+                      <div className="font-semibold text-slate-800">{a.name}</div>
+                      {a.status !== "active" && <div className="text-xs text-slate-400">{a.status}</div>}
+                    </Td>
+                    <Td>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${a.blocked ? "bg-red-50 text-red-700" : open ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                        {a.blocked ? "blocked" : open ? "yes" : "resort closed"}
+                      </span>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          className="!w-20 !py-1"
+                          inputMode="decimal"
+                          placeholder={a.commissionRate != null ? String(a.commissionRate) : "standard"}
+                          value={deal[a.accountId] ?? ""}
+                          onChange={(e) => setDeal({ ...deal, [a.accountId]: e.target.value })}
+                        />
+                        <span className="text-xs text-slate-400">%</span>
+                        <button
+                          onClick={() => void saveDeal(a)}
+                          disabled={busy === `d${a.accountId}`}
+                          className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Save
+                        </button>
+                      </div>
+                      {a.commissionRate != null && (
+                        <div className="mt-0.5 text-[11px] text-slate-400">
+                          {a.commissionKind === "FLAT" ? `flat ${a.commissionRate}` : `${a.commissionRate}%`} — its own deal; save empty for your standard rate
+                        </div>
                       )}
-                      {r.status === "APPROVED" && <span className="text-xs text-slate-400">has access</span>}
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <LoadFailed error={fail.error} onRetry={load} />
-          {!fail.error && rows.length === 0 && <Empty msg="No requests yet" />}
-        </div>
-      </Card>
+                    </Td>
+                    <Td>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => void toggleBlock(a)}
+                          disabled={busy === `b${a.accountId}`}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${a.blocked ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}
+                        >
+                          {a.blocked ? "Unblock" : "Block"}
+                        </button>
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <LoadFailed error={fail.error} onRetry={load} />
+            {!fail.error && rows.length === 0 && <Empty msg="No agency has been verified on the platform yet" />}
+          </div>
+        </Card>
+      </div>
 
       <div className="space-y-4">
         <CommissionCard rid={rid} />
@@ -775,7 +854,7 @@ function AccessTab({ rid }: { rid: number }) {
           <Field label="Agency name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
 
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            The agency receives a <b>link to sign up</b> — it sets its own sign-in, and nobody is sent a password. Once the platform verifies it, it can sell for you. An agent who already has an account is linked straight away.
+            The agency receives a <b>link to sign up</b> — it sets its own sign-in, and nobody is sent a password. Once the platform verifies it, it can sell for you. An agency already on the platform is simply told.
           </div>
           <Button onClick={sendInvite} loading={inviting} disabled={!!emailError(invite.email)}>
             Send invitation
@@ -894,7 +973,7 @@ function UsersTab({ rid }: { rid: number }) {
           roleId: form.roleId ? Number(form.roleId) : undefined,
         },
       });
-      push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
+      push("Staff account created");
       setForm({ name: "", email: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
       load();
     } catch (ex) {
@@ -1014,7 +1093,7 @@ function UsersTab({ rid }: { rid: number }) {
                   </Td>
                   <Td>
                     <Select className="!w-36 !py-1" value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
-                      {["RESORT_ADMIN", "MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"].map((r) => (
+                      {["RESORT_ADMIN", "MANAGER", "FRONT_DESK", "HOUSEKEEPING"].map((r) => (
                         <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
                       ))}
                     </Select>
@@ -1030,20 +1109,8 @@ function UsersTab({ rid }: { rid: number }) {
                           <Check className="inline h-3.5 w-3.5" /> Activate
                         </button>
                       )}
-                      {u.status === "active" && u.role === "AGENT" && (
-                        <>
-                          <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
-                            <Ban className="inline h-3.5 w-3.5" /> Suspend
-                          </button>
-                          {/* "Wallet on" sent the same body as Activate beside it
-                              and enabled no wallet, so it never went away however
-                              many times it was pressed. Removed rather than wired
-                              up: nothing in the product turns a wallet on, and a
-                              button for a feature that does not exist is worse
-                              than no button. */}
-                        </>
-                      )}
-                      {u.status === "active" && u.role !== "AGENT" && (
+                      {/* staff only: an agency sells the resort without being on its team */}
+                      {u.status === "active" && (
                         <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
                           <Ban className="inline h-3.5 w-3.5" /> Suspend
                         </button>
@@ -1069,7 +1136,6 @@ function UsersTab({ rid }: { rid: number }) {
             <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, roleId: "" })}>
               <option value="MANAGER">Manager</option>
               <option value="FRONT_DESK">Front desk</option>
-              <option value="AGENT">Agent</option>
               <option value="HOUSEKEEPING">Housekeeping</option>
             </Select>
           </Field>
@@ -1081,11 +1147,9 @@ function UsersTab({ rid }: { rid: number }) {
               ))}
             </Select>
           </Field>
-          {form.role === "AGENT" && (
-            <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              Agents start as <b>pending</b> — activate them after review. Suspended agents can't create bookings.
-            </div>
-          )}
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Selling through a travel agency? Agencies are not team members — open the resort to them, or invite one, on the Agent access tab.
+          </div>
           <Button
             onClick={create}
             loading={busy}

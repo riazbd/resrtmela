@@ -49,6 +49,15 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // the onboarding question (2026-09-11 design, §8.4): asked, never defaulted
+  const [agentsOpen, setAgentsOpen] = useState<boolean | null>(null);
+  const [liveAgencies, setLiveAgencies] = useState<number | null>(null);
+  useEffect(() => {
+    fetch(`${API_URL}/cms/agencies/count`)
+      .then((r) => r.json())
+      .then((d: { agencies?: number }) => setLiveAgencies(typeof d.agencies === "number" ? d.agencies : null))
+      .catch(() => setLiveAgencies(null));
+  }, []);
 
   const autoSlug = useMemo(
     () =>
@@ -82,6 +91,7 @@ export default function SignupPage() {
           password,
           slug: effectiveSlug || undefined,
           offer: usingOffer ? offer.code : undefined,
+          agentsOpen: agentsOpen === true,
         },
       });
       // adoptToken loads /auth/me and activates the first resort — the same
@@ -217,11 +227,41 @@ export default function SignupPage() {
                   <span className="text-slate-400">Plan:</span> {entryLine || "—"}
                 </div>
               </div>
+              <div className="rounded-xl p-4 ring-1 ring-slate-200">
+                <div className="text-sm font-semibold text-slate-900">Will travel agencies sell your rooms?</div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  A travel agency books rooms for its own clients and earns a commission from you on each booking — a
+                  percentage of the rent you set, paid only when it brings a guest. Every agency here is verified by the
+                  platform before it can sell.
+                  {liveAgencies != null && (
+                    <>
+                      {" "}<b className="text-slate-700">{liveAgencies} verified {liveAgencies === 1 ? "agency is" : "agencies are"}</b> selling right now.
+                    </>
+                  )}{" "}
+                  You can block any one of them, or change your mind, in Settings.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAgentsOpen(true)}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ring-1 ${agentsOpen === true ? "bg-brand-600 text-white ring-brand-600" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                  >
+                    Yes, open to agencies
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgentsOpen(false)}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold ring-1 ${agentsOpen === false ? "bg-slate-700 text-white ring-slate-700" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
               {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
               <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(2)}>
                 ← Back
               </Button>
-              <Button type="submit" className="w-full" loading={busy}>
+              <Button type="submit" className="w-full" loading={busy} disabled={agentsOpen === null}>
                 Create workspace & sign in
               </Button>
               <p className="text-center text-[11px] text-slate-400">

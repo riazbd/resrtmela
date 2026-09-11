@@ -536,16 +536,15 @@ describe("a placeholder, wherever contact details are read", () => {
   });
 
   it("is exported as a blank cell, not as a way to reach someone", async () => {
-    await prisma.user.update({ where: { id: fx.agentId }, data: { phone: `placeholder-${fx.agentId}` } });
-
     const staff = await makeExportService(asPrisma).dataset(admin, fx.resortId, "staff");
 
     const col = (h: string) => staff.headers.indexOf(h);
-    const row = (name: string) => staff.rows.find((r) => r[col("name")] === name)!;
-    expect(row("Test Manager")[col("email")]).toBe("");
-    expect(row("Test Manager")[col("phone")]).toBe(TAKEN_PHONE);
-    expect(row("Test Agent")[col("phone")]).toBe("");
-    expect(String(row("Test Agent")[col("email")])).toMatch(/@example\.com$/);
+    const row = (name: string) => staff.rows.find((r) => r[col("name")] === name);
+    expect(row("Test Manager")![col("email")]).toBe("");
+    expect(row("Test Manager")![col("phone")]).toBe(TAKEN_PHONE);
+    // an agency sells the resort without working there (2026-09-11 design,
+    // §8.3), so it is not in the staff export at all — placeholder or not
+    expect(row("Test Agent")).toBeUndefined();
     expect(JSON.stringify(staff.rows)).not.toMatch(/placeholder/);
   });
 

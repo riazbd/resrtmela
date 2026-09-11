@@ -184,26 +184,31 @@ describe("a resort inviting an agency", () => {
     await expect(agencySignup({ offer: code, email: "invitee@example.com" })).resolves.toBeTruthy();
   });
 
-  it("links an agent who already has an account straight away, and mails nothing", async () => {
+  it("tells an agency already on the platform, and makes and mails nothing", async () => {
     const elsewhere = await seedResort(prisma as unknown as PrismaClient);
     await prisma.user.update({ where: { id: elsewhere.agentId }, data: { email: "their.agent@example.com" } });
 
     await platform().inviteAgency(admin, fx.resortId, { email: "their.agent@example.com" });
 
-    expect(await prisma.userResort.findUnique({ where: { userId_resortId: { userId: elsewhere.agentId, resortId: fx.resortId } } })).not.toBeNull();
+    expect(await prisma.notification.count({ where: { userId: elsewhere.agentId, resortId: fx.resortId } })).toBe(1);
     expect(outbox).toHaveLength(0);
     expect(await prisma.offer.count()).toBe(0);
   });
 
-  it("links the agency to the resort that invited it once it signs up", async () => {
+  it("leaves the invited agency pending — the platform verifies every agency, invited or not", async () => {
     await platform().inviteAgency(admin, fx.resortId, { email: "invitee@example.com" });
     const code = (await prisma.offer.findFirstOrThrow({ orderBy: { id: "desc" } })).code;
 
-    const made = await agencySignup({ offer: code, email: "invitee@example.com" });
+    await agencySignup({ offer: code, email: "invitee@example.com" });
 
-    expect(await prisma.userResort.findUnique({ where: { userId_resortId: { userId: made.user.id, resortId: fx.resortId } } })).not.toBeNull();
-    // still pending: the platform verifies every agency, invited or not
     expect((await accountOf("Offer Travels")).status).toBe("pending");
+  });
+
+  it("will not invite an agency to a resort that is closed to agencies", async () => {
+    await prisma.resort.update({ where: { id: fx.resortId }, data: { agentsOpen: false } });
+
+    await expect(platform().inviteAgency(admin, fx.resortId, { email: "invitee@example.com" })).rejects.toMatchObject({ status: 400 });
+    expect(outbox).toHaveLength(0);
   });
 
   it("has replaced the invite that mailed a password — that method is gone", () => {
