@@ -1063,3 +1063,114 @@ Then verify **by opening the pages**, not by curling the API. A 200 is not proof
 **Verified while writing, on 2026-09-11:** every file this plan says to delete exists; `publicPlans()` returns a bare array with `features: string[]` and `monthlyFee: number`; the OTP table is `otp_codes`; `/login` and `/signup` live outside the `(public)` route group. Line numbers were read the same day and will drift — each step names searchable content as well, so use the content and treat the number as a hint.
 
 **Nothing in this plan is a placeholder.** Where a decision is genuinely the implementer's (how the reset page is laid out, Task 2 Step 2), the constraint that matters is stated instead of the markup.
+
+---
+
+# Addendum — every account has an email and a phone (2026-09-11)
+
+Added during execution, after the whole-branch review found that the password
+reset (Task 1) can only reach an account with an email address, and that
+self-signup stores a phone only — so the one account that matters most, a
+resort owner who signed up alone, could never use "Forgot password?". The
+owner's decision, in his words: *"all user will have both email and phone, can
+login both with email or phone and password, forgot password must have for the
+users, all users."* Existing rows that lack one get a recognisable placeholder
+(his choice over deleting them or asking at next login), so both columns can be
+NOT NULL now.
+
+This belongs to phase 1: spec §4.4 says OTP goes and a real forgot-password
+replaces it in the same phase. A replacement that misses the owner is not a
+replacement. Same rules as the rest of this plan — red first, targeted specs,
+one vitest run at a time, migrations hand-written and run through `db:baseline`.
+
+## Task 10: Every account has an email and a phone
+
+**Files:**
+- Modify: `packages/db/prisma/schema.prisma` (`User.phone`, `User.email` become required; both stay `@unique`)
+- Create: `packages/db/prisma/migrations/20260911130000_every_account_has_an_email_and_a_phone/migration.sql`
+- Modify: `apps/api/src/auth/auth.controller.ts` (`SignupDto` gains a required email), `apps/api/src/auth/auth.service.ts` (`signup`)
+- Modify: `apps/api/src/platform/platform.controller.ts` DTOs and `apps/api/src/platform/platform.service.ts`: `createResortUser`, `inviteAgentByEmail`, `createAgentStaff`, `updateResortUser`
+- Modify: `apps/api/test/helpers/db.ts`, every spec that creates a user, `packages/db/prisma/seed.ts`
+- Test: `apps/api/test/integration/every-account-has-an-email-and-a-phone.spec.ts`
+
+**Rules:**
+- Every path that creates a user requires both a valid email (trimmed, lower-cased) and a phone (normalised the way that path already normalises it), and refuses a duplicate of either with a sentence a person can read (409 for "already has an account", 400 for missing/invalid — follow each path's existing convention).
+  - `signup`: add the email.
+  - `createResortUser`: add the email.
+  - `inviteAgentByEmail`: add the phone (the invite still emails the credentials). Linking an *existing* user is unchanged.
+  - `createAgentStaff`: both required, no longer "email or phone".
+- `updateResortUser` may change a person's email and phone (so a placeholder can be replaced), under the same rule as a password or role change: if the person also works at another resort, only the platform owner may. Neither can be blanked.
+- Login with either identifier reaches the same account — `loginWithPassword` already branches on `@`; prove it.
+- The migration fills gaps with placeholders that can never be mistaken for real contact details, then makes both NOT NULL:
+  - `email` → `CONCAT('user-', id, '@placeholder.invalid')` where NULL or empty (`.invalid` is reserved and never delivers)
+  - `phone` → `CONCAT('placeholder-', id)` where NULL or empty (not a phone number at all, so it can never match a phone login)
+  - then `ALTER TABLE users MODIFY email ... NOT NULL, MODIFY phone ... NOT NULL`, keeping each column's existing type, charset/collation and unique index — read `SHOW CREATE TABLE users` first and match it.
+  - It creates and drops nothing, so `baseline-db.mjs` classes it data-only and always runs it.
+
+- [ ] **Step 1: Write the failing spec** — prose, in the house style:
+  - the database will not hold an account without an email or without a phone (assert the two column definitions are `NOT NULL`, the way `a-guest-has-no-door.spec.ts` checks the role column);
+  - each of the four creation paths refuses a missing email, a missing phone, and a duplicate of each;
+  - `updateResortUser` replaces an email and a phone, and refuses to blank either;
+  - one person signs in with their email and with their phone and gets the same account.
+- [ ] **Step 2: Run it and watch it fail.** Show the red.
+- [ ] **Step 3: Schema, migration, `pnpm -F @rh/db exec prisma generate`, `pnpm -F @rh/api test:setup`.** Before applying locally, count the local users missing an email or a phone; after `db:baseline` (dry run, then `--apply`), show that every one now carries a placeholder and nothing else changed.
+- [ ] **Step 4: The four paths and the update.** Then fix every test fixture and `seed.ts` so each created user has both (unique values). `tsc` does not cover `apps/api/test/` — Prisma will throw at runtime on a missing field, so grep `user.create` and run every file you touch.
+- [ ] **Step 5: Green.** The new spec, `app-boots.spec.ts`, `a-password-can-be-reset.spec.ts`, `tenant-isolation.spec.ts`, and every spec whose fixtures changed; `pnpm typecheck`.
+- [ ] **Step 6: Commit** — `accounts: every one has an email and a phone, so every one can get back in`.
+
+## Task 11: Forgot password works for everyone
+
+**Files:**
+- Modify: `apps/api/src/auth/password-reset.service.ts`, `apps/api/src/auth/auth.controller.ts` (`ForgotPasswordDto`)
+- Modify: `apps/web/src/app/login/page.tsx` (the forgot panel), `apps/web/src/lib/password-reset.ts` if its message changes
+- Test: `apps/api/test/integration/a-password-can-be-reset.spec.ts` (extend)
+
+**Rules:**
+- The forgot request takes an **identifier** — an email or a phone, the same way login does — and always mails the link to the email on the account. SMS is dormant, and every account now has an email, so this is how "every user" reaches it.
+- The answer is identical for a known email, a known phone, and anything unknown, and nothing is sent for an unknown identifier.
+- A placeholder email (`@placeholder.invalid`) gets nothing sent — there is nobody there — and the answer is still the same.
+- The panel's label says "Email or phone"; its confirmation sentence stays neutral ("If that account exists, a reset link is on its way to its email address.").
+
+- [ ] **Step 1: Extend the spec, red first:**
+  - a phone identifier puts the link in the account's email;
+  - an unknown phone gets nothing and the same answer;
+  - a placeholder address gets nothing and the same answer.
+- [ ] **Step 2: Watch it fail; show the red.**
+- [ ] **Step 3: Implement; web label and sentence.** The web spec for the sentence changes with it.
+- [ ] **Step 4: Green** — the reset spec, `app-boots.spec.ts`, `pnpm -F @rh/web exec vitest run`, `pnpm typecheck`.
+- [ ] **Step 5: Commit** — `auth: a forgotten password comes back by email, whichever way you sign in`.
+
+## Task 12: The console asks for both
+
+**Files:**
+- Modify: `apps/web/src/app/signup/page.tsx` (an email field, required)
+- Modify: every console form that posts to `POST /resorts/:id/users`, `POST /resorts/:id/invite-agent`, `POST /agent/staff`, and `PATCH /resorts/:id/users/:userId` (grep `apps/web/src` for those paths)
+- Create: `apps/web/src/lib/contact.ts` — one small pure check that both are present and plausible, used by those forms
+- Test: `apps/web/test/contact.spec.ts`
+
+**Rules:**
+- A form cannot be submitted without both. It shows the API's own sentence when the server refuses (duplicate email or phone).
+- The team edit form can change email and phone.
+- No page-render harness (spec §10); the pure module carries the decision.
+
+- [ ] **Step 1: The spec for `contact.ts`, red first; show the red.**
+- [ ] **Step 2: The module, then the forms.**
+- [ ] **Step 3: Green** — `pnpm -F @rh/web exec vitest run`, `pnpm typecheck`, `pnpm -F @rh/web build`.
+- [ ] **Step 4: Commit** — `web: every form that makes an account asks for an email and a phone`.
+
+## Task 13: What the whole-branch review left, the smoke scripts, and the record
+
+**Files:**
+- Modify: `apps/api/src/platform/platform.service.ts` (`createApiKey` — delete everything after the refusal; the space is the table and the note, never dead code, spec §4.3)
+- Modify: `apps/api/test/integration/a-password-can-be-reset.spec.ts` (the enumeration test asserts the outbox — one mail for a known address, none for an unknown — and its docstring stops claiming the timing is identical)
+- Modify: `apps/web/src/lib/api.ts` (~L53 comment that still uses guest browsing as its example)
+- Delete: `apps/api/scripts/guest-smoke.ps1` (owner approved, 2026-09-11)
+- Modify: `apps/api/scripts/activity-smoke.ps1` (cut the guest booking/activity sections), `apps/api/scripts/smoke.ps1` (cut step 13, the OTP guest login), `apps/api/scripts/phase6-smoke.ps1` (a desk booking by the manager replaces the guest trip) — owner approved
+- Modify: `ROADMAP.md` (§2 "Guest OTP" and the OTP-based reset idea: a short note that both are superseded, pointing at the spec — no deletion)
+- Modify: `STATUS.md` (the §3.x entry for phase 1 gains the addendum: every account has both, placeholders exist and how to replace one, forgot works by either identifier — each claim with the spec that proves it)
+- Modify: `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md` §4.4 (one paragraph recording the owner's decision)
+
+- [ ] **Step 1: Red first for the two code changes** — the strengthened enumeration test fails against a service that mails an unknown address (prove it with a temporary mutation if the current code already passes, and say so); `createApiKey`'s refusal is already tested (Task 7).
+- [ ] **Step 2: The changes above.** Smoke scripts: they are PowerShell against a running API; do not run them — read each edited script end to end so every variable it uses is still defined.
+- [ ] **Step 3: Green** — the reset spec, `a-plan-that-locks.spec.ts`, `app-boots.spec.ts`, `pnpm typecheck`.
+- [ ] **Step 4: Commit** — one commit per concern is fine; the house voice either way.
