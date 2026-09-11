@@ -45,7 +45,7 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **728 API tests** across 73 files (34 at the start of all this,
+Current state: **729 API tests** across 73 files (34 at the start of all this,
 all of them pure unit tests) plus **117 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
@@ -1481,7 +1481,7 @@ expected, the app is retired (§3.32), not merely frozen.
 ```
 pnpm install
 pnpm -F @rh/api test:setup     # creates resorthub_test and migrates it
-pnpm -F @rh/api test           # 728 tests against a real MySQL
+pnpm -F @rh/api test           # 729 tests against a real MySQL
 pnpm -F @rh/web test           # 117 tests, jsdom
 pnpm typecheck                 # four packages; mobile is frozen (§3.27)
 pnpm dev                       # api :4000, web :3000
