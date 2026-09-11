@@ -148,12 +148,24 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
       }),
     );
   }
+  // both, because the database no longer holds an account without either
   const manager = await prisma.user.create({
-    data: { name: "Test Manager", phone: `8801${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`, role: "MANAGER" },
+    data: {
+      name: "Test Manager",
+      phone: `8801${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`,
+      email: `manager-${uniq}@example.com`,
+      role: "MANAGER",
+    },
   });
   await prisma.userResort.create({ data: { userId: manager.id, resortId: resort.id } });
   const agent = await prisma.user.create({
-    data: { name: "Test Agent", phone: `8802${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`, role: "AGENT", status: "active" },
+    data: {
+      name: "Test Agent",
+      phone: `8802${String(seq).padStart(4, "0")}${Math.floor(Math.random() * 1e5)}`,
+      email: `agent-${uniq}@example.com`,
+      role: "AGENT",
+      status: "active",
+    },
   });
   await prisma.userResort.create({
     data: { userId: agent.id, resortId: resort.id, commissionRate: 10, commissionKind: "PERCENT" },

@@ -58,11 +58,13 @@ describe("two agencies at one resort", () => {
     await platform().createAgentStaff(dhaka.claims, {
       name: "Dhaka Staff",
       email: "dhaka.staff@example.com",
+      phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
       password: "password123",
     });
     await platform().createAgentStaff(chittagong.claims, {
       name: "Chittagong Staff",
       email: "ctg.staff@example.com",
+      phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
       password: "password123",
     });
 

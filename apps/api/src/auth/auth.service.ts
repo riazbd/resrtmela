@@ -5,6 +5,7 @@ import { signToken } from "../common/auth.guard";
 import { normalizePhone } from "../common/dates";
 import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
+import { contactEmail, contactPhone, contactTaken } from "../common/contact";
 import { ROLE, type Role } from "@rh/shared";
 
 /**
@@ -69,23 +70,29 @@ export class AuthService {
     resortName: string;
     location?: string;
     name: string;
+    email: string;
     phone: string;
     password: string;
     slug?: string;
   }) {
-    const phone = normalizePhone(input.phone);
+    // both, stored the way login reads them. Signup used to keep only the
+    // phone, so the owner who signed up alone was the one person a password
+    // reset — which is a link sent by email — could never reach.
+    const phone = contactPhone(input.phone);
+    const email = contactEmail(input.email);
     if (input.password.length < 8) {
       throw Object.assign(new Error("Password must be at least 8 characters"), { status: 400 });
     }
     const slug = slugify(input.slug?.trim() || input.companyName || input.resortName);
     if (!slug) throw Object.assign(new Error("Company name is required"), { status: 400 });
 
-    const [slugTaken, phoneTaken] = await Promise.all([
+    const [slugTaken, taken] = await Promise.all([
       this.prisma.tenant.findUnique({ where: { slug } }),
-      this.prisma.user.findUnique({ where: { phone } }),
+      contactTaken(this.prisma, { email, phone }),
     ]);
     if (slugTaken) throw Object.assign(new Error(`Workspace "${slug}" is already taken`), { status: 409 });
-    if (phoneTaken) throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
+    if (taken === "email") throw Object.assign(new Error("This email already has an account — sign in instead"), { status: 409 });
+    if (taken === "phone") throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
@@ -124,13 +131,19 @@ export class AuthService {
         data: {
           name: input.name.trim() || phone,
           phone,
+          email,
           role: "RESORT_ADMIN",
           passwordHash,
         },
       });
       await tx.userResort.create({ data: { userId: user.id, resortId: resort.id } });
       await tx.counter.create({ data: { resortId: resort.id, kind: "BOOKING", nextVal: 0 } });
-      await ensureResortRoles(this.prisma, resort.id);
+      // inside the transaction, on `tx`. This was `this.prisma` — a second
+      // connection, inserting roles for a resort this transaction had not
+      // committed. It waited on the resort row until the transaction timed out
+      // and rolled back, then failed on the foreign key: no signup has
+      // completed since the call was added, and no test called signup to say so.
+      await ensureResortRoles(tx, resort.id);
       await tx.auditLog.create({
         data: {
           actorId: user.id,

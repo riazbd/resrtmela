@@ -124,7 +124,7 @@ describe("tenant export", () => {
       data: { resortId: fx.resortId, name: "Desk", permissions: ["bookings.view"] as never },
     });
     const clerk = await prisma.user.create({
-      data: { name: "Clerk", phone: `88099${Date.now() % 1e7}`, role: "FRONT_DESK" },
+      data: { name: "Clerk", phone: `88099${Date.now() % 1e7}`, email: `88099${Date.now() % 1e7}@example.com`, role: "FRONT_DESK" },
     });
     await prisma.userResort.create({ data: { userId: clerk.id, resortId: fx.resortId, roleId: role.id } });
     const clerkClaims: JwtClaims = { userId: clerk.id, role: ROLE.FRONT_DESK, resortIds: [fx.resortId] };

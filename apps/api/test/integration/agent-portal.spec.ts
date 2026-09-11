@@ -46,6 +46,7 @@ async function hire(name: string, permissions?: string[]) {
   const staff = await platform().createAgentStaff(agency, {
     name,
     email: `${name.toLowerCase().replace(/\W/g, "")}@example.com`,
+    phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
     password: "password123",
   });
   if (permissions) {
@@ -90,13 +91,14 @@ describe("agency roles", () => {
 
   it("never lets one agency assign another agency's role", async () => {
     const other = await prisma.user.create({
-      data: { name: "Other Agency", phone: `88095${Date.now() % 1e7}`, role: "AGENT", status: "active" },
+      data: { name: "Other Agency", phone: `88095${Date.now() % 1e7}`, email: `88095${Date.now() % 1e7}@example.com`, role: "AGENT", status: "active" },
     });
     const otherClaims: JwtClaims = { userId: other.id, role: ROLE.AGENT, resortIds: [fx.resortId] };
     const mine = await agents().createRole(agency, { name: "Mine", permissions: ["agent.book"] });
     const theirStaff = await platform().createAgentStaff(otherClaims, {
       name: "Their Staff",
       email: "their.staff@example.com",
+      phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
       password: "password123",
     });
 
@@ -107,7 +109,7 @@ describe("agency roles", () => {
 /** The platform itself — the only authority that may move an agency's wallet. */
 async function platformClaims(): Promise<JwtClaims> {
   const su = await prisma.user.create({
-    data: { name: "Platform", phone: `8895${Math.floor(Math.random() * 1e8)}`, role: "SUPER_ADMIN" },
+    data: { name: "Platform", phone: `8895${Math.floor(Math.random() * 1e8)}`, email: `8895${Math.floor(Math.random() * 1e8)}@example.com`, role: "SUPER_ADMIN" },
   });
   return { userId: su.id, role: ROLE.SUPER_ADMIN, resortIds: [] };
 }
@@ -140,7 +142,7 @@ describe("agency activity log", () => {
   it("shows what the agency and its staff did, and nobody else", async () => {
     const staff = await hire("Junior");
     const stranger = await prisma.user.create({
-      data: { name: "Stranger", phone: `88094${Date.now() % 1e7}`, role: "AGENT", status: "active" },
+      data: { name: "Stranger", phone: `88094${Date.now() % 1e7}`, email: `88094${Date.now() % 1e7}@example.com`, role: "AGENT", status: "active" },
     });
     await prisma.auditLog.createMany({
       data: [

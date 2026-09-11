@@ -39,6 +39,7 @@ async function userWithPermissions(
     data: {
       name: "Scoped User",
       phone: `8809${Math.floor(Math.random() * 1e8)}`,
+      email: `8809${Math.floor(Math.random() * 1e8)}@example.com`,
       role: fixedRole,
     },
   });
@@ -101,7 +102,7 @@ describe("a missing permission the fixed role would have granted", () => {
 describe("the resort administrator", () => {
   it("keeps everything without needing a custom role", async () => {
     const owner = await prisma.user.create({
-      data: { name: "Owner", phone: `8807${Math.floor(Math.random() * 1e8)}`, role: ROLE.RESORT_ADMIN },
+      data: { name: "Owner", phone: `8807${Math.floor(Math.random() * 1e8)}`, email: `8807${Math.floor(Math.random() * 1e8)}@example.com`, role: ROLE.RESORT_ADMIN },
     });
     await prisma.userResort.create({ data: { userId: owner.id, resortId: fx.resortId } });
     const claims: JwtClaims = {

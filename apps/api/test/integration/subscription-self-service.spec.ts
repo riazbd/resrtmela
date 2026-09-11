@@ -50,6 +50,7 @@ async function withPermissions(permissions: string[]): Promise<JwtClaims> {
     data: {
       name: "Scoped User",
       phone: `8809${Math.floor(Math.random() * 1e8)}`,
+      email: `8809${Math.floor(Math.random() * 1e8)}@example.com`,
       role: ROLE.FRONT_DESK,
       status: "active",
     },

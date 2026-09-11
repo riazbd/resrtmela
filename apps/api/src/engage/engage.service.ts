@@ -458,11 +458,14 @@ export class EngageService {
     let recipients: { email: string; name?: string }[] = [];
     if (input.audience === "AGENTS") {
       if (!input.resortId || !isManagement(claims.role)) throw badRequest("resortId required for owners");
+      // every account has an email now, but an agent who had none was given a
+      // `.invalid` placeholder, which never delivers — mailing it would spend
+      // a credit on nobody
       const agents = await this.prisma.userResort.findMany({
-        where: { resortId: input.resortId, user: { role: "AGENT", email: { not: null } } },
+        where: { resortId: input.resortId, user: { role: "AGENT", NOT: { email: { endsWith: "@placeholder.invalid" } } } },
         select: { user: { select: { email: true, name: true } } },
       });
-      recipients = agents.map((a) => ({ email: a.user.email!, name: a.user.name }));
+      recipients = agents.map((a) => ({ email: a.user.email, name: a.user.name }));
     } else if (input.audience === "RESORT_GUESTS") {
       if (!input.resortId || !isManagement(claims.role)) throw badRequest("resortId required for owners");
       const guests = await this.prisma.guest.findMany({

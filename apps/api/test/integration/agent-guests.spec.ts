@@ -51,6 +51,7 @@ async function hire(name: string, permissions: string[]) {
   const staff = await platform().createAgentStaff(agency, {
     name,
     email: `${name.toLowerCase().replace(/\W/g, "")}@example.com`,
+    phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
     password: "password123",
   });
   const role = await agents().createRole(agency, { name: `${name} role`, permissions });
@@ -136,7 +137,7 @@ describe("everyone the agency has served", () => {
   it("leaves out another agency's guests", async () => {
     await soldStay({ checkIn: "2026-04-01", checkOut: "2026-04-03" });
     const other = await prisma.user.create({
-      data: { name: "Other Agency", phone: `8815${Date.now() % 100000000}`, role: "AGENT" },
+      data: { name: "Other Agency", phone: `8815${Date.now() % 100000000}`, email: `8815${Date.now() % 100000000}@example.com`, role: "AGENT" },
     });
 
     const theirs = await guests().list({ userId: other.id, role: ROLE.AGENT, resortIds: [] }, {});
@@ -237,7 +238,7 @@ describe("a booking list that belongs to the agency", () => {
   it("still shows an agency nothing of another agency's bookings", async () => {
     await soldStay({ checkIn: "2026-08-01", checkOut: "2026-08-02" });
     const other = await prisma.user.create({
-      data: { name: "Other Agency 2", phone: `8816${Date.now() % 100000000}`, role: "AGENT" },
+      data: { name: "Other Agency 2", phone: `8816${Date.now() % 100000000}`, email: `8816${Date.now() % 100000000}@example.com`, role: "AGENT" },
     });
     await prisma.userResort.create({ data: { userId: other.id, resortId: fx.resortId } });
 

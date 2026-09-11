@@ -167,7 +167,7 @@ describe("who a resort's own admin may change", () => {
   it("cannot promote a colleague to resort admin", async () => {
     const platform = makePlatformService(asPrisma);
     const clerk = await prisma.user.create({
-      data: { name: "Clerk", phone: "8801999000111", role: "FRONT_DESK", status: "active" },
+      data: { name: "Clerk", phone: "8801999000111", email: "8801999000111@example.com", role: "FRONT_DESK", status: "active" },
     });
     await prisma.userResort.create({ data: { userId: clerk.id, resortId: ours.resortId } });
 
@@ -181,7 +181,7 @@ describe("who a resort's own admin may change", () => {
     const platform = makePlatformService(asPrisma);
     // one person, two employers — the `users` row is global, this route is not
     const shared = await prisma.user.create({
-      data: { name: "Works at both", phone: "8801999000222", role: "MANAGER", status: "active" },
+      data: { name: "Works at both", phone: "8801999000222", email: "8801999000222@example.com", role: "MANAGER", status: "active" },
     });
     await prisma.userResort.create({ data: { userId: shared.id, resortId: ours.resortId } });
     await prisma.userResort.create({ data: { userId: shared.id, resortId: theirs.resortId } });
@@ -214,7 +214,7 @@ describe("approving an agency's request to sell a resort", () => {
   it("does not quietly reactivate a suspended account", async () => {
     const engage = makeEngageService(asPrisma);
     const banned = await prisma.user.create({
-      data: { name: "Suspended agent", phone: "8801999000333", role: "AGENT", status: "suspended" },
+      data: { name: "Suspended agent", phone: "8801999000333", email: "8801999000333@example.com", role: "AGENT", status: "suspended" },
     });
     const request = await prisma.resortAccess.create({
       data: { userId: banned.id, resortId: ours.resortId, status: "PENDING" },
@@ -257,7 +257,7 @@ describe("approving an agency's request to sell a resort", () => {
     const engage = makeEngageService(asPrisma);
     const theirManager = await prisma.user.findUniqueOrThrow({ where: { id: theirs.managerId } });
     const banned = await prisma.user.create({
-      data: { name: "Suspended agent", phone: "8801999000444", role: "AGENT", status: "suspended" },
+      data: { name: "Suspended agent", phone: "8801999000444", email: "8801999000444@example.com", role: "AGENT", status: "suspended" },
     });
 
     for (const applicant of [theirManager, banned]) {

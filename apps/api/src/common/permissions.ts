@@ -14,8 +14,16 @@ import { forbid } from "./rbac";
  */
 export const ADMIN_ROLE = "Administrator";
 
-/** Seeds the three system roles for a resort (idempotent). */
-export async function ensureResortRoles(prisma: PrismaService, resortId: number) {
+/**
+ * Seeds the three system roles for a resort (idempotent).
+ *
+ * Takes anything with `customRole`, so a caller inside a transaction can pass
+ * the transaction. Signup could not: it called this with the outer client
+ * while its own transaction still held the new resort uncommitted, so the role
+ * insert waited on that row, the transaction timed out, and every signup
+ * failed on a foreign key.
+ */
+export async function ensureResortRoles(prisma: Pick<PrismaService, "customRole">, resortId: number) {
   const count = await prisma.customRole.count({ where: { resortId } });
   if (count > 0) return;
   await prisma.customRole.createMany({

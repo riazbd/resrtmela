@@ -12,6 +12,7 @@ import { PlatformSettingsService, SETTING_DEFAULTS, SETTING_MAX_LENGTH, assertSe
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
 import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
+import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE } from "../common/contact";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
@@ -790,7 +791,7 @@ export class PlatformService {
      * resort's now, on Settings -> Agent access, and `CommissionService` is the
      * only thing that sets it.
      */
-    input: { name: string; phone: string; password: string; role: string; roleId?: number },
+    input: { name: string; email: string; phone: string; password: string; role: string; roleId?: number },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -801,13 +802,17 @@ export class PlatformService {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
       if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
     }
-    const phone = input.phone.replace(/\D/g, "");
-    const exists = await this.prisma.user.findUnique({ where: { phone } });
-    if (exists) throw badRequest("phone already registered");
+    // both, the way login reads them: this used to strip non-digits only, so
+    // a colleague added as 01712… could not sign in as 01712…
+    const email = contactEmail(input.email);
+    const phone = contactPhone(input.phone);
+    const taken = await contactTaken(this.prisma, { email, phone });
+    if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
     const isAgent = input.role === "AGENT";
     const user = await this.prisma.user.create({
       data: {
         name: input.name,
+        email,
         phone,
         passwordHash: await bcrypt.hash(input.password, 12),
         role: input.role as never,
@@ -818,14 +823,14 @@ export class PlatformService {
       data: { userId: user.id, resortId, roleId: input.roleId },
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "user.create", entity: "user", entityId: user.id, diff: { role: input.role, name: input.name, roleId: input.roleId } });
-    return { id: user.id, name: user.name, phone: user.phone, role: user.role, status: user.status };
+    return { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, status: user.status };
   }
 
   async updateResortUser(
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; name?: string; roleId?: number },
+    input: { role?: string; status?: string; password?: string; name?: string; roleId?: number; email?: string; phone?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -842,8 +847,13 @@ export class PlatformService {
      * on the next login. Changing what the person is stays with the platform
      * when the person is not this resort's alone; naming them and giving them
      * a role inside this resort does not.
+     *
+     * An email and a phone are on the same side of that line: they are how the
+     * person signs in and where their reset link goes, so changing one is as
+     * good as changing the password.
      */
-    const account = input.role != null || input.status != null || input.password != null;
+    const account =
+      input.role != null || input.status != null || input.password != null || input.email != null || input.phone != null;
     if (account && claims.role !== ROLE.SUPER_ADMIN) {
       const elsewhere = await this.prisma.userResort.count({
         where: { userId, resortId: { not: resortId } },
@@ -869,6 +879,17 @@ export class PlatformService {
     }
     if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
     if (input.name) data.name = input.name;
+    // replaceable — the migration left placeholders that need replacing — but
+    // never blank and never somebody else's. `!= null`, not truthiness: an
+    // empty string is a request to blank it, and is refused rather than ignored.
+    const email = input.email != null ? contactEmail(input.email) : undefined;
+    const phone = input.phone != null ? contactPhone(input.phone) : undefined;
+    if (email || phone) {
+      const taken = await contactTaken(this.prisma, { email, phone }, userId);
+      if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
+    }
+    if (email) data.email = email;
+    if (phone) data.phone = phone;
     const user = await this.prisma.user.update({ where: { id: userId }, data });
     if (input.roleId != null) {
       if (input.roleId === 0) {
@@ -879,8 +900,10 @@ export class PlatformService {
         await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: input.roleId } });
       }
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, roleId: input.roleId } });
-    return { id: user.id, name: user.name, role: user.role, status: user.status };
+    // the new email and phone are recorded: a change to how someone signs in
+    // is the change an account takeover would make
+    await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, roleId: input.roleId, email, phone } });
+    return { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, status: user.status };
   }
 
   async activityLog(claims: JwtClaims, resortId: number, take = 100, q?: string) {
@@ -1334,17 +1357,20 @@ export class PlatformService {
   async inviteAgentByEmail(
     claims: JwtClaims,
     resortId: number,
-    input: { email: string; name?: string },
+    input: { email: string; name?: string; phone?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
-    const to = input.email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) throw badRequest("valid email required");
+    const to = contactEmail(input.email);
     const existingUser = await this.prisma.user.findFirst({ where: { email: to } });
     if (existingUser) {
       const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: existingUser.id, resortId } } });
       if (linked) throw badRequest("this email already has access to the resort");
     }
+    // a new account needs a phone as well as the address the credentials go
+    // to; linking someone who already has an account asks for nothing new
+    const phone = existingUser ? null : contactPhone(input.phone);
+    if (phone && (await contactTaken(this.prisma, { phone }))) throw badRequest(TAKEN_SENTENCE.phone);
     const tempPassword = `RM-${randomBytes(5).toString("hex")}`;
     const user =
       existingUser ??
@@ -1352,6 +1378,8 @@ export class PlatformService {
         data: {
           name: input.name?.trim() || to.split("@")[0]!,
           email: to,
+          // only reached when there was no existing user, so `phone` was required above
+          phone: phone!,
           passwordHash: await bcrypt.hash(tempPassword, 12),
           role: "AGENT",
           status: "pending",
@@ -1413,20 +1441,15 @@ export class PlatformService {
     });
   }
 
-  async createAgentStaff(claims: JwtClaims, input: { name: string; email?: string; phone?: string; password: string }) {
+  async createAgentStaff(claims: JwtClaims, input: { name: string; email: string; phone: string; password: string }) {
     if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
     if (input.password.length < 8) throw badRequest("password must be at least 8 characters");
-    const email = input.email?.trim().toLowerCase() || null;
-    const phone = input.phone ? input.phone.replace(/\D/g, "") : null;
-    if (!email && !phone) throw badRequest("email or phone required");
-    if (phone) {
-      const exists = await this.prisma.user.findUnique({ where: { phone } });
-      if (exists) throw badRequest("phone already registered");
-    }
-    if (email) {
-      const exists = await this.prisma.user.findFirst({ where: { email } });
-      if (exists) throw badRequest("email already registered");
-    }
+    // both, like every account — this used to take either one, which left an
+    // agency's junior with a phone and no address for a reset link
+    const email = contactEmail(input.email);
+    const phone = contactPhone(input.phone);
+    const taken = await contactTaken(this.prisma, { email, phone });
+    if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
     // copy the agency's approved resort links so staff book at the same resorts
     const myLinks = await this.prisma.userResort.findMany({ where: { userId: claims.userId } });
     const user = await this.prisma.user.create({

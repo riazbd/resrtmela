@@ -90,7 +90,7 @@ describe("asking for a pack", () => {
       data: { resortId: fx.resortId, name: `Role ${Math.random()}`, permissions: ["bookings.view"] },
     });
     const user = await prisma.user.create({
-      data: { name: "Clerk", phone: `8809${Math.floor(Math.random() * 1e8)}`, role: ROLE.FRONT_DESK, status: "active" },
+      data: { name: "Clerk", phone: `8809${Math.floor(Math.random() * 1e8)}`, email: `8809${Math.floor(Math.random() * 1e8)}@example.com`, role: ROLE.FRONT_DESK, status: "active" },
     });
     await prisma.userResort.create({ data: { userId: user.id, resortId: fx.resortId, roleId: role.id } });
 

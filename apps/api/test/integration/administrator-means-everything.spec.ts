@@ -39,6 +39,7 @@ async function onRole(roleId: number): Promise<JwtClaims> {
     data: {
       name: "Deputy",
       phone: `8809${Math.floor(Math.random() * 1e8)}`,
+      email: `8809${Math.floor(Math.random() * 1e8)}@example.com`,
       role: ROLE.FRONT_DESK,
       status: "active",
     },

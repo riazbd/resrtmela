@@ -173,8 +173,13 @@ model Resort {
 model User {
   id            Int        @id @default(autoincrement())
   name          String     @db.VarChar(160)
-  phone         String?    @unique @db.VarChar(32)
-  email         String?    @unique @db.VarChar(191)
+  /// Both required (2026-09-11): a person signs in with either, and the
+  /// password reset mails a link. Stored as `normalizePhone` makes it — the
+  /// form login looks it up by. Accounts that had none carry a placeholder
+  /// (`placeholder-<id>`, `user-<id>@placeholder.invalid`) until a resort
+  /// replaces it.
+  phone         String     @unique @db.VarChar(32)
+  email         String     @unique @db.VarChar(191)
   passwordHash  String?    @db.VarChar(255)
   role          Role
   status        String     @default("active") @db.VarChar(16)

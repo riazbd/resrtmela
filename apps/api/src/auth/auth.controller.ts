@@ -26,7 +26,10 @@ class SignupDto {
   @IsString() @MaxLength(160) resortName!: string;
   @IsOptional() @IsString() @MaxLength(255) location?: string;
   @IsString() @MaxLength(160) name!: string;
-  @IsString() phone!: string;
+  // both required, and checked in the service so the refusal is a sentence
+  // rather than class-validator's "email must be an email"
+  @IsString() @MaxLength(191) email!: string;
+  @IsString() @MaxLength(32) phone!: string;
   @IsString() @MinLength(8) password!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
 }

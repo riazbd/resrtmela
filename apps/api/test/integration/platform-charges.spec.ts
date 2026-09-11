@@ -36,7 +36,7 @@ beforeEach(async () => {
   fx = await seedResort(prisma as unknown as PrismaClient);
   manager = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
   const su = await prisma.user.create({
-    data: { name: "Platform", phone: `8898${Date.now() % 100000000}`, role: "SUPER_ADMIN" },
+    data: { name: "Platform", phone: `8898${Date.now() % 100000000}`, email: `8898${Date.now() % 100000000}@example.com`, role: "SUPER_ADMIN" },
   });
   superAdmin = { userId: su.id, role: ROLE.SUPER_ADMIN, resortIds: [] };
   await prisma.platformSetting.upsert({

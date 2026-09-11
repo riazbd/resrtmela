@@ -27,7 +27,7 @@ const platform = () => makePlatformService(asPrisma);
 /** A platform account linked to this resort, the way a real one is. */
 async function aPlatformAdminInside(resortId: number) {
   const user = await prisma.user.create({
-    data: { name: "Platform Owner", phone: `88017${Math.floor(Math.random() * 1e6)}`, role: "SUPER_ADMIN" },
+    data: { name: "Platform Owner", phone: `88017${Math.floor(Math.random() * 1e6)}`, email: `88017${Math.floor(Math.random() * 1e6)}@example.com`, role: "SUPER_ADMIN" },
   });
   await prisma.userResort.create({ data: { userId: user.id, resortId } });
   return user;

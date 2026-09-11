@@ -122,11 +122,13 @@ async function main() {
     }
   }
 
-  // users — login with phone + Password123!
+  // users — login with phone or email + Password123!
+  // The email is in `update` too, so reseeding a database the migration gave a
+  // placeholder puts the demo address back.
   const admin = await prisma.user.upsert({
     where: { phone: "8801700000001" },
-    update: { role: Role.RESORT_ADMIN, passwordHash },
-    create: { name: "Sky Eco Manager", phone: "8801700000001", role: Role.RESORT_ADMIN, passwordHash },
+    update: { role: Role.RESORT_ADMIN, passwordHash, email: "manager@skyeco.example.com" },
+    create: { name: "Sky Eco Manager", phone: "8801700000001", email: "manager@skyeco.example.com", role: Role.RESORT_ADMIN, passwordHash },
   });
   await prisma.userResort.upsert({
     where: { userId_resortId: { userId: admin.id, resortId: resort.id } },
@@ -136,8 +138,8 @@ async function main() {
 
   const agent = await prisma.user.upsert({
     where: { phone: "8801700000002" },
-    update: { role: Role.AGENT, passwordHash },
-    create: { name: "Rikan", phone: "8801700000002", role: Role.AGENT, passwordHash },
+    update: { role: Role.AGENT, passwordHash, email: "rikan@agent.example.com" },
+    create: { name: "Rikan", phone: "8801700000002", email: "rikan@agent.example.com", role: Role.AGENT, passwordHash },
   });
   await prisma.userResort.upsert({
     where: { userId_resortId: { userId: agent.id, resortId: resort.id } },

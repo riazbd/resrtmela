@@ -46,6 +46,7 @@ async function hire(name: string, permissions: string[]) {
   const staff = await platform().createAgentStaff(agency, {
     name,
     email: `${name.toLowerCase().replace(/\W/g, "")}@example.com`,
+    phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
     password: "password123",
   });
   const role = await agents().createRole(agency, { name: `${name} role`, permissions });
@@ -119,7 +120,7 @@ describe("the agency's own tree", () => {
   it("shows an agency only its own tree", async () => {
     await transportTree();
     const other = await prisma.user.create({
-      data: { name: "Other Agency", phone: `8809${Date.now() % 100000000}`, role: "AGENT" },
+      data: { name: "Other Agency", phone: `8809${Date.now() % 100000000}`, email: `8809${Date.now() % 100000000}@example.com`, role: "AGENT" },
     });
 
     const theirs = await tours().categories({ userId: other.id, role: ROLE.AGENT, resortIds: [] });
@@ -194,7 +195,7 @@ describe("packages", () => {
   it("never hands one agency another's package", async () => {
     const pkg = await tours().createPackage(agency, { name: "Mine", items: [] });
     const other = await prisma.user.create({
-      data: { name: "Other Agency 2", phone: `8810${Date.now() % 100000000}`, role: "AGENT" },
+      data: { name: "Other Agency 2", phone: `8810${Date.now() % 100000000}`, email: `8810${Date.now() % 100000000}@example.com`, role: "AGENT" },
     });
 
     await expect(

@@ -118,6 +118,7 @@ describe("the agency calendar", () => {
     const staff = await makePlatformService(asPrismaService).createAgentStaff(agency, {
       name: "Books Only",
       email: "booksonly@example.com",
+      phone: `8801${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`,
       password: "password123",
     });
     const role = await makeAgentService(asPrismaService).createRole(agency, {

@@ -79,6 +79,7 @@ class PayDueDto {
 
 class CreateUserDto {
   @IsString() @MaxLength(160) name!: string;
+  @IsString() @MaxLength(191) email!: string;
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MaxLength(128) password!: string;
   @IsIn(["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING"]) role!: string;
@@ -91,6 +92,10 @@ class UpdateUserDto {
   @IsOptional() @IsString() @MaxLength(128) password?: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsNumber() roleId?: number;
+  // how the person signs in; the service refuses a blank one rather than
+  // ignoring it, so a placeholder can be replaced but never emptied
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
 }
 
 class RoleDto {
@@ -106,12 +111,15 @@ class RolePatchDto {
 class InviteAgentDto {
   @IsString() email!: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
+  // optional here because inviting someone who already has an account only
+  // links them; the service requires it whenever the invite makes a new one
+  @IsOptional() @IsString() @MaxLength(32) phone?: string;
 }
 
 class AgentStaffDto {
   @IsString() @MaxLength(160) name!: string;
-  @IsOptional() @IsString() @MaxLength(191) email?: string;
-  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+  @IsString() @MaxLength(191) email!: string;
+  @IsString() @MaxLength(32) phone!: string;
   @IsString() @MaxLength(128) password!: string;
 }
 
