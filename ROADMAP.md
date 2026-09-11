@@ -44,6 +44,8 @@ once, then `prisma migrate deploy` for the new `otp_codes` table.
 ~~3. `pm2 restart api --update-env` and verify with a test invoice email.~~
 
 ### 2. Guest OTP — EMAIL LIVE, SMS PENDING (updated 2026-09-07)
+**Superseded (2026-09-11):** guests, the GUEST role, and this OTP door are gone — see `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md` §4.4. Left below for the history of what SMS activation would have needed, not as a live plan.
+
 **Current state:** guests verify by **email OTP** — a 6-digit code is emailed (SMTP is live). The unified endpoint accepts either channel:
 
 - `POST /auth/otp/request` with `{ email }` (works today) or `{ phone }` (auto-activates when the SMS gateway gets a sender ID)
@@ -104,6 +106,8 @@ Renewals are manual (Platform → Resorts → Renew creates the due). Deferred b
 
 ### 7. Forgot-password for staff
 Only change-while-logged-in exists (`POST /auth/me/password`). Add OTP-based reset reusing the SMS/email channel from blocker #2.
+
+**Superseded (2026-09-11):** built, but not as OTP — a mailed single-use reset link, requestable by either email or phone. See `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md` §4.4.
 
 ### 8. Mobile app release
 The Expo app (`apps/mobile`) is feature-complete in code but not built/published to the Play Store. Guest booking works on the web meanwhile. Requires: EAS build, store listing, `EXPO_PUBLIC_API_URL` already set in `.env`.

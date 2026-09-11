@@ -206,6 +206,19 @@ The replacement is a password-reset token — single-use, short-lived, emailed �
 not a code that mints accounts. It can only reset a password for an account that
 already exists, so it gives a guest nothing.
 
+A mailed link found the gap the whole-branch review flagged: some accounts
+carried a phone and no email — an owner who signed up with only a phone number
+was exactly the person this reset could never reach. The owner's decision
+(2026-09-11) closes it at the account, not the reset: **every account now
+carries both an email and a phone.** Sign-in accepts either. Forgot-password
+accepts either too, and always mails the link to the account's email — SMS
+stays dormant, so a phone is a way in, never a way to receive the link. A row
+that had only one of the two before this decision keeps working: it gets a
+placeholder for the field it lacked (`user-<id>@placeholder.invalid` for email,
+`placeholder-<id>` for phone), which is a gap marked as a gap, not an address
+or a number anyone can be reached at — the console shows it as "not set" rather
+than a value, and an admin replaces it from the team edit form.
+
 ### 4.5 Consequences to follow through
 
 - `public_api` leaves `PLAN_FEATURES` **and** every plan row that lists it.

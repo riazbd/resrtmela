@@ -1133,6 +1133,47 @@ against the live server. Neither the reset page nor the homepage has been
 opened in a browser yet — this pass is proven by an HTTP walk and a
 source-tree scan, not by a screenshot. Nothing from this branch is deployed.
 
+**Addendum (2026-09-11) — every account has both, and two things the sweep
+found on the way.** The reset closed OTP's door but opened a narrower one of
+its own: self-signup stored only a phone, an invited agent had only an email,
+and a mailed reset link needs an address — the owner who signed up alone was
+exactly the person it could never reach. The owner's ruling closes it at the
+account rather than the reset: **every account now carries an email and a
+phone, signs in with either, and a forgotten password resets by either.**
+`every-account-has-an-email-and-a-phone.spec.ts` proves both are required on
+every path that makes or edits an account (signup, a resort adding a
+colleague, an agent invite, an agency hiring its own staff) and that sign-in
+reaches the same account either way; `a-password-can-be-reset.spec.ts` proves
+the request accepts either identifier and always mails the link to the
+account's own email.
+
+The same spec is the first thing that has ever called `signup` from a test.
+It found `signup` unable to complete on any call since `bc5d9fa` (2026-09-08):
+`ensureResortRoles` ran on a second database connection from inside the
+signup transaction and deadlocked against the resort row that transaction had
+not committed yet, failing with P2003 every time. Nothing caught it because
+nothing had called it. The same spec also found phones were not stored the
+way login reads them — signup normalised a typed phone through
+`normalizePhone`, but the resort-colleague and agency-hire paths only
+stripped non-digit characters, so a colleague added as `01712...` was stored
+as `01712...` while login looked for `8801712...` and never found them. Both
+are fixed and both are now pinned by that spec.
+
+Rows that already existed with only one of the two got a placeholder from
+migration `20260911130000_every_account_has_an_email_and_a_phone`
+(`user-<id>@placeholder.invalid`, `placeholder-<id>`) — a gap marked as a gap,
+not an address. `every-account-has-an-email-and-a-phone.spec.ts` proves a
+placeholder is never mailed, never printed on an agency's quotation or export,
+and never shown to another party as a way to reach someone;
+`a-password-can-be-reset.spec.ts` proves an account stuck with a placeholder
+email gets no reset mail, because there is nobody there to receive it;
+`apps/web/test/contact.spec.ts` proves the console shows a placeholder as
+"not set" rather than the fake value underneath it. An admin replaces one from
+the team edit form (`updateResortUser`) — the resort's own admin may, unless
+the person also works at another resort, in which case only `SUPER_ADMIN` may,
+the same gate a password or role change already sits behind, because changing
+the address changes who the account belongs to.
+
 ## 4. What is left
 
 P3, P4 and the SSLCommerz half of P5 are done; §3 describes them. What follows
@@ -1320,6 +1361,29 @@ and `20260911110500_login_codes_are_gone` drops the `otp_codes` table
 outright. **Back up first** — `mariadb-dump ... | gzip`, and check the gzip
 before trusting it. There is no undo once those run.
 
+A third migration, `20260911130000_every_account_has_an_email_and_a_phone`,
+makes `email` and `phone` both `NOT NULL` on `users`. **It must ship with the
+web forms in the same deploy** — the API already refuses the shapes the old
+signup, add-colleague, invite-agent and add-agency-staff forms send (no
+`email`, or no `phone`), so deploying the migration and the API ahead of the
+web build would leave every one of those forms 400ing until the web deploy
+catches up.
+
+Before running it: `SHOW CREATE TABLE users` on production, to see the
+column's actual collation (checked here against every database this branch
+touched, not against production's). Then count how many phones collide once
+normalised to the canonical form the migration computes — two spellings of the
+same number are left as they are, not merged, so a row like that keeps its old
+shape rather than gaining the placeholder-safe one. The baseline dry run shows
+neither of these: `baseline-db.mjs` classes this migration data-only from its
+DDL alone and does not inspect what the data actually is, so both checks are
+manual, and the count from the dry run here is not a production number.
+
+`packages/db/prisma/seed.ts` cannot run on this branch — it imports
+`BookingSource` as a Prisma enum, which `6caad88` (before this branch) turned
+into a `resort_options` row, and the import fails before the script does
+anything. Pre-existing, unrelated to phase 1's changes, and left as found.
+
 Sequence: `git pull`, `pnpm install`, then `pnpm -F @rh/api db:baseline` and
 read the dry run's list before doing anything else. Then `pm2 stop api`
 *before* `db:baseline -- --apply`, so a request in flight cannot hit the old
@@ -1355,7 +1419,7 @@ expected, the app is retired (§3.32), not merely frozen.
 pnpm install
 pnpm -F @rh/api test:setup     # creates resorthub_test and migrates it
 pnpm -F @rh/api test           # 678 tests against a real MySQL
-pnpm -F @rh/web test           # 39 tests, jsdom
+pnpm -F @rh/web test           # 117 tests, jsdom
 pnpm typecheck                 # four packages; mobile is frozen (§3.27)
 pnpm dev                       # api :4000, web :3000
 ```
