@@ -274,6 +274,10 @@ export class PlatformController {
   }
 
   // plan definitions
+  @Get("platform/subscriptions") allSubscriptions(@Req() req: AuthedRequest) {
+    return this.platform.allSubscriptions(req.user);
+  }
+
   @Get("platform/offers") offers(@Req() req: AuthedRequest) {
     return this.platform.offers(req.user);
   }

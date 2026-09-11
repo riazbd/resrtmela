@@ -294,6 +294,36 @@ export async function seedTrade(prisma: PrismaClient, ctx: TradeCtx) {
     });
   }
 
+  /**
+   * Today's costs, deliberately.
+   *
+   * The expenses screen opens on today — a register, not an archive — so a
+   * demo whose costs are all in the past opens on an empty page and looks
+   * like a feature that does not work.
+   */
+  for (const [category, amount, scope, details] of [
+    ["Food & kitchen", 7400, "RESTAURANT", "Fish and vegetables from the morning market"],
+    ["Electricity, gas & water", 12800, "RESORT", "August electricity bill, paid at the bank"],
+    ["Housekeeping supplies", 2650, "RESORT", "Soap, detergent, room slippers"],
+    ["Transport & fuel", 1900, "RESORT", "Diesel for the pick-up"],
+    ["Salary & wages", 14000, "RESORT", "Advance to the night guard"],
+  ] as const) {
+    await prisma.expense.create({
+      data: {
+        resortId, date: day(0), category, details, amount, scope,
+        createdBy: staff.adminId, createdAt: at(0, between(r, 8, 16)),
+      },
+    });
+  }
+  for (const [category, amount, scope] of [
+    ["Food & kitchen", 6100, "RESTAURANT"],
+    ["Repairs & maintenance", 3300, "RESORT"],
+  ] as const) {
+    await prisma.expense.create({
+      data: { resortId, date: day(-1), category, amount, scope, details: "Yesterday's entry", createdBy: staff.deskId, createdAt: at(-1, 17) },
+    });
+  }
+
   // ── the paperwork trail ────────────────────────────────────────────────
   const recent = madeBookings.slice(-6);
   for (const [i, b] of recent.entries()) {

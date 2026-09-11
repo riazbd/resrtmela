@@ -85,6 +85,20 @@ type PlanEdit = {
   audience: string;
 };
 
+interface SubscriptionRow {
+  id: string;
+  account: { id: number; name: string; kind: string; status: string };
+  plan: string;
+  pendingPlan: string | null;
+  status: string;
+  monthlyFee: number;
+  startedAt: string;
+  trialEndsAt: string | null;
+  renewsAt: string | null;
+  cancelledAt: string | null;
+  note: string | null;
+  outstanding: number;
+}
 interface DueRow {
   id: string;
   accountId: number;
@@ -214,6 +228,13 @@ export default function PlatformPage() {
     { enabled: tab === "Calendar" },
   );
   const cal = calQ.data ?? null;
+
+  const subsQ = useApi(
+    keys.platform("subscriptions"),
+    () => api<SubscriptionRow[]>("/platform/subscriptions"),
+    { enabled: tab === "Subscriptions" },
+  );
+  const subs = subsQ.data ?? null;
 
   async function act(fn: () => Promise<unknown>, reload = true) {
     setBusy(true);
@@ -559,6 +580,55 @@ export default function PlatformPage() {
           </div>
           {cal?.length === 0 && <div className="mt-3 text-center text-sm text-slate-400">Nothing falls due this month</div>}
         </div>
+      )}
+
+      {/* ── subscriptions: what the platform has sold, to both kinds of customer ── */}
+      {tab === "Subscriptions" && (
+        <Card className="mt-5 overflow-x-auto">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h3 className="text-sm font-bold text-slate-800">Subscriptions — {subs?.length ?? 0}</h3>
+            <span className="text-xs text-slate-400">Every account the platform bills, resort owners and agencies alike. Closed ones stay, so the history reads.</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr><Th>Customer</Th><Th>Plan</Th><Th>Status</Th><Th className="text-right">Monthly</Th><Th>Started</Th><Th>Trial ends / renews</Th><Th className="text-right">Outstanding</Th></tr>
+            </thead>
+            <tbody>
+              {(subs ?? []).map((s) => (
+                <tr key={s.id} className="border-t border-slate-100 align-top">
+                  <Td>
+                    <div className="font-semibold text-slate-800">{s.account.name}</div>
+                    <div className="text-[11px] text-slate-400">
+                      {s.account.kind === "AGENCY" ? "Travel agency" : "Resort owner"}
+                      {s.account.status !== "active" ? ` · ${s.account.status}` : ""}
+                    </div>
+                  </Td>
+                  <Td>
+                    {s.plan}
+                    {s.pendingPlan && <div className="text-[11px] text-amber-600">→ {s.pendingPlan} at renewal</div>}
+                  </Td>
+                  <Td>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                      s.status === "ACTIVE" ? "bg-emerald-50 text-emerald-700"
+                        : s.status === "TRIAL" ? "bg-sky-50 text-sky-700"
+                        : s.status === "PAST_DUE" ? "bg-red-50 text-red-700"
+                        : "bg-slate-100 text-slate-500"}`}>{s.status}</span>
+                    {s.note && <div className="mt-0.5 text-[11px] text-slate-400">{s.note}</div>}
+                  </Td>
+                  <Td className="text-right font-bold">{money(s.monthlyFee)}</Td>
+                  <Td className="text-xs text-slate-500">{dmy(s.startedAt)}</Td>
+                  <Td className="text-xs text-slate-500">
+                    {s.cancelledAt ? `cancelled ${dmy(s.cancelledAt)}` : s.trialEndsAt ? `trial → ${dmy(s.trialEndsAt)}` : s.renewsAt ? dmy(s.renewsAt) : "—"}
+                  </Td>
+                  <Td className={`text-right font-bold ${s.outstanding > 0 ? "text-red-600" : "text-slate-400"}`}>
+                    {s.outstanding > 0 ? money(s.outstanding) : "—"}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {subs && subs.length === 0 && <Empty msg="Nothing sold yet" />}
+        </Card>
       )}
 
       {/* ── dues ── */}

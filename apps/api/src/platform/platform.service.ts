@@ -1592,6 +1592,42 @@ export class PlatformService {
     return this.makeOffer(claims.userId, input);
   }
 
+  /**
+   * Every subscription the platform has sold, live and closed.
+   *
+   * The Resorts tab answers "what is this resort on"; this answers "what has
+   * the platform sold, to whom, and what is still owed against it" — the two
+   * agencies included, which no resort-shaped list can show.
+   */
+  async allSubscriptions(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.subscription.findMany({
+      include: {
+        account: { select: { id: true, name: true, kind: true, status: true } },
+        dues: { select: { amount: true, status: true } },
+      },
+      orderBy: [{ id: "desc" }],
+    });
+    return rows.map((s) => ({
+      id: String(s.id),
+      account: s.account,
+      plan: s.plan,
+      pendingPlan: s.pendingPlan,
+      status: s.status,
+      monthlyFee: Number(s.monthlyFee),
+      startedAt: s.startedAt,
+      trialEndsAt: s.trialEndsAt,
+      renewsAt: s.renewsAt,
+      cancelledAt: s.cancelledAt,
+      note: s.note,
+      outstanding: round2(
+        s.dues
+          .filter((d) => d.status !== "PAID" && d.status !== "WAIVED")
+          .reduce((t, d) => t + Number(d.amount), 0),
+      ),
+    }));
+  }
+
   /** Every offer, with how many accounts came through it — which channel brought whom. */
   async offers(claims: JwtClaims) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);

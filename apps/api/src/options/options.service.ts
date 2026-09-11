@@ -19,7 +19,8 @@ import { PlatformSettingsService } from "../common/platform-settings.service";
 import { PermissionsService } from "../common/permissions";
 import { AuditService } from "../common/audit.service";
 import { badRequest, notFound, requireResortAccess } from "../common/rbac";
-import type { JwtClaims } from "@rh/shared";
+import { requireSellingAccess } from "../common/selling-access";
+import { ROLE, type JwtClaims } from "@rh/shared";
 import {
   OPTION_LISTS,
   OPTION_CODE_RE,
@@ -58,8 +59,18 @@ export class OptionsService {
 
   /** Everything in the list, switched-off rows included — the settings view. */
   async list(claims: JwtClaims, resortId: number, list: OptionList) {
-    requireResortAccess(claims, resortId);
-    await this.perms.require(claims, resortId, "settings.manage");
+    /**
+     * An agency selling this resort reads these too, to fill its own
+     * dropdowns — how a booking was taken, where it came from. They are
+     * labels, not the resort's business, and changing them stays behind
+     * `settings.manage` on the screen below.
+     */
+    if (claims.role === ROLE.AGENT) {
+      await requireSellingAccess(this.prisma, claims, resortId);
+    } else {
+      requireResortAccess(claims, resortId);
+      await this.perms.require(claims, resortId, "settings.manage");
+    }
     await this.ensureSeeded(resortId, list);
     return this.prisma.resortOption.findMany({
       where: { resortId, list },
