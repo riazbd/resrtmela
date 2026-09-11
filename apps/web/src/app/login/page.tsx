@@ -9,6 +9,7 @@ import { Button, Input } from "@/components/ui";
 import { BedDouble, CalendarDays, ShieldCheck, UtensilsCrossed, ArrowLeft } from "lucide-react";
 import { landingFor } from "@/lib/console-access";
 import { RESET_REQUESTED_MESSAGE } from "@/lib/password-reset";
+import { Logo } from "@/components/logo";
 
 const HIGHLIGHTS = [
   { icon: CalendarDays, text: "Booking calendar with one-click reservations" },
@@ -69,12 +70,8 @@ function LoginInner() {
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-700 via-brand-800 to-brand-900 p-10 text-white lg:flex">
         <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/5 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-emerald-300/10 blur-2xl" />
-        <Link href="/" className="relative flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 font-bold backdrop-blur">R</div>
-          <div>
-            <div className="text-sm font-bold leading-tight">Resort Mela</div>
-            <div className="text-[10px] text-brand-200">Resort management platform</div>
-          </div>
+        <Link href="/" className="relative">
+          <Logo size={40} tone="onDark" sub="Resort management platform" />
         </Link>
         <div className="relative">
           <h2 className="max-w-md text-4xl font-black leading-tight">

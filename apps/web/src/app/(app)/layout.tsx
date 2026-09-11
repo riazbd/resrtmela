@@ -16,6 +16,7 @@ import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { OutboxProvider } from "@/lib/outbox";
+import { Logo } from "@/components/logo";
 import { OutboxBar } from "@/components/outbox-bar";
 import { Select, Button, Input, useToast } from "@/components/ui";
 
@@ -156,12 +157,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       {navOpen && <div className="fixed inset-0 z-30 bg-slate-900/50 lg:hidden" onClick={() => setNavOpen(false)} />}
       {/* sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-brand-900 text-white transition-transform duration-200 lg:translate-x-0 ${navOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="flex items-center gap-2 px-4 py-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 font-bold">R</div>
-          <div>
-            <div className="text-sm font-semibold leading-tight">Resort Mela</div>
-            <div className="text-[10px] text-brand-200">Admin Console</div>
-          </div>
+        <div className="px-4 py-4">
+          <Logo size={32} tone="onDark" sub="Admin Console" />
         </div>
         <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
           {NAV.filter(allowed).map((n) => {

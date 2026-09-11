@@ -8,6 +8,7 @@ import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 import { OfferBanner, useOffer } from "../offer";
+import { LogoMark } from "@/components/logo";
 
 /** One plan from the agency shelf — never a resort plan. */
 interface AgencyPlan {
@@ -83,7 +84,7 @@ export default function AgencySignupPage() {
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-700 to-emerald-600 px-4 py-10">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">R</div>
+          <LogoMark size={44} className="mx-auto mb-2" />
           <h1 className="text-xl font-bold text-slate-900">Sign up your travel agency</h1>
           <p className="mt-1 text-xs text-slate-500">
             Verified once by Resort Mela, then sell every resort that is open to agents.

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, API_URL } from "@/lib/api";
 import { formatMoney, planFeatureLabel } from "@rh/shared";
+import { Logo } from "@/components/logo";
 import {
   CalendarDays,
   BedDouble,
@@ -245,12 +246,8 @@ export default function HomePage() {
       {/* ── nav ── */}
       <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">R</div>
-            <div>
-              <div className="text-sm font-bold leading-tight text-slate-900">Resort Mela</div>
-              <div className="text-[10px] text-slate-400">Resort management platform</div>
-            </div>
+          <Link href="/">
+            <Logo size={38} sub="Resort management platform" />
           </Link>
           <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
             <a href="#features" className="hover:text-brand-700">Functionalities</a>
@@ -565,10 +562,7 @@ export default function HomePage() {
       <footer id="contact" className="bg-white py-14">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="sm:col-span-2">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 font-bold text-white">R</div>
-              <div className="text-sm font-bold text-slate-900">Resort Mela</div>
-            </div>
+            <Logo size={38} />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-500">
               The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
               and agents with wallets.
