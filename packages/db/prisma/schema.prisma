@@ -103,7 +103,41 @@ model Tenant {
   /// resort owner's people are reached through its resorts.
   users User[] @relation("AccountUsers")
 
+  /// The offer this customer signed up through — which channel brought it
+  offerId Int?
+  offer   Offer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([offerId])
   @@map("tenants")
+}
+
+/// A way in (2026-09-11 design, §7). One object, three jobs: a private
+/// invitation (one use, one address), a campaign (a hundred uses, "60 days
+/// free"), and what `invite-agent` used to do — which was make an account and
+/// mail its password — without the password.
+model Offer {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique @db.VarChar(32)
+  /// RESORT | AGENCY — which signup it opens
+  audience    String    @db.VarChar(16)
+  /// the plan the signup lands on, whatever the customer picked
+  plan        String    @db.VarChar(16)
+  /// overrides the plan's own trial when set
+  trialDays   Int?
+  discountPct Int?
+  note        String?   @db.VarChar(191)
+  /// set for an invitation: only this address may use it
+  email       String?   @db.VarChar(191)
+  /// the resort that sent the invitation; the agency is linked to it on signup
+  resortId    Int?
+  expiresAt   DateTime?
+  maxUses     Int       @default(1)
+  uses        Int       @default(0)
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  accounts    Tenant[]
+
+  @@map("offers")
 }
 
 model Resort {

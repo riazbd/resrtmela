@@ -14,6 +14,7 @@ import { monthOf } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
 import { displayPhone } from "@/lib/contact";
 import { AgencyQueue } from "./agency-queue";
+import { OffersTab } from "./offers-tab";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -127,7 +128,7 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Plans", "Subscriptions", "Dues", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Offers", "Subscriptions", "Dues", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -726,6 +727,7 @@ export default function PlatformPage() {
 
       {tab === "Email credits" && <PackPricesCard />}
 
+      {tab === "Offers" && <div className="mt-5"><OffersTab /></div>}
       {tab === "Billing policy" && <PolicyTab />}
       {tab === "Website CMS" && <CmsTab />}
 

@@ -241,56 +241,10 @@ describe("a resort adding a colleague", () => {
   });
 });
 
-describe("a resort inviting an agent by email", () => {
-  const invite = (over: Record<string, string> = {}) =>
-    platform().inviteAgentByEmail(admin, fx.resortId, {
-      name: "New Agent",
-      email: " New.Agent@Example.com ",
-      phone: "+880 1712-000444",
-      ...over,
-    } as never);
-
-  it("gives the new agent the phone as well, and still mails the credentials", async () => {
-    const made = await invite();
-
-    const row = await prisma.user.findUniqueOrThrow({ where: { id: made.id } });
-    expect(row.email).toBe("new.agent@example.com");
-    expect(row.phone).toBe("8801712000444");
-    expect(outbox.map((m) => m.to)).toEqual(["new.agent@example.com"]);
-  });
-
-  it("refuses a new agent with no phone", async () => {
-    await refuses(() => invite({ phone: "" }), 400, /phone/i);
-    expect(outbox).toEqual([]);
-  });
-
-  it("refuses a new agent with no email", async () => {
-    await refuses(() => invite({ email: "" }), 400, /email/i);
-  });
-
-  it("refuses a phone somebody already signs in with", async () => {
-    await refuses(() => invite({ phone: `+${TAKEN_PHONE}` }), 400, /phone/i);
-  });
-
-  it("links a person who already has an account, as before — they have a phone, so none is asked for", async () => {
-    /**
-     * An email that already has an account is not a duplicate here: it is an
-     * agent of another resort being given this one too. That path makes
-     * nobody, so it needs nothing new from the inviter.
-     */
-    const elsewhere = await seedResort(prisma as unknown as PrismaClient);
-    const theirAgent = await prisma.user.update({
-      where: { id: elsewhere.agentId },
-      data: { email: "their.agent@example.com" },
-    });
-    const before = await prisma.user.count();
-
-    const linked = await invite({ email: "their.agent@example.com", phone: "" });
-
-    expect(linked.id).toBe(theirAgent.id);
-    expect(await prisma.user.count()).toBe(before);
-  });
-});
+// The invite that made an agent's account and mailed its password is gone
+// (2026-09-11 design, §7). A resort now sends an agency a link to sign itself
+// up, so the invite makes no account and asks for no phone: signup does, and
+// signup's own tests cover it. See an-offer-brings-a-customer.spec.ts.
 
 describe("an agency hiring its own staff", () => {
   const hire = (over: Record<string, string> = {}) =>
@@ -492,20 +446,6 @@ describe("signing in", () => {
 
     expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000322");
     expect((await auth().loginWithPassword("01712000322", "password123")).user.id).toBe(made.id);
-  });
-
-  it("an invited agent with a local number signs in with that number, once approved", async () => {
-    const made = await platform().inviteAgentByEmail(admin, fx.resortId, {
-      email: "local.agent@example.com",
-      phone: "01712000323",
-    } as never);
-    // the temporary password only ever leaves in the invitation, so it is read from there
-    const temporary = outbox[0]?.html.match(/Temporary password<\/td>\s*<td[^>]*>([^<]+)<\/td>/)?.[1];
-    // an invited agent starts pending, and pending accounts cannot sign in
-    await prisma.user.update({ where: { id: made.id }, data: { status: "active" } });
-
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000323");
-    expect((await auth().loginWithPassword("01712000323", temporary!)).user.id).toBe(made.id);
   });
 
   it("a colleague whose phone is changed to a local number signs in with that number", async () => {

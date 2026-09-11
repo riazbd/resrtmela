@@ -686,7 +686,7 @@ function AccessTab({ rid }: { rid: number }) {
   const fail = useLoadFailure();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [invite, setInvite] = useState({ email: "", name: "", phone: "" });
+  const [invite, setInvite] = useState({ email: "", name: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
@@ -710,12 +710,12 @@ function AccessTab({ rid }: { rid: number }) {
   async function sendInvite() {
     setInviting(true);
     try {
-      const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agent`, {
+      const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agency`, {
         method: "POST",
-        body: { email: invite.email, name: invite.name || undefined, phone: invite.phone },
+        body: { email: invite.email, name: invite.name || undefined },
       });
-      push(r.emailed ? "Invitation email sent — the agent can sign in with the emailed credentials" : "Agent linked — they were notified");
-      setInvite({ email: "", name: "", phone: "" });
+      push(r.emailed ? "Invitation sent — the agency signs itself up from the link" : "Agent linked — they were notified");
+      setInvite({ email: "", name: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -769,18 +769,15 @@ function AccessTab({ rid }: { rid: number }) {
       <div className="space-y-4">
         <CommissionCard rid={rid} />
 
-      <Card title="Invite agent by email">
+      <Card title="Invite an agency by email">
         <div className="space-y-3">
-          <Field label="Agent email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agent@email.com" /></Field>
-          <Field label="Name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
-          <Field label="Phone" hint="used if this email has no account yet; ignored if it already does">
-            <Input value={invite.phone} onChange={(e) => setInvite({ ...invite, phone: e.target.value })} placeholder="8801XXXXXXXXX" />
-          </Field>
+          <Field label="Agency email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agency@email.com" /></Field>
+          <Field label="Agency name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
 
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            The agent receives a <b>verification email</b> with login credentials. New agents start pending — activate them below or in Users.
+            The agency receives a <b>link to sign up</b> — it sets its own sign-in, and nobody is sent a password. Once the platform verifies it, it can sell for you. An agent who already has an account is linked straight away.
           </div>
-          <Button onClick={sendInvite} loading={inviting} disabled={!!emailError(invite.email) || !!phoneError(invite.phone)}>
+          <Button onClick={sendInvite} loading={inviting} disabled={!!emailError(invite.email)}>
             Send invitation
           </Button>
         </div>

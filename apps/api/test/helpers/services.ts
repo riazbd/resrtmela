@@ -107,9 +107,9 @@ export function makeBillingService(prisma: PrismaService): BillingService {
 
 /**
  * `email` is for the invite: an unconfigured `EmailService` answers
- * `sent: false`, and `inviteAgentByEmail` refuses when the credentials could
- * not go out — so without a sender that says yes, every fresh invite in a
- * spec fails, and a test that expects a refusal passes for the wrong reason.
+ * `sent: false`, and `inviteAgency` refuses when the signup link could not go
+ * out — so without a sender that says yes, every fresh invite in a spec
+ * fails, and a test that expects a refusal passes for the wrong reason.
  */
 export function makePlatformService(prisma: PrismaService, email?: EmailService): PlatformService {
   return new PlatformService(

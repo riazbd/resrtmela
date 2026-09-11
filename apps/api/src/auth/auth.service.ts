@@ -5,6 +5,7 @@ import { signToken } from "../common/auth.guard";
 import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
+import { openingSubscription, redeemOffer } from "../common/offers";
 import { ROLE, type Role } from "@rh/shared";
 
 /**
@@ -73,6 +74,8 @@ export class AuthService {
     phone: string;
     password: string;
     slug?: string;
+    /** an offer code — the plan and trial the workspace starts on */
+    offer?: string;
   }) {
     // both, stored the way login reads them. Signup used to keep only the
     // phone, so the owner who signed up alone was the one person a password
@@ -95,15 +98,20 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
+    const offerCode = input.offer?.trim();
     const result = await this.prisma.$transaction(async (tx) => {
-      // no plan written here: a customer's plan is its subscription, and one
-      // with none yet is held to the cheapest plan on sale by PlanLimits
+      // spent first, so a refused offer leaves nothing behind
+      const redeemed = offerCode ? await redeemOffer(tx, offerCode, { audience: "RESORT", email }) : null;
       const tenant = await tx.tenant.create({
         data: {
           name: input.companyName || input.resortName,
           slug,
+          offerId: redeemed?.offer.id ?? null,
         },
       });
+      // an offer names the plan; without one no subscription is written, and
+      // PlanLimits holds the account to the cheapest plan on sale
+      if (redeemed) await tx.subscription.create({ data: openingSubscription(tenant.id, redeemed.plan, redeemed.offer) });
       const resort = await tx.resort.create({
         data: {
           tenantId: tenant.id,
@@ -159,7 +167,9 @@ export class AuthService {
     email: string;
     phone: string;
     password: string;
-    plan: string;
+    /** the plan picked from the agency shelf; an offer's plan wins over it */
+    plan?: string;
+    offer?: string;
   }) {
     const phone = contactPhone(input.phone);
     const email = contactEmail(input.email);
@@ -169,15 +179,16 @@ export class AuthService {
     const agencyName = input.agencyName.trim();
     if (!agencyName) throw Object.assign(new Error("Agency name is required"), { status: 400 });
 
-    const plan = await this.prisma.platformPlan.findUnique({ where: { name: input.plan.trim().toUpperCase() } });
-    if (!plan || !plan.active || plan.audience !== "AGENCY") {
+    const offerCode = input.offer?.trim();
+    const chosen = offerCode ? null : await this.prisma.platformPlan.findUnique({ where: { name: (input.plan ?? "").trim().toUpperCase() } });
+    if (!offerCode && (!chosen || !chosen.active || chosen.audience !== "AGENCY")) {
       const shelf = await this.prisma.platformPlan.findMany({
         where: { active: true, audience: "AGENCY" },
         orderBy: { sortOrder: "asc" },
         select: { name: true },
       });
       throw Object.assign(
-        new Error(`"${input.plan}" is not an agency plan. On the agency shelf: ${shelf.map((p) => p.name).join(", ") || "none yet"}`),
+        new Error(`${input.plan ? `"${input.plan}" is not an agency plan` : "Pick a plan"}. On the agency shelf: ${shelf.map((p) => p.name).join(", ") || "none yet"}`),
         { status: 400 },
       );
     }
@@ -190,27 +201,27 @@ export class AuthService {
     const base = slugify(agencyName) || "agency";
     const slug = (await this.prisma.tenant.findUnique({ where: { slug: base } })) ? `${base}-${Date.now().toString(36)}` : base;
     const passwordHash = await bcrypt.hash(input.password, 12);
-    const now = new Date();
-    const onTrial = plan.trialDays > 0;
-    const trialEndsAt = onTrial ? new Date(now.getTime() + plan.trialDays * 86_400_000) : null;
 
     const user = await this.prisma.$transaction(async (tx) => {
-      const account = await tx.tenant.create({ data: { name: agencyName, slug, kind: "AGENCY", status: "pending" } });
+      const redeemed = offerCode ? await redeemOffer(tx, offerCode, { audience: "AGENCY", email }) : null;
+      const plan = redeemed?.plan ?? chosen!;
+      // pending even when a resort sent the invitation: verification is the
+      // platform's, once, and a resort's word must not open every other resort
+      const account = await tx.tenant.create({
+        data: { name: agencyName, slug, kind: "AGENCY", status: "pending", offerId: redeemed?.offer.id ?? null },
+      });
       const u = await tx.user.create({
         data: { name: input.name.trim() || agencyName, phone, email, role: "AGENT", passwordHash, accountId: account.id },
       });
-      await tx.subscription.create({
-        data: {
-          accountId: account.id,
-          plan: plan.name,
-          status: onTrial ? "TRIAL" : "ACTIVE",
-          monthlyFee: plan.monthlyFee,
-          trialEndsAt,
-          renewsAt: onTrial ? trialEndsAt : now,
-        },
-      });
+      await tx.subscription.create({ data: openingSubscription(account.id, plan, redeemed?.offer) });
+      // the resort that invited it gets it as an agent, to sell for once verified
+      const invitedBy = redeemed?.offer.resortId;
+      if (invitedBy) {
+        const role = await tx.customRole.findFirst({ where: { resortId: invitedBy, name: "Agent" }, select: { id: true } });
+        await tx.userResort.create({ data: { userId: u.id, resortId: invitedBy, roleId: role?.id ?? null } });
+      }
       await tx.auditLog.create({
-        data: { actorId: u.id, action: "agency.signup", entity: "tenant", entityId: BigInt(account.id), diff: { slug, plan: plan.name } },
+        data: { actorId: u.id, action: "agency.signup", entity: "tenant", entityId: BigInt(account.id), diff: { slug, plan: plan.name, offer: offerCode ?? null } },
       });
       return u;
     });

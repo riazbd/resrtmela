@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Query } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
 import { PlatformService } from "./platform.service";
 
 /**
@@ -26,5 +26,11 @@ export class MarketingController {
   @Get("plans")
   plans(@Query("audience") audience?: string) {
     return this.platform.publicPlans(audience === "AGENCY" ? "AGENCY" : "RESORT");
+  }
+
+  /** What a signup page shows for `?offer=` — the plan and terms it lands on. */
+  @Get("offers/:code")
+  offer(@Param("code") code: string) {
+    return this.platform.publicOffer(code);
   }
 }

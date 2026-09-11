@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
+import { OfferBanner, useOffer } from "../offer";
 
 /** One plan from the agency shelf — never a resort plan. */
 interface AgencyPlan {
@@ -37,6 +38,7 @@ export default function AgencySignupPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const offer = useOffer("AGENCY");
 
   useEffect(() => {
     fetch(`${API_URL}/cms/plans?audience=AGENCY`)
@@ -49,13 +51,15 @@ export default function AgencySignupPage() {
       .catch(() => setPlans([]));
   }, []);
 
+  // an offer names the plan, so there is nothing to choose
+  const usingOffer = !!offer.offer?.usable && !offer.problem;
   const problem =
     (!agencyName.trim() && "Enter your agency's name") ||
     (!name.trim() && "Enter your name") ||
     emailError(email) ||
     phoneError(phone) ||
     (password.length < 8 && "Password must be at least 8 characters") ||
-    (!plan && "Choose a plan");
+    (!usingOffer && !plan && "Choose a plan");
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -65,7 +69,7 @@ export default function AgencySignupPage() {
     try {
       const res = await api<{ accessToken: string }>("/auth/signup/agency", {
         method: "POST",
-        body: { agencyName, name, email, phone, password, plan },
+        body: usingOffer ? { agencyName, name, email, phone, password, offer: offer.code } : { agencyName, name, email, phone, password, plan },
       });
       const me = await adoptToken(res.accessToken);
       router.replace(landingFor(me.role));
@@ -86,7 +90,8 @@ export default function AgencySignupPage() {
           </p>
         </div>
 
-        {plans && plans.length === 0 ? (
+        <OfferBanner state={offer} />
+        {plans && plans.length === 0 && !usingOffer ? (
           <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
             Agency plans are not on sale yet. Please check back soon.
           </p>
@@ -112,7 +117,7 @@ export default function AgencySignupPage() {
               <label className="text-xs font-medium text-slate-600">Password</label>
               <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="min 8 characters" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1" hidden={usingOffer}>
               <label className="text-xs font-medium text-slate-600">Plan</label>
               <select
                 value={plan}

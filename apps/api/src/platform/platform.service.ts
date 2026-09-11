@@ -15,6 +15,7 @@ import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } f
 import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE, sameEmail, samePhone } from "../common/contact";
 import { signToken } from "../common/auth.guard";
 import { randomBytes } from "node:crypto";
+import type { OfferInput } from "../common/offers";
 import * as bcrypt from "bcryptjs";
 
 /**
@@ -1476,76 +1477,145 @@ export class PlatformService {
     return r;
   }
 
-  // ─────────────────── agent invite by email (verification email) ───────────────────
+  // ─────────────────── offers: invitations and campaigns ───────────────────
 
-  async inviteAgentByEmail(
-    claims: JwtClaims,
-    resortId: number,
-    input: { email: string; name?: string; phone?: string },
-  ) {
+  /**
+   * A way in, made by the platform: a campaign ("60 days free", a hundred
+   * uses) or a private invitation (one use, one address).
+   */
+  async createOffer(claims: JwtClaims, input: OfferInput) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    return this.makeOffer(claims.userId, input);
+  }
+
+  /** Every offer, with how many accounts came through it — which channel brought whom. */
+  async offers(claims: JwtClaims) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.offer.findMany({ orderBy: { id: "desc" }, include: { _count: { select: { accounts: true } } } });
+    return rows.map(({ _count, ...o }) => ({ ...o, signups: _count.accounts }));
+  }
+
+  /**
+   * What a signup page shows for `?offer=`: the plan and the terms — never the
+   * address an invitation is bound to.
+   */
+  async publicOffer(code: string) {
+    const o = await this.prisma.offer.findUnique({ where: { code: code.trim() } });
+    if (!o) throw badRequest("This offer code does not exist");
+    const plan = await this.prisma.platformPlan.findUnique({
+      where: { name: o.plan },
+      select: { name: true, label: true, monthlyFee: true, trialDays: true },
+    });
+    const expired = !!o.expiresAt && o.expiresAt.getTime() <= Date.now();
+    return {
+      code: o.code,
+      audience: o.audience,
+      plan: plan ? { ...plan, monthlyFee: Number(plan.monthlyFee) } : null,
+      trialDays: o.trialDays ?? plan?.trialDays ?? 0,
+      discountPct: o.discountPct,
+      expiresAt: o.expiresAt,
+      invitation: !!o.email,
+      usable: !expired && o.uses < o.maxUses && !!plan,
+    };
+  }
+
+  private async makeOffer(createdById: number, input: OfferInput & { resortId?: number }) {
+    const audience = String(input.audience ?? "").trim().toUpperCase();
+    if (!(PLAN_AUDIENCES as readonly string[]).includes(audience)) throw badRequest(`Audience must be one of: ${PLAN_AUDIENCES.join(", ")}`);
+    const plan = await this.prisma.platformPlan.findUnique({ where: { name: String(input.plan ?? "").trim().toUpperCase() } });
+    if (!plan || plan.audience !== audience) throw badRequest(`"${input.plan}" is not ${audience === "AGENCY" ? "an agency" : "a resort"} plan`);
+    const whole = (v: number | undefined, label: string, min: number, max: number) => {
+      if (v == null) return null;
+      if (!Number.isInteger(v) || v < min || v > max) throw badRequest(`${label} must be a whole number from ${min} to ${max}`);
+      return v;
+    };
+    const trialDays = whole(input.trialDays, "Trial days", 0, 365);
+    const discountPct = whole(input.discountPct, "Discount", 1, 100);
+    const maxUses = whole(input.maxUses, "Uses", 1, 100_000) ?? 1;
+    const expiresAt = input.expiresAt == null || input.expiresAt === "" ? null : new Date(input.expiresAt);
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) throw badRequest("Expiry is not a date");
+    const email = input.email?.trim() ? contactEmail(input.email) : null;
+    return this.prisma.offer.create({
+      data: {
+        code: randomBytes(5).toString("hex").toUpperCase(),
+        audience,
+        plan: plan.name,
+        trialDays,
+        discountPct,
+        maxUses,
+        expiresAt,
+        email,
+        note: input.note?.trim() || null,
+        resortId: input.resortId ?? null,
+        createdById,
+      },
+    });
+  }
+
+  /**
+   * A resort inviting an agency.
+   *
+   * This used to make the account itself and mail its password in the clear
+   * (2026-09-11 design, §7: "should not exist"). It now sends a link to sign
+   * up — a one-use offer bound to that address, on the cheapest agency plan.
+   * The agency sets its own sign-in, lands pending like every agency, and is
+   * linked to this resort when it signs up. Someone who already sells as an
+   * agent is linked straight away, as before.
+   */
+  async inviteAgency(claims: JwtClaims, resortId: number, input: { email: string; name?: string }) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
     const to = contactEmail(input.email);
-    const existingUser = await this.prisma.user.findFirst({ where: { email: to } });
-    if (existingUser) {
-      const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: existingUser.id, resortId } } });
-      if (linked) throw badRequest("this email already has access to the resort");
-    }
-    // a new account needs a phone as well as the address the credentials go
-    // to; linking someone who already has an account asks for nothing new
-    const phone = existingUser ? null : contactPhone(input.phone);
-    if (phone && (await contactTaken(this.prisma, { phone }))) throw badRequest(TAKEN_SENTENCE.phone);
-    const tempPassword = `RM-${randomBytes(5).toString("hex")}`;
-    const user =
-      existingUser ??
-      (await this.prisma.user.create({
-        data: {
-          name: input.name?.trim() || to.split("@")[0]!,
-          email: to,
-          // only reached when there was no existing user, so `phone` was required above
-          phone: phone!,
-          passwordHash: await bcrypt.hash(tempPassword, 12),
-          role: "AGENT",
-          status: "pending",
-          // its own agency account, vouched for by the inviting resort
-          account: { create: { name: input.name?.trim() || to, slug: `agency-${randomBytes(5).toString("hex")}`, kind: "AGENCY", status: "active" } },
-        },
-      }));
-    await this.prisma.userResort.create({
-      data: {
-        userId: user.id,
-        resortId,
-        roleId: (await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" } }))?.id ?? null,
-      },
-    });
     const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
-    if (!existingUser) {
-      // fresh agent: email the credentials + verification link
-      const loginUrl = `${process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com"}/login`;
-      const platformName = await this.settings.str("platform.name", "Resort Mela");
-      const html = `
-        <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
-          <h2 style="margin:0 0 8px">You've been invited to ${resort.name}</h2>
-          <p>${resort.name} added you as a <b>booking agent</b> on ${platformName}. Use the credentials below to sign in and verify your account:</p>
-          <table style="border-collapse:collapse;font-size:14px;margin:12px 0">
-            <tr><td style="padding:4px 12px 4px 0;color:#64748b">Login email</td><td style="padding:4px 0;font-weight:bold">${to}</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;color:#64748b">Temporary password</td><td style="padding:4px 0;font-weight:bold;letter-spacing:1px">${tempPassword}</td></tr>
-          </table>
-          <p style="margin:16px 0">
-            <a href="${loginUrl}" style="background:#047857;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600">Sign in &amp; verify</a>
-          </p>
-          <p style="color:#64748b;font-size:13px">Change your password after the first sign-in (Profile → Set password). Commission terms are set by the resort owner.</p>
-        </div>`;
-      const r = await this.email.send(to, `Agent invitation — ${resort.name}`, html, resort.name);
-      if (!r.sent) throw badRequest(`invitation email could not be sent: ${r.error}`);
-    } else {
-      // existing user (e.g. an agent of another resort): notify them of the new access
+
+    const existing = await this.prisma.user.findFirst({ where: { email: to } });
+    if (existing) {
+      if (existing.role !== "AGENT") throw badRequest("This email belongs to someone who is not an agent");
+      const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId: existing.id, resortId } } });
+      if (linked) throw badRequest("This email already has access to the resort");
+      const role = await this.prisma.customRole.findFirst({ where: { resortId, name: "Agent" }, select: { id: true } });
+      await this.prisma.userResort.create({ data: { userId: existing.id, resortId, roleId: role?.id ?? null } });
       await this.prisma.notification.create({
-        data: { userId: user.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
+        data: { userId: existing.id, resortId, title: `Agent access granted: ${resort.name}`, body: "You can now book for guests at this resort.", kind: "info", link: "/" },
       });
+      await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: existing.id, diff: { email: to, linked: true } });
+      return { linked: true, emailed: false };
     }
-    await this.audit.log({ actorId: claims.userId, resortId, action: "agent.invite", entity: "user", entityId: user.id, diff: { email: to } });
-    return { id: user.id, name: user.name, email: to, status: user.status, emailed: !existingUser };
+
+    const plan = await this.prisma.platformPlan.findFirst({
+      where: { active: true, audience: "AGENCY" },
+      orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
+    });
+    if (!plan) throw badRequest("The platform has no agency plan on sale yet, so there is nothing to invite an agency to");
+    const offer = await this.makeOffer(claims.userId, {
+      audience: "AGENCY",
+      plan: plan.name,
+      maxUses: 1,
+      email: to,
+      resortId,
+      note: `Invited by ${resort.name}${input.name?.trim() ? ` — ${input.name.trim()}` : ""}`,
+      // an invitation left unanswered for a month is not one anyone is waiting on
+      expiresAt: new Date(Date.now() + 30 * 86_400_000),
+    });
+    const link = `${process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com"}/signup/agency?offer=${offer.code}`;
+    const platformName = await this.settings.str("platform.name", "Resort Mela");
+    const html = `
+      <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a;max-width:560px">
+        <h2 style="margin:0 0 8px">${resort.name} invites your agency</h2>
+        <p>${resort.name} would like you to sell its rooms on ${platformName}. Sign your agency up with the link below — you set up your own sign-in, and nobody else knows it.</p>
+        <p style="margin:16px 0">
+          <a href="${link}" style="background:#047857;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600">Sign up your agency</a>
+        </p>
+        <p style="color:#64748b;font-size:13px">The link is for ${to} only and works once, for 30 days. The platform verifies every agency before it sells; commission terms are set by the resort.</p>
+      </div>`;
+    const r = await this.email.send(to, `${resort.name} invites you to ${platformName}`, html, resort.name);
+    if (!r.sent) {
+      // an invitation nobody received is not one anyone can use
+      await this.prisma.offer.delete({ where: { id: offer.id } });
+      throw badRequest(`invitation email could not be sent: ${r.error}`);
+    }
+    await this.audit.log({ actorId: claims.userId, resortId, action: "agency.invite", entity: "offer", entityId: offer.id, diff: { email: to, plan: plan.name } });
+    return { linked: false, emailed: true };
   }
 
   // ─────────────────── agent agency staff (agent's own users & roles) ───────────────────

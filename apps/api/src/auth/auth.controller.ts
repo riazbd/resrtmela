@@ -32,6 +32,7 @@ class SignupDto {
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MinLength(8) password!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
+  @IsOptional() @IsString() @MaxLength(32) offer?: string;
 }
 
 class SignupAgencyDto {
@@ -40,7 +41,9 @@ class SignupAgencyDto {
   @IsString() @MaxLength(191) email!: string;
   @IsString() @MaxLength(32) phone!: string;
   @IsString() @MinLength(8) password!: string;
-  @IsString() @MaxLength(16) plan!: string;
+  // optional when an offer names the plan; the service refuses neither-given
+  @IsOptional() @IsString() @MaxLength(16) plan?: string;
+  @IsOptional() @IsString() @MaxLength(32) offer?: string;
 }
 
 class ForgotPasswordDto {

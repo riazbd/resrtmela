@@ -110,12 +110,21 @@ class RolePatchDto {
   @IsOptional() @IsArray() permissions?: string[];
 }
 
-class InviteAgentDto {
-  @IsString() email!: string;
+// no phone and no password: the agency signs itself up from the link
+class InviteAgencyDto {
+  @IsString() @MaxLength(191) email!: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
-  // optional here because inviting someone who already has an account only
-  // links them; the service requires it whenever the invite makes a new one
-  @IsOptional() @IsString() @MaxLength(32) phone?: string;
+}
+
+class OfferDto {
+  @IsString() @MaxLength(16) audience!: string;
+  @IsString() @MaxLength(16) plan!: string;
+  @IsOptional() @IsInt() @Min(0) trialDays?: number;
+  @IsOptional() @IsInt() @Min(1) discountPct?: number;
+  @IsOptional() @IsInt() @Min(1) maxUses?: number;
+  @IsOptional() @IsString() @MaxLength(40) expiresAt?: string;
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
+  @IsOptional() @IsString() @MaxLength(191) note?: string;
 }
 
 class AgentStaffDto {
@@ -254,6 +263,13 @@ export class PlatformController {
   }
 
   // plan definitions
+  @Get("platform/offers") offers(@Req() req: AuthedRequest) {
+    return this.platform.offers(req.user);
+  }
+  @Post("platform/offers") createOffer(@Req() req: AuthedRequest, @Body() dto: OfferDto) {
+    return this.platform.createOffer(req.user, dto);
+  }
+
   @Get("platform/plans") plans(@Req() req: AuthedRequest) {
     return this.platform.listPlans(req.user);
   }
@@ -336,8 +352,8 @@ export class PlatformController {
   }
 
   // owner — invite agent by email
-  @Post("resorts/:id/invite-agent") inviteAgent(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: InviteAgentDto) {
-    return this.platform.inviteAgentByEmail(req.user, id, dto);
+  @Post("resorts/:id/invite-agency") inviteAgency(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: InviteAgencyDto) {
+    return this.platform.inviteAgency(req.user, id, dto);
   }
 
   // agent — agency sub-users

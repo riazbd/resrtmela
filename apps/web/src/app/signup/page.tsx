@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
+import { OfferBanner, offerLine, useOffer } from "./offer";
 
 interface SignupResult {
   accessToken: string;
@@ -31,6 +32,8 @@ export default function SignupPage() {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  const offer = useOffer("RESORT");
+  const usingOffer = !!offer.offer?.usable && !offer.problem;
   // this deployment's own host, not a domain compiled into the page
   const workspaceHost = typeof window === "undefined" ? "" : window.location.host;
 
@@ -78,6 +81,7 @@ export default function SignupPage() {
           phone,
           password,
           slug: effectiveSlug || undefined,
+          offer: usingOffer ? offer.code : undefined,
         },
       });
       // adoptToken loads /auth/me and activates the first resort — the same
@@ -104,9 +108,12 @@ export default function SignupPage() {
    * sell, at a room cap it may no longer have.
    */
   const entry = plans?.find((p) => p.active) ?? null;
-  const entryLine = entry
-    ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
-    : "";
+  // an offer names the plan the workspace lands on
+  const entryLine = usingOffer
+    ? offerLine(offer.offer!)
+    : entry
+      ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
+      : "";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-700 to-emerald-600 px-4 py-10">
@@ -120,6 +127,7 @@ export default function SignupPage() {
           </p>
         </div>
 
+        <OfferBanner state={offer} />
         <div className="mb-6 flex gap-1.5">
           {[1, 2, 3].map((n) => (
             <div key={n} className={`h-1 flex-1 rounded-full ${n <= step ? "bg-brand-500" : "bg-slate-200"}`} />
