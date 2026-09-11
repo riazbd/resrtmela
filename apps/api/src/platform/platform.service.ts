@@ -217,9 +217,16 @@ export class PlatformService {
         location: true,
         status: true,
         createdAt: true,
-        tenant: { select: { name: true, plan: true } },
+        // the subscription is the account's, so every resort of one owner shows the same one
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            kind: true,
+            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, monthlyFee: true, renewsAt: true } },
+          },
+        },
         _count: { select: { rooms: true, bookings: true, guests: true } },
-        subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, monthlyFee: true, renewsAt: true } },
         userResorts: {
           where: { user: { role: "RESORT_ADMIN" } },
           take: 1,
@@ -337,9 +344,25 @@ export class PlatformService {
 
   // ─────────────────── subscriptions ───────────────────
 
+  /** The Resorts tab picks a resort; the subscription it sets is that resort's account's. */
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
+    input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
+  ) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { tenantId: true } });
+    if (!resort) throw badRequest("resort not found");
+    return this.setAccountSubscription(claims, resort.tenantId, input);
+  }
+
+  /**
+   * The subscriber is the account. An agency owns no resort, and it holds a
+   * subscription all the same (2026-09-11 design, phase 2).
+   */
+  async setAccountSubscription(
+    claims: JwtClaims,
+    accountId: number,
     input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
@@ -350,7 +373,11 @@ export class PlatformService {
     }
     // the plan table is the authority: a plan added there works with no deploy
     const def = await this.prisma.platformPlan.findUnique({ where: { name: input.plan } });
-    if (!def) throw badRequest(`Unknown plan "${input.plan}"`);
+    if (!def) {
+      // a refusal that names what does exist is one the super admin can act on
+      const onSale = await this.prisma.platformPlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { name: true } });
+      throw badRequest(`Unknown plan "${input.plan}". On sale: ${onSale.map((p) => p.name).join(", ")}`);
+    }
     if (!def.active) throw badRequest(`Plan "${def.label}" is not available`);
     const now = new Date();
 
@@ -368,7 +395,7 @@ export class PlatformService {
      * deleted, because what a resort used to pay is a thing to be able to say.
      */
     const existing = await this.prisma.subscription.findFirst({
-      where: { resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+      where: { accountId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
       orderBy: { id: "desc" },
     });
 
@@ -407,7 +434,7 @@ export class PlatformService {
 
       return tx.subscription.create({
         data: {
-          resortId,
+          accountId,
           plan: input.plan,
           status,
           monthlyFee,
@@ -419,10 +446,10 @@ export class PlatformService {
       });
     });
     await this.audit.log({
-      actorId: claims.userId, resortId,
+      actorId: claims.userId,
       action: existing ? "platform.subscription.change" : "platform.subscription.create",
       entity: "subscription", entityId: Number(sub.id),
-      diff: { ...input, from: existing?.plan ?? null, replaced: existing ? Number(existing.id) : null },
+      diff: { ...input, accountId, from: existing?.plan ?? null, replaced: existing ? Number(existing.id) : null },
     });
     return sub;
   }
@@ -560,7 +587,7 @@ export class PlatformService {
     await this.prisma.subscriptionDue.create({
       data: {
         subscriptionId: sub.id,
-        resortId: sub.resortId,
+        accountId: sub.accountId,
         amount: Number(sub.monthlyFee) * months,
         periodStart: base,
         periodEnd: renewsAt,
@@ -571,7 +598,7 @@ export class PlatformService {
       where: { id: sub.id },
       data: { status: sub.status === "TRIAL" ? "ACTIVE" : sub.status, renewsAt },
     });
-    await this.audit.log({ actorId: claims.userId, resortId: sub.resortId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { months, renewsAt } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { accountId: sub.accountId, months, renewsAt } });
     return updated;
   }
 
@@ -582,7 +609,7 @@ export class PlatformService {
       // the generated column frees the live slot on its own
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
-    await this.audit.log({ actorId: claims.userId, resortId: sub.resortId, action: "platform.subscription.cancel", entity: "subscription", entityId: subscriptionId });
+    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.cancel", entity: "subscription", entityId: subscriptionId, diff: { accountId: sub.accountId } });
     return sub;
   }
 
@@ -590,10 +617,11 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     return this.prisma.subscriptionDue.findMany({
       where: {
-        ...(filter.resortId ? { resortId: filter.resortId } : {}),
+        // a resort filter means that resort's account — the bills are the account's
+        ...(filter.resortId ? { account: { resorts: { some: { id: filter.resortId } } } } : {}),
         ...(filter.status ? { status: filter.status } : {}),
       },
-      include: { subscription: { select: { plan: true, status: true } }, resort: { select: { name: true } } },
+      include: { subscription: { select: { plan: true, status: true } }, account: { select: { id: true, name: true, kind: true } } },
       orderBy: { dueDate: "desc" },
       take: 200,
     });
@@ -610,32 +638,42 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const OPEN = ["DUE", "OVERDUE"];
 
-    const [dues, charges, resorts] = await Promise.all([
+    const [dues, charges, resorts, accounts] = await Promise.all([
       this.prisma.subscriptionDue.groupBy({
-        by: ["resortId"],
+        by: ["accountId"],
         where: { status: { in: OPEN } },
         _sum: { amount: true },
       }),
+      // a one-off charge is still raised against a resort; it is owed by that resort's account
       this.prisma.platformCharge.groupBy({
         by: ["resortId"],
         where: { status: { in: OPEN } },
         _sum: { amount: true },
       }),
-      this.prisma.resort.findMany({ select: { id: true, name: true } }),
+      this.prisma.resort.findMany({ select: { id: true, tenantId: true } }),
+      this.prisma.tenant.findMany({ select: { id: true, name: true, kind: true } }),
     ]);
 
-    const name = new Map(resorts.map((r) => [r.id, r.name]));
-    const ids = new Set([...dues.map((d) => d.resortId), ...charges.map((c) => c.resortId)]);
-    const dueBy = new Map(dues.map((d) => [d.resortId, round2(Number(d._sum.amount ?? 0))]));
-    const chargeBy = new Map(charges.map((c) => [c.resortId, round2(Number(c._sum.amount ?? 0))]));
+    const accountOf = new Map(resorts.map((r) => [r.id, r.tenantId]));
+    const accountBy = new Map(accounts.map((a) => [a.id, a]));
+    const dueBy = new Map(dues.map((d) => [d.accountId, round2(Number(d._sum.amount ?? 0))]));
+    const chargeBy = new Map<number, number>();
+    for (const c of charges) {
+      const accountId = accountOf.get(c.resortId);
+      if (accountId == null) continue;
+      chargeBy.set(accountId, round2((chargeBy.get(accountId) ?? 0) + Number(c._sum.amount ?? 0)));
+    }
+    const ids = new Set([...dueBy.keys(), ...chargeBy.keys()]);
 
     return [...ids]
-      .map((resortId) => {
-        const subscriptions = dueBy.get(resortId) ?? 0;
-        const oneOff = chargeBy.get(resortId) ?? 0;
+      .map((accountId) => {
+        const subscriptions = dueBy.get(accountId) ?? 0;
+        const oneOff = chargeBy.get(accountId) ?? 0;
+        const account = accountBy.get(accountId);
         return {
-          resortId,
-          resort: name.get(resortId) ?? `#${resortId}`,
+          accountId,
+          account: account?.name ?? `#${accountId}`,
+          kind: account?.kind ?? null,
           subscriptions,
           charges: oneOff,
           total: round2(subscriptions + oneOff),
@@ -712,11 +750,11 @@ export class PlatformService {
     });
     // A tenant who has just paid should be working again before they can close
     // the receipt -- not at whenever the next sweep happens to run.
-    const openForResort = await this.prisma.subscriptionDue.count({
-      where: { resortId: due.resortId, status: { in: ["DUE", "OVERDUE"] } },
+    const openForAccount = await this.prisma.subscriptionDue.count({
+      where: { accountId: due.accountId, status: { in: ["DUE", "OVERDUE"] } },
     });
-    if (openForResort === 0) await this.billing.reactivate(due.resortId);
-    await this.audit.log({ actorId: claims.userId, resortId: due.resortId, action: "platform.due.paid", entity: "subscription_due", entityId: Number(due.id), diff: { amount: Number(due.amount), method } });
+    if (openForAccount === 0) await this.billing.reactivateAccount(due.accountId);
+    await this.audit.log({ actorId: claims.userId, action: "platform.due.paid", entity: "subscription_due", entityId: Number(due.id), diff: { accountId: due.accountId, amount: Number(due.amount), method } });
     return updated;
   }
 
@@ -725,12 +763,10 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const dues = await this.prisma.subscriptionDue.findMany({
       where: { dueDate: { gte: new Date(from), lte: new Date(`${to}T23:59:59`) } },
-      include: { resort: { select: { id: true, name: true } }, subscription: { select: { plan: true, status: true } } },
       orderBy: { dueDate: "asc" },
     });
     const renewals = await this.prisma.subscription.findMany({
       where: { renewsAt: { gte: new Date(from), lte: new Date(`${to}T23:59:59`) }, status: { not: "CANCELLED" } },
-      include: { resort: { select: { id: true, name: true } } },
       orderBy: { renewsAt: "asc" },
     });
     const byDate = new Map<string, { date: string; dues: number; dueCount: number; renewals: number }>();

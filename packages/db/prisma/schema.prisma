@@ -83,10 +83,21 @@ model Tenant {
   id        Int      @id @default(autoincrement())
   name      String   @db.VarChar(120)
   slug      String   @unique @db.VarChar(80)
-  plan      String   @default("free") @db.VarChar(32)
+  /// RESORT_OWNER | AGENCY — the two customers the platform sells to. Which one
+  /// decides who is told about a bill and what a suspension does (a resort
+  /// stops taking new entries; an agency stops selling).
+  kind      String   @default("RESORT_OWNER") @db.VarChar(16)
   status    String   @default("active") @db.VarChar(16)
+  /// "billing" when the sweep suspended the account, so the sweep may lift it
+  suspendedReason String?   @db.VarChar(32)
+  suspendedAt     DateTime?
   createdAt DateTime @default(now())
   resorts   Resort[]
+
+  /// The subscription belongs to the account. `Tenant.plan` used to be a second
+  /// answer to "what plan is this customer on" and is gone.
+  subscriptions    Subscription[]
+  subscriptionDues SubscriptionDue[]
 
   @@map("tenants")
 }
@@ -146,8 +157,6 @@ model Resort {
   counters         Counter[]
   expenses         Expense[]
   fbBills          FbBill[]
-  subscriptions    Subscription[]
-  subscriptionDues SubscriptionDue[]
   apiKeys          ApiKey[]
   discountOffers   DiscountOffer[]
   accessRequests   ResortAccess[]
@@ -856,8 +865,9 @@ model Counter {
 /// A resort's platform subscription ("booking" the resort makes with the platform).
 model Subscription {
   id          BigInt    @id @default(autoincrement())
-  resortId    Int
-  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// The customer — a resort owner or an agency — not one of its resorts.
+  accountId   Int
+  account     Tenant    @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// PlatformPlan.name — a string, not an enum, so a new plan needs no migration
   plan        String    @default("STARTER") @db.VarChar(16)
   status      String    @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
@@ -878,24 +888,24 @@ model Subscription {
 
   dues SubscriptionDue[]
 
-  /// One live subscription per resort. The database enforces it with a
-  /// generated column, `liveKey` — the resort id while the status is live, NULL
-  /// once it is cancelled — under a unique index. It is deliberately not in this
-  /// model: a column the application can write is a column the application can
-  /// get wrong, and the whole point is that it cannot. See migration
-  /// 20260910140000_one_live_subscription.
-  @@index([resortId])
+  /// One live subscription per account. The database enforces it with a
+  /// generated column, `accountLiveKey` — the account id while the status is
+  /// live, NULL once it is cancelled — under a unique index. It is deliberately
+  /// not in this model: a column the application can write is a column the
+  /// application can get wrong. See migrations 20260910140000_one_live_subscription
+  /// and 20260912100000_the_subscriber_is_an_account.
+  @@index([accountId])
   @@index([status])
   @@map("subscriptions")
 }
 
-/// One billing period the resort owes the platform.
+/// One billing period the account owes the platform.
 model SubscriptionDue {
   id             BigInt       @id @default(autoincrement())
   subscriptionId BigInt
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  resortId       Int
-  resort         Resort       @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  accountId      Int
+  account        Tenant       @relation(fields: [accountId], references: [id], onDelete: Cascade)
   amount         Decimal      @db.Decimal(10, 2)
   periodStart    DateTime
   periodEnd      DateTime
@@ -908,7 +918,7 @@ model SubscriptionDue {
   /// same period cannot raise a second bill, whatever the application does
   @@unique([subscriptionId, periodStart])
   @@index([status])
-  @@index([resortId])
+  @@index([accountId])
   @@map("subscription_dues")
 }
 
@@ -1074,6 +1084,10 @@ model PlatformPlan {
   /// plan the owner created showed no features, and no line on any card locked
   /// anything.
   features   Json    @default("[]")
+
+  /// RESORT | AGENCY — which shelf this plan is sold from. A resort never sees
+  /// an agency plan and an agency never sees a resort plan.
+  audience   String  @default("RESORT") @db.VarChar(16)
 
   active     Boolean @default(true)
   sortOrder  Int     @default(0)

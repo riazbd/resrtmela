@@ -31,7 +31,7 @@ afterAll(async () => {
 
 async function subscribe(plan: "STARTER" | "GROWTH" | "CHAIN") {
   await prisma.subscription.create({
-    data: { resortId: fx.resortId, plan, status: "ACTIVE", monthlyFee: 2500 },
+    data: { accountId: fx.tenantId, plan, status: "ACTIVE", monthlyFee: 2500 },
   });
 }
 
@@ -51,9 +51,7 @@ describe("plan limits", () => {
     await expect(addRoom("104")).rejects.toMatchObject({ status: 402 });
   });
 
-  it("prefers the subscription's plan over the tenant's legacy plan", async () => {
-    // legacy PRO would have allowed 500 rooms
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "PRO" } });
+  it("reads the account's subscription, which is the only answer to what plan it is on", async () => {
     await subscribe("STARTER");
     await prisma.platformPlan.upsert({
       where: { name: "STARTER" },
@@ -64,9 +62,7 @@ describe("plan limits", () => {
     await expect(addRoom("103")).rejects.toMatchObject({ status: 402 });
   });
 
-  it("falls back to the legacy plan when the resort has no subscription", async () => {
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "FREE" } });
-
+  it("holds an account with no subscription to the cheapest plan on sale", async () => {
     for (let i = 3; i <= 10; i++) await addRoom(`10${i}`); // up to 10 rooms
     await expect(addRoom("111")).rejects.toMatchObject({ status: 402 });
   });
@@ -74,7 +70,9 @@ describe("plan limits", () => {
   it("does not tighten a legacy tenant that was already above the new plan caps", async () => {
     // STANDARD historically allowed 50 rooms; GROWTH allows 40. An existing
     // tenant must not lose capacity just because the tables were unified.
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "STANDARD" } });
+    await prisma.subscription.create({
+      data: { accountId: fx.tenantId, plan: "STANDARD", status: "ACTIVE", monthlyFee: 2500 },
+    });
 
     for (let i = 3; i <= 41; i++) await addRoom(`room-${i}`);
     await expect(addRoom("room-42")).resolves.toBeTruthy();

@@ -238,7 +238,7 @@ describe("retiring a plan", () => {
 
     await platform().updatePlan(owner, "CHAIN", { active: false });
 
-    const sub = await prisma.subscription.findFirstOrThrow({ where: { resortId: fx.resortId } });
+    const sub = await prisma.subscription.findFirstOrThrow({ where: { accountId: fx.tenantId } });
     expect(sub.plan).toBe("CHAIN");
     expect(sub.status).not.toBe("CANCELLED");
   });
@@ -284,7 +284,7 @@ describe("deleting a plan", () => {
   it("counts cancelled subscriptions too — the row still names the plan", async () => {
     await platform().setSubscription(owner, fx.resortId, { plan: "STARTER" });
     await prisma.subscription.updateMany({
-      where: { resortId: fx.resortId },
+      where: { accountId: fx.tenantId },
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
 

@@ -83,7 +83,7 @@ async function paying(plan: string, monthlyFee: number, renewsInDays = 10) {
   periodStart.setMonth(periodStart.getMonth() - 1);
   return prisma.subscription.create({
     data: {
-      resortId: fx.resortId,
+      accountId: fx.tenantId,
       plan,
       status: "ACTIVE",
       monthlyFee: monthlyFee as never,
@@ -96,7 +96,7 @@ async function paying(plan: string, monthlyFee: number, renewsInDays = 10) {
 
 const liveRow = () =>
   prisma.subscription.findFirstOrThrow({
-    where: { resortId: fx.resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+    where: { accountId: fx.tenantId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
   });
 
 beforeEach(async () => {
@@ -157,8 +157,8 @@ describe("what the owner can see", () => {
     const sub = await paying("STARTER", 2500);
     await prisma.subscriptionDue.createMany({
       data: [
-        { subscriptionId: sub.id, resortId: fx.resortId, amount: 2500 as never, periodStart: new Date("2026-07-01"), periodEnd: new Date("2026-08-01"), dueDate: new Date("2026-07-01"), status: "PAID", paidAt: new Date("2026-07-02") },
-        { subscriptionId: sub.id, resortId: fx.resortId, amount: 2500 as never, periodStart: new Date("2026-08-01"), periodEnd: new Date("2026-09-01"), dueDate: new Date("2026-08-01"), status: "OVERDUE" },
+        { subscriptionId: sub.id, accountId: fx.tenantId, amount: 2500 as never, periodStart: new Date("2026-07-01"), periodEnd: new Date("2026-08-01"), dueDate: new Date("2026-07-01"), status: "PAID", paidAt: new Date("2026-07-02") },
+        { subscriptionId: sub.id, accountId: fx.tenantId, amount: 2500 as never, periodStart: new Date("2026-08-01"), periodEnd: new Date("2026-09-01"), dueDate: new Date("2026-08-01"), status: "OVERDUE" },
       ] as never,
     });
 
@@ -225,7 +225,7 @@ describe("upgrading", () => {
 
     const r = await makeSubscriptionService(asPrisma).changePlan(owner, fx.resortId, "GROWTH");
 
-    const bill = await prisma.subscriptionDue.findFirstOrThrow({ where: { resortId: fx.resortId } });
+    const bill = await prisma.subscriptionDue.findFirstOrThrow({ where: { accountId: fx.tenantId } });
     // ~2500 × 10/30. Not the full 5,000, and not the full difference either.
     expect(Number(bill.amount)).toBeGreaterThan(700);
     expect(Number(bill.amount)).toBeLessThan(900);
@@ -247,7 +247,7 @@ describe("upgrading", () => {
     await makeSubscriptionService(asPrisma).changePlan(owner, fx.resortId, "GROWTH");
 
     const live = await prisma.subscription.findMany({
-      where: { resortId: fx.resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+      where: { accountId: fx.tenantId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
     });
     expect(live).toHaveLength(1);
   });
@@ -280,7 +280,7 @@ describe("downgrading", () => {
 
     await makeSubscriptionService(asPrisma).changePlan(owner, fx.resortId, "STARTER");
 
-    expect(await prisma.subscriptionDue.count({ where: { resortId: fx.resortId } })).toBe(0);
+    expect(await prisma.subscriptionDue.count({ where: { accountId: fx.tenantId } })).toBe(0);
   });
 
   it("lands at the renewal, and the next bill is the cheaper one", async () => {
@@ -295,7 +295,7 @@ describe("downgrading", () => {
     expect(Number(live.monthlyFee)).toBe(2500);
     expect(live.pendingPlan).toBeNull();
     const bill = await prisma.subscriptionDue.findFirstOrThrow({
-      where: { resortId: fx.resortId },
+      where: { accountId: fx.tenantId },
       orderBy: { id: "desc" },
     });
     expect(Number(bill.amount)).toBe(2500);
@@ -319,7 +319,7 @@ describe("during a trial", () => {
     const trialEndsAt = new Date(Date.now() + 7 * DAY);
     await prisma.subscription.create({
       data: {
-        resortId: fx.resortId, plan: "STARTER", status: "TRIAL",
+        accountId: fx.tenantId, plan: "STARTER", status: "TRIAL",
         monthlyFee: 2500 as never, trialEndsAt, renewsAt: trialEndsAt,
       },
     });

@@ -118,29 +118,30 @@ export class SubscriptionService {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "billing.view");
 
-    const [sub, onSale, limits, resort] = await Promise.all([
+    // the console is per resort; the subscription is the account's
+    const accountId = await this.accountOf(resortId);
+    const [sub, onSale, limits] = await Promise.all([
       this.prisma.subscription.findFirst({
-        where: { resortId, status: { in: [...LIVE] } },
+        where: { accountId, status: { in: [...LIVE] } },
         orderBy: { id: "desc" },
       }),
       this.planLimits.onSale(),
       this.planLimits.forResort(resortId),
-      this.prisma.resort.findUnique({ where: { id: resortId }, select: { tenantId: true } }),
     ]);
 
     const [rooms, resorts, bills, open] = await Promise.all([
       this.prisma.room.count({ where: { resortId, deletedAt: null } }),
-      resort ? this.prisma.resort.count({ where: { tenantId: resort.tenantId } }) : Promise.resolve(1),
-      // by resort, not by subscription: a subscription the super admin
-      // cancelled and replaced still billed this resort, and its invoices are
+      this.prisma.resort.count({ where: { tenantId: accountId } }),
+      // by account, not by subscription: a subscription the super admin
+      // cancelled and replaced still billed this account, and its invoices are
       // the owner's to read
       this.prisma.subscriptionDue.findMany({
-        where: { resortId },
+        where: { accountId },
         orderBy: { periodStart: "desc" },
         take: BILL_HISTORY,
       }),
       this.prisma.subscriptionDue.aggregate({
-        where: { resortId, status: { in: [...OPEN] } },
+        where: { accountId, status: { in: [...OPEN] } },
         _sum: { amount: true },
         _count: true,
       }),
@@ -221,7 +222,7 @@ export class SubscriptionService {
     }
 
     const sub = await this.prisma.subscription.findFirst({
-      where: { resortId, status: { in: [...LIVE] } },
+      where: { accountId: await this.accountOf(resortId), status: { in: [...LIVE] } },
       orderBy: { id: "desc" },
     });
     if (!sub) {
@@ -284,7 +285,7 @@ export class SubscriptionService {
    * nothing would give the dearer plan away until the renewal.
    */
   private async chargeDifference(
-    sub: { id: bigint; resortId: number; renewsAt: Date | null },
+    sub: { id: bigint; accountId: number; renewsAt: Date | null },
     feeDifference: number,
     now: Date,
   ): Promise<number> {
@@ -304,7 +305,7 @@ export class SubscriptionService {
       await this.prisma.subscriptionDue.create({
         data: {
           subscriptionId: sub.id,
-          resortId: sub.resortId,
+          accountId: sub.accountId,
           amount: amount as never,
           periodStart: now,
           periodEnd: renewsAt,
@@ -343,6 +344,13 @@ export class SubscriptionService {
         `${target.label} allows ${target.maxResorts} resort(s) and you have ${resorts}.`,
       );
     }
+  }
+
+  /** The account a resort belongs to — the subscriber its bills are raised against. */
+  private async accountOf(resortId: number): Promise<number> {
+    const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { tenantId: true } });
+    if (!resort) throw badRequest("resort not found");
+    return resort.tenantId;
   }
 
   private log(

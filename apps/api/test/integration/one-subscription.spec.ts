@@ -45,7 +45,7 @@ const yesterday = () => new Date(Date.now() - 86_400_000);
 
 const live = () =>
   prisma.subscription.findMany({
-    where: { resortId: fx.resortId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
+    where: { accountId: fx.tenantId, status: { in: ["TRIAL", "ACTIVE", "PAST_DUE"] } },
   });
 
 describe("changing plan", () => {
@@ -96,13 +96,13 @@ describe("changing plan", () => {
     });
     await platform.setSubscription(owner, fx.resortId, { plan: "GROWTH" });
     await prisma.subscription.updateMany({
-      where: { resortId: fx.resortId, status: "TRIAL" },
+      where: { accountId: fx.tenantId, status: "TRIAL" },
       data: { status: "ACTIVE", renewsAt: yesterday() },
     });
 
     await makeBillingService(asPrisma).sweep();
 
-    const dues = await prisma.subscriptionDue.count({ where: { resortId: fx.resortId } });
+    const dues = await prisma.subscriptionDue.count({ where: { accountId: fx.tenantId } });
     expect(dues).toBe(1);
   });
 });
@@ -116,7 +116,7 @@ describe("the database itself", () => {
     await expect(
       prisma.subscription.create({
         data: {
-          resortId: fx.resortId,
+          accountId: fx.tenantId,
           plan: "GROWTH",
           status: "TRIAL",
           monthlyFee: 5000 as never,
@@ -134,7 +134,7 @@ describe("the database itself", () => {
     await platform.setSubscription(owner, fx.resortId, { plan: "GROWTH" });
 
     // the history stays: what a resort used to pay is a thing to be able to say
-    const all = await prisma.subscription.count({ where: { resortId: fx.resortId } });
+    const all = await prisma.subscription.count({ where: { accountId: fx.tenantId } });
     expect(all).toBe(2);
     expect(await live()).toHaveLength(1);
   });

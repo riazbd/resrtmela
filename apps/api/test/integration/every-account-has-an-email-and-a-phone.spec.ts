@@ -571,7 +571,7 @@ describe("a placeholder, wherever contact details are read", () => {
       data: { status: "suspended", suspendedReason: "billing", suspendedAt: new Date() },
     });
 
-    await makeBillingService(asPrisma).reactivate(fx.resortId);
+    await makeBillingService(asPrisma).reactivateAccount(fx.tenantId);
 
     const jobs = await prisma.notificationJob.findMany({ select: { channel: true, toRef: true } });
     expect(jobs).toEqual([{ channel: "SMS", toRef: TAKEN_PHONE }]);

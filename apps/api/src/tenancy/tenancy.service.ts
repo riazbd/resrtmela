@@ -191,11 +191,19 @@ export class TenancyService {
       select: { userId: true },
     });
     const staffIds = new Set(staffUsers.map((u) => u.userId));
-    const limits = await this.planLimits.forTenant(tenantId);
+    const [limits, subscription] = await Promise.all([
+      this.planLimits.forTenant(tenantId),
+      // the plan is the subscription's; `Tenant.plan` was a label that drifted from it
+      this.prisma.subscription.findFirst({
+        where: { accountId: tenantId, status: { not: "CANCELLED" } },
+        orderBy: { id: "desc" },
+        select: { plan: true },
+      }),
+    ]);
     return {
       tenantId,
       name: tenant.name,
-      plan: tenant.plan,
+      plan: subscription?.plan ?? null,
       planLabel: limits.label,
       limits: { maxResorts: limits.maxResorts, maxRoomsPerResort: limits.maxRooms },
       resorts: tenant.resorts.length,
@@ -203,40 +211,6 @@ export class TenancyService {
       staffUsers: staffIds.size,
       guests: guestCount,
     };
-  }
-
-  /**
-   * Plan change — platform team only.
-   *
-   * This used to check the name against a list in the code, which had never
-   * heard of the plans the platform actually sells: a super admin could not
-   * move a tenant onto STARTER, GROWTH or CHAIN through this route at all. The
-   * plan table decides now, and a refusal names the plans that exist.
-   */
-  async updatePlan(claims: JwtClaims, tenantId: number, plan: string) {
-    requireRoles(claims, [ROLE.SUPER_ADMIN]);
-    const name = plan.trim().toUpperCase();
-    const known = await this.prisma.platformPlan.findUnique({ where: { name } });
-    if (!known) {
-      const onSale = await this.prisma.platformPlan.findMany({
-        where: { active: true },
-        orderBy: { sortOrder: "asc" },
-        select: { name: true },
-      });
-      throw Object.assign(
-        new Error(`No such plan "${plan}". On sale: ${onSale.map((p) => p.name).join(", ")}`),
-        { status: 400 },
-      );
-    }
-    const tenant = await this.prisma.tenant.update({ where: { id: tenantId }, data: { plan: name } });
-    await this.audit.log({
-      actorId: claims.userId,
-      action: "tenant.plan.change",
-      entity: "tenant",
-      entityId: tenantId,
-      diff: { plan: name },
-    });
-    return tenant;
   }
 
   async detail(claims: JwtClaims, resortId: number) {

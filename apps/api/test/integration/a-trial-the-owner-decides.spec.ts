@@ -64,7 +64,7 @@ describe("a plan that sells no free trial", () => {
     const result = await makeBillingService(asPrisma).sweep(new Date());
 
     expect(result.duesRaised).toBe(1);
-    const due = await prisma.subscriptionDue.findFirstOrThrow({ where: { resortId: fx.resortId } });
+    const due = await prisma.subscriptionDue.findFirstOrThrow({ where: { accountId: fx.tenantId } });
     expect(Number(due.amount)).toBe(2500);
   });
 
@@ -125,7 +125,7 @@ describe("what a trial is still not", () => {
      */
     await platform().setSubscription(owner, fx.resortId, { plan: "STARTER", trialDays: 1 });
     await prisma.subscription.updateMany({
-      where: { resortId: fx.resortId },
+      where: { accountId: fx.tenantId },
       data: { status: "ACTIVE", trialEndsAt: null },
     });
 

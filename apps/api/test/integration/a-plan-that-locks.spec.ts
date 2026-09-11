@@ -91,7 +91,7 @@ describe("what a plan includes", () => {
   it("is still everything when the subscription is cancelled, because a lock is not a debt collector", async () => {
     await onAPlanWith([]);
     await prisma.subscription.updateMany({
-      where: { resortId: fx.resortId },
+      where: { accountId: fx.tenantId },
       data: { status: "CANCELLED", cancelledAt: new Date() },
     });
 

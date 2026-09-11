@@ -92,25 +92,13 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
-    /**
-     * The entry plan, taken from the price list rather than named here.
-     *
-     * Signup used to write "FREE" — a plan that existed only in a code constant
-     * and not in the plan table at all, so every new customer's limits sat
-     * somewhere the super admin could not reach.
-     */
-    const entryPlan = await this.prisma.platformPlan.findFirst({
-      where: { active: true },
-      orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
-      select: { name: true },
-    });
-
     const result = await this.prisma.$transaction(async (tx) => {
+      // no plan written here: a customer's plan is its subscription, and one
+      // with none yet is held to the cheapest plan on sale by PlanLimits
       const tenant = await tx.tenant.create({
         data: {
           name: input.companyName || input.resortName,
           slug,
-          ...(entryPlan ? { plan: entryPlan.name } : {}),
         },
       });
       const resort = await tx.resort.create({

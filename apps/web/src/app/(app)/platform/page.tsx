@@ -27,9 +27,14 @@ interface ResortRow {
   location: string | null;
   status: string;
   createdAt: string;
-  tenant: { name: string; plan: string };
+  /** The subscription is the account's — every resort of one owner shows the same one. */
+  tenant: {
+    id: number;
+    name: string;
+    kind: string;
+    subscriptions: { id: string; plan: string; status: string; monthlyFee: string; renewsAt: string | null }[];
+  };
   _count: { rooms: number; bookings: number; guests: number };
-  subscriptions: { id: string; plan: string; status: string; monthlyFee: string; renewsAt: string | null }[];
   userResorts?: { user: { id: number; name: string; phone: string } }[];
 }
 interface AgentRow {
@@ -76,8 +81,9 @@ type PlanEdit = {
 
 interface DueRow {
   id: string;
-  resortId: number;
-  resort: { name: string };
+  accountId: number;
+  /** The customer billed — a resort owner or an agency, not a resort. */
+  account: { id: number; name: string; kind: string };
   subscription: { plan: string };
   amount: string;
   periodStart: string;
@@ -237,7 +243,7 @@ export default function PlatformPage() {
 
   if (ov === null && resorts === null) return <Spinner />;
 
-  const sub = (r: ResortRow) => r.subscriptions[0];
+  const sub = (r: ResortRow) => r.tenant.subscriptions[0];
 
   return (
     <div>
@@ -564,7 +570,7 @@ export default function PlatformPage() {
             <tbody>
               {dues.map((d) => (
                 <tr key={d.id} className="border-t border-slate-100">
-                  <Td className="font-semibold text-slate-800">{d.resort.name}</Td>
+                  <Td className="font-semibold text-slate-800">{d.account.name}</Td>
                   <Td>{d.subscription.plan}</Td>
                   <Td className="text-xs text-slate-500">{dmy(d.periodStart)} → {dmy(d.periodEnd)}</Td>
                   <Td>{dmy(d.dueDate)}</Td>

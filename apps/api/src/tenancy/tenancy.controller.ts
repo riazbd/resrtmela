@@ -75,15 +75,6 @@ export class TenancyController {
     return this.svc.usage(req.user, id);
   }
 
-  @Patch("tenants/:id/plan")
-  updatePlan(
-    @Req() req: AuthedRequest,
-    @Param("id", ParseIntPipe) id: number,
-    @Body() dto: { plan: string },
-  ) {
-    return this.svc.updatePlan(req.user, id, dto.plan);
-  }
-
   // ── platform ops (super_admin only) ──
   @Get("tenants")
   listTenants(@Req() req: AuthedRequest) {

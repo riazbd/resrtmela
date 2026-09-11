@@ -13,14 +13,15 @@
  * sells, because it validated against the code list.
  *
  * The database is the vocabulary now. The legacy names survive as inactive rows
- * carrying exactly the limits they always had, so no existing tenant's capacity
- * moves by a single room on the day this lands — which is the whole point of
- * doing it this way rather than mapping old names onto new plans.
+ * carrying exactly the limits they always had, so no existing customer's
+ * capacity moves by a single room on the day this lands. And since phase 2 the
+ * plan a customer is on is its subscription's, full stop — `Tenant.plan`, the
+ * second answer this file used to test against, is gone.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeTenancyService, makePlanLimits } from "../helpers/services";
+import { makePlatformService, makePlanLimits } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
@@ -30,6 +31,8 @@ let fx: Fixture;
 let superAdmin: JwtClaims;
 
 const limits = () => makePlanLimits(asPrismaService);
+const subscribe = (plan: string) =>
+  prisma.subscription.create({ data: { accountId: fx.tenantId, plan, status: "ACTIVE", monthlyFee: 2500 } });
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
@@ -46,16 +49,16 @@ afterAll(async () => {
 
 describe("where a limit comes from", () => {
   it("reads the plan table, so the super admin can change it without a deploy", async () => {
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "STARTER" } });
+    await subscribe("STARTER");
     await prisma.platformPlan.update({ where: { name: "STARTER" }, data: { maxRooms: 3 } });
 
     expect((await limits().forTenant(fx.tenantId)).maxRooms).toBe(3);
   });
 
-  it("keeps a legacy tenant on exactly the limits it always had", async () => {
+  it("keeps a legacy customer on exactly the limits it always had", async () => {
     // STANDARD gave 50 rooms in code; GROWTH, the plan nearest to it, gives 40.
     // Unifying the tables must not quietly take ten rooms off a paying customer.
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "STANDARD" } });
+    await subscribe("STANDARD");
 
     expect((await limits().forTenant(fx.tenantId)).maxRooms).toBe(50);
   });
@@ -70,36 +73,27 @@ describe("where a limit comes from", () => {
   });
 
   it("survives a plan name nobody recognises by falling to the cheapest plan on sale", async () => {
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "ENTERPRISE_XL" } });
+    await subscribe("ENTERPRISE_XL");
 
     const found = await limits().forTenant(fx.tenantId);
 
     expect(found.label).toBe("Starter");
     expect(found.source).toBe("fallback");
   });
-
-  it("still prefers a subscription over whatever the tenant row says", async () => {
-    await prisma.tenant.update({ where: { id: fx.tenantId }, data: { plan: "PRO" } });
-    await prisma.subscription.create({
-      data: { resortId: fx.resortId, plan: "STARTER", status: "ACTIVE", monthlyFee: 2500 },
-    });
-
-    expect((await limits().forTenant(fx.tenantId)).maxRooms).toBe(10);
-  });
 });
 
-describe("changing a tenant's plan", () => {
+describe("changing an account's plan", () => {
   it("accepts any plan the platform actually sells", async () => {
-    const tenant = await makeTenancyService(asPrismaService).updatePlan(superAdmin, fx.tenantId, "GROWTH");
+    const sub = await makePlatformService(asPrismaService).setAccountSubscription(superAdmin, fx.tenantId, { plan: "GROWTH" });
 
     // the old code list refused this outright: it had never heard of GROWTH,
-    // so the super admin could not set a tenant to a plan on the price list
-    expect(tenant.plan).toBe("GROWTH");
+    // so the super admin could not set a customer to a plan on the price list
+    expect(sub.plan).toBe("GROWTH");
   });
 
   it("refuses a plan that does not exist, and says what does", async () => {
     await expect(
-      makeTenancyService(asPrismaService).updatePlan(superAdmin, fx.tenantId, "PLATINUM"),
+      makePlatformService(asPrismaService).setAccountSubscription(superAdmin, fx.tenantId, { plan: "PLATINUM" }),
     ).rejects.toThrow(/STARTER/);
   });
 
@@ -107,7 +101,7 @@ describe("changing a tenant's plan", () => {
     const owner: JwtClaims = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
 
     await expect(
-      makeTenancyService(asPrismaService).updatePlan(owner, fx.tenantId, "GROWTH"),
+      makePlatformService(asPrismaService).setAccountSubscription(owner, fx.tenantId, { plan: "GROWTH" }),
     ).rejects.toThrow();
   });
 });

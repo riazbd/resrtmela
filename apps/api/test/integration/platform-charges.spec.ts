@@ -119,12 +119,12 @@ describe("taking a credit pack", () => {
 describe("what the platform is owed", () => {
   it("counts one-off charges alongside subscription dues", async () => {
     const sub = await prisma.subscription.create({
-      data: { resortId: fx.resortId, plan: "STARTER", status: "ACTIVE", monthlyFee: 2500 },
+      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", monthlyFee: 2500 },
     });
     await prisma.subscriptionDue.create({
       data: {
         subscriptionId: sub.id,
-        resortId: fx.resortId,
+        accountId: fx.tenantId,
         amount: 2500,
         periodStart: new Date("2026-09-01"),
         periodEnd: new Date("2026-10-01"),
@@ -135,7 +135,9 @@ describe("what the platform is owed", () => {
 
     const owed = await platform().outstanding(superAdmin);
 
-    const row = owed.find((r) => r.resortId === fx.resortId)!;
+    // what is owed is owed by the account (phase 2), and a charge raised
+    // against one of its resorts counts towards that account
+    const row = owed.find((r) => r.accountId === fx.tenantId)!;
     expect(row.subscriptions).toBe(2500);
     expect(row.charges).toBe(600);
     expect(row.total).toBe(3100);

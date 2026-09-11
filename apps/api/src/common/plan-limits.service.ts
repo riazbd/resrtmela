@@ -32,7 +32,7 @@ export interface PlanLimits {
   /** Keys from `PLAN_FEATURES` — what the owner ticked for this plan. */
   features: string[];
   /** Where the numbers came from — useful in error messages and support. */
-  source: "subscription" | "tenant" | "fallback";
+  source: "subscription" | "fallback";
 }
 
 /**
@@ -94,8 +94,10 @@ export class PlanLimitsService {
   }
 
   async forTenant(tenantId: number): Promise<PlanLimits> {
+    // the subscription belongs to the account itself now; the resort that used
+    // to sit in this `where` was only ever a bridge to the tenant
     const subscription = await this.prisma.subscription.findFirst({
-      where: { resort: { tenantId }, status: { not: "CANCELLED" } },
+      where: { accountId: tenantId, status: { not: "CANCELLED" } },
       orderBy: { id: "desc" },
       select: { plan: true },
     });
@@ -104,17 +106,8 @@ export class PlanLimitsService {
       if (row) return { ...row, source: "subscription" };
     }
 
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: tenantId },
-      select: { plan: true },
-    });
-    if (tenant?.plan) {
-      // casing drifted before the migration normalised it; a lookup that is
-      // case-sensitive on a name typed by a human is a support call
-      const row = await this.planByName(tenant.plan.toUpperCase());
-      if (row) return { ...row, source: "tenant" };
-    }
-
+    // `Tenant.plan` used to be consulted here as a second answer. It diverged
+    // from the subscription the first time a plan changed, and it is gone.
     return this.cheapestOnSale();
   }
 

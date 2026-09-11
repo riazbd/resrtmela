@@ -49,7 +49,7 @@ afterAll(async () => {
 async function subscription(over: Record<string, unknown> = {}) {
   return prisma.subscription.create({
     data: {
-      resortId: fx.resortId,
+      accountId: fx.tenantId,
       plan: "STARTER",
       status: "TRIAL",
       monthlyFee: 2500,
@@ -227,7 +227,7 @@ describe("subscription lifecycle sweep", () => {
     await subscription({ status: "ACTIVE", trialEndsAt: null, renewsAt: day(0) });
     await prisma.subscription.create({
       data: {
-        resortId: other.resortId,
+        accountId: other.tenantId,
         plan: "STARTER",
         status: "ACTIVE",
         monthlyFee: 2500,
