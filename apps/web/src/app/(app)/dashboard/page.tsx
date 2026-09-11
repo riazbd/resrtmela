@@ -71,7 +71,14 @@ export default function DashboardPage() {
           <Stat
             label="Outstanding dues"
             value={money(dues.total)}
-            sub={`${dues.count} booking(s)`}
+            /* how much of it the desk can actually ask for. The rest is an
+               agency settlement, and reading one number for both sends
+               somebody to chase a guest for money the guest does not owe. */
+            sub={
+              dues.agencyTotal > 0
+                ? `${dues.count} booking(s) · ${money(dues.agencyTotal)} from agencies`
+                : `${dues.count} booking(s)`
+            }
             tone="red"
           />
         )}

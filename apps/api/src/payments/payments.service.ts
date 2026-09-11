@@ -119,7 +119,23 @@ export class PaymentsService {
     return { payment: { ...payment, amount: Number(payment.amount) }, booking: detail, replayed: false };
   }
 
-  /** Outstanding dues across a resort (doc §3.6) */
+  /**
+   * Outstanding dues across a resort (doc §3.6), told apart by who owes them.
+   *
+   * A guest's balance and an agency's balance are one number here and two
+   * different jobs everywhere else. The guest's is collected at the desk on
+   * the morning they leave, in cash or bKash, by whoever is standing there.
+   * The agency's is a trade account: the room was sold on the agency's paper,
+   * the money arrives when the two businesses settle, and any one booking is a
+   * line in that settlement — not something to ask a departing guest for.
+   *
+   * Totalled together, the red number at the top of the screen was one nobody
+   * could act on, and the desk read a guest's name beside money that guest
+   * does not owe. The rows carry who is behind each debt, the totals are
+   * struck separately, and the agency side is also added up per agency —
+   * because "who do I ring, and for how much" is a question about an agency,
+   * not about a booking.
+   */
   async dues(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     // the matrix showed this box and nothing asked for it: hiding the menu
@@ -128,13 +144,52 @@ export class PaymentsService {
     const taxRules = await this.tax.rulesFor(resortId);
     const bookings = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null, state: { in: ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] } },
-      include: { payments: true, guest: { select: { fullName: true, phone: true } }, items: true },
+      include: {
+        payments: true,
+        guest: { select: { fullName: true, phone: true } },
+        items: true,
+        /**
+         * Who sold it, and which agency they sell for. Agency staff hold no
+         * account of their own — they hang off the agency's owner — so the
+         * account is theirs or their parent's, the same rule the agent report
+         * uses.
+         */
+        agentUser: {
+          select: {
+            id: true,
+            name: true,
+            accountId: true,
+            parentAgent: { select: { accountId: true } },
+          },
+        },
+      },
       orderBy: { checkIn: "asc" },
     });
-    const rows = bookings
+
+    const owing = bookings
       .map((b) => ({ b, t: BookingsService.computeTotals(b, taxRules) }))
-      .filter(({ t }) => t.due > 0.001)
-      .map(({ b, t }) => ({
+      .filter(({ t }) => t.due > 0.001);
+
+    // one query for the names, rather than one per booking
+    const accountIds = [
+      ...new Set(
+        owing
+          .map(({ b }) => b.agentUser?.accountId ?? b.agentUser?.parentAgent?.accountId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    // an account is a `tenants` row — the agency itself, not one of its people
+    const accounts = accountIds.length
+      ? await this.prisma.tenant.findMany({
+          where: { id: { in: accountIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const agencyName = new Map<number, string>(accounts.map((a) => [a.id, a.name]));
+
+    const rows = owing.map(({ b, t }) => {
+      const accountId = b.agentUser?.accountId ?? b.agentUser?.parentAgent?.accountId ?? null;
+      return {
         id: b.id,
         code: b.code,
         state: b.state,
@@ -142,11 +197,58 @@ export class PaymentsService {
         checkIn: b.checkIn,
         checkOut: b.checkOut,
         rooms: b.items.map((i) => i.roomId).length,
+        /**
+         * Null for a booking the resort took itself — a walk-in, a phone call,
+         * its own website. That null is the whole distinction the screen draws.
+         */
+        agent: b.agentUser
+          ? {
+              id: b.agentUser.id,
+              name: b.agentUser.name,
+              accountId,
+              // a lone agent with no agency behind them is named by themselves
+              agency: (accountId != null ? agencyName.get(accountId) : null) ?? b.agentUser.name,
+            }
+          : null,
         ...t,
-      }));
+      };
+    });
+
+    const guestRows = rows.filter((r) => r.agent === null);
+    const agencyRows = rows.filter((r) => r.agent !== null);
+
+    /** What each agency owes across every booking of theirs that is short. */
+    const byAgency = [
+      ...agencyRows
+        .reduce((map, r) => {
+          // an agency's staff all settle through the agency; an agent with no
+          // account is their own debtor, keyed on themselves
+          const key = r.agent!.accountId != null ? `a${r.agent!.accountId}` : `u${r.agent!.id}`;
+          const at = map.get(key) ?? {
+            accountId: r.agent!.accountId,
+            agency: r.agent!.agency,
+            bookings: 0,
+            due: 0,
+          };
+          at.bookings++;
+          at.due += r.due;
+          map.set(key, at);
+          return map;
+        }, new Map<string, { accountId: number | null; agency: string; bookings: number; due: number }>())
+        .values(),
+    ]
+      .map((a) => ({ ...a, due: round2(a.due) }))
+      .sort((a, b) => b.due - a.due);
+
+    const sum = (list: typeof rows) => round2(list.reduce((s, r) => s + r.due, 0));
     return {
-      total: round2(rows.reduce((s, r) => s + r.due, 0)),
+      total: sum(rows),
       count: rows.length,
+      guestTotal: sum(guestRows),
+      guestCount: guestRows.length,
+      agencyTotal: sum(agencyRows),
+      agencyCount: agencyRows.length,
+      byAgency,
       rows,
     };
   }

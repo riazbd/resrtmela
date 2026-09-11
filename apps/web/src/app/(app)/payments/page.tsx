@@ -12,12 +12,26 @@ import { usePaymentMethods } from "@/lib/resort-options";
 
 type DueRow = DuesReport["rows"][number];
 
+/**
+ * Whose debt this screen is showing.
+ *
+ * A guest's balance is collected at the desk on the morning they leave. An
+ * agency's is a trade account settled between two businesses. They were one
+ * table and one red total, so the front desk read a guest's name beside money
+ * that guest does not owe, and "what is outstanding" was a number nobody could
+ * act on. Everything is still one click away — the split is a lens, not a
+ * filter that hides money.
+ */
+const WHO = ["Everyone", "Guests", "Agencies"] as const;
+type Who = (typeof WHO)[number];
+
 export default function PaymentsPage() {
   const { activeResort, isStaff } = useAuth();
   const { push } = useToast();
   const t = useT();
   const qc = useQueryClient();
   const [payFor, setPayFor] = useState<DueRow | null>(null);
+  const [who, setWho] = useState<Who>("Everyone");
 
   const { data, isPending, error } = useApi(
     keys.dues(activeResort?.id),
@@ -42,29 +56,105 @@ export default function PaymentsPage() {
   if (error) return <ErrorState error={error} />;
   if (isPending || !data) return <Skeleton rows={6} />;
 
+  const rows =
+    who === "Guests"
+      ? data.rows.filter((r) => r.agent === null)
+      : who === "Agencies"
+        ? data.rows.filter((r) => r.agent !== null)
+        : data.rows;
+
+  const shown =
+    who === "Guests"
+      ? { total: data.guestTotal, count: data.guestCount }
+      : who === "Agencies"
+        ? { total: data.agencyTotal, count: data.agencyCount }
+        : { total: data.total, count: data.count };
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label={t("pay.outstanding")} value={money(data.total)} tone="red" />
         <Stat label={t("pay.withDues")} value={String(data.count)} tone="amber" />
+        {/* the same money, split by who has to be asked for it */}
+        <Stat label="Guests owe" value={money(data.guestTotal)} />
+        <Stat label="Agencies owe" value={money(data.agencyTotal)} />
       </div>
 
-      <Card className="!p-0" title={t("pay.title")}>
-        {data.rows.length === 0 ? (
-          <Empty msg="No outstanding dues 🎉" />
+      <div className="flex overflow-hidden rounded-lg border border-slate-200">
+        {WHO.map((w) => (
+          <button
+            key={w}
+            onClick={() => setWho(w)}
+            className={`px-3 py-1.5 text-xs font-semibold transition ${
+              who === w ? "bg-brand-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            {w}
+            <span className={`ml-1.5 ${who === w ? "opacity-80" : "text-slate-400"}`}>
+              {w === "Guests" ? data.guestCount : w === "Agencies" ? data.agencyCount : data.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/**
+       * Who to ring, and for how much. Four bookings from one agency are one
+       * phone call, and this is the only place on the screen that says so.
+       */}
+      {who === "Agencies" && data.byAgency.length > 0 && (
+        <Card className="!p-0" title="What each agency owes">
+          <div className="divide-y divide-slate-50">
+            {data.byAgency.map((a) => (
+              <div
+                key={`${a.accountId ?? a.agency}`}
+                className="flex items-center justify-between px-4 py-2 text-sm"
+              >
+                <span className="font-medium text-slate-700">{a.agency}</span>
+                <span className="text-slate-500">
+                  {a.bookings} booking{a.bookings === 1 ? "" : "s"}
+                  <b className="ml-3 text-red-700">{money(a.due)}</b>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card className="!p-0" title={`${t("pay.title")} — ${money(shown.total)} across ${shown.count}`}>
+        {rows.length === 0 ? (
+          <Empty
+            msg={
+              who === "Agencies"
+                ? "No agency owes anything 🎉"
+                : who === "Guests"
+                  ? "No guest owes anything 🎉"
+                  : "No outstanding dues 🎉"
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px]">
+            <table className="w-full min-w-[820px]">
               <thead className="border-b border-slate-100">
-                <tr><Th>Code</Th><Th>Guest</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Rent</Th><Th className="text-right">Paid</Th><Th className="text-right">Due</Th><Th /></tr>
+                <tr><Th>Code</Th><Th>Guest</Th><Th>Owed by</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Rent</Th><Th className="text-right">Paid</Th><Th className="text-right">Due</Th><Th /></tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {data.rows.map((b) => (
+                {rows.map((b) => (
                   <tr key={b.id} className="hover:bg-slate-50/50">
                     <Td className="font-medium text-brand-700">{b.code}</Td>
                     <Td>
                       <div>{b.guest?.fullName}</div>
                       <div className="text-[11px] text-slate-400">{b.guest?.phone}</div>
+                    </Td>
+                    {/* the desk asks the guest; the office settles with the agency */}
+                    <Td>
+                      {b.agent ? (
+                        <>
+                          <div className="text-sm text-slate-700">{b.agent.agency}</div>
+                          <div className="text-[11px] text-slate-400">sold by {b.agent.name}</div>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-400">The guest</span>
+                      )}
                     </Td>
                     <Td className="text-xs">{dmy(b.checkIn)} → {dmy(b.checkOut)}</Td>
                     <Td><Badge value={b.state} /></Td>
@@ -133,6 +223,13 @@ function CollectModal({ row, onClose, onDone }: {
         <div className="space-y-3">
           <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             {row.guest?.fullName} · due <b className="text-red-700">{money(row.due)}</b>
+            {/* whose money this is, so nobody asks a departing guest for an
+                agency's settlement */}
+            {row.agent && (
+              <div className="mt-0.5 text-[11px] text-amber-700">
+                Owed by {row.agent.agency}, not the guest
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label={`Amount (${cur()})`}><Input type="number" min={1} value={amount || ""} onChange={(e) => setAmount(Number(e.target.value))} /></Field>

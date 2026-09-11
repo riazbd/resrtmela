@@ -265,11 +265,24 @@ export interface DaySheet {
 export interface DuesReport {
   total: number;
   count: number;
+  /**
+   * The same money, split by who is on the hook for it. A guest's balance is
+   * collected at the desk; an agency's is settled between two businesses. One
+   * total covering both was a number nobody could act on.
+   */
+  guestTotal: number;
+  guestCount: number;
+  agencyTotal: number;
+  agencyCount: number;
+  /** What each agency owes across all its short bookings — one row per phone call. */
+  byAgency: { accountId: number | null; agency: string; bookings: number; due: number }[];
   rows: {
     id: number;
     code: string;
     state: string;
     guest: { fullName: string; phone: string };
+    /** who sold it, or null for a booking the resort took itself */
+    agent: { id: number; name: string; accountId: number | null; agency: string } | null;
     checkIn: string | null;
     checkOut: string | null;
     rooms: number;
