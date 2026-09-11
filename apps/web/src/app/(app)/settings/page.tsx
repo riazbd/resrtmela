@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
+import { changedContactFields, emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
 interface ResortDetail {
   id: number;
@@ -685,7 +686,7 @@ function AccessTab({ rid }: { rid: number }) {
   const fail = useLoadFailure();
   const [rows, setRows] = useState<AccessRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [invite, setInvite] = useState({ email: "", name: "" });
+  const [invite, setInvite] = useState({ email: "", name: "", phone: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
@@ -711,10 +712,10 @@ function AccessTab({ rid }: { rid: number }) {
     try {
       const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agent`, {
         method: "POST",
-        body: { email: invite.email, name: invite.name || undefined },
+        body: { email: invite.email, name: invite.name || undefined, phone: invite.phone },
       });
       push(r.emailed ? "Invitation email sent — the agent can sign in with the emailed credentials" : "Agent linked — they were notified");
-      setInvite({ email: "", name: "" });
+      setInvite({ email: "", name: "", phone: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -772,11 +773,16 @@ function AccessTab({ rid }: { rid: number }) {
         <div className="space-y-3">
           <Field label="Agent email"><Input type="email" value={invite.email} onChange={(e) => setInvite({ ...invite, email: e.target.value })} placeholder="agent@email.com" /></Field>
           <Field label="Name (optional)"><Input value={invite.name} onChange={(e) => setInvite({ ...invite, name: e.target.value })} /></Field>
+          <Field label="Phone" hint="used if this email has no account yet; ignored if it already does">
+            <Input value={invite.phone} onChange={(e) => setInvite({ ...invite, phone: e.target.value })} placeholder="8801XXXXXXXXX" />
+          </Field>
 
           <div className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
             The agent receives a <b>verification email</b> with login credentials. New agents start pending — activate them below or in Users.
           </div>
-          <Button onClick={sendInvite} loading={inviting} disabled={!invite.email}>Send invitation</Button>
+          <Button onClick={sendInvite} loading={inviting} disabled={!!emailError(invite.email) || !!phoneError(invite.phone)}>
+            Send invitation
+          </Button>
         </div>
       </Card>
       </div>
@@ -869,8 +875,10 @@ function UsersTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
   const [busy, setBusy] = useState(false);
+  const [contactEdit, setContactEdit] = useState<{ id: number; email: string; phone: string } | null>(null);
+  const [contactBusy, setContactBusy] = useState(false);
 
   const load = useCallback(() => {
     // the roles list is shared with the Permissions tab and cached under one key
@@ -885,12 +893,12 @@ function UsersTab({ rid }: { rid: number }) {
       await api(`/resorts/${rid}/users`, {
         method: "POST",
         body: {
-          name: form.name, phone: form.phone, password: form.password, role: form.role,
+          name: form.name, email: form.email, phone: form.phone, password: form.password, role: form.role,
           roleId: form.roleId ? Number(form.roleId) : undefined,
         },
       });
       push(`${form.role === "AGENT" ? "Agent" : "Staff"} created${form.role === "AGENT" ? " (pending activation)" : ""}`);
-      setForm({ name: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
+      setForm({ name: "", email: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -909,20 +917,103 @@ function UsersTab({ rid }: { rid: number }) {
     }
   }
 
+  function startEditContact(u: UserRow) {
+    // a placeholder is shown blank — the person editing types a real value,
+    // never sees the fake one, and an untouched blank field stays "no change"
+    setContactEdit({
+      id: u.id,
+      email: isPlaceholderEmail(u.email) ? "" : u.email ?? "",
+      phone: isPlaceholderPhone(u.phone) ? "" : u.phone,
+    });
+  }
+
+  async function saveContact(u: UserRow) {
+    if (!contactEdit) return;
+    const body = changedContactFields(
+      { email: contactEdit.email, phone: contactEdit.phone },
+      { email: u.email ?? "", phone: u.phone },
+    );
+    if (Object.keys(body).length === 0) {
+      setContactEdit(null);
+      return;
+    }
+    // only the fields that changed are checked — an untouched field, even a
+    // blank one standing in for a placeholder, is not a value being submitted
+    const err =
+      (body.email !== undefined && emailError(body.email)) ||
+      (body.phone !== undefined && phoneError(body.phone));
+    if (err) {
+      push(err, "err");
+      return;
+    }
+    setContactBusy(true);
+    try {
+      await api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body });
+      push("Contact details updated");
+      setContactEdit(null);
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setContactBusy(false);
+    }
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <Card title={`Team (${rows?.length ?? 0})`}>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
+              <tr><Th>Name</Th><Th>Contact</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {(rows ?? []).map((u) => (
                 <tr key={u.id} className="border-t border-slate-100">
                   <Td>
                     <div className="font-semibold text-slate-800">{u.name}</div>
-                    <div className="text-xs text-slate-400">{u.phone}</div>
+                  </Td>
+                  <Td className="min-w-[220px]">
+                    {contactEdit?.id === u.id ? (
+                      <div className="space-y-1.5">
+                        <Input
+                          value={contactEdit.email}
+                          onChange={(e) => setContactEdit({ ...contactEdit, email: e.target.value })}
+                          placeholder={isPlaceholderEmail(u.email) ? "Not set yet — add a real email" : ""}
+                          className="!py-1 text-xs"
+                        />
+                        <Input
+                          value={contactEdit.phone}
+                          onChange={(e) => setContactEdit({ ...contactEdit, phone: e.target.value })}
+                          placeholder={isPlaceholderPhone(u.phone) ? "Not set yet — add a real phone" : ""}
+                          className="!py-1 text-xs"
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => saveContact(u)}
+                            disabled={contactBusy}
+                            className="rounded-lg border border-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setContactEdit(null)}
+                            disabled={contactBusy}
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500">
+                        <div>{isPlaceholderEmail(u.email) ? "not set" : u.email}</div>
+                        <div>{isPlaceholderPhone(u.phone) ? "not set" : u.phone}</div>
+                        <button onClick={() => startEditContact(u)} className="mt-0.5 text-brand-600 hover:underline">
+                          Edit
+                        </button>
+                      </div>
+                    )}
                   </Td>
                   <Td>
                     <Select className="!w-36 !py-1" value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
@@ -974,6 +1065,7 @@ function UsersTab({ rid }: { rid: number }) {
       <Card title="Add team member">
         <div className="space-y-3">
           <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          <Field label="Email (login)"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@resort.com" /></Field>
           <Field label="Phone (login)"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8801XXXXXXXXX" /></Field>
           <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
           <Field label="Role">
@@ -997,7 +1089,13 @@ function UsersTab({ rid }: { rid: number }) {
               Agents start as <b>pending</b> — activate them after review. Suspended agents can't create bookings.
             </div>
           )}
-          <Button onClick={create} loading={busy} disabled={!form.name || !form.phone || !form.password}>Create account</Button>
+          <Button
+            onClick={create}
+            loading={busy}
+            disabled={!form.name || !!emailError(form.email) || !!phoneError(form.phone) || !form.password}
+          >
+            Create account
+          </Button>
         </div>
       </Card>
     </div>

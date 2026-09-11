@@ -1,6 +1,9 @@
 import type { PrismaService } from "../prisma/prisma.service";
 import { badRequest } from "./rbac";
 import { normalizePhone } from "./dates";
+import { isPlaceholderEmail, isPlaceholderPhone, PLACEHOLDER_EMAIL_SUFFIX } from "@rh/shared";
+
+export { PLACEHOLDER_EMAIL_SUFFIX, isPlaceholderEmail, isPlaceholderPhone };
 
 /**
  * The two ways into an account, as every path that writes one stores them.
@@ -17,25 +20,12 @@ import { normalizePhone } from "./dates";
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * The placeholders, defined once.
- *
- * Migration 20260911130000 gave every account missing an email
- * `user-<id>@placeholder.invalid` and every account missing a phone
- * `placeholder-<id>`, so both columns could be required. SQL cannot import
- * this, so the migration spells the same two shapes out; everything in the
- * API asks here. They are gaps wearing a value: `.invalid` never delivers,
- * and `placeholder-<id>` is not a phone number.
+ * The placeholders themselves now live in `packages/shared` (Task 12) so the
+ * console can recognise one without duplicating the shape — a form that
+ * cannot tell a placeholder from a real address would offer to "edit" the
+ * fake one, or show it in a list as though someone typed it. Re-exported
+ * here so every existing import of `./contact` in this API keeps working.
  */
-export const PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid";
-const PLACEHOLDER_PHONE_PREFIX = "placeholder-";
-
-export function isPlaceholderEmail(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX);
-}
-
-export function isPlaceholderPhone(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().startsWith(PLACEHOLDER_PHONE_PREFIX);
-}
 
 /**
  * The address a person can actually be reached at, or null.

@@ -8,6 +8,7 @@ import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useT
 import { Table, Tabs } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { ShieldCheck, UserPlus } from "lucide-react";
+import { emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
 /**
  * An agency's own team.
@@ -121,7 +122,14 @@ export default function AgentTeamPage() {
                   {staff.map((s) => (
                     <tr key={s.id}>
                       <Td className="font-medium">{s.name}</Td>
-                      <Td className="text-xs text-slate-500">{s.email ?? s.phone ?? "—"}</Td>
+                      <Td className="text-xs text-slate-500">
+                        {[
+                          s.email && !isPlaceholderEmail(s.email) ? s.email : null,
+                          s.phone && !isPlaceholderPhone(s.phone) ? s.phone : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "not set"}
+                      </Td>
                       <Td>
                         <Select
                           value={String(s.agentRoleId ?? "")}
@@ -152,7 +160,11 @@ export default function AgentTeamPage() {
               </Field>
             </div>
             <div className="mt-3 flex justify-end">
-              <Button loading={busy} onClick={addStaff} disabled={!form.name || !form.password}>
+              <Button
+                loading={busy}
+                onClick={addStaff}
+                disabled={!form.name || !!emailError(form.email) || !!phoneError(form.phone) || !form.password}
+              >
                 <UserPlus className="mr-1 h-4 w-4" /> Add
               </Button>
             </div>

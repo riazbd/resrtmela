@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, setToken, API_URL } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
+import { emailError, phoneError } from "@/lib/contact";
 
 interface SignupResult {
   accessToken: string;
@@ -37,6 +38,7 @@ export default function SignupPage() {
       .catch(() => setPlans([]));
   }, []);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,6 +71,7 @@ export default function SignupPage() {
           resortName,
           location: location || undefined,
           name,
+          email,
           phone,
           password,
           slug: effectiveSlug || undefined,
@@ -154,6 +157,10 @@ export default function SignupPage() {
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Md. Rahman" autoFocus />
               </div>
               <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Email (login)</label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+              </div>
+              <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Mobile (login)</label>
                 <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01XXXXXXXXX" />
               </div>
@@ -165,7 +172,12 @@ export default function SignupPage() {
               <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(1)}>
                 ← Back
               </Button>
-              <Button type="button" className="w-full" disabled={!name || phone.length < 10 || password.length < 8} onClick={() => setStep(3)}>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={!name || !!emailError(email) || !!phoneError(phone) || password.length < 8}
+                onClick={() => setStep(3)}
+              >
                 Continue
               </Button>
             </>
@@ -180,7 +192,7 @@ export default function SignupPage() {
                   {location ? ` · ${location}` : ""}
                 </div>
                 <div className="mt-2 text-xs">
-                  <span className="text-slate-400">Admin:</span> {name} · {phone}
+                  <span className="text-slate-400">Admin:</span> {name} · {email} · {phone}
                 </div>
                 <div className="text-xs">
                   <span className="text-slate-400">Plan:</span> {entryLine || "—"}

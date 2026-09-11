@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, money, dmy, type BookingRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
+import { emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
 interface StaffRow {
   id: number;
@@ -71,7 +72,7 @@ export default function ProfilePage() {
     try {
       await api("/agent/staff", {
         method: "POST",
-        body: { name: form.name, phone: form.phone || undefined, email: form.email || undefined, password: form.password },
+        body: { name: form.name, phone: form.phone, email: form.email, password: form.password },
       });
       push("Agency user created — they can log in and book for guests");
       setForm({ name: "", phone: "", email: "", password: "" });
@@ -175,7 +176,14 @@ export default function ProfilePage() {
                       {staff.map((s) => (
                         <tr key={s.id} className="border-t border-slate-100">
                           <Td className="font-semibold text-slate-800">{s.name}</Td>
-                          <Td className="text-xs">{s.phone ?? s.email ?? "—"}</Td>
+                          <Td className="text-xs">
+                            {[
+                              s.phone && !isPlaceholderPhone(s.phone) ? s.phone : null,
+                              s.email && !isPlaceholderEmail(s.email) ? s.email : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || "not set"}
+                          </Td>
                           <Td>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${s.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{s.status}</span>
                           </Td>
@@ -189,10 +197,16 @@ export default function ProfilePage() {
             <Card title="Add agency user">
               <div className="space-y-3">
                 <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+                <Field label="Email (login)"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="you@company.com" /></Field>
                 <Field label="Phone (login)"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8801XXXXXXXXX" /></Field>
-                <Field label="Email (alternative login)"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="optional" /></Field>
                 <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
-                <Button onClick={addStaff} loading={busy} disabled={!form.name || !form.password || (!form.phone && !form.email)}>Create user</Button>
+                <Button
+                  onClick={addStaff}
+                  loading={busy}
+                  disabled={!form.name || !form.password || !!emailError(form.email) || !!phoneError(form.phone)}
+                >
+                  Create user
+                </Button>
               </div>
             </Card>
           </div>
