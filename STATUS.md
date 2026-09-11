@@ -46,7 +46,7 @@ product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
 Current state: **728 API tests** across 73 files (34 at the start of all this,
-all of them pure unit tests) plus **100 front-end tests**. Four packages
+all of them pure unit tests) plus **117 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
 empty database, which it could not before.
@@ -1129,9 +1129,37 @@ on purpose — does: the column definition itself is proven
 (`information_schema.COLUMNS` no longer lists `GUEST` on `users.role`), but a
 lax production server would still store an out-of-range value as `''` with a
 warning rather than refusing it outright, and that has not been checked
-against the live server. Neither the reset page nor the homepage has been
-opened in a browser yet — this pass is proven by an HTTP walk and a
-source-tree scan, not by a screenshot. Nothing from this branch is deployed.
+against the live server.
+
+**Checked open, in a browser, on 2026-09-11 — headless Edge, against a local
+API and web build on the development database. Local, not production**, and
+said so plainly rather than left ambiguous: the homepage's pricing cards load
+from `/cms/plans`; `/book` answers 404 with nothing on the site linking to it;
+forgot-password by phone shows the same neutral sentence, mails nothing to a
+placeholder address, and does mail a real one; login succeeds by a
+local-format phone and separately by email; Users & Roles shows a placeholder
+as "not set" and an edit through that form replaces it; a mailed reset link
+sets the password once and a second use of the same link is refused; signup's
+step 2 will not continue without an email. Signup's own landing was wrong —
+after "Create workspace & sign in" the page landed on `/login`, because it
+adopted the token without telling `AuthProvider`, so `/auth/me` was never
+called and `consoleGate` saw nobody signed in — fixed in this commit
+(`auth.tsx` gains `adoptToken`, `login` now calls it instead of repeating its
+lines, and signup calls it and routes with `landingFor`); the controller
+confirms by re-running the same browser check.
+
+The same local API also ran `smoke.ps1`, `phase6-smoke.ps1` and
+`activity-smoke.ps1` end to end. `smoke.ps1`'s step 3-4 (the double-booking
+guard) depends on the seed's `BK-00001` occupying Camellia — `seed.ts` cannot
+be re-run to refresh that (§6.1), so this relied on the development
+database's existing seed data rather than a fresh one; run twice, the guard
+held both times, refusing the conflicting booking with 409 on the second run
+as on the first.
+
+This pass is proven by a browser session and three smoke runs, not by a
+screenshot filed anywhere — and production's `sql_mode`, collation and
+phone-collision counts are still unknown; none of this reached the live
+server (§6.1). Nothing from this branch is deployed.
 
 **Addendum (2026-09-11) — every account has both, and two things the sweep
 found on the way.** The reset closed OTP's door but opened a narrower one of
