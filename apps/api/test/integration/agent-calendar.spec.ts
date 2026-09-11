@@ -105,6 +105,73 @@ describe("the agency calendar", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  /**
+   * The resort's own calendar is a working screen: a stay opens from it, the
+   * colour says what state it is in, a red stripe says money is owed, and a
+   * room under maintenance is drawn as unavailable rather than deleted. An
+   * agency was given a read-only picture of the same month, so everything it
+   * is entitled to act on — its own bookings — it could only look at.
+   *
+   * The line stays where it was: this is about the agency's own stays. Nothing
+   * here reaches another agency's money or hands over a way to open its
+   * booking.
+   */
+  describe("what an agency may do with its own nights", () => {
+    it("carries the booking id on its own stay, so the bar opens it", async () => {
+      const mine = await ourStay();
+      const [resort] = (await cal().calendar(agency, RANGE)).resorts;
+      const stay = resort!.stays.find((s) => s.mine)!;
+      expect(stay.bookingId).toBe(mine.id);
+    });
+
+    it("carries what is still owed on its own stay", async () => {
+      await ourStay();
+      const [resort] = (await cal().calendar(agency, RANGE)).resorts;
+      const stay = resort!.stays.find((s) => s.mine)!;
+      expect(stay.paymentState).toBe("UNPAID");
+    });
+
+    it("gives neither the id nor the money state for somebody else's stay", async () => {
+      await otherStay();
+      await prisma.resort.update({
+        where: { id: fx.resortId },
+        // even with names on, the handle and the money stay behind the line
+        data: { showGuestNamesToAgents: true },
+      });
+      const [resort] = (await cal().calendar(agency, RANGE)).resorts;
+      const stay = resort!.stays.find((s) => !s.mine)!;
+      expect(stay.bookingId).toBeNull();
+      expect(stay.paymentState).toBeNull();
+    });
+
+    it("keeps a room that is out of service on the grid, and says so", async () => {
+      await prisma.room.update({
+        where: { id: fx.rooms[1]!.id },
+        data: { status: "OUT_OF_SERVICE" },
+      });
+      const [resort] = (await cal().calendar(agency, RANGE)).resorts;
+      const room = resort!.rooms.find((r) => r.id === fx.rooms[1]!.id);
+      expect(room, "an unsellable room is not a missing room").toBeTruthy();
+      expect(room!.status).toBe("OUT_OF_SERVICE");
+    });
+
+    it("shows the room's rate only where the resort shares its rates", async () => {
+      await prisma.resort.update({
+        where: { id: fx.resortId },
+        data: { showRatesToAgents: true },
+      });
+      const shown = (await cal().calendar(agency, RANGE)).resorts[0]!;
+      expect(shown.rooms[0]!.baseRate).toBe(5000);
+
+      await prisma.resort.update({
+        where: { id: fx.resortId },
+        data: { showRatesToAgents: false },
+      });
+      const hidden = (await cal().calendar(agency, RANGE)).resorts[0]!;
+      expect(hidden.rooms[0]!.baseRate).toBeNull();
+    });
+  });
+
   it("refuses anyone who is not an agent", async () => {
     const manager: JwtClaims = {
       userId: fx.managerId,

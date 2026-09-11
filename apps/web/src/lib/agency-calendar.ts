@@ -16,12 +16,24 @@ export interface CalendarStay {
   state: string;
   guestName: string | null;
   code: string | null;
+  /** both null unless the stay is the agency's own */
+  bookingId: number | null;
+  paymentState: string | null;
 }
 
+/**
+ * A square carries everything the bar drawn over it has to show: whose it is,
+ * who is in it, what state the stay is in, whether money is still owed, and
+ * the id to open it by. The API sends nulls for the last three on a stay the
+ * agency did not sell, so a grey block is all that can be drawn from one.
+ */
 export interface CalendarCell {
   mine: boolean;
   guestName: string | null;
   code: string | null;
+  state: string;
+  bookingId: number | null;
+  paymentState: string | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -45,6 +57,9 @@ export function occupancyCells(stays: CalendarStay[]): Map<string, CalendarCell>
         mine: s.mine,
         guestName: s.guestName,
         code: s.code,
+        state: s.state,
+        bookingId: s.bookingId,
+        paymentState: s.paymentState,
       });
     }
   }

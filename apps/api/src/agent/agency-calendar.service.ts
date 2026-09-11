@@ -38,11 +38,39 @@ export interface AgencyStay {
   /** null unless it is theirs, or the resort chose to show names */
   guestName: string | null;
   code: string | null;
+  /**
+   * A handle to open the stay, and what is still owed on it — both only for
+   * the agency's own bookings.
+   *
+   * These are the two things that make the resort's calendar a screen you work
+   * from rather than one you read: a bar you can click through to, and a
+   * stripe that says the money has not come in. An agency is entitled to both
+   * for what it sold. `showGuestNamesToAgents` does not extend to them: a
+   * resort choosing to name its guests has not chosen to hand one agency
+   * another's ledger, or a way into its booking.
+   */
+  bookingId: number | null;
+  paymentState: string | null;
 }
 
 export interface AgencyResortMonth {
   resort: { id: number; name: string; location: string | null };
-  rooms: { id: number; name: string; roomTypeId: number | null; roomTypeName: string | null }[];
+  rooms: {
+    id: number;
+    name: string;
+    roomTypeId: number | null;
+    roomTypeName: string | null;
+    /**
+     * Out-of-service rooms used to be filtered out here, which left an agency
+     * unable to tell a room under maintenance from a room that does not
+     * exist — and made the grid silently change shape from one week to the
+     * next. They come through marked instead, and the screen draws them as
+     * unsellable.
+     */
+    status: string;
+    /** null where the resort hides its pricing, as everywhere else */
+    baseRate: number | null;
+  }[];
   stays: AgencyStay[];
 }
 
@@ -83,7 +111,13 @@ export class AgencyCalendarService {
     const links = (
       await this.prisma.resort.findMany({
         where: { id: { in: ids } },
-        select: { id: true, name: true, location: true, showGuestNamesToAgents: true },
+        select: {
+          id: true,
+          name: true,
+          location: true,
+          showGuestNamesToAgents: true,
+          showRatesToAgents: true,
+        },
         orderBy: { id: "asc" },
       })
     ).map((resort) => ({ resortId: resort.id, resort }));
@@ -94,12 +128,15 @@ export class AgencyCalendarService {
 
     const [rooms, bookings] = await Promise.all([
       this.prisma.room.findMany({
-        where: { resortId: { in: resortIds }, status: "ACTIVE", deletedAt: null },
+        // retired rooms are gone; one out of service is still a room
+        where: { resortId: { in: resortIds }, deletedAt: null },
         select: {
           id: true,
           name: true,
           resortId: true,
           roomTypeId: true,
+          status: true,
+          baseRate: true,
           roomType: { select: { name: true } },
         },
         orderBy: { name: "asc" },
@@ -118,6 +155,7 @@ export class AgencyCalendarService {
           id: true,
           code: true,
           state: true,
+          paymentState: true,
           resortId: true,
           checkIn: true,
           checkOut: true,
@@ -151,6 +189,8 @@ export class AgencyCalendarService {
               state: b.state,
               guestName: named ? b.guest.fullName : null,
               code: named ? b.code : null,
+              bookingId: isMine ? b.id : null,
+              paymentState: isMine ? b.paymentState : null,
             });
           }
         }
@@ -163,6 +203,8 @@ export class AgencyCalendarService {
               name: r.name,
               roomTypeId: r.roomTypeId,
               roomTypeName: r.roomType?.name ?? null,
+              status: r.status,
+              baseRate: link.resort.showRatesToAgents ? Number(r.baseRate) : null,
             })),
           stays,
         };

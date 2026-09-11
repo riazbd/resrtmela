@@ -16,7 +16,12 @@
  * by the one next to it.
  */
 import { describe, expect, it } from "vitest";
-import { occupancyCells, freeSpan, type CalendarStay } from "@/lib/agency-calendar";
+import {
+  occupancyCells,
+  freeSpan,
+  type CalendarCell,
+  type CalendarStay,
+} from "@/lib/agency-calendar";
 
 const stay = (over: Partial<CalendarStay> = {}): CalendarStay => ({
   roomId: 1,
@@ -26,6 +31,8 @@ const stay = (over: Partial<CalendarStay> = {}): CalendarStay => ({
   state: "CONFIRMED",
   guestName: null,
   code: null,
+  bookingId: null,
+  paymentState: null,
   ...over,
 });
 
@@ -64,6 +71,35 @@ describe("occupancyCells", () => {
     expect(cells.get("1|2026-10-04")!.code).toBe("BK-00042");
   });
 
+  /**
+   * A square has to carry everything the bar drawn over it shows. The resort's
+   * own calendar colours a stay by its state and stripes it when money is
+   * owed, and opens it on a click; a cell that only knew "mine, and a name"
+   * could draw none of that.
+   */
+  it("carries the state, the money and the way in, for the agency's own stay", () => {
+    const cells = occupancyCells([
+      stay({
+        mine: true,
+        state: "CHECKED_IN",
+        paymentState: "PARTIAL",
+        bookingId: 77,
+        guestName: "Our Client",
+        code: "BK-00042",
+      }),
+    ]);
+    expect(cells.get("1|2026-10-06")).toMatchObject({
+      state: "CHECKED_IN",
+      paymentState: "PARTIAL",
+      bookingId: 77,
+    });
+  });
+
+  it("carries no money and no way in for a stay that is not the agency's", () => {
+    const cells = occupancyCells([stay({ state: "CHECKED_IN" })]);
+    expect(cells.get("1|2026-10-06")).toMatchObject({ bookingId: null, paymentState: null });
+  });
+
   it("keeps rooms apart", () => {
     const cells = occupancyCells([stay(), stay({ roomId: 2 })]);
     expect(taken(cells, 1)).toHaveLength(3);
@@ -93,7 +129,19 @@ describe("occupancyCells", () => {
  */
 describe("choosing a span of nights", () => {
   const taken = (roomId: number, night: string) =>
-    new Map([[`${roomId}|${night}`, { mine: false, guestName: null, code: null }]]);
+    new Map<string, CalendarCell>([
+      [
+        `${roomId}|${night}`,
+        {
+          mine: false,
+          guestName: null,
+          code: null,
+          state: "CONFIRMED",
+          bookingId: null,
+          paymentState: null,
+        },
+      ],
+    ]);
 
   it("turns two clicks into a stay", () => {
     expect(freeSpan(new Map(), 1, "2026-10-05", "2026-10-07")).toEqual({

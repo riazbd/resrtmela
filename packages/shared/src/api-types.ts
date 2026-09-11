@@ -550,12 +550,24 @@ export interface AgencyStay {
   state: string;
   guestName: string | null;
   code: string | null;
+  /** the stay to open, and what is still owed — the agency's own bookings only */
+  bookingId: number | null;
+  paymentState: string | null;
 }
 
 /** One resort's month: the rooms it has, and the nights already taken. */
 export interface AgencyResortMonth {
   resort: { id: number; name: string; location: string | null };
-  rooms: { id: number; name: string; roomTypeId: number | null; roomTypeName: string | null }[];
+  rooms: {
+    id: number;
+    name: string;
+    roomTypeId: number | null;
+    roomTypeName: string | null;
+    /** ACTIVE, or OUT_OF_SERVICE — drawn as a room that cannot be sold */
+    status: string;
+    /** null where the resort hides its pricing from agencies */
+    baseRate: number | null;
+  }[];
   stays: AgencyStay[];
 }
 
