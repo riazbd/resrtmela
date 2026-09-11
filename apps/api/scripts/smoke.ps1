@@ -103,10 +103,5 @@ try {
   Write-Host ("12. agent transition blocked: " + $msg)
 }
 
-# 13) OTP flow (guest)
-$otp = Invoke-RestMethod -Method Post "$BASE/auth/otp/request" -ContentType "application/json" -Body '{"phone":"01812-345678"}'
-$verifyBody = @{ phone = "01812-345678"; code = $otp.devCode } | ConvertTo-Json
-$g = Invoke-RestMethod -Method Post "$BASE/auth/otp/verify" -ContentType "application/json" -Body $verifyBody
-Write-Host ("13. OTP guest login -> role: " + $g.user.role)
 Write-Host ""
 Write-Host "SMOKE COMPLETE"

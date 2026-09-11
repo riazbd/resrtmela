@@ -1,4 +1,4 @@
-# ResortHub Phase 6 E2E - notifications+dedupe, online checkout lifecycle,
+# ResortHub Phase 6 E2E - notifications+dedupe, payment receipts,
 # commission reports, audit trail. PS 5.1 ASCII.
 $ErrorActionPreference = "Stop"
 $BASE = "http://localhost:4000"
@@ -28,45 +28,27 @@ Write-Host ("3. feed has booking_confirmed: sent=" + $conf.sent + " to=" + $conf
 $disp2 = Invoke-RestMethod -Method Post "$BASE/notifications/dispatch" -ContentType "application/json" -Headers $M -Body '{"sweeps":1}'
 Write-Host ("4. re-dispatch sent=" + $disp2.sent + " (0 new confirms expected)")
 
-# 5) guest checkout lifecycle (bKash mock)
-$otp = Invoke-RestMethod -Method Post "$BASE/auth/otp/request" -ContentType "application/json" -Body '{"phone":"01812-345678"}'
-$g = Invoke-RestMethod -Method Post "$BASE/auth/otp/verify" -ContentType "application/json" -Body (@{ phone="01812-345678"; code=$otp.devCode } | ConvertTo-Json -Compress)
-$G = @{ Authorization = "Bearer $($g.accessToken)" }
-$std = ((Invoke-RestMethod -Method Get "$BASE/guest/resorts/$rid" -Headers $G).roomTypes | Select-Object -First 1).id
-$trip = Invoke-RestMethod -Method Post "$BASE/guest/bookings" -ContentType "application/json" -Headers $G -Body (@{ resortId=$rid; items=@(@{ roomTypeId=$std; qty=1 }); checkIn=(Today 5); checkOut=(Today 6); adults=2 } | ConvertTo-Json -Compress -Depth 5)
-$co = Invoke-RestMethod -Method Post "$BASE/bookings/$($trip.id)/checkout" -ContentType "application/json" -Headers $G -Body '{"method":"BKASH","amount":3000}'
-Write-Host ("5. checkout intent " + $co.providerRef + " -> " + $co.checkoutUrl)
+# 5) desk payment settles the booking -> payment_receipt notification queued
+# (the online gateway checkout this used to exercise via a guest login is gone
+# — Task 4 removed guest payments outright, not just the OTP door to them — so
+# this now proves the same receipt notification off a payment the desk takes)
+$pay = Invoke-RestMethod -Method Post "$BASE/bookings/$($bk.id)/payments" -ContentType "application/json" -Headers $M -Body '{"amount":3000,"method":"CASH","note":"phase6 smoke"}'
+Write-Host ("5. desk payment: paid=" + $pay.booking.paid + " due=" + $pay.booking.due + " state=" + $pay.booking.paymentState)
 
-# 6) overpay rejected
-try { Invoke-RestMethod -Method Post "$BASE/bookings/$($trip.id)/checkout" -ContentType "application/json" -Headers $G -Body '{"method":"BKASH","amount":999999}' | Out-Null; Write-Host "6. FAIL" }
-catch { Write-Host ("6. overpay blocked: " + (($_.ErrorDetails.Message | ConvertFrom-Json).message)) }
-
-# 7) gateway confirms -> ledger payment + PAID/PARTIAL state
-$pay = Invoke-RestMethod -Method Post "$BASE/mock-checkout/$($co.providerRef)/confirm" -ContentType "application/json" -Headers $G -Body '{"trxId":"bkash-demo-777"}'
-Write-Host ("7. confirmed: status=" + $pay.status + " bookingState=" + $pay.booking.paymentState + " paid=" + $pay.booking.paid)
-
-# 8) double-confirm rejected
-try { Invoke-RestMethod -Method Post "$BASE/mock-checkout/$($co.providerRef)/confirm" -ContentType "application/json" -Headers $G -Body '{}' | Out-Null; Write-Host "8. FAIL: double confirm" }
-catch { Write-Host ("8. replay blocked: " + (($_.ErrorDetails.Message | ConvertFrom-Json).message)) }
-
-# 9) receipt notification queued
+# 6) receipt notification queued
 $feed2 = Invoke-RestMethod -Method Get "$BASE/notifications/recent?take=5" -Headers $M
 $rc = $feed2 | Where-Object { $_.template -eq "payment_receipt" } | Select-Object -First 1
-Write-Host ("9. receipt notification: " + ($rc -ne $null) + " to=" + $rc.to)
+Write-Host ("6. receipt notification: " + ($rc -ne $null) + " to=" + $rc.to)
 
-# 10) agent commission report (Rikan has imported bookings on resort 2 + smoke booking here)
+# 7) agent commission report (Rikan has imported bookings on resort 2 + smoke booking here)
 $ag = Invoke-RestMethod -Method Post "$BASE/auth/login" -ContentType "application/json" -Body '{"phone":"8801700000002","password":"Password123!"}'
 $A = @{ Authorization = "Bearer $($ag.accessToken)" }
 $rep = Invoke-RestMethod -Method Get "$BASE/agents/me/report`?resortId=2" -Headers $A
-Write-Host ("10. Rikan report r2: bookings=" + $rep.bookings + " rent=" + $rep.rent + " commission=" + $rep.commission + " (rate " + $rep.commissionRate + "%)")
+Write-Host ("7. Rikan report r2: bookings=" + $rep.bookings + " rent=" + $rep.rent + " commission=" + $rep.commission + " (rate " + $rep.commissionRate + "%)")
 
-# 11) staff source report
+# 8) staff source report
 $src = Invoke-RestMethod -Method Get "$BASE/resorts/$rid/reports/sources" -Headers $M
-Write-Host ("11. sources r1: " + (($src.rows | ForEach-Object { "$($_.source)=$($_.bookings)" }) -join ", "))
-
-# 12) guest blocked from reports
-try { Invoke-RestMethod -Method Get "$BASE/resorts/$rid/reports/agents" -Headers $G | Out-Null; Write-Host "12. FAIL" }
-catch { Write-Host ("12. guest reports blocked: HTTP " + $_.Exception.Response.StatusCode.value__) }
+Write-Host ("8. sources r1: " + (($src.rows | ForEach-Object { "$($_.source)=$($_.bookings)" }) -join ", "))
 
 Write-Host ""
 Write-Host "PHASE6 SMOKE COMPLETE"
