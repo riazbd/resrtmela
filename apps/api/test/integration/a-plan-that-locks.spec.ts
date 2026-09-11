@@ -174,12 +174,19 @@ describe("the doors those ticks open", () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 
-  it("keeps API keys shut on a plan without the public API", async () => {
-    await onAPlanWith([]);
+  it("mints no key on any plan, because the resort-website API it would open is gone", async () => {
+    // Every feature ticked, including the ones that still have a door behind
+    // them — proof this refusal is not a plan question any more. `public_api`
+    // sold a key; the door it opened (the resort-website `/v1` API) was
+    // removed in an earlier task, so no plan, however generous, should mint
+    // one that opens nothing.
+    await onAPlanWith([...ALL_PLAN_FEATURES]);
 
     await expect(
       platform().createApiKey(admin, fx.resortId, "My website"),
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(await prisma.apiKey.count({ where: { resortId: fx.resortId } })).toBe(0);
   });
 });
 
@@ -254,6 +261,10 @@ describe("what the console is told", () => {
 });
 
 describe("the shelf", () => {
+  it("does not offer a feature nothing implements any more", () => {
+    expect(ALL_PLAN_FEATURES).not.toContain("public_api");
+  });
+
   /**
    * A lock with no door is worse than no lock: the owner unticks a box, the
    * card stops promising it, and the customer carries on using it. This is the

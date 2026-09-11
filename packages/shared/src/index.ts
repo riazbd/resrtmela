@@ -155,7 +155,12 @@ export const PLAN_FEATURES = [
   { key: "activities", label: "Activities & tours", blurb: "Sell trips and rides alongside the room" },
   { key: "discounts", label: "Discount & offer engine", blurb: "Seasonal rates, offers and coupon rules" },
   { key: "bulk_email", label: "Bulk guest email", blurb: "Write to your whole guest list at once" },
-  { key: "public_api", label: "Public API for your website", blurb: "Show live rooms and rates on your own site" },
+  // `public_api` sold the resort-website `/v1` API, which this branch removed
+  // (see migration 20260911120000_a_feature_that_is_gone). The api_keys table
+  // and its management endpoints stayed for a possible future integration,
+  // but a feature nothing implements does not belong on the shelf: the next
+  // edit of any plan still listing it would fail `isPlanFeature` validation
+  // for a reason nobody reading the panel could act on.
   { key: "payroll", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
   { key: "imports", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
 ] as const;

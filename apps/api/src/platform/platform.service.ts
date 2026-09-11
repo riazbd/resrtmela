@@ -1220,8 +1220,19 @@ export class PlatformService {
   async createApiKey(claims: JwtClaims, resortId: number, name: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "apikeys.manage");
-    // a key is the whole of the public API; issuing one is buying the feature
-    await this.planLimits.requireFeature(resortId, "public_api");
+    // A key is the whole of the public API, and the resort-website `/v1` API
+    // it unlocked is gone (the `public_api` plan feature was removed with it
+    // — see migration 20260911120000_a_feature_that_is_gone). The api_keys
+    // table and the rest of this method's siblings (listApiKeys,
+    // revokeApiKey) stay so existing rows remain visible and revocable, and
+    // so a future resort-website integration has a table to resume into. But
+    // minting a key today would open nothing: "a screen that mints a key
+    // opening nothing is a lie told to a customer." Refuse unconditionally,
+    // for every plan, rather than reinstating a plan-feature gate for a
+    // feature that no longer exists.
+    throw badRequest(
+      "API keys are not available: the resort-website API they unlocked has been removed. None will be issued until that integration returns.",
+    );
     const secret = randomBytes(24).toString("hex");
     const prefix = `rm_live_${randomBytes(4).toString("hex")}`;
     const keyHash = createHash("sha256").update(secret).digest("hex");
