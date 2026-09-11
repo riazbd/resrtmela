@@ -1,16 +1,21 @@
+"use client";
+
+import { useBrand } from "@/lib/brand-context";
+import { DEFAULT_BRAND } from "@/lib/brand";
 import { MARK_PATH, MARK_STROKE, WORDMARK_PATH, WORDMARK_VIEWBOX } from "./logo-paths";
 
 /**
- * Resort Mela's logo.
+ * The logo — the owner's if they have set one, ours if they have not.
  *
- * The mark is two roofs meeting: the M of Mela, the two sides this platform
- * joins — a resort and the agency selling it — and, at a glance, hills with a
- * valley between them. It is one stroke of one weight on a 32 grid, because
- * most of the places a logo is really seen are small: a browser tab is sixteen
- * pixels, and anything fussier than this dissolves there.
+ * Platform → Website CMS holds a name, a square icon and a wide logo. Whatever
+ * is there wins here and in the browser tab, so a platform can be renamed and
+ * re-skinned without a deploy.
  *
- * Both the mark and the wordmark are paths (see `logo-paths.ts`). Nothing here
- * waits on a web font, and the logo is the same shape everywhere it appears.
+ * What ships as the fallback: a mark of two roofs meeting — the M of Mela, the
+ * two sides this platform joins, and at a glance hills with a valley between
+ * them. One stroke of one weight on a 32 grid, because a browser tab is
+ * sixteen pixels and anything fussier dissolves there. The wordmark beside it
+ * is Manrope ExtraBold in outlines (see `logo-paths.ts`), so it needs no font.
  */
 
 type Tone = "brand" | "onDark";
@@ -32,14 +37,30 @@ export function LogoMark({
   decorative?: boolean;
   className?: string;
 }) {
+  const brand = useBrand();
   const onDark = tone === "onDark";
+
+  if (brand.icon) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={brand.icon}
+        width={size}
+        height={size}
+        alt={decorative ? "" : brand.name}
+        className={`rounded-[22%] object-contain ${className}`}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 32 32"
       className={className}
-      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": "Resort Mela" })}
+      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": brand.name })}
     >
       {tile && <rect width="32" height="32" rx="7.5" fill={onDark ? "rgba(255,255,255,0.13)" : INK} />}
       <path
@@ -54,24 +75,39 @@ export function LogoMark({
   );
 }
 
-/** The name, as outlines. `height` is the cap height of the letters, in pixels. */
+/** The name. The owner's wide logo if there is one, else their name, else ours in outlines. */
 export function Wordmark({ height = 18, tone = "brand", className = "" }: { height?: number; tone?: Tone; className?: string }) {
+  const brand = useBrand();
+  const onDark = tone === "onDark";
+
+  if (brand.logo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={brand.logo} alt={brand.name} style={{ height }} className={`block w-auto ${className}`} />
+    );
+  }
+  if (brand.name !== DEFAULT_BRAND.name) {
+    // a renamed platform cannot use our outlines — they spell the old name
+    return (
+      <span
+        className={`block font-extrabold leading-none tracking-tight ${onDark ? "text-white" : "text-brand-700"} ${className}`}
+        style={{ fontSize: Math.round(height * 1.15) }}
+      >
+        {brand.name}
+      </span>
+    );
+  }
   return (
-    <svg
-      height={height}
-      viewBox={WORDMARK_VIEWBOX}
-      className={`block ${className}`}
-      role="img"
-      aria-label="Resort Mela"
-    >
-      <path d={WORDMARK_PATH} fill={tone === "onDark" ? "#fff" : INK} />
+    <svg height={height} viewBox={WORDMARK_VIEWBOX} className={`block ${className}`} role="img" aria-label={brand.name}>
+      <path d={WORDMARK_PATH} fill={onDark ? "#fff" : INK} />
     </svg>
   );
 }
 
 /**
  * The lockup: mark, a fixed gap, the name — and an optional line under it
- * ("Admin Console", "Resort management platform").
+ * ("Admin Console", "Resort management platform"). An owner's wide logo
+ * replaces the pair, since it already contains both.
  */
 export function Logo({
   size = 36,
@@ -86,16 +122,30 @@ export function Logo({
   className?: string;
   subClassName?: string;
 }) {
+  const brand = useBrand();
+  const subLine = sub && (
+    <span className={`mt-1 block text-[10px] ${tone === "onDark" ? "text-brand-200" : "text-slate-400"} ${subClassName}`}>
+      {sub}
+    </span>
+  );
+
+  if (brand.logo) {
+    return (
+      <span className={`flex items-center ${className}`}>
+        <span>
+          <Wordmark height={size * 0.75} tone={tone} />
+          {subLine}
+        </span>
+      </span>
+    );
+  }
+
   return (
     <span className={`flex items-center gap-2.5 ${className}`}>
       <LogoMark size={size} tone={tone} decorative />
       <span>
         <Wordmark height={Math.round(size * 0.5)} tone={tone} />
-        {sub && (
-          <span className={`mt-1 block text-[10px] ${tone === "onDark" ? "text-brand-200" : "text-slate-400"} ${subClassName}`}>
-            {sub}
-          </span>
-        )}
+        {subLine}
       </span>
     </span>
   );

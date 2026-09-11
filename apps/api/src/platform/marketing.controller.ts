@@ -28,6 +28,12 @@ export class MarketingController {
     return this.platform.publicPlans(audience === "AGENCY" ? "AGENCY" : "RESORT");
   }
 
+  /** The platform's name, icon and logo, for the pages and the browser tab. */
+  @Get("brand")
+  brand() {
+    return this.platform.publicBrand();
+  }
+
   /** How many agencies are verified and selling — resort onboarding shows it before asking. */
   @Get("agencies/count")
   agencies() {

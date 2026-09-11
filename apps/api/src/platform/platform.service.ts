@@ -16,6 +16,7 @@ import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE, sameEmail, sa
 import { signToken } from "../common/auth.guard";
 import { randomBytes } from "node:crypto";
 import type { OfferInput } from "../common/offers";
+import { assertBrandValue, BRAND_KEYS, isBrandKey, type BrandKey } from "../common/brand";
 import * as bcrypt from "bcryptjs";
 
 /**
@@ -1812,6 +1813,19 @@ export class PlatformService {
     return this.prisma.cmsSetting.findMany({ orderBy: { key: "asc" } });
   }
 
+  /**
+   * The platform's own name, icon and logo — whatever the owner has set.
+   *
+   * Every page that wears the brand reads this, so changing it is a save in
+   * Platform → Website CMS and a reload, never a deploy. Null means "nothing
+   * set": the console falls back to the mark it ships with.
+   */
+  async publicBrand(): Promise<{ name: string | null; icon: string | null; logo: string | null }> {
+    const rows = await this.prisma.cmsSetting.findMany({ where: { key: { in: [...BRAND_KEYS] } } });
+    const get = (k: BrandKey) => rows.find((r) => r.key === k)?.value.trim() || null;
+    return { name: get("brand.name"), icon: get("brand.icon"), logo: get("brand.logo") };
+  }
+
   /** public homepage content map (no auth) */
   async publicCms(): Promise<Record<string, string>> {
     const rows = await this.prisma.cmsSetting.findMany();
@@ -1851,6 +1865,9 @@ export class PlatformService {
   async putCms(claims: JwtClaims, key: string, value: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!/^[a-z0-9_.]{2,60}$/.test(key)) throw badRequest("key must be lowercase letters, digits, dot or underscore");
+    // the brand rows hold an uploaded image, so they carry their own rules
+    if (isBrandKey(key)) assertBrandValue(key, value);
+    else if (value.length > 8 * 1024) throw badRequest("That text is too long — the limit is 8KB.");
     const row = await this.prisma.cmsSetting.upsert({
       where: { key },
       update: { value },

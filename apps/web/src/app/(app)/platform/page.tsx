@@ -1533,6 +1533,161 @@ function PolicyTab() {
   );
 }
 
+/**
+ * The platform's own brand.
+ *
+ * A name, a square icon for the browser tab, and a wide logo. They are CMS
+ * rows, so this screen is the only place they are set — no deploy, and no
+ * file checked into the repository. Empty means the built-in mark.
+ */
+function BrandCard() {
+  const { push } = useToast();
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState<string | null>(null);
+  const [logo, setLogo] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<CmsRow[]>("/platform/cms")
+      .then((rows) => {
+        const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+        setName(m["brand.name"] ?? "");
+        setIcon(m["brand.icon"] || null);
+        setLogo(m["brand.logo"] || null);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => load(), [load]);
+
+  async function save(key: string, value: string, ok: string) {
+    setBusy(key);
+    try {
+      await api("/platform/cms", { method: "POST", body: { key, value } });
+      push(ok);
+      load();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function upload(key: "brand.icon" | "brand.logo", file: File | undefined) {
+    if (!file) return;
+    const dataUrl = await new Promise<string | null>((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(file);
+    });
+    if (!dataUrl) {
+      push("That file could not be read", "err");
+      return;
+    }
+    await save(key, dataUrl, key === "brand.icon" ? "Icon saved — reload to see the browser tab change" : "Logo saved — reload to see it");
+  }
+
+  const filePicker = (key: "brand.icon" | "brand.logo", label: string) => (
+    <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+      {busy === key ? "Saving…" : label}
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon"
+        className="hidden"
+        onChange={(e) => {
+          void upload(key, e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+    </label>
+  );
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 text-lg font-bold text-slate-900">
+        <Globe className="h-5 w-5 text-brand-500" /> Brand
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        The name, the browser-tab icon and the logo. Set here, used everywhere — no deploy. Leave a thing empty and the
+        built-in mark is used.
+      </p>
+
+      <div className="mt-4 flex items-end gap-2">
+        <label className="flex-1">
+          <span className="text-xs font-semibold text-slate-500">Platform name <code className="text-[10px] text-slate-300">brand.name</code></span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Resort Mela"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+        <Btn size="sm" loading={busy === "brand.name"} onClick={() => save("brand.name", name, "Name saved")}>Save</Btn>
+      </div>
+
+      <div className="mt-5 grid gap-5 sm:grid-cols-2">
+        <div>
+          <div className="text-xs font-semibold text-slate-500">Icon — the browser tab, and the tile in the sidebar</div>
+          <div className="mt-2 flex items-center gap-3">
+            {icon ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={icon} alt="" className="h-12 w-12 rounded-[22%] object-contain ring-1 ring-slate-200" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={icon} alt="" className="h-4 w-4 rounded-[22%] object-contain" />
+              </>
+            ) : (
+              <span className="text-xs text-slate-400">Using the built-in mark</span>
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            {filePicker("brand.icon", icon ? "Replace…" : "Upload…")}
+            {icon && (
+              <button
+                onClick={() => void save("brand.icon", "", "Back to the built-in mark")}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Use the default
+              </button>
+            )}
+          </div>
+          <div className="mt-1 text-[10px] text-slate-400">Square, SVG or PNG. Up to ~70KB.</div>
+        </div>
+
+        <div>
+          <div className="text-xs font-semibold text-slate-500">Logo — replaces the mark and name together</div>
+          <div className="mt-2 flex items-center gap-3">
+            {logo ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logo} alt="" className="h-8 w-auto" />
+                <span className="rounded-lg bg-brand-900 px-3 py-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logo} alt="" className="h-6 w-auto" />
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-slate-400">Using the built-in lockup</span>
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            {filePicker("brand.logo", logo ? "Replace…" : "Upload…")}
+            {logo && (
+              <button
+                onClick={() => void save("brand.logo", "", "Back to the built-in lockup")}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Use the default
+              </button>
+            )}
+          </div>
+          <div className="mt-1 text-[10px] text-slate-400">Wide, on a transparent background. Up to ~190KB.</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function CmsTab() {
   const { push } = useToast();
   const [rows, setRows] = useState<CmsRow[]>([]);
@@ -1562,6 +1717,7 @@ function CmsTab() {
 
   return (
     <div className="mt-5 max-w-2xl space-y-4">
+      <BrandCard />
       <Card className="p-5">
         <div className="flex items-center gap-2 text-lg font-bold text-slate-900"><Globe className="h-5 w-5 text-brand-500" /> Front-end CMS</div>
         <p className="mt-1 text-xs text-slate-500">Edit the public homepage text without a deploy. Empty fields fall back to the built-in defaults.</p>

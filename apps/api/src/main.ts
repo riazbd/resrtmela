@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigModule } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { corsOrigins } from "./common/cors";
@@ -33,7 +34,7 @@ async function bootstrap() {
     process.exit(1);
   });
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   console.log(
     eventLogLine("info", "boot", {
       cwd: process.cwd(),
@@ -44,6 +45,16 @@ async function bootstrap() {
     }),
   );
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  /**
+   * Express defaults to 100KB of JSON, which is less than a logo.
+   *
+   * The platform's own brand is set from the console by picking a file, and
+   * the file travels as a `data:` URL inside the request — so the default
+   * refused the upload with a 413 before any of our own limits were reached.
+   * `common/brand.ts` holds the real caps (96KB for an icon, 256KB for a
+   * logo); this only has to be bigger than those.
+   */
+  app.useBodyParser("json", { limit: "1mb" });
   /**
    * One hop of reverse proxy, so `req.ip` is the caller and not nginx.
    *
