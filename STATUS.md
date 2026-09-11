@@ -45,7 +45,7 @@ everything else here is critical.
 product other people can buy and someone can run. That is what this pass
 addressed, and what remains.
 
-Current state: **678 API tests** across 72 files (34 at the start of all this,
+Current state: **728 API tests** across 73 files (34 at the start of all this,
 all of them pure unit tests) plus **100 front-end tests**. Four packages
 typecheck clean — the fifth, mobile, is deliberately frozen out of the pipeline
 (§3.27) — the console builds, and the repository can be provisioned from an
@@ -1372,12 +1372,47 @@ catches up.
 Before running it: `SHOW CREATE TABLE users` on production, to see the
 column's actual collation (checked here against every database this branch
 touched, not against production's). Then count how many phones collide once
-normalised to the canonical form the migration computes — two spellings of the
-same number are left as they are, not merged, so a row like that keeps its old
-shape rather than gaining the placeholder-safe one. The baseline dry run shows
-neither of these: `baseline-db.mjs` classes this migration data-only from its
-DDL alone and does not inspect what the data actually is, so both checks are
-manual, and the count from the dry run here is not a production number.
+normalised to the canonical form the migration computes, with the read-only
+form of the same query the migration's own `UPDATE` joins against
+(`migration.sql`'s `by_number` derived table, minus the write):
+
+```sql
+SELECT canon, COUNT(*) AS holders
+FROM (
+  SELECT
+    CASE
+      WHEN d LIKE '880%' AND CHAR_LENGTH(d) >= 13 THEN LEFT(d, 13)
+      WHEN d LIKE '880%' THEN d
+      WHEN CHAR_LENGTH(d) = 11 AND d LIKE '0%' THEN CONCAT('880', SUBSTRING(d, 2))
+      WHEN CHAR_LENGTH(d) = 10 THEN CONCAT('880', d)
+      ELSE d
+    END AS canon
+  FROM (
+    SELECT REGEXP_REPLACE(phone, '[^0-9]', '') AS d
+    FROM users
+    WHERE phone IS NOT NULL AND TRIM(phone) <> '' AND phone NOT LIKE 'placeholder-%'
+  ) AS digits
+) AS every_row
+GROUP BY canon
+HAVING COUNT(*) > 1;
+```
+
+A group this returns is two (or more) spellings of the same number, on
+different accounts — the migration leaves every row in it exactly as spelled,
+rather than merging accounts or guessing which one is right. Two spellings of
+the same number are left as they are, not merged, so a row like that keeps its
+old shape rather than gaining the placeholder-safe one. **What that costs:**
+neither twin can sign in with the canonical form of the number, and neither
+can ask for a reset by phone — only by whichever spelling is actually stored,
+or by email if the account has one. **The remedy is a manual one, already
+open:** an admin sets one twin's phone to the canonical number from the team
+edit form; `contactTaken` allows it, because neither twin holds the canonical
+form yet, so nothing collides at the moment of the edit. The other twin still
+needs its own fix. The baseline dry run shows neither the collation nor this
+count: `baseline-db.mjs` classes this migration data-only from its DDL alone
+and does not inspect what the data actually is, so both checks are manual, and
+the count from a dry run here (against a database this branch's specs and
+scratch tables touched) is not a production number.
 
 `packages/db/prisma/seed.ts` cannot run on this branch — it imports
 `BookingSource` as a Prisma enum, which `6caad88` (before this branch) turned
@@ -1418,7 +1453,7 @@ expected, the app is retired (§3.32), not merely frozen.
 ```
 pnpm install
 pnpm -F @rh/api test:setup     # creates resorthub_test and migrates it
-pnpm -F @rh/api test           # 678 tests against a real MySQL
+pnpm -F @rh/api test           # 728 tests against a real MySQL
 pnpm -F @rh/web test           # 117 tests, jsdom
 pnpm typecheck                 # four packages; mobile is frozen (§3.27)
 pnpm dev                       # api :4000, web :3000

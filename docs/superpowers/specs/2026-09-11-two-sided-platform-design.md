@@ -219,6 +219,17 @@ placeholder for the field it lacked (`user-<id>@placeholder.invalid` for email,
 or a number anyone can be reached at — the console shows it as "not set" rather
 than a value, and an admin replaces it from the team edit form.
 
+An accepted trade-off, not an oversight: signup answers 409 on a taken email,
+the same way it already did on a taken phone, and either tells a stranger that
+an account with that address exists — the one thing the forgot-password
+endpoint is built never to reveal, answering identically for a known and an
+unknown identifier. Signup cannot buy that same silence without lying about
+why the attempt failed, and a person mid-signup is owed the true reason
+("sign in instead") more than a stranger is owed the absence of that signal.
+The two endpoints are allowed to disagree here because they are answering
+different questions — signup already vouches this is your own attempt, and
+forgot-password can never assume that.
+
 ### 4.5 Consequences to follow through
 
 - `public_api` leaves `PLAN_FEATURES` **and** every plan row that lists it.
