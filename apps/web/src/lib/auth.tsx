@@ -9,6 +9,14 @@ interface AuthState {
   activeResort: Resort | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<Me>;
+  /**
+   * Adopts an access token this component did not itself request — signup's
+   * own POST mints one just as validly as a login does. Stores it, loads
+   * `/auth/me`, activates the first resort and remembers it, and hands back
+   * `me` so the caller can route somewhere that is actually theirs. `login`
+   * is this plus the POST that gets the token in the first place.
+   */
+  adoptToken: (accessToken: string) => Promise<Me>;
   logout: () => void;
   setActiveResort: (r: Resort) => void;
   role: string;
@@ -99,12 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [me, activeResort, permTick]);
 
-  const login = useCallback(async (identifier: string, password: string) => {
-    const res = await api<{ accessToken: string }>("/auth/login", {
-      method: "POST",
-      body: { identifier, password },
-    });
-    setToken(res.accessToken);
+  const adoptToken = useCallback(async (accessToken: string) => {
+    setToken(accessToken);
     const meData = await api<Me>("/auth/me");
     setMe(meData);
     const resort = meData.resorts.map((r) => r.resort)[0] ?? null;
@@ -114,6 +118,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // set here is not readable until the next render
     return meData;
   }, []);
+
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      const res = await api<{ accessToken: string }>("/auth/login", {
+        method: "POST",
+        body: { identifier, password },
+      });
+      return adoptToken(res.accessToken);
+    },
+    [adoptToken],
+  );
 
   const logout = useCallback(() => {
     setToken(null);
@@ -168,6 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       activeResort,
       loading,
       login,
+      adoptToken,
       logout,
       setActiveResort,
       role: me?.role ?? "",
@@ -182,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       can,
       refreshPerms: () => setPermTick((t) => t + 1),
     }),
-    [me, activeResort, loading, login, logout, setActiveResort, impersonate, exitImpersonation, perms, features, can],
+    [me, activeResort, loading, login, adoptToken, logout, setActiveResort, impersonate, exitImpersonation, perms, features, can],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

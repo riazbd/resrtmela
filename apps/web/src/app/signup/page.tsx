@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, setToken, API_URL } from "@/lib/api";
+import { api, API_URL } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 
@@ -21,6 +23,7 @@ interface PublicPlan {
 
 export default function SignupPage() {
   const router = useRouter();
+  const { adoptToken } = useAuth();
   const [step, setStep] = useState(1);
   const [companyName, setCompanyName] = useState("");
   const [resortName, setResortName] = useState("");
@@ -77,8 +80,13 @@ export default function SignupPage() {
           slug: effectiveSlug || undefined,
         },
       });
-      setToken(res.accessToken);
-      router.replace("/dashboard");
+      // adoptToken loads /auth/me and activates the first resort — the same
+      // thing login does after its own POST. Without it the console's own
+      // AuthProvider never learns who just signed up, and consoleGate (which
+      // only knows `me` from that provider) sends the brand-new owner
+      // straight back to /login.
+      const me = await adoptToken(res.accessToken);
+      router.replace(landingFor(me.role));
     } catch (ex) {
       setErr((ex as Error).message);
       setBusy(false);
