@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, JwtClaims, isPermissionKey, isPlanFeature, formatMoney, ALL_PERMISSIONS } from "@rh/shared";
+import { ROLE, JwtClaims, isPermissionKey, isPlanFeature, formatMoney, ALL_PERMISSIONS, PLAN_AUDIENCES, planFeaturesFor } from "@rh/shared";
 import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
@@ -45,6 +45,8 @@ export interface PlanInput {
   trialDays: number;
   /** Keys from `PLAN_FEATURES` — what this plan includes. */
   features?: string[];
+  /** RESORT | AGENCY — the shelf the plan is sold from. */
+  audience?: string;
   maxStaff?: number;
   blurb?: string | null;
   sortOrder?: number;
@@ -93,6 +95,15 @@ function assertWholeNumber(value: number, field: string, min: number, max: numbe
   }
 }
 
+/** A feature is for one shelf: "Restaurant POS" is not a thing an agency can buy. */
+function assertShelf(audience: string, features: string[]) {
+  const allowed = new Set(planFeaturesFor(audience));
+  const wrong = features.filter((k) => isPlanFeature(k) && !allowed.has(k));
+  if (wrong.length) {
+    throw badRequest(`Not sold to ${audience === "AGENCY" ? "agencies" : "resorts"}: ${wrong.join(", ")}`);
+  }
+}
+
 function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean }) {
   if (creating) {
     if (!input.name || !PLAN_NAME.test(input.name)) {
@@ -101,6 +112,10 @@ function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean })
     for (const required of ["label", "monthlyFee", "maxRooms", "maxResorts", "trialDays"] as const) {
       if (input[required] == null) throw badRequest(`${required} is required`);
     }
+  }
+
+  if (input.audience != null && !(PLAN_AUDIENCES as readonly string[]).includes(input.audience)) {
+    throw badRequest("A plan is sold to RESORT or AGENCY");
   }
 
   if (input.label != null) {
@@ -235,6 +250,48 @@ export class PlatformService {
       },
       orderBy: { id: "asc" },
     });
+  }
+
+  /**
+   * The agencies — the second customer. Pending ones are the platform owner's
+   * queue: verification is now the only gate between an agency and every open
+   * resort, so it is the one that has to be real (2026-09-11 design, §6.2).
+   */
+  async agencies(claims: JwtClaims, status?: string) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.tenant.findMany({
+      where: { kind: "AGENCY", ...(status ? { status } : {}) },
+      select: {
+        id: true, name: true, status: true, suspendedReason: true, createdAt: true,
+        users: {
+          where: { role: "AGENT", parentAgentId: null },
+          take: 1,
+          select: { id: true, name: true, email: true, phone: true },
+        },
+        subscriptions: { orderBy: { id: "desc" }, take: 1, select: { plan: true, status: true, trialEndsAt: true } },
+      },
+      orderBy: { id: "desc" },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      name: a.name,
+      status: a.status,
+      suspendedReason: a.suspendedReason,
+      createdAt: a.createdAt,
+      owner: a.users[0] ?? null,
+      subscription: a.subscriptions[0] ?? null,
+    }));
+  }
+
+  /** Verified once, it sells every open resort — not once per resort. */
+  async verifyAgency(claims: JwtClaims, accountId: number) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const account = await this.prisma.tenant.findUnique({ where: { id: accountId }, select: { kind: true, status: true } });
+    if (!account || account.kind !== "AGENCY") throw badRequest("not an agency");
+    if (account.status !== "pending") throw badRequest(`This agency is ${account.status}, not waiting for verification.`);
+    const updated = await this.prisma.tenant.update({ where: { id: accountId }, data: { status: "active" } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.agency.verify", entity: "tenant", entityId: accountId });
+    return { id: updated.id, name: updated.name, status: updated.status };
   }
 
   async allAgents(claims: JwtClaims) {
@@ -379,6 +436,13 @@ export class PlatformService {
       throw badRequest(`Unknown plan "${input.plan}". On sale: ${onSale.map((p) => p.name).join(", ")}`);
     }
     if (!def.active) throw badRequest(`Plan "${def.label}" is not available`);
+    // one machine, two shelves: an agency is never put on a resort plan, nor a resort on an agency one
+    const account = await this.prisma.tenant.findUnique({ where: { id: accountId }, select: { kind: true } });
+    if (!account) throw badRequest("account not found");
+    const shelf = account.kind === "AGENCY" ? "AGENCY" : "RESORT";
+    if (def.audience !== shelf) {
+      throw badRequest(`${def.label} is sold to ${def.audience === "AGENCY" ? "agencies" : "resorts"}; this account is ${shelf === "AGENCY" ? "an agency" : "a resort owner"}.`);
+    }
     const now = new Date();
 
     /**
@@ -465,6 +529,7 @@ export class PlatformService {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
     assertPlanFields(input, { creating: true });
+    assertShelf(input.audience ?? "RESORT", input.features ?? []);
 
     if (await this.prisma.platformPlan.findUnique({ where: { name: input.name } })) {
       throw badRequest(`A plan named ${input.name} already exists`);
@@ -479,6 +544,7 @@ export class PlatformService {
         maxResorts: input.maxResorts,
         maxStaff: input.maxStaff ?? 1,
         trialDays: input.trialDays,
+        audience: input.audience ?? "RESORT",
         features: (input.features ?? []) as never,
         blurb: input.blurb?.trim() || null,
         sortOrder: input.sortOrder ?? 0,
@@ -507,6 +573,14 @@ export class PlatformService {
       throw badRequest("A plan's name is fixed — subscriptions point at it by name. Change the label instead.");
     }
     assertPlanFields(input, { creating: false });
+    const current = await this.prisma.platformPlan.findUnique({ where: { name } });
+    if (!current) throw badRequest("No such plan");
+    if (input.audience != null && input.audience !== current.audience) {
+      // the accounts already on it would be left on the wrong shelf
+      const sold = await this.prisma.subscription.count({ where: { plan: name, status: { not: "CANCELLED" } } });
+      if (sold > 0) throw badRequest(`${sold} account(s) are on this plan — a plan that has been sold cannot move shelf.`);
+    }
+    assertShelf(input.audience ?? current.audience, input.features ?? (Array.isArray(current.features) ? (current.features as string[]) : []));
 
     const plan = await this.prisma.platformPlan.update({
       where: { name },
@@ -517,6 +591,7 @@ export class PlatformService {
         ...(input.maxStaff != null ? { maxStaff: input.maxStaff } : {}),
         ...(input.trialDays != null ? { trialDays: input.trialDays } : {}),
         ...(input.features != null ? { features: input.features as never } : {}),
+        ...(input.audience != null ? { audience: input.audience } : {}),
         ...(input.label != null ? { label: input.label } : {}),
         ...(input.blurb != null ? { blurb: input.blurb.trim() || null } : {}),
         ...(input.sortOrder != null ? { sortOrder: input.sortOrder } : {}),
@@ -853,6 +928,10 @@ export class PlatformService {
         passwordHash: await bcrypt.hash(input.password, 12),
         role: input.role as never,
         status: isAgent ? "pending" : "active",
+        // an agency is a customer with an account of its own; this one was
+        // vouched for by the resort that added it, so it is not held for
+        // platform verification the way a self-signed-up agency is
+        ...(isAgent ? { account: { create: { name: input.name, slug: `agency-${randomBytes(5).toString("hex")}`, kind: "AGENCY", status: "active" } } } : {}),
       },
     });
     await this.prisma.userResort.create({
@@ -1428,6 +1507,8 @@ export class PlatformService {
           passwordHash: await bcrypt.hash(tempPassword, 12),
           role: "AGENT",
           status: "pending",
+          // its own agency account, vouched for by the inviting resort
+          account: { create: { name: input.name?.trim() || to, slug: `agency-${randomBytes(5).toString("hex")}`, kind: "AGENCY", status: "active" } },
         },
       }));
     await this.prisma.userResort.create({
@@ -1497,6 +1578,10 @@ export class PlatformService {
     if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
     // copy the agency's approved resort links so staff book at the same resorts
     const myLinks = await this.prisma.userResort.findMany({ where: { userId: claims.userId } });
+    // staff sell for their agency's account — verified, billed and stopped with it
+    const agency = claims.role === ROLE.AGENT
+      ? await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { accountId: true } })
+      : null;
     const user = await this.prisma.user.create({
       data: {
         name: input.name,
@@ -1507,6 +1592,7 @@ export class PlatformService {
         status: "active",
         // whose staff this is; an agency itself has no parent
         parentAgentId: claims.role === ROLE.AGENT ? claims.userId : null,
+        accountId: agency?.accountId ?? null,
       },
     });
     for (const link of myLinks) {
@@ -1582,9 +1668,9 @@ export class PlatformService {
    * Only what is actually being sold: an inactive plan is one the owner has
    * stopped offering, and it should leave the page when they say so.
    */
-  async publicPlans() {
+  async publicPlans(audience: "RESORT" | "AGENCY" = "RESORT") {
     const rows = await this.prisma.platformPlan.findMany({
-      where: { active: true },
+      where: { active: true, audience },
       orderBy: { sortOrder: "asc" },
       select: {
         name: true, label: true, monthlyFee: true,

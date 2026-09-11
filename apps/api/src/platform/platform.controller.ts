@@ -40,6 +40,7 @@ class PlanDto {
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsBoolean() highlight?: boolean;
+  @IsOptional() @IsString() @MaxLength(16) audience?: string;
 }
 
 /** The same, with everything optional — `name` included, so a rename is refused rather than ignored. */
@@ -56,6 +57,7 @@ class PlanPatchDto {
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsBoolean() active?: boolean;
   @IsOptional() @IsBoolean() highlight?: boolean;
+  @IsOptional() @IsString() @MaxLength(16) audience?: string;
 }
 
 /** The owner asking to move plan. The plan table decides whether it exists. */
@@ -217,6 +219,12 @@ export class PlatformController {
   /** Subscription dues and one-off charges together — what each tenant owes. */
   @Get("platform/outstanding") outstanding(@Req() req: AuthedRequest) {
     return this.platform.outstanding(req.user);
+  }
+  @Get("platform/agencies") agencies(@Req() req: AuthedRequest, @Query("status") status?: string) {
+    return this.platform.agencies(req.user, status);
+  }
+  @Post("platform/agencies/:id/verify") verifyAgency(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.platform.verifyAgency(req.user, id);
   }
 
   @Get("platform/charges") charges(@Req() req: AuthedRequest, @Query("resortId") resortId?: string, @Query("status") status?: string) {

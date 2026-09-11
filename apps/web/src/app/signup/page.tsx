@@ -115,6 +115,9 @@ export default function SignupPage() {
           <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">R</div>
           <h1 className="text-xl font-bold text-slate-900">Create your workspace</h1>
           <p className="mt-1 text-xs text-slate-500">Step {step} of 3{entryLine ? ` · ${entryLine}` : ""} · no card needed</p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            A travel agency? <a href="/signup/agency" className="font-semibold text-brand-700 hover:underline">Sign up as an agency</a>
+          </p>
         </div>
 
         <div className="mb-6 flex gap-1.5">

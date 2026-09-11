@@ -1,4 +1,4 @@
-import { Controller, Get, Inject } from "@nestjs/common";
+import { Controller, Get, Inject, Query } from "@nestjs/common";
 import { PlatformService } from "./platform.service";
 
 /**
@@ -18,9 +18,13 @@ export class MarketingController {
     return this.platform.publicCms();
   }
 
-  /** The price list the homepage quotes — the same rows Platform → Plans edits. */
+  /**
+   * The price list the homepage quotes — the same rows Platform → Plans edits.
+   * Resort plans unless asked for the agency shelf (`?audience=AGENCY`), which
+   * is what agency signup shows.
+   */
   @Get("plans")
-  plans() {
-    return this.platform.publicPlans();
+  plans(@Query("audience") audience?: string) {
+    return this.platform.publicPlans(audience === "AGENCY" ? "AGENCY" : "RESORT");
   }
 }

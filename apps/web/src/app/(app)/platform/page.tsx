@@ -13,6 +13,7 @@ import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircl
 import { monthOf } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
 import { displayPhone } from "@/lib/contact";
+import { AgencyQueue } from "./agency-queue";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -62,6 +63,8 @@ interface PlanDef {
   sortOrder: number;
   /** The one plan the pricing page recommends. */
   highlight: boolean;
+  /** RESORT | AGENCY — the shelf it is sold from. */
+  audience: string;
 }
 
 /** Every field the panel can send. `name` is absent on purpose: it is fixed. */
@@ -77,6 +80,8 @@ type PlanEdit = {
   active: boolean;
   sortOrder: number;
   highlight: boolean;
+  /** RESORT | AGENCY. Fixed once the plan has been sold — the API refuses a move. */
+  audience: string;
 };
 
 interface DueRow {
@@ -382,6 +387,7 @@ export default function PlatformPage() {
       )}
 
       {/* ── agents ── */}
+      {tab === "Agents" && <div className="mt-5"><AgencyQueue /></div>}
       {tab === "Agents" && agents && (
         <Card className="mt-5 overflow-x-auto">
           <table className="w-full text-sm">
@@ -810,11 +816,18 @@ function NumField({ label, value, min, onChange }: { label: string; value: numbe
  * locks on and what the public pricing card prints. One vocabulary, three
  * readers — so a box unticked here is a door shut there, and neither can drift.
  */
-function FeaturePicker({ chosen, onToggle }: { chosen: string[]; onToggle: (key: string) => void }) {
+function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onToggle: (key: string) => void; audience: string }) {
+  // a feature belongs to one shelf: the restaurant is not a thing an agency can buy
+  const shelf = PLAN_FEATURES.filter((f) => f.audience === audience);
   return (
     <div className="space-y-1.5">
       <div className="text-[11px] font-semibold text-slate-500">What this plan includes</div>
-      {PLAN_FEATURES.map((f) => (
+      {shelf.length === 0 && (
+        <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] text-slate-500">
+          No agency features yet — an agency plan sells selling itself for now; tools arrive with their own locks.
+        </div>
+      )}
+      {shelf.map((f) => (
         <label key={f.key} className="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50">
           <input
             type="checkbox"
@@ -845,6 +858,7 @@ function toEdit(plan: PlanDef): PlanEdit {
     active: plan.active,
     sortOrder: plan.sortOrder,
     highlight: plan.highlight,
+    audience: plan.audience ?? "RESORT",
   };
 }
 
@@ -878,6 +892,7 @@ function PlanCard({
         <div>
           <div className="text-lg font-bold text-slate-900">{form.label || plan.name}</div>
           <div className="font-mono text-[10px] uppercase tracking-wide text-slate-400">{plan.name}</div>
+          <div className="mt-0.5 text-[10px] font-bold text-slate-500">{plan.audience === "AGENCY" ? "Agency plan" : "Resort plan"}</div>
         </div>
         <button
           onClick={() => set("active", !form.active)}
@@ -930,7 +945,7 @@ function PlanCard({
           </span>
         </label>
 
-        <FeaturePicker chosen={form.features} onToggle={toggle} />
+        <FeaturePicker chosen={form.features} onToggle={toggle} audience={form.audience} />
 
         <div className="flex gap-2">
           <button
@@ -970,6 +985,7 @@ const BLANK_PLAN: PlanEdit & { name: string } = {
   active: true,
   sortOrder: 0,
   highlight: false,
+  audience: "RESORT",
 };
 
 function NewPlanCard({
@@ -1007,6 +1023,18 @@ function NewPlanCard({
     <Card className="p-5">
       <div className="text-lg font-bold text-slate-900">New plan</div>
       <div className="mt-4 space-y-3">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-slate-500">Sold to — a resort never sees an agency plan, and an agency never sees a resort plan</span>
+          <select
+            value={form.audience}
+            // a feature belongs to one shelf, so a change of shelf clears the ticks
+            onChange={(e) => setForm((f) => ({ ...f, audience: e.target.value, features: [] }))}
+            className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm"
+          >
+            <option value="RESORT">Resorts</option>
+            <option value="AGENCY">Travel agencies</option>
+          </select>
+        </label>
         <label className="block">
           <span className="text-[11px] font-semibold text-slate-500">Name — fixed once saved, because subscriptions point at it</span>
           <input
@@ -1060,6 +1088,7 @@ function NewPlanCard({
 
         <FeaturePicker
           chosen={form.features}
+          audience={form.audience}
           onToggle={(key) =>
             setForm((f) => ({
               ...f,

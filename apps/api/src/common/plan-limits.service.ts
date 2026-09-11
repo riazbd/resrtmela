@@ -108,7 +108,10 @@ export class PlanLimitsService {
 
     // `Tenant.plan` used to be consulted here as a second answer. It diverged
     // from the subscription the first time a plan changed, and it is gone.
-    return this.cheapestOnSale();
+    // An account with no subscription is held to the cheapest plan on its own
+    // shelf — an agency is never measured against a resort plan.
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { kind: true } });
+    return this.cheapestOnSale(tenant?.kind === "AGENCY" ? "AGENCY" : "RESORT");
   }
 
   private async planByName(name: string): Promise<Omit<PlanLimits, "source"> | null> {
@@ -167,9 +170,9 @@ export class PlanLimitsService {
    * same, and when they are not, the platform's own price list is a better
    * statement of intent than picking the smallest number.
    */
-  private async cheapestOnSale(): Promise<PlanLimits> {
+  private async cheapestOnSale(audience: "RESORT" | "AGENCY" = "RESORT"): Promise<PlanLimits> {
     const plan = await this.prisma.platformPlan.findFirst({
-      where: { active: true },
+      where: { active: true, audience },
       orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
     });
     if (!plan) {
@@ -187,9 +190,10 @@ export class PlanLimitsService {
   }
 
   /** Every plan the platform is currently selling, cheapest first. */
-  async onSale() {
+  /** The plans on one shelf. A resort's screens ask for RESORT and never see an agency plan. */
+  async onSale(audience: "RESORT" | "AGENCY" = "RESORT") {
     return this.prisma.platformPlan.findMany({
-      where: { active: true },
+      where: { active: true, audience },
       orderBy: [{ sortOrder: "asc" }, { monthlyFee: "asc" }],
     });
   }

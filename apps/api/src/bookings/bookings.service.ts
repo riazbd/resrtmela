@@ -189,6 +189,34 @@ export class BookingsService {
     return this.tax.rulesFor(resortId);
   }
 
+  /**
+   * An agency sells only while the platform says it may (2026-09-11 design, §6).
+   *
+   * Pending: signed up, not yet verified — it can look around, not sell.
+   * Suspended: behind on its bill (or stopped by the platform) — it stops
+   * selling, and only that. This guards new bookings and nothing else, so what
+   * it already sold stays live, readable and honoured: the guest did nothing
+   * wrong, and the resort is expecting them.
+   */
+  private async assertAgencyMaySell(agentUserId: number): Promise<void> {
+    const agent = await this.prisma.user.findUnique({
+      where: { id: agentUserId },
+      select: { account: { select: { status: true, suspendedReason: true } }, parentAgent: { select: { account: { select: { status: true, suspendedReason: true } } } } },
+    });
+    const account = agent?.account ?? agent?.parentAgent?.account ?? null;
+    // every agency was given an account when accounts arrived; one without is
+    // older than that and was admitted by the resorts it sells for
+    if (!account || account.status === "active") return;
+    if (account.status === "pending") {
+      throw forbid("This agency has not been verified yet. The platform verifies each agency once — until then it can look around, but not sell.");
+    }
+    throw forbid(
+      account.suspendedReason === "billing"
+        ? "This agency's account is suspended for an unpaid bill, so it cannot make new bookings. Bookings it has already made are unaffected."
+        : "This agency's account is suspended, so it cannot make new bookings. Bookings it has already made are unaffected.",
+    );
+  }
+
   async create(claims: JwtClaims, input: CreateBookingInput) {
     requireSellingAccess(claims, input.resortId);
     await this.tenantState.assertWritable(input.resortId);
@@ -207,6 +235,7 @@ export class BookingsService {
     if (isAgent) {
       const agent = await this.prisma.user.findUnique({ where: { id: claims.userId }, select: { status: true } });
       if (agent?.status !== "active") throw forbid("Agent account is not activated yet — ask the resort to activate");
+      await this.assertAgencyMaySell(claims.userId);
       // live access check (token may be stale after approval)
       const linked = await this.prisma.userResort.findFirst({ where: { userId: claims.userId, resortId: input.resortId } });
       if (!linked) throw forbid("No access to this resort — request access from the resorts page");

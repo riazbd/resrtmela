@@ -99,6 +99,10 @@ model Tenant {
   subscriptions    Subscription[]
   subscriptionDues SubscriptionDue[]
 
+  /// The people who sign in for this account. Only agencies use it so far: a
+  /// resort owner's people are reached through its resorts.
+  users User[] @relation("AccountUsers")
+
   @@map("tenants")
 }
 
@@ -205,6 +209,11 @@ model User {
   /// holds every agent permission by being the agency.
   agentRoleId   Int?
   agentRole     AgentRole? @relation(fields: [agentRoleId], references: [id], onDelete: SetNull)
+  /// For AGENT users: the agency account this person sells for — the customer
+  /// the platform verifies, bills and, when it stops paying, stops. Staff share
+  /// their agency's account.
+  accountId     Int?
+  account       Tenant?    @relation("AccountUsers", fields: [accountId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
 
   resorts         UserResort[]
@@ -229,6 +238,7 @@ model User {
   salesDocs       SalesDoc[]       @relation("AgencySalesDocs")
   passwordResets  PasswordReset[]
 
+  @@index([accountId])
   @@map("users")
 }
 

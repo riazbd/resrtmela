@@ -174,21 +174,36 @@ export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
  * owner composes plans freely from this shelf; adding to the shelf is a
  * developer's job because it means writing the gate as well.
  */
+/**
+ * The two shelves. A resort never sees an agency plan and an agency never sees
+ * a resort plan (2026-09-11 design, §6.1), and a feature belongs to one shelf:
+ * "Restaurant POS" is not a thing an agency can buy.
+ */
+export const PLAN_AUDIENCES = ["RESORT", "AGENCY"] as const;
+export type PlanAudience = (typeof PLAN_AUDIENCES)[number];
+
 export const PLAN_FEATURES = [
-  { key: "restaurant", label: "Restaurant POS & room tabs", blurb: "Sell food and drink, and put it on the room" },
-  { key: "agents", label: "Agents with wallets", blurb: "Travel agents book for you, on commission" },
-  { key: "activities", label: "Activities & tours", blurb: "Sell trips and rides alongside the room" },
-  { key: "discounts", label: "Discount & offer engine", blurb: "Seasonal rates, offers and coupon rules" },
-  { key: "bulk_email", label: "Bulk guest email", blurb: "Write to your whole guest list at once" },
+  { key: "restaurant", audience: "RESORT", label: "Restaurant POS & room tabs", blurb: "Sell food and drink, and put it on the room" },
+  { key: "agents", audience: "RESORT", label: "Agents with wallets", blurb: "Travel agents book for you, on commission" },
+  { key: "activities", audience: "RESORT", label: "Activities & tours", blurb: "Sell trips and rides alongside the room" },
+  { key: "discounts", audience: "RESORT", label: "Discount & offer engine", blurb: "Seasonal rates, offers and coupon rules" },
+  { key: "bulk_email", audience: "RESORT", label: "Bulk guest email", blurb: "Write to your whole guest list at once" },
   // `public_api` sold the resort-website `/v1` API, which this branch removed
   // (see migration 20260911120000_a_feature_that_is_gone). The api_keys table
   // and its management endpoints stayed for a possible future integration,
   // but a feature nothing implements does not belong on the shelf: the next
   // edit of any plan still listing it would fail `isPlanFeature` validation
   // for a reason nobody reading the panel could act on.
-  { key: "payroll", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
-  { key: "imports", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
+  { key: "payroll", audience: "RESORT", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
+  { key: "imports", audience: "RESORT", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
+  // No agency features yet. The agency plan sells tools, not admission (§9);
+  // each tool arrives with its gate, the way the resort ones did.
 ] as const;
+
+/** The feature keys that belong on one shelf. */
+export function planFeaturesFor(audience: string): string[] {
+  return PLAN_FEATURES.filter((f) => f.audience === audience).map((f) => f.key);
+}
 
 export type PlanFeatureKey = (typeof PLAN_FEATURES)[number]["key"];
 

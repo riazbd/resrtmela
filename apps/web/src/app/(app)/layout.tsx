@@ -244,6 +244,16 @@ function Shell({ children }: { children: React.ReactNode }) {
         </header>
         <OutboxBar />
         <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
+          {/* an agency's standing with the platform: it can look around, but not sell */}
+          {me?.account && me.account.status !== "active" && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {me.account.status === "pending"
+                ? "Your agency is waiting for Resort Mela to verify it. You can look around, but you cannot make bookings until it is verified — once, for every resort."
+                : me.account.suspendedReason === "billing"
+                  ? "Your agency's account is suspended for an unpaid bill, so you cannot make new bookings. Bookings you have already made are unaffected."
+                  : "Your agency's account is suspended, so you cannot make new bookings. Bookings you have already made are unaffected."}
+            </div>
+          )}
           <NotInPlan feature={missingFeature(pathname, NAV, features)} />
           {children}
         </main>

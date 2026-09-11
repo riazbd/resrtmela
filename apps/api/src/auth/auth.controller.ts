@@ -34,6 +34,15 @@ class SignupDto {
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
 }
 
+class SignupAgencyDto {
+  @IsString() @MaxLength(120) agencyName!: string;
+  @IsString() @MaxLength(160) name!: string;
+  @IsString() @MaxLength(191) email!: string;
+  @IsString() @MaxLength(32) phone!: string;
+  @IsString() @MinLength(8) password!: string;
+  @IsString() @MaxLength(16) plan!: string;
+}
+
 class ForgotPasswordDto {
   /** phone number OR email — one identifier is enough, same as LoginDto */
   @IsOptional() @IsString() @MaxLength(191) identifier?: string;
@@ -65,6 +74,13 @@ export class PublicAuthController {
   @HttpCode(201)
   signup(@Body() dto: SignupDto) {
     return this.auth.signup(dto);
+  }
+
+  /** Public: an agency signs itself up, pending, on a trial of an agency plan. */
+  @Post("signup/agency")
+  @HttpCode(201)
+  signupAgency(@Body() dto: SignupAgencyDto) {
+    return this.auth.signupAgency(dto);
   }
 
   /**

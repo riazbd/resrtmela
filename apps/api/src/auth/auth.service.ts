@@ -44,6 +44,9 @@ export class AuthService {
         email: true,
         role: true,
         status: true,
+        // an agency's standing with the platform: pending until verified,
+        // suspended when behind on its bill — the console says so
+        account: { select: { id: true, name: true, kind: true, status: true, suspendedReason: true } },
         resorts: {
           select: {
             resort: { select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true, timezone: true } },
@@ -141,6 +144,77 @@ export class AuthService {
       return { tenant, resort, user };
     });
     return this.issueToken(result.user.id, result.user.role);
+  }
+
+  /**
+   * An agency's front door (2026-09-11 design, §6.2) — the mirror of resort
+   * signup, because the owner asked for exactly that. It lands pending: the
+   * platform verifies each agency once, and that is the only gate between it
+   * and every open resort. Its subscription starts in trial on the plan it
+   * chose, from the agency shelf and nowhere else.
+   */
+  async signupAgency(input: {
+    agencyName: string;
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+    plan: string;
+  }) {
+    const phone = contactPhone(input.phone);
+    const email = contactEmail(input.email);
+    if (input.password.length < 8) {
+      throw Object.assign(new Error("Password must be at least 8 characters"), { status: 400 });
+    }
+    const agencyName = input.agencyName.trim();
+    if (!agencyName) throw Object.assign(new Error("Agency name is required"), { status: 400 });
+
+    const plan = await this.prisma.platformPlan.findUnique({ where: { name: input.plan.trim().toUpperCase() } });
+    if (!plan || !plan.active || plan.audience !== "AGENCY") {
+      const shelf = await this.prisma.platformPlan.findMany({
+        where: { active: true, audience: "AGENCY" },
+        orderBy: { sortOrder: "asc" },
+        select: { name: true },
+      });
+      throw Object.assign(
+        new Error(`"${input.plan}" is not an agency plan. On the agency shelf: ${shelf.map((p) => p.name).join(", ") || "none yet"}`),
+        { status: 400 },
+      );
+    }
+
+    const taken = await contactTaken(this.prisma, { email, phone });
+    if (taken === "email") throw Object.assign(new Error("This email already has an account — sign in instead"), { status: 409 });
+    if (taken === "phone") throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
+
+    // the slug is not the agency's to see; it only has to be unique
+    const base = slugify(agencyName) || "agency";
+    const slug = (await this.prisma.tenant.findUnique({ where: { slug: base } })) ? `${base}-${Date.now().toString(36)}` : base;
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const now = new Date();
+    const onTrial = plan.trialDays > 0;
+    const trialEndsAt = onTrial ? new Date(now.getTime() + plan.trialDays * 86_400_000) : null;
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const account = await tx.tenant.create({ data: { name: agencyName, slug, kind: "AGENCY", status: "pending" } });
+      const u = await tx.user.create({
+        data: { name: input.name.trim() || agencyName, phone, email, role: "AGENT", passwordHash, accountId: account.id },
+      });
+      await tx.subscription.create({
+        data: {
+          accountId: account.id,
+          plan: plan.name,
+          status: onTrial ? "TRIAL" : "ACTIVE",
+          monthlyFee: plan.monthlyFee,
+          trialEndsAt,
+          renewsAt: onTrial ? trialEndsAt : now,
+        },
+      });
+      await tx.auditLog.create({
+        data: { actorId: u.id, action: "agency.signup", entity: "tenant", entityId: BigInt(account.id), diff: { slug, plan: plan.name } },
+      });
+      return u;
+    });
+    return this.issueToken(user.id, user.role);
   }
 
   private async issueToken(userId: number, role: Role) {

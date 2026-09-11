@@ -519,13 +519,16 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Whoever owns the account. For a resort owner: the admins of its resorts,
-   * else their managers. An agency is reached through its own agency users —
-   * wired when the agency becomes a customer (phase 3); until then it has none.
+   * else their managers. For an agency: the agency itself — the AGENT with no
+   * parent — never its staff, and never a resort it sells for.
    */
   private async billingContacts(account: Account): Promise<string[]> {
     const users =
       account.kind === ACCOUNT_KIND.AGENCY
-        ? []
+        ? await this.prisma.user.findMany({
+            where: { accountId: account.id, role: "AGENT", parentAgentId: null, status: "active" },
+            select: { id: true, role: true, email: true, phone: true },
+          })
         : (
             await this.prisma.userResort.findMany({
               where: {

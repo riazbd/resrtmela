@@ -216,7 +216,8 @@ export class SubscriptionService {
 
     const name = plan.trim().toUpperCase();
     const target = await this.prisma.platformPlan.findUnique({ where: { name } });
-    if (!target || !target.active) {
+    // the resort's own screen sells from the resort shelf only
+    if (!target || !target.active || target.audience !== "RESORT") {
       const onSale = await this.planLimits.onSale();
       throw badRequest(`No plan "${plan}" on sale. Available: ${onSale.map((p) => p.name).join(", ")}`);
     }

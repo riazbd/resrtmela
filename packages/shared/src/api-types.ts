@@ -58,6 +58,12 @@ export interface Me {
   name: string;
   phone: string;
   role: string;
+  /**
+   * The account this person signs in for — set for an agency's people. Its
+   * status is the agency's standing with the platform: pending until verified,
+   * suspended when behind on its bill.
+   */
+  account?: { id: number; name: string; kind: string; status: string; suspendedReason: string | null } | null;
   resorts: { resort: Resort }[];
 }
 
