@@ -15,6 +15,13 @@
  * service records what would have been sent, and the test lifts the token
  * out of the link the same way a real recipient would click it, which also
  * proves the link is one that actually works.
+ *
+ * Every account now has both an email and a phone (2026-09-11) and can sign
+ * in with either, so the request has to accept either too — the same
+ * identifier rule `loginWithPassword` already uses. Whichever one was typed,
+ * the link always goes to the account's email: SMS is dormant, and a
+ * placeholder email (`@placeholder.invalid`) is a gap, not an address, so an
+ * account stuck with one gets nothing, same as an account nobody has heard of.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
@@ -27,6 +34,7 @@ const prisma = testPrisma();
 const asPrisma = prisma as unknown as PrismaService;
 let fx: Fixture;
 let outbox: Outbox;
+let managerPhone: string;
 
 const service = () => {
   outbox = [];
@@ -36,10 +44,13 @@ const service = () => {
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
   fx = await seedResort(prisma as unknown as PrismaClient);
-  await prisma.user.update({
+  const manager = await prisma.user.update({
     where: { id: fx.managerId },
     data: { email: "manager@example.com", passwordHash: await bcrypt.hash("old-password-1", 12) },
   });
+  // seedResort already gives the manager a phone (every account has one now);
+  // captured here rather than hard-coded so it stays whatever the fixture generates
+  managerPhone = manager.phone;
 });
 
 afterAll(async () => {
@@ -92,10 +103,17 @@ describe("a password that can be reset", () => {
     await expect(svc.reset(raw, "short")).rejects.toMatchObject({ status: 400 });
   });
 
-  it("says the same thing for an unknown address, so it cannot be used to find out who has an account", async () => {
-    const known = await service().request("manager@example.com");
-    const unknown = await service().request("nobody@example.com");
+  it("says the same thing for an unknown address, but only mails the known one — one sent, none for the other", async () => {
+    // `{ sent: true }` never varies, so the thing worth pinning is what
+    // actually left: one mail for the account that exists, nothing more for
+    // the one that does not.
+    const svc = service();
 
+    const known = await svc.request("manager@example.com");
+    expect(outbox).toHaveLength(1);
+
+    const unknown = await svc.request("nobody@example.com");
+    expect(outbox).toHaveLength(1);
     expect(unknown).toEqual(known);
   });
 
@@ -105,5 +123,51 @@ describe("a password that can be reset", () => {
     await service().request("nobody@example.com");
 
     expect(await prisma.user.count()).toBe(before);
+  });
+
+  it("puts the link in the account's email when the request is made by phone", async () => {
+    const svc = service();
+
+    await svc.request(managerPhone);
+
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.to).toBe("manager@example.com");
+  });
+
+  it("gives the same answer for an unknown phone as for a known one, and mails nothing for it", async () => {
+    const svc = service();
+
+    const known = await svc.request("manager@example.com");
+    expect(outbox).toHaveLength(1);
+
+    const unknownPhone = await svc.request("01799999999");
+
+    expect(outbox).toHaveLength(1);
+    expect(unknownPhone).toEqual(known);
+  });
+
+  it("sends nothing for an account whose email is a placeholder — there is nobody there to receive it", async () => {
+    // migration 20260911130000 gives an account with no real email one shaped
+    // like this; the same account may have a perfectly good phone, but SMS is
+    // dormant, so a placeholder email is a dead end, not a fallback
+    const placeholder = await prisma.user.create({
+      data: {
+        name: "No Real Email",
+        phone: "8801611222333",
+        email: "user-999999@placeholder.invalid",
+        role: "MANAGER",
+        status: "active",
+        passwordHash: await bcrypt.hash("whatever-1", 4),
+      },
+    });
+    const svc = service();
+
+    const known = await svc.request("manager@example.com");
+    expect(outbox).toHaveLength(1);
+
+    const placeholderAnswer = await svc.request(placeholder.email);
+
+    expect(outbox).toHaveLength(1);
+    expect(placeholderAnswer).toEqual(known);
   });
 });

@@ -35,7 +35,11 @@ class SignupDto {
 }
 
 class ForgotPasswordDto {
-  @IsString() @MaxLength(191) email!: string;
+  /** phone number OR email — one identifier is enough, same as LoginDto */
+  @IsOptional() @IsString() @MaxLength(191) identifier?: string;
+  // kept so a web bundle cached across the deploy — still posting { email } —
+  // does not start getting 400s the moment this ships
+  @IsOptional() @IsString() @MaxLength(191) email?: string;
 }
 class ResetPasswordDto {
   @IsString() @MaxLength(128) token!: string;
@@ -71,7 +75,7 @@ export class PublicAuthController {
   @Post("password/forgot")
   @HttpCode(200)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.reset.request(dto.email);
+    return this.reset.request(dto.identifier ?? dto.email ?? "");
   }
 
   @Post("password/reset")

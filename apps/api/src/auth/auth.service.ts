@@ -2,10 +2,9 @@ import { Injectable, UnauthorizedException, Inject } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
 import { signToken } from "../common/auth.guard";
-import { normalizePhone } from "../common/dates";
 import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
-import { contactEmail, contactPhone, contactTaken } from "../common/contact";
+import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
 import { ROLE, type Role } from "@rh/shared";
 
 /**
@@ -23,13 +22,10 @@ import { ROLE, type Role } from "@rh/shared";
 export class AuthService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  /** Identifier may be a phone number or an email address. */
+  /** Identifier may be a phone number or an email address — see findUserByIdentifier. */
   async loginWithPassword(identifierRaw: string, password: string) {
     if (!identifierRaw) throw new UnauthorizedException("Invalid identifier or password");
-    const looksEmail = identifierRaw.includes("@");
-    const user = looksEmail
-      ? await this.prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } })
-      : await this.prisma.user.findUnique({ where: { phone: normalizePhone(identifierRaw) } });
+    const user = await findUserByIdentifier(this.prisma, identifierRaw);
     if (!user || !user.passwordHash || user.status !== "active") {
       throw new UnauthorizedException("Invalid identifier or password");
     }

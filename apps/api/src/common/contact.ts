@@ -55,6 +55,27 @@ export function reachablePhone(value: string | null | undefined): string | null 
 }
 
 /**
+ * The one rule for turning what somebody typed into an account: an "@" means
+ * an email (trimmed, lower-cased, the way it is stored); anything else is a
+ * phone, read through the same `normalizePhone` every path stores one with.
+ *
+ * `loginWithPassword` had this branch inline; the password reset needed the
+ * identical rule — an account reachable by either has to be *findable* by
+ * either — so it moved here rather than being typed out a second time for a
+ * second caller to drift from the first.
+ */
+export async function findUserByIdentifier<T extends Pick<PrismaService, "user">>(
+  prisma: T,
+  identifierRaw: string,
+) {
+  if (!identifierRaw) return null;
+  const looksEmail = identifierRaw.includes("@");
+  return looksEmail
+    ? prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } })
+    : prisma.user.findFirst({ where: { phone: normalizePhone(identifierRaw) } });
+}
+
+/**
  * Sent back as it is stored — in the same spelling, or one that normalises to
  * it. For an update: an edit form sends every field with every save, and a
  * field it did not change is not a request to change it.

@@ -32,11 +32,14 @@ describe("newPasswordError", () => {
 });
 
 describe("RESET_REQUESTED_MESSAGE", () => {
-  it("is the one sentence the forgot-password form shows, whatever the address turns out to be", () => {
+  it("is the one sentence the forgot-password form shows, whatever the identifier turns out to be", () => {
     // the API never reveals whether an account exists (Task 1); the screen
-    // must not undo that by phrasing success and "no such account" differently
+    // must not undo that by phrasing success and "no such account" differently.
+    // Every account can now be reached by either an email or a phone (2026-09-11),
+    // but the link always lands in the account's inbox — SMS is dormant — so the
+    // sentence says that plainly instead of implying a text might arrive instead.
     expect(RESET_REQUESTED_MESSAGE).toBe(
-      "If that address has an account, a reset link is on its way.",
+      "If that account exists, a reset link is on its way to its email address.",
     );
   });
 });

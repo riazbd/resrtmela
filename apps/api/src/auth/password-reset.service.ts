@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
 import { badRequest } from "../common/rbac";
+import { findUserByIdentifier, isPlaceholderEmail } from "../common/contact";
 
 const TTL_MS = 60 * 60 * 1000; // one hour
 const MIN_PASSWORD = 8;
@@ -31,20 +32,32 @@ export class PasswordResetService {
   /**
    * Always answers the same, whoever asked.
    *
-   * A different reply for a known and an unknown address turns this endpoint
-   * into a way to ask "does this person have an account here", which is a
-   * question about the platform's customers that no stranger should be able
-   * to put to it.
+   * A different reply for a known and an unknown identifier turns this
+   * endpoint into a way to ask "does this person have an account here",
+   * which is a question about the platform's customers that no stranger
+   * should be able to put to it. That is all this guarantees — it does not
+   * make a known and an unknown identifier take the same amount of time: the
+   * known path waits on an insert and an email send that the unknown path
+   * never reaches.
    */
-  async request(email: string): Promise<{ sent: boolean }> {
-    await this.issue(email);
+  async request(identifier: string): Promise<{ sent: boolean }> {
+    await this.issue(identifier);
     return { sent: true };
   }
 
-  private async issue(email: string): Promise<void> {
-    const address = email.trim().toLowerCase();
-    const user = await this.prisma.user.findFirst({ where: { email: address } });
-    if (!user || user.status !== "active") return;
+  /**
+   * Identifier may be a phone number or an email address — the same rule
+   * `loginWithPassword` resolves one by. Whichever was typed, the link is
+   * mailed to the account's email: SMS is dormant, and every account has an
+   * email now, placeholder or real. A placeholder (`@placeholder.invalid`)
+   * is a gap standing in for an address, not one — there is nobody to
+   * deliver it to — so an account stuck with one is treated the same as an
+   * account nobody has heard of.
+   */
+  private async issue(identifier: string): Promise<void> {
+    const user = await findUserByIdentifier(this.prisma, identifier);
+    if (!user || user.status !== "active" || isPlaceholderEmail(user.email)) return;
+    const address = user.email;
 
     const raw = randomBytes(32).toString("hex");
     await this.prisma.passwordReset.create({

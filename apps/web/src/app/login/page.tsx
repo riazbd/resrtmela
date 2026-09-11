@@ -27,7 +27,7 @@ function LoginInner() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotIdentifier, setForgotIdentifier] = useState("");
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
 
@@ -52,7 +52,7 @@ function LoginInner() {
   async function submitForgot() {
     setForgotBusy(true);
     try {
-      await api("/auth/password/forgot", { method: "POST", body: { email: forgotEmail } });
+      await api("/auth/password/forgot", { method: "POST", body: { identifier: forgotIdentifier } });
     } catch {
       // the endpoint deliberately never reveals whether the address has an
       // account (Task 1); a network failure here gets the same one sentence
@@ -154,14 +154,13 @@ function LoginInner() {
                 ) : (
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-600">
-                      Email for your reset link
+                      Email or phone
                     </label>
                     <div className="flex gap-2">
                       <Input
-                        type="email"
-                        placeholder="you@email.com"
-                        value={forgotEmail}
-                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="01XXXXXXXXX or you@email.com"
+                        value={forgotIdentifier}
+                        onChange={(e) => setForgotIdentifier(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
@@ -173,7 +172,7 @@ function LoginInner() {
                         type="button"
                         size="sm"
                         loading={forgotBusy}
-                        disabled={!forgotEmail}
+                        disabled={!forgotIdentifier}
                         onClick={() => void submitForgot()}
                       >
                         Send
