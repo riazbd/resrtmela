@@ -1323,13 +1323,17 @@ before trusting it. There is no undo once those run.
 Sequence: `git pull`, `pnpm install`, then `pnpm -F @rh/api db:baseline` and
 read the dry run's list before doing anything else. Then `pm2 stop api`
 *before* `db:baseline -- --apply`, so a request in flight cannot hit the old
-OTP routes against a half-migrated database while the migration runs. Then
-`prisma migrate deploy`, `prisma generate`, `pnpm build`, `pm2 restart api
-web`.
+OTP routes against a half-migrated database while the migration runs —
+`db:baseline -- --apply` already ends by running `prisma migrate deploy`
+itself (`baseline-db.mjs`), so there is nothing left to run there. Then
+`prisma generate`, `pnpm build`, `pm2 restart api web`.
 
-`PUBLIC_WEB_URL` must be set in production's `.env` before this deploys — the
-password-reset email builds its reset link from it, and an unset value means
-every reset link is silently broken, for every resort, until someone notices.
+Reset links (and the agent-invite link) are built from `PUBLIC_WEB_URL`,
+falling back to the production console's own address,
+`https://resortmela.rootcodebd.com`, when it is unset
+(`password-reset.service.ts`, `platform.service.ts`). Set it only if the
+console is ever moved to a different domain — it does not need to be set for
+this deploy to work.
 
 The GUEST-deletion migration is two statements (`DELETE` then `MODIFY`), and
 MySQL/MariaDB DDL is not fully transactional, so a failure partway through can
@@ -1350,7 +1354,7 @@ expected, the app is retired (§3.32), not merely frozen.
 ```
 pnpm install
 pnpm -F @rh/api test:setup     # creates resorthub_test and migrates it
-pnpm -F @rh/api test           # 421 tests against a real MySQL
+pnpm -F @rh/api test           # 678 tests against a real MySQL
 pnpm -F @rh/web test           # 39 tests, jsdom
 pnpm typecheck                 # four packages; mobile is frozen (§3.27)
 pnpm dev                       # api :4000, web :3000
