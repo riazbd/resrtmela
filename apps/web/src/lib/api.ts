@@ -50,8 +50,9 @@ export async function api<T = unknown>(
       (payload as { message?: string })?.message ??
       (payload as { error?: string })?.error ??
       `Request failed (${res.status})`;
-    // only end the session when we actually HAD one; anonymous 401s (e.g. guest
-    // browsing before verification) must not bounce visitors to /login
+    // only end the session when we actually HAD one; anonymous 401s (e.g. a
+    // wrong-password attempt on /auth/login, made before any token exists)
+    // must not bounce visitors to /login
     if (res.status === 401 && token) {
       setToken(null);
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {

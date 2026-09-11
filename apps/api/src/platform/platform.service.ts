@@ -14,7 +14,7 @@ import { round2 } from "../common/dates";
 import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE, sameEmail, samePhone } from "../common/contact";
 import { signToken } from "../common/auth.guard";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 
 /**
@@ -1272,13 +1272,6 @@ export class PlatformService {
     throw badRequest(
       "API keys are not available: the resort-website API they unlocked has been removed. None will be issued until that integration returns.",
     );
-    const secret = randomBytes(24).toString("hex");
-    const prefix = `rm_live_${randomBytes(4).toString("hex")}`;
-    const keyHash = createHash("sha256").update(secret).digest("hex");
-    const row = await this.prisma.apiKey.create({ data: { resortId, name, prefix, keyHash } });
-    await this.audit.log({ actorId: claims.userId, resortId, action: "apikey.create", entity: "api_key", entityId: Number(row.id), diff: { name } });
-    // full key is shown exactly once
-    return { id: row.id.toString(), name: row.name, prefix: row.prefix, key: `${prefix}.${secret}` };
   }
 
   async revokeApiKey(claims: JwtClaims, id: number) {
