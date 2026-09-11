@@ -12,7 +12,7 @@ import { PlatformSettingsService, SETTING_DEFAULTS, SETTING_MAX_LENGTH, assertSe
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
 import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
-import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE } from "../common/contact";
+import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE, sameEmail, samePhone } from "../common/contact";
 import { signToken } from "../common/auth.guard";
 import { createHash, randomBytes } from "node:crypto";
 import * as bcrypt from "bcryptjs";
@@ -838,6 +838,17 @@ export class PlatformService {
     if (!linked) throw badRequest("user not in this resort");
 
     /**
+     * A contact field sent back as it is stored is not a change. The edit form
+     * sends the email and phone with every save, so counting them would stop a
+     * resort renaming anyone who also works elsewhere — and running an
+     * unchanged `placeholder-7` through `normalizePhone` would store `7`, a
+     * number nobody typed.
+     */
+    const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { email: true, phone: true } });
+    const emailChanged = input.email != null && !sameEmail(input.email, current.email);
+    const phoneChanged = input.phone != null && !samePhone(input.phone, current.phone);
+
+    /**
      * This route is resort-scoped; the row it writes is not.
      *
      * `users` is global — one person, one row, however many resorts they work
@@ -848,12 +859,11 @@ export class PlatformService {
      * when the person is not this resort's alone; naming them and giving them
      * a role inside this resort does not.
      *
-     * An email and a phone are on the same side of that line: they are how the
-     * person signs in and where their reset link goes, so changing one is as
-     * good as changing the password.
+     * An email and a phone are on the same side of that line when they
+     * actually change: they are how the person signs in and where their reset
+     * link goes, so changing one is as good as changing the password.
      */
-    const account =
-      input.role != null || input.status != null || input.password != null || input.email != null || input.phone != null;
+    const account = input.role != null || input.status != null || input.password != null || emailChanged || phoneChanged;
     if (account && claims.role !== ROLE.SUPER_ADMIN) {
       const elsewhere = await this.prisma.userResort.count({
         where: { userId, resortId: { not: resortId } },
@@ -863,6 +873,9 @@ export class PlatformService {
       }
     }
 
+    // Every check comes before the first write, so a request refused in any
+    // part changes nothing. The role check used to run after the user row was
+    // saved: a new email was kept, and then the request answered 400.
     const data: Prisma.UserUpdateInput = {};
     if (input.role) {
       // the same list `createResortUser` accepts. RESORT_ADMIN resolves to
@@ -877,28 +890,31 @@ export class PlatformService {
       if (!["active", "pending", "suspended"].includes(input.status)) throw badRequest("bad status");
       data.status = input.status;
     }
-    if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
     if (input.name) data.name = input.name;
     // replaceable — the migration left placeholders that need replacing — but
-    // never blank and never somebody else's. `!= null`, not truthiness: an
+    // never blank, never a placeholder, and never somebody else's. A changed
     // empty string is a request to blank it, and is refused rather than ignored.
-    const email = input.email != null ? contactEmail(input.email) : undefined;
-    const phone = input.phone != null ? contactPhone(input.phone) : undefined;
+    const email = emailChanged ? contactEmail(input.email) : undefined;
+    const phone = phoneChanged ? contactPhone(input.phone) : undefined;
     if (email || phone) {
       const taken = await contactTaken(this.prisma, { email, phone }, userId);
       if (taken) throw badRequest(TAKEN_SENTENCE[taken]);
     }
     if (email) data.email = email;
     if (phone) data.phone = phone;
+    if (input.roleId != null && input.roleId !== 0) {
+      const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
+      if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
+    }
+    if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
+
     const user = await this.prisma.user.update({ where: { id: userId }, data });
     if (input.roleId != null) {
-      if (input.roleId === 0) {
-        await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: null } });
-      } else {
-        const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
-        if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
-        await this.prisma.userResort.update({ where: { userId_resortId: { userId, resortId } }, data: { roleId: input.roleId } });
-      }
+      // 0 clears the custom role; anything else was checked above
+      await this.prisma.userResort.update({
+        where: { userId_resortId: { userId, resortId } },
+        data: { roleId: input.roleId === 0 ? null : input.roleId },
+      });
     }
     // the new email and phone are recorded: a change to how someone signs in
     // is the change an account takeover would make

@@ -8,6 +8,7 @@ import { PermissionsService } from "../common/permissions";
 import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
+import { PLACEHOLDER_EMAIL_SUFFIX, reachableEmail, reachablePhone } from "../common/contact";
 
 @Injectable()
 export class EngageService {
@@ -300,7 +301,8 @@ export class EngageService {
     return rows.map((r) => ({
       ...this.orderView(r),
       buyer: r.user.name,
-      buyerContact: r.user.email ?? r.user.phone ?? "",
+      // a placeholder email is not how to reach the buyer; their phone is
+      buyerContact: reachableEmail(r.user.email) ?? reachablePhone(r.user.phone) ?? "",
       resortName: r.resort.name,
     }));
   }
@@ -462,7 +464,7 @@ export class EngageService {
       // `.invalid` placeholder, which never delivers — mailing it would spend
       // a credit on nobody
       const agents = await this.prisma.userResort.findMany({
-        where: { resortId: input.resortId, user: { role: "AGENT", NOT: { email: { endsWith: "@placeholder.invalid" } } } },
+        where: { resortId: input.resortId, user: { role: "AGENT", NOT: { email: { endsWith: PLACEHOLDER_EMAIL_SUFFIX } } } },
         select: { user: { select: { email: true, name: true } } },
       });
       recipients = agents.map((a) => ({ email: a.user.email, name: a.user.name }));

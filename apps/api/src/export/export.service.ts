@@ -23,6 +23,7 @@ import { PermissionsService } from "../common/permissions";
 import { TaxService } from "../common/tax.service";
 import { requireResortAccess, badRequest } from "../common/rbac";
 import { bookingTotals, fbBillTotals } from "../common/money";
+import { reachableEmail, reachablePhone } from "../common/contact";
 import { toCsv, type CsvValue } from "./csv-writer";
 import type { JwtClaims } from "@rh/shared";
 
@@ -253,7 +254,9 @@ export class ExportService {
       // as a record; what an agent is actually paid is the resort's one rate
       headers: ["name", "phone", "email", "role", "customRole", "status", "formerCommission", "formerCommissionKind"],
       rows: rows.map((l) => [
-        l.user.name, l.user.phone ?? "", l.user.email ?? "", l.user.role, l.role?.name ?? "",
+        // a placeholder is a gap, so it exports as one — a blank cell, not a
+        // contact detail somebody will try
+        l.user.name, reachablePhone(l.user.phone) ?? "", reachableEmail(l.user.email) ?? "", l.user.role, l.role?.name ?? "",
         l.user.status, l.commissionRate == null ? "" : Number(l.commissionRate), l.commissionKind,
       ]),
     };

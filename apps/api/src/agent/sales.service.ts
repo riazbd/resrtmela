@@ -19,6 +19,7 @@ import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { AgencyContextService } from "./agency-context.service";
 import { renderSalesDoc, subjectFor, type RenderDoc } from "./sales-render";
+import { reachableEmail, reachablePhone } from "../common/contact";
 import type { JwtClaims } from "@rh/shared";
 
 const SALES = "agent.sales.manage";
@@ -398,8 +399,9 @@ export class SalesService {
       clientPhone: doc.clientPhone,
       clientAddress: doc.clientAddress,
       agencyName: agency?.name ?? "Your travel agency",
-      agencyEmail: agency?.email ?? null,
-      agencyPhone: agency?.phone ?? null,
+      // a placeholder is left off the client's copy: the renderer omits a null line
+      agencyEmail: reachableEmail(agency?.email),
+      agencyPhone: reachablePhone(agency?.phone),
       items: doc.items.map((i) => ({
         label: i.label,
         details: i.details,
@@ -448,8 +450,9 @@ export class SalesService {
       clientPhone: doc.clientPhone,
       clientAddress: doc.clientAddress,
       agencyName: agency?.name ?? "Your travel agency",
-      agencyEmail: agency?.email ?? null,
-      agencyPhone: agency?.phone ?? null,
+      // a placeholder is left off the client's copy: the renderer omits a null line
+      agencyEmail: reachableEmail(agency?.email),
+      agencyPhone: reachablePhone(agency?.phone),
       items: doc.items.map((i) => ({
         label: i.label,
         details: i.details,

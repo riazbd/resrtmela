@@ -36,6 +36,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
 import { AuditService } from "../common/audit.service";
 import { SYSTEM_ACTOR_ID } from "../common/rbac";
+import { reachableEmail, reachablePhone } from "../common/contact";
 import type { TemplateName } from "../notifications/templates";
 
 export interface BillingSweepResult {
@@ -457,8 +458,10 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
     const admins = links.filter((l) => l.user.role === "RESORT_ADMIN");
     const chosen = admins.length > 0 ? admins : links;
+    // a placeholder email is not the owner's: it falls through to their phone,
+    // which is where an owner who signed up with only a phone is reached
     return chosen
-      .map((l) => l.user.email?.trim() || l.user.phone?.trim() || "")
+      .map((l) => reachableEmail(l.user.email) ?? reachablePhone(l.user.phone) ?? "")
       .filter((v) => v.length > 0);
   }
 }

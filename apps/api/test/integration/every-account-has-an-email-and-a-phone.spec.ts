@@ -27,8 +27,15 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import bcrypt from "bcryptjs";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makePlatformService } from "../helpers/services";
+import {
+  makePlatformService,
+  makeBillingService,
+  makeSalesService,
+  makeExportService,
+  makeEngageService,
+} from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
+import { ensureResortRoles } from "../../src/common/permissions";
 import type { EmailService } from "../../src/notifications/email.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -40,11 +47,11 @@ let admin: JwtClaims;
 let agency: JwtClaims;
 
 /** What the invite would have mailed — it must still mail the credentials. */
-let outbox: { to: string; subject: string }[];
+let outbox: { to: string; subject: string; html: string }[];
 const recordingEmail = () =>
   ({
-    send: async (to: string, subject: string) => {
-      outbox.push({ to, subject });
+    send: async (to: string, subject: string, html: string) => {
+      outbox.push({ to, subject, html });
       return { sent: true };
     },
   }) as unknown as EmailService;
@@ -171,6 +178,27 @@ describe("signing up", () => {
   it("refuses a phone that already has an account", async () => {
     await refuses(() => auth().signup(owner({ phone: `+${TAKEN_PHONE}` })), 409, /phone/i);
   });
+
+  /**
+   * The roles are what the transaction repair was for: they were seeded on a
+   * second connection that waited on the uncommitted resort. A signup that
+   * finishes but leaves the resort without its system roles would pass every
+   * other test here, so the roles are checked against what
+   * `ensureResortRoles` gives any resort it is asked to seed.
+   */
+  it("gives the new resort its system roles", async () => {
+    const { user } = await auth().signup(owner());
+    const resortId = user.resortIds[0]!;
+
+    const control = await prisma.resort.create({ data: { tenantId: fx.tenantId, name: "Control" } });
+    await ensureResortRoles(asPrisma, control.id);
+    const names = (id: number) =>
+      prisma.customRole.findMany({ where: { resortId: id }, select: { name: true, system: true }, orderBy: { name: "asc" } });
+
+    const expected = await names(control.id);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(await names(resortId)).toEqual(expected);
+  });
 });
 
 describe("a resort adding a colleague", () => {
@@ -206,6 +234,10 @@ describe("a resort adding a colleague", () => {
 
   it("refuses a phone somebody already signs in with", async () => {
     await refuses(() => add({ phone: `+${TAKEN_PHONE}` }), 400, /phone/i);
+  });
+
+  it("refuses a placeholder address — nobody can be reached at one", async () => {
+    await refuses(() => add({ email: "user-99@placeholder.invalid" }), 400, /email/i);
   });
 });
 
@@ -312,7 +344,7 @@ describe("changing a person's email and phone", () => {
     colleagueId = colleague.id;
   });
 
-  const change = (claims: JwtClaims, input: Record<string, string>) =>
+  const change = (claims: JwtClaims, input: Record<string, unknown>) =>
     platform().updateResortUser(claims, fx.resortId, colleagueId, input as never);
   const stored = () =>
     prisma.user.findUniqueOrThrow({ where: { id: colleagueId }, select: { email: true, phone: true } });
@@ -335,6 +367,38 @@ describe("changing a person's email and phone", () => {
 
   it("refuses an email somebody else already signs in with, in a sentence rather than a constraint error", async () => {
     await expect(change(admin, { email: TAKEN_EMAIL })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/email/i) });
+  });
+
+  it("refuses a phone somebody else already signs in with", async () => {
+    await expect(change(admin, { phone: `+${TAKEN_PHONE}` })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/phone/i) });
+    expect((await stored()).phone).toBe("placeholder-7");
+  });
+
+  it("refuses to replace an address with a placeholder", async () => {
+    await expect(change(admin, { email: "user-8@placeholder.invalid" })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/email/i) });
+    expect((await stored()).email).toBe("user-7@placeholder.invalid");
+  });
+
+  /**
+   * The edit form sends back what it shows. A placeholder sent back unchanged
+   * is not a request to change anything — and running it through
+   * `normalizePhone` would turn `placeholder-7` into `7`, a phone number that
+   * belongs to nobody and was never typed.
+   */
+  it("leaves a placeholder as it was when a form sends it back unchanged", async () => {
+    await change(admin, { name: "Renamed", email: "user-7@placeholder.invalid", phone: "placeholder-7" });
+
+    expect(await stored()).toEqual({ email: "user-7@placeholder.invalid", phone: "placeholder-7" });
+  });
+
+  it("changes nothing when a later part of the request is refused", async () => {
+    const elsewhere = await seedResort(prisma as unknown as PrismaClient);
+    await ensureResortRoles(asPrisma, elsewhere.resortId);
+    const theirRole = await prisma.customRole.findFirstOrThrow({ where: { resortId: elsewhere.resortId } });
+
+    await expect(change(admin, { email: "moved@example.com", roleId: theirRole.id })).rejects.toMatchObject({ status: 400 });
+
+    expect((await stored()).email).toBe("user-7@placeholder.invalid");
   });
 
   /**
@@ -368,6 +432,20 @@ describe("changing a person's email and phone", () => {
       await change(platformOwner, { email: "fixed@example.com", phone: "+880 1712-000888" });
 
       expect(await stored()).toEqual({ email: "fixed@example.com", phone: "8801712000888" });
+    });
+
+    /**
+     * An unchanged value is not a change to the account. Task 12's edit form
+     * sends the email and phone back with every save, so counting them as
+     * account changes would stop a resort renaming anyone who also works
+     * elsewhere.
+     */
+    it("lets this resort's admin rename them when the form sends their email and phone back unchanged", async () => {
+      await change(admin, { name: "Renamed", email: "user-7@placeholder.invalid", phone: "placeholder-7" });
+
+      const row = await prisma.user.findUniqueOrThrow({ where: { id: colleagueId } });
+      expect(row.name).toBe("Renamed");
+      expect({ email: row.email, phone: row.phone }).toEqual({ email: "user-7@placeholder.invalid", phone: "placeholder-7" });
     });
   });
 });
@@ -404,6 +482,51 @@ describe("signing in", () => {
     expect(byPhone.user.id).toBe(made.id);
   });
 
+  it("an agency's staff member added with a local number signs in with that number", async () => {
+    const made = await platform().createAgentStaff(agency, {
+      name: "Local Junior",
+      email: "local.junior@example.com",
+      phone: "01712000322",
+      password: "password123",
+    });
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000322");
+    expect((await auth().loginWithPassword("01712000322", "password123")).user.id).toBe(made.id);
+  });
+
+  it("an invited agent with a local number signs in with that number, once approved", async () => {
+    const made = await platform().inviteAgentByEmail(admin, fx.resortId, {
+      email: "local.agent@example.com",
+      phone: "01712000323",
+    } as never);
+    // the temporary password only ever leaves in the invitation, so it is read from there
+    const temporary = outbox[0]?.html.match(/Temporary password<\/td>\s*<td[^>]*>([^<]+)<\/td>/)?.[1];
+    // an invited agent starts pending, and pending accounts cannot sign in
+    await prisma.user.update({ where: { id: made.id }, data: { status: "active" } });
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000323");
+    expect((await auth().loginWithPassword("01712000323", temporary!)).user.id).toBe(made.id);
+  });
+
+  it("a colleague whose phone is changed to a local number signs in with that number", async () => {
+    const colleague = await prisma.user.create({
+      data: {
+        name: "Moving Number",
+        email: "moving.number@example.com",
+        phone: "8801712000399",
+        role: "FRONT_DESK",
+        status: "active",
+        passwordHash: await bcrypt.hash("password123", 4),
+      },
+    });
+    await prisma.userResort.create({ data: { userId: colleague.id, resortId: fx.resortId } });
+
+    await platform().updateResortUser(admin, fx.resortId, colleague.id, { phone: "01712000324" } as never);
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: colleague.id } })).phone).toBe("8801712000324");
+    expect((await auth().loginWithPassword("01712000324", "password123")).user.id).toBe(colleague.id);
+  });
+
   it("lets the owner who signed up alone in by either — the account the reset could not reach", async () => {
     const { user } = await auth().signup({
       companyName: "Sea Breeze",
@@ -419,5 +542,84 @@ describe("signing in", () => {
 
     expect(byEmail.user.id).toBe(user.id);
     expect(byPhone.user.id).toBe(user.id);
+  });
+});
+
+/**
+ * A placeholder is a gap, not a contact detail.
+ *
+ * The migration filled every missing email with `user-<id>@placeholder.invalid`
+ * and every missing phone with `placeholder-<id>`, so that both columns could
+ * be required. To every reader that used to test for null they now look real,
+ * and a reader that falls back from email to phone never falls back, because
+ * the email is never missing any more. So each place that reaches a person, or
+ * prints how to reach them, has to see a placeholder for what it is and use
+ * what is real.
+ */
+describe("a placeholder, wherever contact details are read", () => {
+  beforeEach(async () => {
+    // the owner who signed up before this change: a real phone, and a placeholder where the email was
+    await prisma.user.update({
+      where: { id: fx.managerId },
+      data: { role: "RESORT_ADMIN", email: `user-${fx.managerId}@placeholder.invalid` },
+    });
+  });
+
+  it("does not receive a billing notice — the owner's phone does", async () => {
+    await prisma.resort.update({
+      where: { id: fx.resortId },
+      data: { status: "suspended", suspendedReason: "billing", suspendedAt: new Date() },
+    });
+
+    await makeBillingService(asPrisma).reactivate(fx.resortId);
+
+    const jobs = await prisma.notificationJob.findMany({ select: { channel: true, toRef: true } });
+    expect(jobs).toEqual([{ channel: "SMS", toRef: TAKEN_PHONE }]);
+  });
+
+  it("is left off an agency's quotation, and the agency's phone is not", async () => {
+    await prisma.user.update({ where: { id: fx.agentId }, data: { email: `user-${fx.agentId}@placeholder.invalid` } });
+    const sales = makeSalesService(asPrisma);
+    const doc = await sales.create(agency, {
+      kind: "QUOTATION",
+      clientName: "Farhana Rahman",
+      clientEmail: "farhana@example.com",
+      issueDate: "2026-09-09",
+      items: [{ label: "Cottage, 2 nights", qty: 2, unitPrice: 4500 }],
+    });
+
+    const html = await sales.preview(agency, doc.id);
+
+    const theAgency = await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } });
+    expect(html).toContain(theAgency.phone);
+    expect(html).not.toContain("placeholder.invalid");
+  });
+
+  it("is exported as a blank cell, not as a way to reach someone", async () => {
+    await prisma.user.update({ where: { id: fx.agentId }, data: { phone: `placeholder-${fx.agentId}` } });
+
+    const staff = await makeExportService(asPrisma).dataset(admin, fx.resortId, "staff");
+
+    const col = (h: string) => staff.headers.indexOf(h);
+    const row = (name: string) => staff.rows.find((r) => r[col("name")] === name)!;
+    expect(row("Test Manager")[col("email")]).toBe("");
+    expect(row("Test Manager")[col("phone")]).toBe(TAKEN_PHONE);
+    expect(row("Test Agent")[col("phone")]).toBe("");
+    expect(String(row("Test Agent")[col("email")])).toMatch(/@example\.com$/);
+    expect(JSON.stringify(staff.rows)).not.toMatch(/placeholder/);
+  });
+
+  it("is not shown as a buyer's contact on the platform's credit queue — their phone is", async () => {
+    await prisma.platformSetting.upsert({
+      where: { key: "email.creditPacks" },
+      update: { value: JSON.stringify([{ credits: 500, price: 500 }]) },
+      create: { key: "email.creditPacks", value: JSON.stringify([{ credits: 500, price: 500 }]) },
+    });
+    await makeEngageService(asPrisma).requestCredits(admin, 500);
+    const platformOwner: JwtClaims = { userId: fx.managerId, role: ROLE.SUPER_ADMIN, resortIds: [] };
+
+    const [order] = await makeEngageService(asPrisma).listCreditOrders(platformOwner, "PENDING");
+
+    expect(order?.buyerContact).toBe(TAKEN_PHONE);
   });
 });
