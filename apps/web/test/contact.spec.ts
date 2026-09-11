@@ -19,6 +19,8 @@
 import { describe, expect, it } from "vitest";
 import {
   changedContactFields,
+  displayEmail,
+  displayPhone,
   emailError,
   isPlaceholderEmail,
   isPlaceholderPhone,
@@ -78,6 +80,31 @@ describe("isPlaceholderEmail / isPlaceholderPhone", () => {
     expect(isPlaceholderEmail(null)).toBe(false);
     expect(isPlaceholderEmail(undefined)).toBe(false);
     expect(isPlaceholderPhone("")).toBe(false);
+  });
+});
+
+describe("displayEmail / displayPhone", () => {
+  // Fix round 1: every place in the console that prints a stored account's
+  // email or phone shares this, so a migration placeholder never reaches a
+  // screen as though someone had typed it — e.g. an agent access request
+  // showing "placeholder-42" as though that were a real phone number.
+  it("shows 'not set' for a placeholder", () => {
+    expect(displayEmail("user-9@placeholder.invalid")).toBe("not set");
+    expect(displayPhone("placeholder-9")).toBe("not set");
+  });
+
+  it("shows 'not set' for an empty or missing value", () => {
+    expect(displayEmail("")).toBe("not set");
+    expect(displayEmail(null)).toBe("not set");
+    expect(displayEmail(undefined)).toBe("not set");
+    expect(displayPhone("")).toBe("not set");
+    expect(displayPhone(null)).toBe("not set");
+    expect(displayPhone(undefined)).toBe("not set");
+  });
+
+  it("shows the real value otherwise", () => {
+    expect(displayEmail("guest@example.com")).toBe("guest@example.com");
+    expect(displayPhone("01712345678")).toBe("01712345678");
   });
 });
 

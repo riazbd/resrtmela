@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
-import { changedContactFields, emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
+import { changedContactFields, displayEmail, displayPhone, emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
 interface ResortDetail {
   id: number;
@@ -740,7 +740,7 @@ function AccessTab({ rid }: { rid: number }) {
                     <div className="font-semibold text-slate-800">{r.user.name}</div>
                     <div className="text-xs text-slate-400">{r.user.role.replace(/_/g, " ")} · {r.user.status}</div>
                   </Td>
-                  <Td className="text-xs">{r.user.phone}</Td>
+                  <Td className="text-xs">{displayPhone(r.user.phone)}</Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" : r.status === "PENDING" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
                   </Td>
@@ -1007,8 +1007,8 @@ function UsersTab({ rid }: { rid: number }) {
                       </div>
                     ) : (
                       <div className="text-xs text-slate-500">
-                        <div>{isPlaceholderEmail(u.email) ? "not set" : u.email}</div>
-                        <div>{isPlaceholderPhone(u.phone) ? "not set" : u.phone}</div>
+                        <div>{displayEmail(u.email)}</div>
+                        <div>{displayPhone(u.phone)}</div>
                         <button onClick={() => startEditContact(u)} className="mt-0.5 text-brand-600 hover:underline">
                           Edit
                         </button>

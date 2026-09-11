@@ -35,6 +35,27 @@ export function phoneError(value: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * What a screen prints for a stored account's email or phone.
+ *
+ * Fix round 1: `AccessTab`'s access-request table printed `r.user.phone`
+ * straight from the API, so a colleague added before this feature existed —
+ * or added by a path that only had a phone — showed the resort admin a
+ * migration placeholder (`placeholder-<id>`) as though it were a number
+ * someone could call. Every display site shares these two functions instead
+ * of re-deriving the "is this a placeholder, or empty" check per screen, the
+ * way the three lists fixed in the first pass each wrote their own filter.
+ */
+export function displayEmail(value: string | null | undefined): string {
+  const email = (value ?? "").trim();
+  return !email || isPlaceholderEmail(email) ? "not set" : email;
+}
+
+export function displayPhone(value: string | null | undefined): string {
+  const phone = (value ?? "").trim();
+  return !phone || isPlaceholderPhone(phone) ? "not set" : phone;
+}
+
 export interface ContactFields {
   email: string;
   phone: string;

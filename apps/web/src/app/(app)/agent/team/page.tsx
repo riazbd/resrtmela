@@ -8,7 +8,7 @@ import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useT
 import { Table, Tabs } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { ShieldCheck, UserPlus } from "lucide-react";
-import { emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
+import { displayEmail, displayPhone, emailError, phoneError } from "@/lib/contact";
 
 /**
  * An agency's own team.
@@ -123,12 +123,8 @@ export default function AgentTeamPage() {
                     <tr key={s.id}>
                       <Td className="font-medium">{s.name}</Td>
                       <Td className="text-xs text-slate-500">
-                        {[
-                          s.email && !isPlaceholderEmail(s.email) ? s.email : null,
-                          s.phone && !isPlaceholderPhone(s.phone) ? s.phone : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "not set"}
+                        {[displayEmail(s.email), displayPhone(s.phone)].filter((v) => v !== "not set").join(" · ") ||
+                          "not set"}
                       </Td>
                       <Td>
                         <Select

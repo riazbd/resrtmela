@@ -12,6 +12,7 @@ import { Button as Btn } from "@/components/ui";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 import { monthOf } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
+import { displayPhone } from "@/lib/contact";
 
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
@@ -324,7 +325,7 @@ export default function PlatformPage() {
                       {r.userResorts?.[0] && (
                         <button
                           onClick={() => loginAs(r.userResorts![0]!.user.id)}
-                          title={`Log in as ${r.userResorts[0].user.name} (${r.userResorts[0].user.phone})`}
+                          title={`Log in as ${r.userResorts[0].user.name} (${displayPhone(r.userResorts[0].user.phone)})`}
                           className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                         >
                           <LogIn className="inline h-3.5 w-3.5" /> Login as
@@ -386,7 +387,7 @@ export default function PlatformPage() {
                 <tr key={a.id} className="border-t border-slate-100">
                   <Td>
                     <div className="font-semibold text-slate-800">{a.name}</div>
-                    <div className="text-xs text-slate-400">{a.phone}</div>
+                    <div className="text-xs text-slate-400">{displayPhone(a.phone)}</div>
                   </Td>
                   <Td className="text-xs text-slate-500">{a.resorts.map((r) => r.name).join(", ") || "—"}</Td>
                   <Td>{a.bookings}</Td>

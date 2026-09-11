@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, money, dmy, type BookingRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
-import { emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
+import { displayEmail, displayPhone, emailError, phoneError } from "@/lib/contact";
 
 interface StaffRow {
   id: number;
@@ -107,7 +107,7 @@ export default function ProfilePage() {
           </div>
           <div>
             <div className="text-base font-semibold">{me?.name}</div>
-            <div className="text-xs text-slate-500">{me?.phone} · Agent · {activeResort?.name}</div>
+            <div className="text-xs text-slate-500">{displayPhone(me?.phone)} · Agent · {activeResort?.name}</div>
           </div>
           <div className="ml-auto text-right">
             <div className="text-[11px] font-medium text-slate-400">Commission terms</div>
@@ -177,12 +177,8 @@ export default function ProfilePage() {
                         <tr key={s.id} className="border-t border-slate-100">
                           <Td className="font-semibold text-slate-800">{s.name}</Td>
                           <Td className="text-xs">
-                            {[
-                              s.phone && !isPlaceholderPhone(s.phone) ? s.phone : null,
-                              s.email && !isPlaceholderEmail(s.email) ? s.email : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ") || "not set"}
+                            {[displayPhone(s.phone), displayEmail(s.email)].filter((v) => v !== "not set").join(" · ") ||
+                              "not set"}
                           </Td>
                           <Td>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${s.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{s.status}</span>
