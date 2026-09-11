@@ -8,7 +8,7 @@ $suffix = Get-Date -Format "HHmmss"
 $slug = "demo-resort-$suffix"
 $body = @{
   companyName = "Demo Group $suffix"; resortName = "Demo Resort"; location = "Cox's Bazar"
-  name = "Demo Admin"; phone = "01900$suffix"; password = "Password123!" ; slug = $slug
+  name = "Demo Admin"; email = "demo-$suffix@example.com"; phone = "01900$suffix"; password = "Password123!" ; slug = $slug
 } | ConvertTo-Json -Compress
 $signup = Invoke-RestMethod -Method Post "$BASE/auth/signup" -ContentType "application/json" -Body $body
 $T = @{ Authorization = "Bearer $($signup.accessToken)" }
@@ -18,11 +18,13 @@ $tenantId = 99 # resolved below via usage of my own resort detail
 
 # 2) duplicate slug + duplicate phone
 try {
-  Invoke-RestMethod -Method Post "$BASE/auth/signup" -ContentType "application/json" -Body (@{ companyName="X"; resortName="Y"; name="Z"; phone="01911$suffix"; password="Password123!"; slug=$slug } | ConvertTo-Json -Compress) | Out-Null
+  # fresh email + fresh phone here, so the slug is the only thing that collides
+  Invoke-RestMethod -Method Post "$BASE/auth/signup" -ContentType "application/json" -Body (@{ companyName="X"; resortName="Y"; name="Z"; email="demo-2a-$suffix@example.com"; phone="01911$suffix"; password="Password123!"; slug=$slug } | ConvertTo-Json -Compress) | Out-Null
   Write-Host "2a. FAIL: duplicate slug accepted"
 } catch { Write-Host ("2a. duplicate slug rejected: " + (($_.ErrorDetails.Message | ConvertFrom-Json).message)) }
 try {
-  Invoke-RestMethod -Method Post "$BASE/auth/signup" -ContentType "application/json" -Body (@{ companyName="X2"; resortName="Y2"; name="Z2"; phone="01900$suffix"; password="Password123!" } | ConvertTo-Json -Compress) | Out-Null
+  # fresh email here, so the phone (reused from step 1) is the only thing that collides
+  Invoke-RestMethod -Method Post "$BASE/auth/signup" -ContentType "application/json" -Body (@{ companyName="X2"; resortName="Y2"; name="Z2"; email="demo-2b-$suffix@example.com"; phone="01900$suffix"; password="Password123!" } | ConvertTo-Json -Compress) | Out-Null
   Write-Host "2b. FAIL: duplicate phone accepted"
 } catch { Write-Host ("2b. duplicate phone rejected: " + (($_.ErrorDetails.Message | ConvertFrom-Json).message)) }
 
