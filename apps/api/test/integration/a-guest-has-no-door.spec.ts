@@ -98,7 +98,8 @@ describe("the guest account", () => {
         db.$transaction(async (tx) => {
           await tx.$executeRawUnsafe("SET SESSION sql_mode = 'STRICT_ALL_TABLES'");
           await tx.$executeRawUnsafe(
-            "INSERT INTO `users` (`name`, `phone`, `role`) VALUES ('A guest', '+8801799999001', 'GUEST')",
+            "INSERT INTO `users` (`name`, `phone`, `email`, `role`) VALUES " +
+              "('A guest', '+8801799999001', 'a-guest-has-no-door@example.com', 'GUEST')",
           );
         }),
       ).rejects.toThrow(/Data truncated for column 'role'/);
