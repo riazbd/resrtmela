@@ -13,13 +13,19 @@ interface SignupResult {
   accessToken: string;
 }
 
-/** One row of the public price list — the same rows Platform → Plans edits. */
+/**
+ * One row of the public price list — the same rows Platform → Plans edits.
+ *
+ * There is no `active` here: `/cms/plans` returns what is on sale and nothing
+ * else. This page used to read one, and `plans.find(p => p.active)` was
+ * therefore always undefined — so the plan a new workspace starts on printed
+ * as "—" on the summary step, and the header line quoting it was blank.
+ */
 interface PublicPlan {
   name: string;
   label: string;
   maxRooms: number;
   trialDays: number;
-  active: boolean;
 }
 
 export default function SignupPage() {
@@ -34,8 +40,12 @@ export default function SignupPage() {
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
   const offer = useOffer("RESORT");
   const usingOffer = !!offer.offer?.usable && !offer.problem;
-  // this deployment's own host, not a domain compiled into the page
-  const workspaceHost = typeof window === "undefined" ? "" : window.location.host;
+  // this deployment's own host, not a domain compiled into the page. Read
+  // after mounting, not during render: the server has no `window`, so
+  // rendering it inline made the server's HTML and the client's first render
+  // disagree, and React threw the whole tree away and built it again.
+  const [workspaceHost, setWorkspaceHost] = useState("");
+  useEffect(() => setWorkspaceHost(window.location.host), []);
 
   useEffect(() => {
     fetch(`${API_URL}/cms/plans`)
@@ -117,7 +127,8 @@ export default function SignupPage() {
    * unified — so the page was describing a plan the platform may no longer
    * sell, at a room cap it may no longer have.
    */
-  const entry = plans?.find((p) => p.active) ?? null;
+  // the first row of the price list, which the API already orders and filters
+  const entry = plans?.[0] ?? null;
   // an offer names the plan the workspace lands on
   const entryLine = usingOffer
     ? offerLine(offer.offer!)
