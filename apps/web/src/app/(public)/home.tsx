@@ -7,6 +7,7 @@ import { formatMoney, planFeatureLabel } from "@rh/shared";
 import { Logo } from "@/components/logo";
 import type { PublicPlan } from "./plan";
 import type { HomeData } from "./home-data";
+import { signupHref } from "./signup-href";
 import {
   CalendarDays,
   BedDouble,
@@ -637,21 +638,16 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                 {/**
                  * The door that matches the shelf.
                  *
-                 * An agency picks its plan as it signs up, so the card carries
-                 * the plan across. A resort does not: no subscription is written
-                 * at resort signup unless an offer names one — the platform sets
-                 * the first one up — so a `plan` on that link would be a
-                 * parameter nothing reads. The rhythm travels either way,
-                 * because an offer does honour it.
+                 * Both audiences carry the plan across. This once carried it
+                 * for agencies only, and the comment here explained why: resort
+                 * signup wrote no subscription unless an offer named one, so a
+                 * `plan` parameter would have been read by nobody. That stopped
+                 * being true when signup started opening a subscription on the
+                 * first day, the comment did not change with it, and a resort
+                 * that clicked Chain opened on Starter for months.
                  */}
                 <Link
-                  href={
-                    audience === "AGENCY"
-                      ? `/signup/agency?plan=${p.name}${yearlyHere(p) ? "&billing=YEARLY" : ""}`
-                      : yearlyHere(p)
-                        ? "/signup?billing=YEARLY"
-                        : "/signup"
-                  }
+                  href={signupHref({ audience, plan: p.name, yearly: yearlyHere(p) })}
                   className={`mt-auto block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
                   Start free trial

@@ -33,6 +33,14 @@ class SignupDto {
   @IsString() @MinLength(8) password!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
   @IsOptional() @IsString() @MaxLength(32) offer?: string;
+  /**
+   * The plan card that was clicked on the pricing page; the entry plan when
+   * unsaid. `AuthService.signup` has taken this since resort signup started
+   * opening a subscription, and `SignupAgencyDto` has always declared it —
+   * this side did not, so `ValidationPipe({ whitelist: true })` removed it
+   * from the body without a word and every workspace opened on Starter.
+   */
+  @IsOptional() @IsString() @MaxLength(16) plan?: string;
   /** MONTHLY or YEARLY, from the toggle on the pricing page. */
   @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
   @IsOptional() @IsBoolean() agentsOpen?: boolean;

@@ -151,6 +151,25 @@ export function isAgentPermission(key: string): boolean {
 
 export const ALL_PERMISSIONS = PERMISSIONS.map((p) => p.key);
 
+/** The group the agency's own permissions live in, and nothing else does. */
+export const AGENT_PERMISSION_GROUP = "Agent portal";
+
+/**
+ * What a *resort* may put on one of its roles.
+ *
+ * Settings → Permissions offered every key there is, which meant a resort
+ * owner was shown the agency's wallet, payroll, staff and expenses and invited
+ * to manage them. They are not the resort's to manage: an agency is a separate
+ * business whose owner sets its roles in `/agent/team`, and every agency
+ * endpoint reads permissions from the agency role rather than the resort one.
+ * So the checkbox granted nothing — and, worse, an owner who unticked "Book
+ * for guests" to stop an agency selling their rooms changed nothing at all.
+ *
+ * `marketing.send` is in both lists on purpose: each side buys its own email
+ * credits and sends its own campaigns.
+ */
+export const RESORT_PERMISSIONS = PERMISSIONS.filter((p) => p.group !== AGENT_PERMISSION_GROUP).map((p) => p.key);
+
 const PERMISSION_SET = new Set(ALL_PERMISSIONS);
 
 export function isPermissionKey(key: string): boolean {
@@ -158,6 +177,9 @@ export function isPermissionKey(key: string): boolean {
 }
 
 export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((p) => p.group))];
+
+/** The groups a resort's role editor may draw. */
+export const RESORT_PERMISSION_GROUPS = PERMISSION_GROUPS.filter((g) => g !== AGENT_PERMISSION_GROUP);
 
 /**
  * What a plan can include — the platform's shelf.
@@ -222,7 +244,11 @@ export function planFeatureLabel(key: string): string {
 
 /** Defaults for the seeded system roles, keyed by role name */
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  Administrator: ALL_PERMISSIONS,
+  // every *resort* permission. It used to be every permission there is, so a
+  // new resort's Administrator row literally listed the agency's wallet and
+  // payroll among its own — inert, because the role is computed as `["*"]` at
+  // read time, and still not what the row should say
+  Administrator: RESORT_PERMISSIONS,
   Manager: [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
     "payments.view", "payments.create", "expenses.view", "expenses.create",

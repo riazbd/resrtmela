@@ -9,6 +9,7 @@ import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 import { OfferBanner, offerLine, useOffer } from "./offer";
+import { plannedPlan } from "../(public)/signup-href";
 import { LogoMark } from "@/components/logo";
 
 interface SignupResult {
@@ -66,8 +67,18 @@ export default function SignupPage() {
    * makes the first client render disagree with the server's HTML.
    */
   const [yearly, setYearly] = useState(false);
+  /**
+   * `?plan=CHAIN`, from the card that was clicked.
+   *
+   * Read here for the same reason `billing` is, and it is the same trip: the
+   * two travel together from the pricing page, and until today only one of
+   * them was picked up. A workspace that chose Chain opened on Starter.
+   */
+  const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
-    setYearly(new URLSearchParams(window.location.search).get("billing") === "YEARLY");
+    const q = new URLSearchParams(window.location.search);
+    setYearly(q.get("billing") === "YEARLY");
+    setPicked(q.get("plan"));
   }, []);
 
   useEffect(() => {
@@ -124,6 +135,10 @@ export default function SignupPage() {
           password,
           slug: effectiveSlug || undefined,
           offer: usingOffer ? offer.code : undefined,
+          // the plan card that was clicked — sent as the form described it, so
+          // what the visitor read while typing is what the workspace opens on.
+          // An offer names its own plan and wins; the API decides that.
+          plan: entry?.name,
           // which rhythm was picked on the pricing page. The API checks it
           // against the plan and falls back to monthly rather than refusing,
           // so a stale link cannot cost somebody their signup.
@@ -154,8 +169,9 @@ export default function SignupPage() {
    * unified — so the page was describing a plan the platform may no longer
    * sell, at a room cap it may no longer have.
    */
-  // the first row of the price list, which the API already orders and filters
-  const entry = plans?.[0] ?? null;
+  // the plan the pricing card named, or the first row of the price list — which
+  // the API already orders and filters — when the visitor arrived without one
+  const entry = plannedPlan(plans, picked);
   // an offer names the plan the workspace lands on
   // and the rhythm, when the visitor arrived from the yearly side of the toggle
   const onYear = yearly && entry?.yearlyFee != null;

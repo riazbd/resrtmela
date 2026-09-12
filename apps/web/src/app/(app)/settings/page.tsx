@@ -5,7 +5,7 @@ import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
-import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
+import { PERMISSIONS, RESORT_PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
@@ -1250,7 +1250,11 @@ function RolesTab({ rid }: { rid: number }) {
   }
 
   if (!roles) return <Empty msg="Loading…" />;
-  const groups = PERMISSION_GROUPS;
+  // a resort's roles, so the resort's vocabulary. This drew every group there
+  // is, which put the agency's wallet, payroll, staff and expenses in front of
+  // a resort owner as things to grant — none of which are theirs, and none of
+  // which the tick did anything about. The agency sets those in /agent/team.
+  const groups = RESORT_PERMISSION_GROUPS;
   const isAdminRole = (r: PermRole) => r.system && r.name === "Administrator";
   return (
     <div className="space-y-4">

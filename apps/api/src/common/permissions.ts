@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ALL_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
+import { AGENT_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, RESORT_PERMISSIONS, ROLE, type JwtClaims } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { agentPermissionsFor } from "./agency-permissions";
 import { forbid } from "./rbac";
@@ -101,7 +101,27 @@ export class PermissionsService {
   }
 }
 
-export function validPermissions(keys: unknown): string[] {
+/**
+ * The keys that may be stored on a role, filtered to the audience that owns it.
+ *
+ * The audience matters as much as the key does. A resort role holding
+ * `agent.wallet.view` grants nothing — agency endpoints read the *agency*
+ * role — but it is a key the resort's owner was invited to tick, and a switch
+ * wired to nothing is worse than no switch. An agency role holding
+ * `payroll.manage` would be the reverse and worse: the escalation the
+ * `AGENT_PERMISSIONS` comment in @rh/shared warns about.
+ *
+ * Filtered here and not only in the form, because a checkbox removed from a
+ * page is still reachable by anyone willing to post the body themselves.
+ *
+ * The agency side has its own stricter path — `AgentService.checkPermissions`
+ * refuses an unknown key with a sentence rather than dropping it — so nothing
+ * passes "AGENCY" today. The parameter exists because without it, anyone who
+ * reaches for this function on an agency role gets every key silently deleted,
+ * which is a worse bug than the one being fixed here.
+ */
+export function validPermissions(keys: unknown, audience: "RESORT" | "AGENCY" = "RESORT"): string[] {
   if (!Array.isArray(keys)) return [];
-  return keys.filter((k): k is string => typeof k === "string" && ALL_PERMISSIONS.includes(k));
+  const shelf: readonly string[] = audience === "AGENCY" ? AGENT_PERMISSIONS : RESORT_PERMISSIONS;
+  return keys.filter((k): k is string => typeof k === "string" && shelf.includes(k));
 }
