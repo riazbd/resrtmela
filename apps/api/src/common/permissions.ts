@@ -120,6 +120,52 @@ export class PermissionsService {
  * reaches for this function on an agency role gets every key silently deleted,
  * which is a worse bug than the one being fixed here.
  */
+/**
+ * The one-word name for what a permission set amounts to.
+ *
+ * `User.role` used to be a second thing an owner chose, beside the permission
+ * set, and the two could disagree: a live console had somebody listed as FRONT
+ * DESK carrying a set called Admin. Deleting the column is not on — `isStaff`
+ * and `isManagement` read it in fifty-seven places, and HOUSEKEEPING is
+ * deliberately not staff — so it stops being chosen and starts being derived.
+ * Two values computed from each other cannot contradict each other.
+ *
+ * The order is the design: each rung is the least authority that still earns
+ * the name, and the first match wins. Agency keys are ignored — old rows still
+ * carry them, and none of them should promote anybody.
+ */
+const CAN_CHANGE_THE_RESORT = ["settings.manage", "users.manage", "rooms.manage", "payroll.manage"];
+
+export function accountKindFor(permissions: readonly string[]): "RESORT_ADMIN" | "MANAGER" | "FRONT_DESK" | "HOUSEKEEPING" {
+  const held = new Set(permissions.filter((p) => !p.startsWith("agent.")));
+  if (held.has("*")) return "RESORT_ADMIN";
+  if (CAN_CHANGE_THE_RESORT.some((p) => held.has(p))) return "MANAGER";
+  // the register: taking a booking is what a front desk is for, and what
+  // separates them from the people who never open one
+  if (held.has("bookings.view")) return "FRONT_DESK";
+  return "HOUSEKEEPING";
+}
+
+/**
+ * The same, for a role row rather than a bare list.
+ *
+ * `Administrator` has to be answered by name, exactly as `resolve()` answers
+ * it: its stored permissions are a snapshot taken the day the resort was made
+ * and never updated, so reading them would call the owner a MANAGER and put
+ * the contradiction straight back. `system` as well as the name — a role
+ * somebody called "Administrator" themselves is an ordinary role.
+ *
+ * `null` in, `null` out: a user with no permission set keeps whatever role
+ * they were given, which is what the legacy defaults in `resolve()` expect.
+ */
+export function accountKindForRole(
+  role: { system: boolean; name: string; permissions: unknown } | null,
+): ReturnType<typeof accountKindFor> | null {
+  if (!role) return null;
+  if (role.system && role.name === ADMIN_ROLE) return "RESORT_ADMIN";
+  return accountKindFor(Array.isArray(role.permissions) ? (role.permissions as string[]) : []);
+}
+
 export function validPermissions(keys: unknown, audience: "RESORT" | "AGENCY" = "RESORT"): string[] {
   if (!Array.isArray(keys)) return [];
   const shelf: readonly string[] = audience === "AGENCY" ? AGENT_PERMISSIONS : RESORT_PERMISSIONS;

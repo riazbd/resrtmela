@@ -11,7 +11,7 @@ import { BillingService } from "./billing.service";
 import { PlatformSettingsService, SETTING_DEFAULTS, SETTING_MAX_LENGTH, assertSettingParses } from "../common/platform-settings.service";
 import { bookingTotals } from "../common/money";
 import { round2 } from "../common/dates";
-import { PermissionsService, ensureResortRoles, validPermissions, ADMIN_ROLE } from "../common/permissions";
+import { PermissionsService, ensureResortRoles, validPermissions, accountKindForRole, ADMIN_ROLE } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, TAKEN_SENTENCE, sameEmail, samePhone } from "../common/contact";
 import { signToken } from "../common/auth.guard";
 import { randomBytes } from "node:crypto";
@@ -1001,9 +1001,19 @@ export class PlatformService {
     if (!["MANAGER", "FRONT_DESK", "HOUSEKEEPING"].includes(input.role)) {
       throw badRequest("role must be MANAGER | FRONT_DESK | HOUSEKEEPING");
     }
+    /**
+     * The permission set decides the role, when one is given.
+     *
+     * Both used to be chosen, and they could disagree — a live console had
+     * somebody listed as FRONT DESK holding a set called Admin. Deriving one
+     * from the other is what makes the list honest: what the row says is what
+     * the person can do.
+     */
+    let kind = input.role;
     if (input.roleId != null) {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
       if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
+      kind = accountKindForRole(role) ?? input.role;
     }
     // both, the way login reads them: this used to strip non-digits only, so
     // a colleague added as 01712… could not sign in as 01712…
@@ -1017,7 +1027,7 @@ export class PlatformService {
         email,
         phone,
         passwordHash: await bcrypt.hash(input.password, 12),
-        role: input.role as never,
+        role: kind as never,
         status: "active",
       },
     });
@@ -1107,6 +1117,41 @@ export class PlatformService {
     if (input.roleId != null && input.roleId !== 0) {
       const role = await this.prisma.customRole.findUnique({ where: { id: input.roleId } });
       if (!role || role.resortId !== resortId) throw badRequest("role not found in this resort");
+      /**
+       * Changing the permission set changes the role with it, so the two
+       * cannot drift apart. A SUPER_ADMIN's explicit `role` still wins — that
+       * is the "Login as" path, and it is deliberate — but nothing else gets
+       * to set a role that disagrees with what the person can actually do.
+       */
+      if (!input.role) data.role = (accountKindForRole(role) ?? undefined) as never;
+    }
+
+    /**
+     * A resort always keeps somebody who can administer it.
+     *
+     * Demoting the last administrator is a door that locks from the outside:
+     * making somebody an administrator again is itself a Settings action, and
+     * Settings is what nobody can reach any more. It was possible before this
+     * — the old role dropdown listed RESORT_ADMIN beside MANAGER — and
+     * deriving the role from the permission set does not close it by itself,
+     * because that is the same demotion by another route.
+     *
+     * The invariant is guarded rather than a particular account: pinning "the
+     * founder" would mean a colleague promoted to Administrator could never be
+     * demoted again, since they are an administrator too.
+     */
+    if (data.role && data.role !== "RESORT_ADMIN") {
+      const before = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+      if (before?.role === "RESORT_ADMIN") {
+        const others = await this.prisma.userResort.count({
+          where: { resortId, userId: { not: userId }, user: { role: "RESORT_ADMIN", status: "active" } },
+        });
+        if (others === 0) {
+          throw badRequest(
+            "This is the resort's last administrator. Give somebody else the Administrator role first — otherwise nobody could open Settings again, including you.",
+          );
+        }
+      }
     }
     if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
 

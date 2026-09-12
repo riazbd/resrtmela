@@ -1088,12 +1088,10 @@ function UsersTab({ rid }: { rid: number }) {
                       </div>
                     )}
                   </Td>
+                  {/* one control: the permission set. The account's role is
+                      derived from it by the API, so the two cannot disagree —
+                      which they did, visibly, on a live console. */}
                   <Td>
-                    <Select className="!w-36 !py-1" value={u.role} onChange={(e) => patch(u.id, { role: e.target.value })}>
-                      {["RESORT_ADMIN", "MANAGER", "FRONT_DESK", "HOUSEKEEPING"].map((r) => (
-                        <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
-                      ))}
-                    </Select>
                     <RolePicker u={u} rid={rid} roles={roles} onDone={load} />
                   </Td>
                   <Td>
@@ -1129,16 +1127,18 @@ function UsersTab({ rid }: { rid: number }) {
           <Field label="Email (login)"><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@resort.com" /></Field>
           <Field label="Phone (login)"><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="8801XXXXXXXXX" /></Field>
           <Field label="Password"><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
-          <Field label="Role">
-            <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, roleId: "" })}>
-              <option value="MANAGER">Manager</option>
-              <option value="FRONT_DESK">Front desk</option>
-              <option value="HOUSEKEEPING">Housekeeping</option>
-            </Select>
-          </Field>
-          <Field label="Permissions set" hint="create custom permission sets in the Permissions tab">
+          {/**
+           * One role, not two.
+           *
+           * This asked for a fixed Role *and* a Permissions set, and the two
+           * could disagree — a live console had somebody listed as FRONT DESK
+           * carrying a set called Admin. The permission set is the one that
+           * decides what the server allows, so it is the one that is chosen;
+           * the API derives the account's role from it.
+           */}
+          <Field label="Role" hint="what this person may do — build more in the Permissions tab">
             <Select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })}>
-              <option value="">Default for role</option>
+              <option value="">Choose a role…</option>
               {roles.map((r) => (
                 <option key={r.id} value={r.id}>{r.name} ({r.permissions.length} perms)</option>
               ))}
@@ -1160,13 +1160,30 @@ function UsersTab({ rid }: { rid: number }) {
   );
 }
 
+/**
+ * The one role control.
+ *
+ * There used to be two: a fixed Role beside this, which could disagree with it
+ * — and did, on a live console, where somebody listed as FRONT DESK held a set
+ * called Admin. The permission set is what the server reads, so it is what is
+ * shown and chosen, and the API derives the account's role from it.
+ *
+ * Everyone's role is changeable here, the owner's included. What protects the
+ * resort is not an unchangeable person but an invariant the API keeps: the
+ * last administrator cannot be demoted, and it refuses with a sentence saying
+ * why. Guarding a particular account instead would make a promotion to
+ * Administrator impossible to undo, since that account becomes an
+ * administrator too.
+ */
 function RolePicker({ u, rid, roles, onDone }: { u: UserRow; rid: number; roles: PermRole[]; onDone: () => void }) {
   const { push } = useToast();
-  if (roles.length === 0 || u.role === "RESORT_ADMIN") return null;
+  if (roles.length === 0) {
+    return <span className="text-xs text-slate-400">No roles yet — make one in Permissions</span>;
+  }
   return (
-    <div className="mt-1 flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5">
       <Select
-        className="!w-32 !py-0.5 text-xs"
+        className="!w-36 !py-1 text-xs"
         value={u.roleId ? String(u.roleId) : ""}
         onChange={(e) => {
           const roleId = e.target.value ? Number(e.target.value) : 0;
@@ -1175,12 +1192,13 @@ function RolePicker({ u, rid, roles, onDone }: { u: UserRow; rid: number; roles:
             .catch((ex) => push((ex as Error).message, "err"));
         }}
       >
-        <option value="">Default perms</option>
+        {/* not a choice anybody should make — it is the state of a colleague
+            added before roles existed, and it reads as unfinished on purpose */}
+        <option value="">No role set</option>
         {roles.map((r) => (
           <option key={r.id} value={r.id}>{r.name}</option>
         ))}
       </Select>
-      {u.roleName && <span className="text-[10px] text-slate-400">{u.roleName}</span>}
     </div>
   );
 }
