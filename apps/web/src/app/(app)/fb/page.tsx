@@ -313,7 +313,10 @@ export default function FbPage() {
           <div className="flex flex-wrap items-center gap-2">
             {packages.length === 0 && <span className="text-xs text-slate-400">No packages yet</span>}
             {packages.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
+              // a package chip carries a name, a price, its item list and a
+              // delete button; on a phone that is wider than the screen unless
+              // the chip is allowed to wrap inside itself
+              <div key={p.id} className="flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm">
                 <span className={`font-semibold ${p.active ? "text-slate-700" : "text-slate-300"}`}>{p.name}</span>
                 <span className="text-xs text-slate-500">{money(p.price)}</span>
                 {p.items && <span className="max-w-[220px] truncate text-[10px] text-slate-400">{p.items}</span>}

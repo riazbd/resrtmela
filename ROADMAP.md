@@ -114,10 +114,14 @@ Only change-while-logged-in exists (`POST /auth/me/password`). Add OTP-based res
 
 Release 0 hosts the console in a native shell, so both panels work from the first build, and native screens replace it one at a time. Still open: push notifications, the offline read cache and write queue, iOS.
 
-### 8b. The console on a phone
-Measured on a 390px screen on 2026-09-13: the page itself does not overflow — which is why this passed for "responsive" — but the content does. The Platform → Resorts table is **1009px wide**, reachable only by dragging sideways inside its card; seven cells render below 13px; and on the Platform page the sticky header covers the tab strip, so *Billing policy* cannot be tapped at all.
+### 8b. The console on a phone — ✅ DONE (2026-09-13)
+**What was wrong,** measured at 390px: the page itself did not overflow, which is why this had passed for "responsive", but the content did. Platform → Resorts rendered a **1009px** table reachable only by dragging inside its card; the sticky header covered the tab strip so *Billing policy* could not be tapped at all; `/settings` scrolled 674px sideways; and the bookings page alone had 621 elements below 13px.
 
-It is deliberate, not accidental: twenty-four files set an explicit `min-w-[560px]`–`min-w-[860px]` on their tables and wrap them in `overflow-x-auto`. A phone needs the other shape — one card per row — which is a change to the console that the app then inherits for free.
+**What changed.** Forty tables became `<Table>` from `components/patterns.tsx`, which is a table above `sm` and one card per row below it, each cell labelled from the table's own `<thead>`. `min-w-0` on the content column — a flex item will not shrink below its content, so one wide toolbar had been stretching the column and the header with it. Tab strips wrap instead of scrolling out of reach. A type floor on phones only: `text-[10px]`/`text-[11px]` render at 12px, `text-xs` at 13px.
+
+**Where it stands now,** same measurement, both panels, 23 screens: nothing drags sideways, no control is covered, and the only text under 12px is the notification bell's "9+" badge, which is a mark rather than prose.
+
+Two tables stay tables on purpose: `/invoice/[id]` and the stay bill. A bill is a document, and the invoice is what html2canvas turns into the PDF a guest receives.
 
 ### 9. Terms of Service & Privacy Policy pages
 Public signup exists (`/signup`) — legally the SaaS should ship both pages. Add `apps/web/src/app/(public)/legal/...` and link from the footer + signup form.

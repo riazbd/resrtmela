@@ -153,7 +153,9 @@ export default function ReportsPage() {
           <Button size="sm" variant="ghost" onClick={() => { setFrom(""); setTo(""); }}>Clear</Button>
         }
       >
-        <div className="flex items-end gap-3">
+        {/* three date controls do not fit side by side on a phone, and a row
+            that cannot wrap drags the page instead of stacking */}
+        <div className="flex flex-wrap items-end gap-3">
           <Field label="Financial year">
           <Select
             value={fy}
