@@ -1424,12 +1424,29 @@ against it. The sequence that worked, for next time:
 pnpm -F @rh/api test            # app-boots.spec.ts is the gate
 git pull --ff-only
 pnpm install --frozen-lockfile
-pnpm -F @rh/api db:baseline     # look first
+pnpm -F @rh/db generate         # ALWAYS — see below
+                                # only when the schema changed:
+pnpm -F @rh/api db:baseline     #   look first
 pnpm -F @rh/api db:baseline -- --apply
-cd packages/db && npx prisma migrate deploy && npx prisma generate
-cd ../.. && pnpm -F @rh/web build
+cd packages/db && npx prisma migrate deploy && cd ../..
+pnpm -F @rh/shared build
+pnpm -F @rh/web build
 pm2 restart api web
 ```
+
+**`generate` is not part of the migration step.** It used to be written on the
+end of the `migrate deploy` line, so a deploy with no schema change skipped the
+whole line — and on 2026-09-13 that took the API down for four minutes with
+`Cannot find module '.prisma/client/default'`. The generated client lives
+inside `node_modules`, so any install that relinks the store throws it away,
+whether or not the schema moved. It takes four seconds. Run it every time.
+
+**Do not pipe the deploy script into `ssh host 'bash -s'`.** `pnpm install`
+reads stdin, stdin is the rest of the script, and pnpm swallows its own
+remaining instructions — the shell then reaches end of input and exits 0, so a
+deploy that never built or restarted anything reports success. Write the script
+to the server first (`… | ssh host 'cat > /opt/resortmela/.deploy.sh'`, then
+`ssh host 'bash /opt/…'`). `scp` to this host answers "Connection closed".
 
 Take a `mariadb-dump` before the migration step and check it ends with
 "Dump completed". The notes below predate the first deployment and are kept for
