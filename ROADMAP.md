@@ -110,7 +110,14 @@ Only change-while-logged-in exists (`POST /auth/me/password`). Add OTP-based res
 **Superseded (2026-09-11):** built, but not as OTP — a mailed single-use reset link, requestable by either email or phone. See `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md` §4.4.
 
 ### 8. Mobile app release
-**Dropped (2026-09-13):** `apps/mobile` is deleted. It was a guest app, and the platform stopped having guests on 2026-09-11 — the endpoints it called are gone, so it was a client for a server that no longer exists. It had also never been built once: no `android.package`, no `ios.bundleIdentifier`, no push, no offline, no Bangla. The console is responsive and is how staff work from a phone. If a native app is ever wanted it is a new product decision, not a release of this one.
+**Restarted (2026-09-13), for a different audience.** The guest app that lived here was deleted the same morning — it called endpoints removed on 2026-09-11, and had never been built once: no `android.package`, no bundle identifier, no APK. The replacement is for the two audiences that pay, resort staff and agents, and its first act was the thing the old one never managed: an installable build. Design in `docs/superpowers/specs/2026-09-13-mobile-app-design.md`; every APK produced is listed in `apps/mobile/RELEASES.md`.
+
+Release 0 hosts the console in a native shell, so both panels work from the first build, and native screens replace it one at a time. Still open: push notifications, the offline read cache and write queue, iOS.
+
+### 8b. The console on a phone
+Measured on a 390px screen on 2026-09-13: the page itself does not overflow — which is why this passed for "responsive" — but the content does. The Platform → Resorts table is **1009px wide**, reachable only by dragging sideways inside its card; seven cells render below 13px; and on the Platform page the sticky header covers the tab strip, so *Billing policy* cannot be tapped at all.
+
+It is deliberate, not accidental: twenty-four files set an explicit `min-w-[560px]`–`min-w-[860px]` on their tables and wrap them in `overflow-x-auto`. A phone needs the other shape — one card per row — which is a change to the console that the app then inherits for free.
 
 ### 9. Terms of Service & Privacy Policy pages
 Public signup exists (`/signup`) — legally the SaaS should ship both pages. Add `apps/web/src/app/(public)/legal/...` and link from the footer + signup form.

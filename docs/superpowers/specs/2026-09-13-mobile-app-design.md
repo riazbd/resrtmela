@@ -103,7 +103,9 @@ the home screen.
 - Android back button navigates the console's history and only exits at its
   root.
 - Pull to refresh.
-- A Bangla offline screen with a retry button — never a blank white page.
+- An offline screen with a retry button — never a blank white page. In English,
+  like the console: English is this platform's default and Bangla is the
+  toggle, and the app does not get to invent a different rule.
 - Camera and file permissions wired, so the console's uploads work from a phone.
 - External links (`tel:`, `mailto:`, other hosts) open outside the app.
 - Session persists across launches.
