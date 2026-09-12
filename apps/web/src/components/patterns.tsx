@@ -29,7 +29,14 @@ export function Tabs<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="tablist" className={`flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 ${className}`}>
+    /**
+     * Wrapping, not scrolling. `overflow-x-auto` kept the strip one row tall
+     * and hid the later tabs off the right edge — on the Platform page at
+     * 390px that meant *Billing policy* could not be reached at all, because
+     * the sticky header sat on top of the only part of it that was visible.
+     * `min-w-0` stops the strip stretching the column it lives in.
+     */
+    <div role="tablist" className={`flex min-w-0 flex-wrap gap-1 rounded-xl bg-slate-100 p-1 ${className}`}>
       {tabs.map((t) => (
         <button
           key={t}

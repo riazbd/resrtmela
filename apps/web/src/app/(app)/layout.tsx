@@ -193,7 +193,10 @@ function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* content */}
-      <div className="flex min-h-screen flex-1 flex-col lg:ml-60">
+      {/* `min-w-0`: a flex item refuses to shrink below its content by default,
+          so one wide toolbar stretched this whole column — and the header with
+          it, which is why the language button sat 170px off a 390px screen. */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:ml-60">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur sm:px-6">
           <div className="flex min-w-0 items-center gap-2">
             <button
