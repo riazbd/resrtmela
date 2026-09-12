@@ -8,9 +8,11 @@
  * of that, so the resort left the whole feature switched off and the "Extra
  * persons" box never appeared on a single booking form.
  *
- * The type keeps its numbers as the default a new room starts with — nobody
- * wants to type the same rate nine times — and the room is what the booking
- * reads.
+ * The type kept its numbers for a while as the default a new room started
+ * with. That went too (2026-09-13): a default drawn from a setting that could
+ * not describe any of the rooms is a price on beds that may not exist, applied
+ * silently at creation and never looked at again. A new room takes nobody
+ * until the room is told otherwise.
  *
  * Which makes the price a per-room question for the first time. A booking still
  * carries one `extraPersons` count, so the extra persons go into the rooms that were
@@ -151,7 +153,18 @@ describe("what an extra person costs", () => {
 });
 
 describe("the room type", () => {
-  it("still carries the terms, as what a new room starts with", async () => {
+  /**
+   * This case used to assert the opposite: that a new room started with
+   * whatever the type said. That was the half-step — extra persons had just
+   * moved to the room, and the type's answer was kept as a default.
+   *
+   * The owner's decision (2026-09-13) is that the type has no answer to give.
+   * One type covers rooms of different sizes, so its single setting described
+   * none of them, and a default that is wrong for most rooms is worse than no
+   * default: it puts a price on beds that do not exist, silently, at creation
+   * time, where nobody looks again.
+   */
+  it("no longer decides what a new room takes", async () => {
     const type = await prisma.roomType.update({
       where: { id: fx.roomTypeId },
       data: { extraPersonAllowed: true, extraPersonRate: 850 as never, extraPersonMax: 2 },
@@ -164,8 +177,24 @@ describe("the room type", () => {
     });
 
     const fresh = await prisma.room.findUniqueOrThrow({ where: { id: room.id } });
+    expect(fresh.extraPersonAllowed).toBe(false);
+    expect(Number(fresh.extraPersonRate)).toBe(0);
+    expect(fresh.extraPersonMax).toBe(0);
+  });
+
+  it("leaves the room to be told, one room at a time", async () => {
+    // the room with the floor space is the room that can take the bed, so the
+    // answer is given per room — in the edit dialog, beside its name and rate
+    const room = await makeRoomsService(asPrisma).createRoom(desk, fx.resortId, {
+      name: "Corner Room",
+      roomTypeId: fx.roomTypeId,
+      baseRate: 5000,
+    });
+    await roomTakes(room.id, 1, 900);
+
+    const fresh = await prisma.room.findUniqueOrThrow({ where: { id: room.id } });
     expect(fresh.extraPersonAllowed).toBe(true);
-    expect(Number(fresh.extraPersonRate)).toBe(850);
-    expect(fresh.extraPersonMax).toBe(2);
+    expect(Number(fresh.extraPersonRate)).toBe(900);
+    expect(fresh.extraPersonMax).toBe(1);
   });
 });

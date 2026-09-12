@@ -126,19 +126,25 @@ export class RoomsService {
      */
     const type = await this.prisma.roomType.findFirst({
       where: { id: data.roomTypeId, resortId },
-      select: { extraPersonAllowed: true, extraPersonRate: true, extraPersonMax: true },
+      select: { id: true },
     });
     if (!type) throw badRequest("That room type is not in this resort");
 
+    /**
+     * A new room takes no extra person until somebody says it does.
+     *
+     * This used to copy the type's answer, back when extra persons lived on
+     * the type — where one setting had to describe every room of that type,
+     * including the small ones. The room is what has the floor space, so the
+     * room is where it is set, and the honest default for a room nobody has
+     * measured yet is none.
+     */
     const room = await this.prisma.room.create({
       data: {
         resortId,
         name: data.name,
         roomTypeId: data.roomTypeId,
         baseRate: data.baseRate as never,
-        extraPersonAllowed: type.extraPersonAllowed,
-        extraPersonRate: type.extraPersonRate,
-        extraPersonMax: type.extraPersonMax,
       },
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "room.create", entity: "room", entityId: room.id, diff: data });

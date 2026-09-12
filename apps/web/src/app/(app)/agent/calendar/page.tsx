@@ -13,6 +13,7 @@ import { MapPin } from "lucide-react";
 import { occupancyCells, freeSpan, type CalendarCell } from "@/lib/agency-calendar";
 import { mergeRuns } from "@/lib/calendar-bars";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
+import { monthOf, monthStart, monthLength } from "@/lib/calendar-month";
 import type { AgencyCalendar } from "@rh/shared";
 
 /**
@@ -75,7 +76,9 @@ export default function AgencyCalendarPage() {
   // a calendar that opens on tomorrow is a calendar nobody trusts
   const today = todayIn(activeResort?.timezone);
   const [start, setStart] = useState(today);
-  const [span, setSpan] = useState<number>(14);
+  // a month, not a fortnight: an agent is looking for dates, and two screens
+  // of paging to see one month was the tax on every search
+  const [span, setSpan] = useState<number>(30);
   const [resortId, setResortId] = useState<number | null>(null);
   /** The first night of a stay being picked out, waiting for its second click. */
   const [anchor, setAnchor] = useState<{ roomId: number; night: string } | null>(null);
@@ -189,6 +192,20 @@ export default function AgencyCalendarPage() {
               →
             </Button>
           </div>
+          {/* jump to a month, rather than paging to it a span at a time */}
+          <input
+            type="month"
+            aria-label="Go to month"
+            value={monthOf(start)}
+            onChange={(e) => {
+              const first = monthStart(e.target.value);
+              if (!first) return;
+              setStart(first);
+              setSpan(monthLength(e.target.value));
+              setAnchor(null);
+            }}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700"
+          />
           <span className="text-sm font-semibold text-slate-700">
             {dayNumber(start)} {monthLabel(start)} – {dayNumber(addDaysIso(end, -1))}{" "}
             {monthLabel(addDaysIso(end, -1))}
@@ -558,7 +575,11 @@ function FreeNights({
                   ? "bg-brand-400 ring-1 ring-inset ring-brand-600"
                   : reachable
                     ? "bg-brand-200 ring-1 ring-inset ring-brand-400"
-                    : "bg-slate-50 hover:bg-brand-100 hover:ring-1 hover:ring-inset hover:ring-brand-400"
+                    : // a free night is inventory, not a gap: `bg-slate-50` was
+                      // the page's own background, so an empty row read as a
+                      // hole in the table. The resting tint is the hover colour,
+                      // quieter, and hovering deepens it
+                      "bg-brand-50 ring-1 ring-inset ring-brand-100 hover:bg-brand-100 hover:ring-brand-400"
               }`}
             />
           </td>

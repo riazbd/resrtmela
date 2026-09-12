@@ -66,48 +66,6 @@ export default function RoomsPage() {
   }
 
   /**
-   * What this room takes, asked one room at a time.
-   *
-   * Extra persons used to be a switch and a rate on the room *type*, so a type
-   * covering nine rooms of different sizes could not describe any of them, and
-   * the resort left it off — which is why the "Extra persons" box never once
-   * appeared on a booking form.
-   */
-  async function editExtraPersons(room: Room) {
-    const maxRaw = window.prompt(
-      `How many extra persons can ${room.name} take? (0 for none)`,
-      String(room.extraPersonMax ?? 0),
-    );
-    if (maxRaw === null) return;
-    const max = Math.max(0, Math.floor(Number(maxRaw) || 0));
-
-    let rate = Number(room.extraPersonRate ?? 0);
-    if (max > 0) {
-      const rateRaw = window.prompt(
-        `What does one extra person in ${room.name} cost per night? (${cur()})`,
-        String(rate || ""),
-      );
-      if (rateRaw === null) return;
-      rate = Math.max(0, Number(rateRaw) || 0);
-      if (rate <= 0) {
-        push("An extra person with no price cannot be sold — set a rate, or set the count to 0", "err");
-        return;
-      }
-    }
-
-    try {
-      await api(`/rooms/${room.id}`, {
-        method: "PATCH",
-        body: { extraPersonAllowed: max > 0, extraPersonMax: max, extraPersonRate: rate },
-      });
-      push(max > 0 ? `${room.name}: ${max} × ${money(rate)}/night` : `${room.name}: no extra person`);
-      await load();
-    } catch (e) {
-      push((e as Error).message, "err");
-    }
-  }
-
-  /**
    * Removing a room is the one action on this screen that cannot be undone by
    * clicking the same button again, so it says which of the two things will
    * happen — deleted outright, or retired with its history kept — and the
@@ -166,8 +124,9 @@ This cannot be undone.`;
                   <Td><Badge value={r.status} /></Td>
                   {canEdit && (
                     <Td className="text-right">
+                      {/* one dialog for everything about a room, extra
+                          persons included — it used to be two chained prompts */}
                       <Button size="sm" variant="ghost" onClick={() => setEditRoom(r)}>Edit</Button>{" "}
-                      <Button size="sm" variant="ghost" onClick={() => void editExtraPersons(r)}>Extra persons</Button>{" "}
                       <Button size="sm" variant={r.status === "ACTIVE" ? "subtle" : "primary"} onClick={() => toggleRoom(r)}>
                         {r.status === "ACTIVE" ? "Out of service" : "Activate"}
                       </Button>
@@ -200,9 +159,11 @@ This cannot be undone.`;
               className="rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/50"
             >
               <div className="text-sm font-medium">{t.name}</div>
+              {/* no extra-person line: that belongs to the room, which is
+                  where the extra bed is. One type covers rooms of different
+                  sizes, so a single setting here described none of them. */}
               <div className="text-[11px] text-slate-400">
                 {t.maxAdults}A · {t.maxChildren}C
-                {t.extraPersonAllowed ? ` · +extra ${money(Number(t.extraPersonRate))}/n` : ""}
                 {t.amenities?.length ? ` · ${(t.amenities as string[]).join(", ")}` : ""}
               </div>
             </button>
@@ -314,6 +275,8 @@ function EditRoomModal({
   const [name, setName] = useState("");
   const [typeId, setTypeId] = useState<number | "">("");
   const [rate, setRate] = useState(0);
+  const [extraMax, setExtraMax] = useState(0);
+  const [extraRate, setExtraRate] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -321,6 +284,8 @@ function EditRoomModal({
       setName(room.name);
       setTypeId(room.roomTypeId);
       setRate(Number(room.baseRate));
+      setExtraMax(room.extraPersonAllowed ? (room.extraPersonMax ?? 0) : 0);
+      setExtraRate(Number(room.extraPersonRate ?? 0));
     }
   }, [room]);
 
@@ -330,11 +295,24 @@ function EditRoomModal({
       push("A room needs a name", "err");
       return;
     }
+    // an extra bed with no price cannot be sold, and a booking form that
+    // offers one at ৳0 is offering the resort's money away
+    if (extraMax > 0 && extraRate <= 0) {
+      push("An extra person needs a rate — or set the count to 0", "err");
+      return;
+    }
     setBusy(true);
     try {
       await api(`/rooms/${room.id}`, {
         method: "PATCH",
-        body: { name: name.trim(), roomTypeId: typeId === "" ? undefined : Number(typeId), baseRate: rate },
+        body: {
+          name: name.trim(),
+          roomTypeId: typeId === "" ? undefined : Number(typeId),
+          baseRate: rate,
+          extraPersonAllowed: extraMax > 0,
+          extraPersonMax: extraMax,
+          extraPersonRate: extraMax > 0 ? extraRate : 0,
+        },
       });
       push(`${name.trim()} updated`);
       onDone();
@@ -362,6 +340,42 @@ function EditRoomModal({
         <Field label={`Base rate (${cur()})`}>
           <Input type="number" min={0} value={rate} onChange={(e) => setRate(Number(e.target.value))} />
         </Field>
+
+        {/**
+         * Extra persons, on the room and nowhere else.
+         *
+         * This used to be two chained `window.prompt`s, and before that it
+         * lived on the room *type* — where one setting had to describe nine
+         * rooms of different sizes, so resorts left it off and the box never
+         * appeared on a booking form. It belongs to the room, because the
+         * extra bed does.
+         */}
+        <div className="rounded-xl border border-slate-200 p-3">
+          <div className="text-sm font-semibold text-slate-800">Extra persons</div>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Beyond what the room type seats. 0 means this room takes none.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <Field label="How many">
+              <Input
+                type="number"
+                min={0}
+                value={extraMax}
+                onChange={(e) => setExtraMax(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+              />
+            </Field>
+            <Field label={`Each, per night (${cur()})`}>
+              <Input
+                type="number"
+                min={0}
+                value={extraRate}
+                disabled={extraMax === 0}
+                onChange={(e) => setExtraRate(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </Field>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button onClick={submit} loading={busy}>Save</Button>
@@ -376,8 +390,6 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
   const [name, setName] = useState("");
   const [a, setA] = useState(2);
   const [c, setC] = useState(0);
-  const [extraAllowed, setExtraAllowed] = useState(false);
-  const [extraRate, setExtraRate] = useState(0);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -385,8 +397,6 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
       setName(t.name);
       setA(t.maxAdults);
       setC(t.maxChildren);
-      setExtraAllowed(!!t.extraPersonAllowed);
-      setExtraRate(Number(t.extraPersonRate ?? 0));
     }
   }, [t]);
 
@@ -396,7 +406,7 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
     try {
       await api(`/room-types/${t.id}`, {
         method: "PATCH",
-        body: { name, maxAdults: a, maxChildren: c, extraPersonAllowed: extraAllowed, extraPersonRate: extraAllowed ? extraRate : 0 },
+        body: { name, maxAdults: a, maxChildren: c },
       });
       push("Room type updated");
       onDone();
@@ -416,13 +426,8 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
           <Field label="Max adults"><Input type="number" min={1} value={a} onChange={(e) => setA(Number(e.target.value))} /></Field>
           <Field label="Max children"><Input type="number" min={0} value={c} onChange={(e) => setC(Number(e.target.value))} /></Field>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={extraAllowed} onChange={(e) => setExtraAllowed(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
-          Allow extra person (beyond max adults)
-        </label>
-        {extraAllowed && (
-          <Field label={`Extra person rate (${cur()}/night)`}><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
-        )}
+        {/* extra persons are set on each room, not here: one type covers rooms
+            of different sizes, so a single answer described none of them */}
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Save</Button></div>
       </div>
     </Modal>
@@ -435,8 +440,6 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
   const [name, setName] = useState("");
   const [a, setA] = useState(2);
   const [c, setC] = useState(0);
-  const [extraAllowed, setExtraAllowed] = useState(false);
-  const [extraRate, setExtraRate] = useState(0);
   const [amen, setAmen] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -448,8 +451,6 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
         method: "POST",
         body: {
           name, maxAdults: a, maxChildren: c,
-          extraPersonAllowed: extraAllowed,
-          extraPersonRate: extraAllowed ? extraRate : 0,
           amenities: amen ? amen.split(",").map((s) => s.trim()) : undefined,
         },
       });
@@ -472,13 +473,8 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
           <Field label="Max adults"><Input type="number" min={1} value={a} onChange={(e) => setA(Number(e.target.value))} /></Field>
           <Field label="Max children"><Input type="number" min={0} value={c} onChange={(e) => setC(Number(e.target.value))} /></Field>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={extraAllowed} onChange={(e) => setExtraAllowed(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
-          Allow extra person (beyond max adults)
-        </label>
-        {extraAllowed && (
-          <Field label={`Extra person rate (${cur()}/night)`}><Input type="number" min={0} value={extraRate || ""} onChange={(e) => setExtraRate(Number(e.target.value))} /></Field>
-        )}
+        {/* extra persons are set on each room, not here: one type covers rooms
+            of different sizes, so a single answer described none of them */}
         <Field label="Amenities" hint="comma separated"><Input value={amen} onChange={(e) => setAmen(e.target.value)} placeholder="AC, WiFi, Balcony" /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name}>Add</Button></div>
       </div>

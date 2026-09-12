@@ -10,6 +10,7 @@ import { Button, Card } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { mergeRuns } from "@/lib/calendar-bars";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
+import { monthOf, monthStart, monthLength } from "@/lib/calendar-month";
 
 /**
  * The month, as a chart of stays.
@@ -67,7 +68,14 @@ export default function CalendarPage() {
   // a calendar that opens on tomorrow is a calendar nobody trusts
   const today = todayIn(activeResort?.timezone);
   const [start, setStart] = useState(today);
-  const [span, setSpan] = useState<number>(14);
+  /**
+   * A month, not a fortnight.
+   *
+   * Fourteen days answers "what is happening this week"; a resort's calendar
+   * is mostly used to answer "what is October like", and two screens of
+   * paging to see one month was the tax on every such question.
+   */
+  const [span, setSpan] = useState<number>(30);
 
   const days = useMemo(
     () => Array.from({ length: span }, (_, i) => addDaysIso(start, i)),
@@ -158,6 +166,26 @@ export default function CalendarPage() {
               →
             </Button>
           </div>
+          {/**
+           * Jump to a month.
+           *
+           * Reaching October from August was four presses of →, and reaching
+           * last March was however many it took. Choosing a month sets the
+           * span to that month's own length, so the grid is the month rather
+           * than thirty days starting on the 1st.
+           */}
+          <input
+            type="month"
+            aria-label="Go to month"
+            value={monthOf(start)}
+            onChange={(e) => {
+              const first = monthStart(e.target.value);
+              if (!first) return;
+              setStart(first);
+              setSpan(monthLength(e.target.value));
+            }}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700"
+          />
           <span className="text-sm font-semibold text-slate-700">
             {dayNumber(start)} {monthLabel(start)} – {dayNumber(addDaysIso(end, -1))}{" "}
             {monthLabel(addDaysIso(end, -1))}
@@ -344,10 +372,19 @@ export default function CalendarPage() {
                                   weekdayOf(night) === 6 ? "border-l border-l-slate-300" : ""
                                 }`}
                               >
+                                {/**
+                                 * A free night is inventory, and looks like it.
+                                 *
+                                 * These were `bg-slate-50` — the page's own
+                                 * background — so an empty row read as a hole
+                                 * in the table rather than as a fortnight the
+                                 * resort has to sell. The resting tint is the
+                                 * hover colour, quieter; hovering deepens it.
+                                 */}
                                 <button
                                   onClick={() => bookRun(room.id, night, 1)}
-                                  title={`${room.name} free on ${night}`}
-                                  className="h-9 w-full rounded bg-slate-50 transition hover:bg-brand-100 hover:ring-1 hover:ring-inset hover:ring-brand-400"
+                                  title={`${room.name} free on ${night} — click to book`}
+                                  className="h-9 w-full rounded bg-brand-50 ring-1 ring-inset ring-brand-100 transition hover:bg-brand-100 hover:ring-brand-400"
                                 />
                               </td>
                             );
