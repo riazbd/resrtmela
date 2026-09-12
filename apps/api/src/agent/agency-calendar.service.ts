@@ -15,10 +15,13 @@
  * nothing else: no name, no booking code, no payment state, not even which
  * agency it belongs to.
  *
- * The resort can decide otherwise. `showGuestNamesToAgents` is off for every
- * resort until someone turns it on, and it is the resort's switch, not the
- * platform's — the same shape as `showRatesToAgents`, which already lets a
- * resort choose how much of its pricing an agency sees.
+ * The resort used to be able to decide otherwise, through a setting called
+ * `showGuestNamesToAgents`. It was removed rather than kept, because it did not
+ * do what its label said: it named the guest on *every* stay, so an owner who
+ * meant "agents may see my walk-in guests" was also handing each agency the
+ * names on its competitors' bookings. Rates are still the resort's to share —
+ * `showRatesToAgents` — because a price is the resort's own information. A
+ * rival's client is not.
  */
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
@@ -35,7 +38,7 @@ export interface AgencyStay {
   /** the agency's own booking — theirs to open, move or cancel */
   mine: boolean;
   state: string;
-  /** null unless it is theirs, or the resort chose to show names */
+  /** null unless the stay is theirs — there is no setting that lifts this */
   guestName: string | null;
   code: string | null;
   /**
@@ -45,9 +48,8 @@ export interface AgencyStay {
    * These are the two things that make the resort's calendar a screen you work
    * from rather than one you read: a bar you can click through to, and a
    * stripe that says the money has not come in. An agency is entitled to both
-   * for what it sold. `showGuestNamesToAgents` does not extend to them: a
-   * resort choosing to name its guests has not chosen to hand one agency
-   * another's ledger, or a way into its booking.
+   * for what it sold, and for nothing else: another agency's ledger, and a way
+   * into its booking, are not the resort's to give away.
    */
   bookingId: number | null;
   paymentState: string | null;
@@ -115,7 +117,6 @@ export class AgencyCalendarService {
           id: true,
           name: true,
           location: true,
-          showGuestNamesToAgents: true,
           showRatesToAgents: true,
         },
         orderBy: { id: "asc" },
@@ -171,14 +172,12 @@ export class AgencyCalendarService {
       from,
       to,
       resorts: links.map((link) => {
-        const showNames = link.resort.showGuestNamesToAgents;
         const stays: AgencyStay[] = [];
         for (const b of bookings) {
           if (b.resortId !== link.resortId) continue;
           // a booking without both dates occupies no night anyone can plan around
           if (b.checkIn == null || b.checkOut == null) continue;
           const isMine = b.agentUserId != null && mine.includes(b.agentUserId);
-          const named = isMine || showNames;
           for (const item of b.items) {
             if (item.roomId == null) continue;
             stays.push({
@@ -187,8 +186,8 @@ export class AgencyCalendarService {
               checkOut: b.checkOut,
               mine: isMine,
               state: b.state,
-              guestName: named ? b.guest.fullName : null,
-              code: named ? b.code : null,
+              guestName: isMine ? b.guest.fullName : null,
+              code: isMine ? b.code : null,
               bookingId: isMine ? b.id : null,
               paymentState: isMine ? b.paymentState : null,
             });

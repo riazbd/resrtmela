@@ -550,10 +550,9 @@ export interface AgencyGuestRow {
 /**
  * One room, occupied for a span of nights, as an agency is allowed to see it.
  *
- * `guestName` and `code` are null for a stay the agency did not sell, unless
- * the resort has turned `showGuestNamesToAgents` on. That is the whole point of
- * the type: an agency needs to know a night is gone without learning whose
- * customer is in the room.
+ * `guestName` and `code` are null for a stay the agency did not sell, and there
+ * is no setting that lifts that. It is the whole point of the type: an agency
+ * needs to know a night is gone without learning whose customer is in the room.
  */
 export interface AgencyStay {
   roomId: number;

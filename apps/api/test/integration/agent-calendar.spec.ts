@@ -82,15 +82,22 @@ describe("the agency calendar", () => {
     expect(stay!.code).toBe(mine.code);
   });
 
-  it("names other guests too once the resort turns the switch on", async () => {
-    await otherStay();
-    await prisma.resort.update({
-      where: { id: fx.resortId },
-      data: { showGuestNamesToAgents: true },
-    });
-    const [resort] = (await cal().calendar(agency, RANGE)).resorts;
-    expect(resort!.stays[0]!.guestName).toBe("Test Guest");
-    expect(resort!.stays[0]!.mine).toBe(false);
+  /**
+   * There used to be a resort setting — "Show guest names to agents" — that
+   * lifted this. It read like a hospitality choice and behaved like a data
+   * transfer: turning it on did not just name the resort's own walk-in guests,
+   * it named the clients of every *other agency* selling the same rooms. An
+   * owner ticking that box was handing Agency A a list of Agency B's customers
+   * with dates attached, which is not a thing the owner was being asked.
+   *
+   * So the setting is gone rather than narrowed. A switch that can put a rival's
+   * customer list on screen is a switch someone eventually flips by accident.
+   */
+  it("has no setting that could name another agency's guest", async () => {
+    const columns = await prisma.$queryRawUnsafe<unknown[]>(
+      "SHOW COLUMNS FROM `resorts` LIKE 'showGuestNamesToAgents'",
+    );
+    expect(columns, "the switch came back — see the note above").toHaveLength(0);
   });
 
   it("leaves a cancelled stay off, because that room is free again", async () => {
@@ -131,15 +138,12 @@ describe("the agency calendar", () => {
       expect(stay.paymentState).toBe("UNPAID");
     });
 
-    it("gives neither the id nor the money state for somebody else's stay", async () => {
+    it("gives nothing but the occupied nights for somebody else's stay", async () => {
       await otherStay();
-      await prisma.resort.update({
-        where: { id: fx.resortId },
-        // even with names on, the handle and the money stay behind the line
-        data: { showGuestNamesToAgents: true },
-      });
       const [resort] = (await cal().calendar(agency, RANGE)).resorts;
       const stay = resort!.stays.find((s) => !s.mine)!;
+      expect(stay.guestName).toBeNull();
+      expect(stay.code).toBeNull();
       expect(stay.bookingId).toBeNull();
       expect(stay.paymentState).toBeNull();
     });

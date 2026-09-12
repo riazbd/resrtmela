@@ -1,0 +1,15 @@
+-- A resort could turn on "Show guest names to agents". The label describes a
+-- hospitality choice; the behaviour was a data transfer. With the switch on,
+-- the agency calendar named the guest on *every* stay in the resort -- not
+-- only the resort's own walk-in bookings, but the clients of every rival
+-- agency selling the same rooms. An owner ticking that box was handing
+-- Agency A a list of Agency B's customers with the dates they travel.
+--
+-- Narrowing it to direct bookings was the other option. It loses to removal:
+-- a switch that can put a competitor's customer list on screen is a switch
+-- somebody eventually flips without reading the small print, and the resort
+-- gains nothing from it that occupancy alone does not already give the agent.
+--
+-- Dropping the column is the point, not a side effect: while it exists, the
+-- calendar has a code path that reads it.
+ALTER TABLE `resorts` DROP COLUMN `showGuestNamesToAgents`;

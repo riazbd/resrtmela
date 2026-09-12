@@ -586,12 +586,14 @@ more — no name, no code, not even which agency it belongs to. The resort down
 the road sells to the same agencies, and a calendar with names on it is a
 customer list with a date attached.
 
-A resort that wants to be more open can be: `showGuestNamesToAgents` sits beside
-`showRatesToAgents` in the resort's own settings and labels the other blocks
-too. It is off for every resort until someone turns it on, which is the part of
-the design worth stating plainly — the safe answer is what you get without
-deciding anything, and the open one costs a deliberate act by the resort that
-owns the data.
+There is no setting that opens this. One existed — `showGuestNamesToAgents`,
+sitting beside `showRatesToAgents` in the resort's own settings — and it was
+removed in `20260917100000_nobody_elses_guests`, because the label and the
+behaviour did not match. An owner reading "show guest names to agents" is
+thinking about their own walk-in guests; what the switch actually did was name
+the guest on every stay, which handed each agency the client list of every
+other agency selling the same rooms. Rates stay the resort's to share, because
+a price is the resort's own information. A rival's customer is not.
 
 Cancelled and no-show stays are left off the grid entirely: those rooms are free
 again, and drawing them as taken would lose the resort a sellable night. The

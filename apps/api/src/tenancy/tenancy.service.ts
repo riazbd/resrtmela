@@ -96,7 +96,6 @@ export class TenancyService {
       timezone: string;
       currency: string;
       showRatesToAgents: boolean;
-      showGuestNamesToAgents: boolean;
       taxRatePct: number;
       status: string;
       invoicePrefix: string;

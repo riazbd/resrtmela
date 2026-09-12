@@ -454,7 +454,9 @@ export default function AgencyCalendarPage() {
  * The agency's own stay is the resort's own bar: coloured by state, striped
  * when money is owed, and a button that opens the booking. Somebody else's is
  * a calm grey band that does nothing, because there is nothing here the agency
- * may act on — and, unless the resort turned names on, nothing it may read.
+ * may act on and nothing it may read. The API sends no name for it, and there
+ * is no setting that makes it send one — so there is no branch here for the
+ * case where one arrives.
  */
 function StayBar({
   cell,
@@ -471,15 +473,9 @@ function StayBar({
     return (
       <td colSpan={nights} className={`border-b border-slate-100 p-0.5 ${edge}`}>
         <div
-          title={cell.guestName ? `Taken — ${cell.guestName}` : "Taken — sold by someone else"}
-          className="flex h-9 items-center overflow-hidden rounded-md bg-slate-300/90 px-2 ring-1 ring-inset ring-slate-400/30"
-        >
-          {cell.guestName && nights > 1 && (
-            <span className="truncate text-[11px] font-medium leading-none text-slate-600">
-              {cell.guestName}
-            </span>
-          )}
-        </div>
+          title="Taken — sold by someone else"
+          className="h-9 overflow-hidden rounded-md bg-slate-300/90 ring-1 ring-inset ring-slate-400/30"
+        />
       </td>
     );
   }

@@ -174,9 +174,11 @@ model Resort {
   currency          String    @default("BDT") @db.VarChar(8)
   locale            String    @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
   showRatesToAgents Boolean   @default(false)
-  // agents planning a group need to see which nights are taken; whose
-  // booking it is stays the resort's to give away, and starts closed
-  showGuestNamesToAgents Boolean @default(false)
+  // There is deliberately no switch beside this one for guest names. There was
+  // — `showGuestNamesToAgents` — and it did not mean what an owner ticking it
+  // would have thought: it named the clients of every *other* agency selling
+  // this resort, not just the resort's own walk-in guests. Whose booking a
+  // night belongs to is nobody else's to read. See 20260917100000.
   /// Open to agencies (2026-09-11 design, §8): every verified agency in good
   /// standing may sell this resort, unless the resort has blocked it. Asked at
   /// onboarding; starts closed.
