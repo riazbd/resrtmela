@@ -120,9 +120,14 @@ export async function seedPlatform(prisma: PrismaClient) {
       { key: "stats.2.label", value: "match to a manager's own register" },
       { key: "stats.3.value", value: "2" },
       { key: "stats.3.label", value: "languages, on every screen" },
-      { key: "stats.4.value", value: "14 days" },
+      /*
+       * No number here. The trial lives in `platform_plans.trialDays`, and the
+       * homepage fills this stat from it — seeding "14 days" planted a copy
+       * that stopped agreeing the moment the trial was changed in Platform →
+       * Plans, which is exactly what it is there to let somebody do.
+       */
       { key: "stats.4.label", value: "free, no card" },
-      { key: "cta.title", value: "Start today — free for 14 days" },
+      { key: "cta.title", value: "Start today — free to try" },
       {
         key: "cta.body",
         value: "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents, and run the whole resort from one screen.",

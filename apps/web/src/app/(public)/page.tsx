@@ -44,12 +44,25 @@ import {
  */
 const STAT_KEYS = ["stats.1", "stats.2", "stats.3", "stats.4"] as const;
 
+/**
+ * Three of these are claims the owner writes; the fourth is a fact the plan
+ * already holds. `stats.4` therefore has no number of its own — `trialFor`
+ * fills it from the plan list, so changing the trial in Platform → Plans
+ * changes the homepage with it. A CMS row still overrides any of them, but a
+ * *default* that contradicts the plan nobody edited is how one page comes to
+ * promise two different trials.
+ */
 const STAT_FALLBACKS: Record<string, { n: string; l: string }> = {
   "stats.1": { n: "0", l: "Double bookings possible" },
   "stats.2": { n: "98.9%", l: "Match to a manager's own register" },
   "stats.3": { n: "2", l: "Languages, on every screen" },
-  "stats.4": { n: "14 days", l: "Free, no card" },
+  "stats.4": { n: "", l: "Free, no card" },
 };
+
+/** The trial, in the words the page uses for it. Empty when the plans disagree. */
+function trialFor(days: number): string {
+  return days ? `${days} days` : "Free";
+}
 
 function MockDaySheet() {
   return (
@@ -386,7 +399,7 @@ export default function HomePage() {
               </div>
               <div className="h-10 w-px bg-slate-200" />
               <div>
-                <div className="text-2xl font-black text-slate-900">14 days</div>
+                <div className="text-2xl font-black text-slate-900">{trialFor(trialDays)}</div>
                 <div className="text-xs text-slate-500">free trial on every plan</div>
               </div>
             </div>
@@ -414,7 +427,9 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-10 sm:grid-cols-4">
           {STAT_KEYS.map((key) => {
             const fallback = STAT_FALLBACKS[key]!;
-            const value = cms[`${key}.value`] || fallback.n;
+            // the trial is the plan's to state; the rest are the owner's words
+            const value =
+              cms[`${key}.value`] || (key === "stats.4" ? trialFor(trialDays) : fallback.n);
             const label = cms[`${key}.label`] || fallback.l;
             return (
               <div key={key} className="text-center">
@@ -706,7 +721,7 @@ export default function HomePage() {
       {/* ── final CTA ── */}
       <section className="bg-gradient-to-br from-brand-700 to-brand-900 py-20 text-white">
         <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] || "Start today — free for 14 days"}</h2>
+          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] || `Start today — ${trialDays ? `${trialDays} days free` : "free to try"}`}</h2>
           <p className="mt-4 text-lg text-brand-50/90">
             {cms["cta.body"] ||
               "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen."}
