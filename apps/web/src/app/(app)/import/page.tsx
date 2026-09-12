@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Badge, Button, Card, Empty, Field, Input, Spinner, Td, Th, useToast } from "@/components/ui";
+import { Button, Card, Empty, Field, Input, Spinner, Td, Th, useToast } from "@/components/ui";
+import { IMPORT_OUTCOME, type ImportOutcome } from "@/lib/import-outcomes";
+import {
+  SAMPLE_BOOKINGS_CSV,
+  SAMPLE_EXPENSES_CSV,
+  SAMPLE_FB_CSV,
+  SAMPLE_FILENAMES,
+} from "@rh/shared";
 
 interface ImportReport {
   dryRun: boolean;
@@ -24,14 +31,53 @@ interface ImportReport {
   }[];
 }
 
-const OUTCOME_BADGE: Record<ImportReport["rows"][number]["outcome"], string> = {
-  imported: "CONFIRMED",
-  skipped: "CANCELLED",
-  out_of_service: "NO_SHOW",
-  conflict_no_hold: "PENDING",
-};
+/** The importer's own words for what happened to a row — see lib/import-outcomes. */
+function OutcomeBadge({ outcome }: { outcome: ImportOutcome }) {
+  const { label, style } = IMPORT_OUTCOME[outcome];
+  return (
+    <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${style}`}>
+      {label}
+    </span>
+  );
+}
 
 type ImportTab = "bookings" | "expenses" | "fb" | "reconcile";
+
+/**
+ * The example sheet for each tab, or null where an example would mislead.
+ *
+ * Reconcile has none on purpose: the two files it wants are the manager's own
+ * grids exported from their own workbook, so a sample would be inventing a
+ * layout we do not control and cannot check.
+ */
+const SAMPLES: Record<ImportTab, { csv: string; filename: string } | null> = {
+  bookings: { csv: SAMPLE_BOOKINGS_CSV, filename: SAMPLE_FILENAMES.bookings },
+  expenses: { csv: SAMPLE_EXPENSES_CSV, filename: SAMPLE_FILENAMES.expenses },
+  fb: { csv: SAMPLE_FB_CSV, filename: SAMPLE_FILENAMES.fb },
+  reconcile: null,
+};
+
+/**
+ * Hand the file to the browser.
+ *
+ * The BOM is not decoration: Excel on a Bangla Windows install reads a plain
+ * UTF-8 CSV in the system codepage, so "বিদ্যুৎ" opens as mojibake and the
+ * person's first impression of the sample is that it is broken. The BOM makes
+ * Excel read it as UTF-8, and our own parser skips it.
+ */
+function downloadSample(tab: ImportTab) {
+  const sample = SAMPLES[tab];
+  if (!sample) return;
+  const blob = new Blob(["﻿", sample.csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = sample.filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 const TABS: { key: ImportTab; label: string }[] = [
   { key: "bookings", label: "Bookings" },
@@ -192,7 +238,8 @@ export default function ImportPage() {
       >
         {tab === "bookings" && (
           <p className="mb-3 text-xs text-slate-500">
-            Expects the standard Resort Mela sheet layout (Booking ID, Guest Name, Mobile, Room, Check-In/Out, …).
+            Required columns: <strong>Booking ID, Guest Name, Room, Check-In</strong>. Everything else may
+            be blank. Dates like <code>05-Nov-2026</code>, <code>2026-11-05</code> or <code>11/5/2026</code>.
             Guests are deduped by mobile; BK-codes are preserved; advances become ledger entries;
             &quot;out of service&quot; rows flip the room status instead of creating bookings. Always dry-run first.
           </p>
@@ -252,6 +299,18 @@ export default function ImportPage() {
           ) : (
             <>
               <Button variant="ghost" onClick={() => fileRef.current?.click()}>Choose .csv file</Button>
+              {/*
+                * Beside the picker, not below the explanation: someone who does
+                * not yet know what shape their sheet needs is standing at this
+                * button, and the answer is easier to open than to read.
+                */}
+              <button
+                type="button"
+                onClick={() => downloadSample(tab)}
+                className="text-xs font-medium text-brand-600 underline underline-offset-2 hover:text-brand-700"
+              >
+                Download a sample file
+              </button>
               {fileName && (
                 <span className="text-xs text-slate-500">
                   {fileName} · {(csv.length / 1024).toFixed(1)} KB
@@ -406,7 +465,7 @@ export default function ImportPage() {
                     <tr key={r.rowNo}>
                       <Td className="text-xs text-slate-400">{r.rowNo}</Td>
                       <Td className="font-medium">{r.code}</Td>
-                      <Td><Badge value={OUTCOME_BADGE[r.outcome]} /></Td>
+                      <Td><OutcomeBadge outcome={r.outcome} /></Td>
                       <Td className="text-xs text-slate-500">{r.detail ?? "—"}</Td>
                     </tr>
                   ))}

@@ -125,11 +125,11 @@ export default function AgencySignupPage() {
           <form onSubmit={submit} className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Agency name</label>
-              <Input value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="e.g. Sea Breeze Travels" autoFocus />
+              <Input value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="e.g. Meghna Tours & Travels" autoFocus />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Your name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Md. Rahman" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Md. Rahman" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Email (login)</label>

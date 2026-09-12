@@ -188,7 +188,7 @@ export default function SignupPage() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Location (optional)</label>
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Sylhet, Bangladesh" />
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Sylhet, Bangladesh" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Workspace URL</label>
@@ -200,7 +200,7 @@ export default function SignupPage() {
                       setSlugTouched(true);
                       setSlug(slugifyLocal(e.target.value));
                     }}
-                    placeholder="sky-eco-group"
+                    placeholder="sundarban-group"
                   />
                 </div>
               </div>
@@ -214,7 +214,7 @@ export default function SignupPage() {
             <>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Your name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Md. Rahman" autoFocus />
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Md. Rahman" autoFocus />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Email (login)</label>
