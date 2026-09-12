@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { RegisterAs } from "@/components/register-as";
 import { useRouter } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -43,6 +44,14 @@ export default function AgencySignupPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const offer = useOffer("AGENCY");
+  /**
+   * The offer code, carried when switching to the other form.
+   *
+   * `useOffer` already refuses a code meant for the other audience and says so
+   * — which is the case where switching form is exactly what the visitor
+   * should do, and arriving there without the code would cost them the offer.
+   */
+  const offerSearch = offer.code ? `?offer=${encodeURIComponent(offer.code)}` : "";
 
   /**
    * The plan and the rhythm the pricing page was showing when the visitor
@@ -116,6 +125,7 @@ export default function AgencySignupPage() {
           </p>
         </div>
 
+        <RegisterAs current="agency" search={offerSearch} />
         <OfferBanner state={offer} />
         {plans && plans.length === 0 && !usingOffer ? (
           <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">

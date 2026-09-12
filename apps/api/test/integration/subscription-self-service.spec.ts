@@ -367,9 +367,17 @@ describe("what it refuses", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("refuses to change the plan of a resort with no subscription", async () => {
+  /*
+   * This used to refuse: "the platform sets the first one up". That was true of
+   * the code and of nothing else — the owner was shown the plan cards, told
+   * what each cost, and given no button to press. Starting the first
+   * subscription is now the owner's to do, on the plan's own trial, and
+   * `a-plan-from-the-first-day.spec.ts` holds the whole rule. What stays
+   * refused is a plan that is not on the resort shelf.
+   */
+  it("refuses a plan that is not sold to resorts, even as a first subscription", async () => {
     await expect(
-      makeSubscriptionService(asPrisma).changePlan(owner, fx.resortId, "GROWTH"),
+      makeSubscriptionService(asPrisma).changePlan(owner, fx.resortId, "AGENCY_PRO"),
     ).rejects.toMatchObject({ status: 400 });
   });
 });

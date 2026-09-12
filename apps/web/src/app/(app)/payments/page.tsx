@@ -76,8 +76,8 @@ export default function PaymentsPage() {
         <Stat label={t("pay.outstanding")} value={money(data.total)} tone="red" />
         <Stat label={t("pay.withDues")} value={String(data.count)} tone="amber" />
         {/* the same money, split by who has to be asked for it */}
-        <Stat label="Guests owe" value={money(data.guestTotal)} />
-        <Stat label="Agencies owe" value={money(data.agencyTotal)} />
+        <Stat label="Due from guests" value={money(data.guestTotal)} />
+        <Stat label="Due from agencies" value={money(data.agencyTotal)} />
       </div>
 
       <div className="flex overflow-hidden rounded-lg border border-slate-200">
@@ -102,7 +102,7 @@ export default function PaymentsPage() {
        * phone call, and this is the only place on the screen that says so.
        */}
       {who === "Agencies" && data.byAgency.length > 0 && (
-        <Card className="!p-0" title="What each agency owes">
+        <Card className="!p-0" title="Due from each agency">
           <div className="divide-y divide-slate-50">
             {data.byAgency.map((a) => (
               <div
@@ -125,9 +125,9 @@ export default function PaymentsPage() {
           <Empty
             msg={
               who === "Agencies"
-                ? "No agency owes anything 🎉"
+                ? "Nothing due from any agency 🎉"
                 : who === "Guests"
-                  ? "No guest owes anything 🎉"
+                  ? "Nothing due from any guest 🎉"
                   : "No outstanding dues 🎉"
             }
           />
@@ -135,7 +135,7 @@ export default function PaymentsPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px]">
               <thead className="border-b border-slate-100">
-                <tr><Th>Code</Th><Th>Guest</Th><Th>Owed by</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Rent</Th><Th className="text-right">Paid</Th><Th className="text-right">Due</Th><Th /></tr>
+                <tr><Th>Code</Th><Th>Guest</Th><Th>Due from</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Rent</Th><Th className="text-right">Paid</Th><Th className="text-right">Due</Th><Th /></tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {rows.map((b) => (
@@ -227,7 +227,7 @@ function CollectModal({ row, onClose, onDone }: {
                 agency's settlement */}
             {row.agent && (
               <div className="mt-0.5 text-[11px] text-amber-700">
-                Owed by {row.agent.agency}, not the guest
+                Due from {row.agent.agency}, not the guest
               </div>
             )}
           </div>

@@ -72,7 +72,7 @@ export default function SalesPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Quotations &amp; invoices</h1>
-          <p className="text-sm text-slate-500">What you have quoted, what you have billed, and what is owed.</p>
+          <p className="text-sm text-slate-500">What you have quoted, what you have billed, and what is still due.</p>
         </div>
         <Button onClick={() => setOpen("new")}>
           <Plus className="mr-1 h-4 w-4" /> New {kind === "QUOTATION" ? "quotation" : "invoice"}

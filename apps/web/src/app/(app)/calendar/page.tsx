@@ -185,7 +185,7 @@ export default function CalendarPage() {
           ))}
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="h-2.5 w-4 rounded-sm bg-slate-200 ring-1 ring-inset ring-red-500" />
-            Money owed
+            Payment due
           </span>
         </div>
       </div>
@@ -368,7 +368,7 @@ export default function CalendarPage() {
                           >
                             <button
                               onClick={() => openStay(b.id)}
-                              title={`${b.code} · ${b.guestName}${b.agentName ? ` · agent ${b.agentName}` : ""} · ${look.label}${stripe ? " · money owed" : ""}`}
+                              title={`${b.code} · ${b.guestName}${b.agentName ? ` · agent ${b.agentName}` : ""} · ${look.label}${stripe ? " · payment due" : ""}`}
                               className={`relative flex h-9 w-full items-center overflow-hidden px-2 text-left transition hover:brightness-110 ${look.fill} ${look.text} ${
                                 opensHere ? "rounded-l-md" : ""
                               } ${endsHere ? "rounded-r-md" : ""}`}

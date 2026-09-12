@@ -39,6 +39,7 @@ import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuditService } from "../common/audit.service";
 import { badRequest, requireResortAccess } from "../common/rbac";
 import { round2 } from "../common/dates";
+import { openingSubscription } from "../common/offers";
 import {
   cycleNoun,
   feeFor,
@@ -277,7 +278,37 @@ export class SubscriptionService {
       orderBy: { id: "desc" },
     });
     if (!sub) {
-      throw badRequest("This resort has no subscription yet — the platform sets the first one up.");
+      /**
+       * No subscription, so this is the first one — start it rather than refuse.
+       *
+       * This used to say "the platform sets the first one up", which was true
+       * of the code and true of nothing else: the owner was shown the plan
+       * cards, told what each cost, and given no way to pick one. Signup opens
+       * a trial now, but that does nothing for the workspaces created before
+       * it did, and they are the ones stuck on this screen.
+       *
+       * It opens on the same terms signup would have given them — the plan's
+       * own trial — because arriving late at this screen is not a reason to
+       * lose the trial everybody else gets.
+       */
+      const opened = await this.prisma.subscription.create({
+        data: openingSubscription(
+          await this.accountOf(resortId),
+          target,
+          null,
+          new Date(),
+          (billingCycle as BillingCycle | undefined) ?? "MONTHLY",
+        ),
+      });
+      await this.log(claims, resortId, opened.id, { action: "opened", from: null, to: name });
+      return {
+        plan: target.name,
+        planLabel: target.label,
+        billingCycle: (billingCycle as BillingCycle | undefined) ?? "MONTHLY",
+        effective: "now",
+        charged: 0,
+        effectiveFrom: opened.renewsAt ? opened.renewsAt.toISOString() : null,
+      };
     }
 
     const fromCycle: BillingCycle = isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY";

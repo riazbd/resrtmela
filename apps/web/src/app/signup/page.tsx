@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { RegisterAs } from "@/components/register-as";
 import { useRouter } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -41,6 +42,14 @@ export default function SignupPage() {
   const [slugTouched, setSlugTouched] = useState(false);
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
   const offer = useOffer("RESORT");
+  /**
+   * The offer code, carried when switching to the other form.
+   *
+   * `useOffer` already refuses a code meant for the other audience and says so
+   * — which is the case where switching form is exactly what the visitor
+   * should do, and arriving there without the code would cost them the offer.
+   */
+  const offerSearch = offer.code ? `?offer=${encodeURIComponent(offer.code)}` : "";
   const usingOffer = !!offer.offer?.usable && !offer.problem;
   // this deployment's own host, not a domain compiled into the page. Read
   // after mounting, not during render: the server has no `window`, so
@@ -163,11 +172,12 @@ export default function SignupPage() {
           <LogoMark size={44} className="mx-auto mb-2" />
           <h1 className="text-xl font-bold text-slate-900">Create your workspace</h1>
           <p className="mt-1 text-xs text-slate-500">Step {step} of 3{entryLine ? ` · ${entryLine}` : ""} · no card needed</p>
-          <p className="mt-1 text-[11px] text-slate-400">
-            A travel agency? <a href="/signup/agency" className="font-semibold text-brand-700 hover:underline">Sign up as an agency</a>
-          </p>
         </div>
 
+        {/* the small grey "A travel agency?" line used to live under the title;
+            a choice the platform's two customers both have to make belongs at
+            the top of the form, not at the bottom of the header */}
+        {step === 1 && <RegisterAs current="resort" search={offerSearch} />}
         <OfferBanner state={offer} />
         <div className="mb-6 flex gap-1.5">
           {[1, 2, 3].map((n) => (

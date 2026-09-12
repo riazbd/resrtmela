@@ -1739,8 +1739,11 @@ function SubscriptionTab({ rid }: { rid: number }) {
       window.alert(`${p.label} is sold by the month only. Switch to monthly billing first.`);
       return;
     }
-    const ask =
-      p.direction === "upgrade"
+    const ask = !d?.plan
+      ? // the first plan is not a move from anywhere; the other two sentences
+        // both describe leaving something, and there is nothing to leave
+        `Start on ${p.label} (${fee}/${per})?\n\nIt begins as a free trial — nothing is billed until the trial ends.`
+      : p.direction === "upgrade"
         ? `Move to ${p.label} (${fee}/${per})?\n\nIt applies immediately, and you are billed only the difference for the days left in this ${per}.`
         : p.direction === "current"
           ? `Stay on ${p.label} and call off the change?`
@@ -1860,8 +1863,8 @@ function SubscriptionTab({ rid }: { rid: number }) {
           </>
         ) : (
           <p className="text-sm text-slate-500">
-            This resort is not on a subscription. The platform sets the first one up — the prices below are
-            what it would cost.
+            This resort is not on a subscription yet. Pick a plan below to start one — it begins as a free
+            trial, and nothing is billed until the trial ends.
           </p>
         )}
       </Card>
@@ -1899,6 +1902,23 @@ function SubscriptionTab({ rid }: { rid: number }) {
                 {p.maxResorts === 1 ? "" : "s"}
               </div>
               {p.blurb && <div className="mt-1 text-[11px] text-slate-400">{p.blurb}</div>}
+              {/*
+                * With no subscription every card is a first choice, not an
+                * upgrade or a downgrade. This used to render the button only
+                * when `d.plan` was set, so a workspace that had just signed up
+                * saw the prices and no way to act on any of them.
+                */}
+              {!d.plan && (
+                <Button
+                  className="mt-2 w-full"
+                  size="sm"
+                  variant={p.direction === "upgrade" ? "primary" : "ghost"}
+                  loading={busy === p.name}
+                  onClick={() => void change(p)}
+                >
+                  Start on {p.label}
+                </Button>
+              )}
               {d.plan && p.direction !== "current" && (
                 <Button
                   className="mt-2 w-full"

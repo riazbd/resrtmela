@@ -563,7 +563,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
               </b>
             </span>
             <span className="text-brand-900">
-              You owe the resort <b>{money(b.agentPricing.agentPrice)}</b>
+              You pay the resort <b>{money(b.agentPricing.agentPrice)}</b>
             </span>
           </div>
         </div>

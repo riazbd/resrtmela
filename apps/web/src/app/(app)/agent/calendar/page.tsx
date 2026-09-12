@@ -33,10 +33,9 @@ import type { AgencyCalendar } from "@rh/shared";
  * What does not cross over is identity. A night someone else sold is a grey
  * block and nothing more: no name, no code, no state, no money, not even which
  * agency. The resort down the road sells to the same agencies, and a calendar
- * with names on it is a customer list with a date attached. A resort that wants
- * to be more open can turn guest names on in its own settings, and then the
- * blocks are labelled here too — but the booking behind one still belongs to
- * whoever sold it.
+ * with names on it is a customer list with a date attached. There is no setting
+ * that opens this: one existed and was removed, because it named the guest on
+ * every stay rather than only the resort's own.
  */
 
 /**
@@ -164,7 +163,7 @@ export default function AgencyCalendarPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Calendar</h1>
         <p className="text-sm text-slate-500">
-          Which nights are already gone, which of them are yours, and what is still owed on them.
+          Which nights are already gone, which of them are yours, and what is still due on them.
         </p>
       </div>
 
@@ -231,7 +230,7 @@ export default function AgencyCalendarPage() {
           ))}
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="h-2.5 w-4 rounded-sm bg-slate-200 ring-1 ring-inset ring-red-500" />
-            Money owed
+            Payment due
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <span className="h-2.5 w-4 rounded-sm bg-slate-300" />
@@ -486,7 +485,7 @@ function StayBar({
     <td colSpan={nights} className={`border-b border-slate-100 p-0.5 ${edge}`}>
       <button
         onClick={() => cell.bookingId != null && onOpen(cell.bookingId)}
-        title={`${cell.code ?? ""} ${cell.guestName ?? ""} · ${look.label}${stripe ? " · money owed" : ""}`.trim()}
+        title={`${cell.code ?? ""} ${cell.guestName ?? ""} · ${look.label}${stripe ? " · payment due" : ""}`.trim()}
         className={`relative flex h-9 w-full items-center overflow-hidden px-2 text-left transition hover:brightness-110 ${look.fill} ${look.text} rounded-md`}
       >
         <span className="truncate text-[11px] font-semibold leading-none">

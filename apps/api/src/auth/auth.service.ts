@@ -36,6 +36,44 @@ function cycleFor(asked: string | undefined, plan: { monthlyFee: unknown; yearly
 export class AuthService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
+  /**
+   * The resort plan a signup opens on: the one they picked, or the entry plan.
+   *
+   * "The entry plan" is the first row of the resort shelf, which is exactly
+   * what the signup page displays while the visitor types — so a workspace
+   * that says nothing lands on the plan it was just shown, rather than on the
+   * platform's idea of a default or on nothing at all.
+   *
+   * A plan from the agency shelf is refused rather than quietly swapped: the
+   * two shelves are sold to two different customers, and silently moving
+   * somebody to a different plan than the one they named is how a bill becomes
+   * an argument.
+   */
+  private async entryOrChosenPlan(name?: string) {
+    const wanted = name?.trim().toUpperCase();
+    if (wanted) {
+      const chosen = await this.prisma.platformPlan.findUnique({ where: { name: wanted } });
+      if (chosen?.active && chosen.audience === "RESORT") return chosen;
+      const shelf = await this.prisma.platformPlan.findMany({
+        where: { active: true, audience: "RESORT" },
+        orderBy: { sortOrder: "asc" },
+        select: { name: true },
+      });
+      throw Object.assign(
+        new Error(`"${name}" is not a resort plan. On the shelf: ${shelf.map((p) => p.name).join(", ") || "none yet"}`),
+        { status: 400 },
+      );
+    }
+    const entry = await this.prisma.platformPlan.findFirst({
+      where: { active: true, audience: "RESORT" },
+      orderBy: { sortOrder: "asc" },
+    });
+    if (!entry) {
+      throw Object.assign(new Error("No plan is on sale right now — please try again shortly"), { status: 503 });
+    }
+    return entry;
+  }
+
   /** Identifier may be a phone number or an email address — see findUserByIdentifier. */
   async loginWithPassword(identifierRaw: string, password: string) {
     if (!identifierRaw) throw new UnauthorizedException("Invalid identifier or password");
@@ -107,6 +145,8 @@ export class AuthService {
     slug?: string;
     /** an offer code — the plan and trial the workspace starts on */
     offer?: string;
+    /** the plan picked on the pricing page; the entry plan when unsaid */
+    plan?: string;
     /** MONTHLY or YEARLY, as picked on the pricing page. Monthly when unsaid. */
     billingCycle?: string;
     /** the onboarding question: open to travel agencies? Unanswered is closed. */
@@ -134,6 +174,21 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(input.password, 12);
 
     const offerCode = input.offer?.trim();
+    /**
+     * The plan the workspace opens on.
+     *
+     * This used to be "none unless an offer named one", and a workspace with no
+     * subscription is a state nothing else in the product expects: Settings
+     * said "the platform sets the first one up" and drew the plan cards with no
+     * buttons, so a new owner could neither see what they were on nor choose —
+     * while the signup page had just told them "Starter · 10 rooms · 30 days
+     * free". Agency signup has always opened a trial on a named plan; this is
+     * the resort side matching it.
+     *
+     * Resolved before the transaction so a plan that is not on the resort shelf
+     * is refused with a sentence rather than rolled back halfway.
+     */
+    const chosenPlan = offerCode ? null : await this.entryOrChosenPlan(input.plan);
     const result = await this.prisma.$transaction(async (tx) => {
       // spent first, so a refused offer leaves nothing behind
       const redeemed = offerCode ? await redeemOffer(tx, offerCode, { audience: "RESORT", email }) : null;
@@ -144,13 +199,12 @@ export class AuthService {
           offerId: redeemed?.offer.id ?? null,
         },
       });
-      // an offer names the plan; without one no subscription is written, and
-      // PlanLimits holds the account to the cheapest plan on sale
-      if (redeemed) {
-        await tx.subscription.create({
-          data: openingSubscription(tenant.id, redeemed.plan, redeemed.offer, new Date(), cycleFor(input.billingCycle, redeemed.plan)),
-        });
-      }
+      // an offer names the plan; otherwise the one picked on the pricing page,
+      // or the entry plan the signup page was showing while they typed
+      const plan = redeemed?.plan ?? chosenPlan!;
+      await tx.subscription.create({
+        data: openingSubscription(tenant.id, plan, redeemed?.offer, new Date(), cycleFor(input.billingCycle, plan)),
+      });
       const resort = await tx.resort.create({
         data: {
           tenantId: tenant.id,
