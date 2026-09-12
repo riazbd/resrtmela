@@ -158,8 +158,22 @@ const STATE_STYLES: Record<string, string> = {
  * raw enum with its underscore swapped for a hyphen — CHECKED-IN — on a
  * console that calls itself Bangla-first.
  */
-export function Badge({ value }: { value: string }) {
+export function Badge({ value }: { value: string | null | undefined }) {
   const t = useT();
+  /**
+   * Nothing to label is nothing to draw.
+   *
+   * This took `string` and called `.replace` on it, and it is rendered from a
+   * dozen API fields across twenty screens — several of which are nullable and
+   * one of which (a booking's source) is null for every booking made on the
+   * form, because the form does not ask. The result was not a missing badge:
+   * the throw reached the console's error boundary and replaced the entire
+   * page with "Something went wrong".
+   *
+   * A placeholder would be worse than nothing. "—" or "Unknown" is a claim
+   * about the data, and the claim here is that nobody recorded anything.
+   */
+  if (value == null || value === "") return null;
   const style = STATE_STYLES[value] ?? "bg-slate-100 text-slate-600 ring-slate-200";
   const key = `st.${value}` as DictKey;
   const label = isStateKey(key) ? t(key) : value.replace(/_/g, "-");

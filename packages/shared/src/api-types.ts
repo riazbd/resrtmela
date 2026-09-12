@@ -83,7 +83,17 @@ export interface BookingRow {
   groupTag?: string | null;
   state: string;
   paymentState: string;
-  source: string;
+  /**
+   * Where the booking came from, or null when nobody said.
+   *
+   * This claimed to be a `string` long after the column became nullable, so
+   * every screen was free to hand it straight to something that would call
+   * `.replace` on it — and one of them did, which is how opening a booking
+   * made through the form crashed the whole page. An unrecorded source is a
+   * real and common state (the booking form does not ask), so it is in the
+   * type now and the compiler can hold the screens to it.
+   */
+  source: string | null;
   checkIn: string | null;
   checkOut: string | null;
   guest: { id: number; fullName: string; phone: string };
