@@ -8,15 +8,18 @@
  * today — stays, money, the restaurant, the costs, and the trail all of it
  * leaves.
  *
- *   pnpm -F @rh/db seed -- --force
+ *   pnpm -F @rh/db seed -- --force=resorthub
  *
- * `--force` is required because this deletes everything first. Every account's
- * password is `Password123!`.
+ * The name after `--force` must be the database DATABASE_URL points at. This
+ * deletes everything first, and a bare `--force` sitting in a deploy script is
+ * how the production database came to be emptied once — see seed/guard.ts.
+ * Every account's password is `Password123!`.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "../src";
 import { rng, at, TABLES_IN_WIPE_ORDER } from "./seed/util";
+import { assertSafeToSeed } from "./seed/guard";
 
 /**
  * `tsx` does not read `.env`, and the Prisma CLI that usually does is not in
@@ -72,17 +75,24 @@ async function wipe() {
 }
 
 async function main() {
-  if (!process.argv.includes("--force")) {
-    console.error(
-      "This deletes every row in the database before seeding.\n" +
-        "Run it with --force when that is what you want:\n\n" +
-        "  pnpm -F @rh/db seed -- --force\n",
-    );
+  const url = process.env.DATABASE_URL ?? "";
+  /**
+   * Which database, named out loud.
+   *
+   * `--force` alone used to be the whole gate, and a deploy script carrying it
+   * emptied the production database — a flag typed once into a script says
+   * nothing about the machine the script later runs on. The rule and the
+   * reasoning are in seed/guard.ts.
+   */
+  let database: string;
+  try {
+    database = assertSafeToSeed(process.argv, url);
+  } catch (e) {
+    console.error(`\n${(e as Error).message}\n`);
     process.exit(1);
   }
 
-  const url = process.env.DATABASE_URL ?? "";
-  console.log(`Seeding ${url.replace(/:[^:@]*@/, ":***@") || "(no DATABASE_URL)"}`);
+  console.log(`Seeding "${database}" — ${url.replace(/:[^:@]*@/, ":***@")}`);
 
   const r = rng();
   await wipe();
