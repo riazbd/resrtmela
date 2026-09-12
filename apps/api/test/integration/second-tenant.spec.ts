@@ -146,7 +146,7 @@ describe("a second tenant, configured entirely through data", () => {
     const sub = await platform.setSubscription(superAdmin, mv.resortId, { plan: "ISLAND" });
 
     expect(sub.plan).toBe("ISLAND");
-    expect(Number(sub.monthlyFee)).toBe(199);
+    expect(Number(sub.fee)).toBe(199);
     const limits = await new PlanLimitsService(asPrismaService).forResort(mv.resortId);
     expect(limits.maxRooms).toBe(40);
   });

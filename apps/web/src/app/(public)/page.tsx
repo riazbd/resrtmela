@@ -150,6 +150,10 @@ interface PublicPlan {
   name: string;
   label: string;
   monthlyFee: number;
+  /** What a year costs, or null where the plan is sold by the month only. */
+  yearlyFee: number | null;
+  /** What the year saves against twelve months — the badge on the toggle. */
+  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
   maxRooms: number;
   maxResorts: number;
   maxStaff: number;
@@ -200,8 +204,26 @@ function roomCap(p: PublicPlan): string {
  */
 const EVERY_PLAN = ["Booking calendar & front desk", "Guest database", "Email invoices"];
 
-function planTicks(p: PublicPlan): string[] {
+/**
+ * What every agency plan includes, whichever one it is.
+ *
+ * The resort floor is not the agency floor: an agency has no front desk and no
+ * rooms of its own. It sells other people's, which is why "Up to 0 rooms" —
+ * what the resort bullets produced from an agency's room cap — was not merely
+ * ugly but wrong about what is being bought.
+ */
+const EVERY_AGENCY_PLAN = [
+  "Book every resort open to agencies",
+  "Your own client list",
+  "Quotations & invoices",
+  "Wallet, commission & dues",
+];
+
+function planTicks(p: PublicPlan, audience: "RESORT" | "AGENCY"): string[] {
   const staff = p.maxStaff >= 1000 ? "Unlimited staff accounts" : `${p.maxStaff} staff account${p.maxStaff === 1 ? "" : "s"}`;
+  if (audience === "AGENCY") {
+    return [...EVERY_AGENCY_PLAN, ...p.features.map(planFeatureLabel), staff];
+  }
   return [
     roomCap(p),
     ...EVERY_PLAN,
@@ -214,11 +236,37 @@ export default function HomePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cms, setCms] = useState<Record<string, string>>({});
   const [plans, setPlans] = useState<PublicPlan[] | null>(null);
+  /**
+   * Which rhythm the price list is showing.
+   *
+   * Monthly first, always: it is the smaller number and the one a visitor is
+   * comparing against. The yearly setting is a thing they choose, not a thing
+   * they are shown and have to talk themselves out of.
+   */
+  const [cycle, setCycle] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  /**
+   * Which of the platform's two customers the price list is for.
+   *
+   * The platform sells to resorts and to travel agencies, and it had one price
+   * list: the resort one. An agency arriving at the front door saw prices that
+   * were not theirs, no prices that were, and no way to sign up — the only link
+   * to `/signup/agency` was a line of small print on the *resort* signup form,
+   * which an agency has no reason to open. A marketplace with two sides needs
+   * both sides on the page.
+   */
+  const [audience, setAudience] = useState<"RESORT" | "AGENCY">("RESORT");
   // every plan carries its own trial; the line only claims one when they agree
   const trialDays =
     plans && plans.length && plans.every((p) => p.trialDays === plans[0]!.trialDays)
       ? plans[0]!.trialDays
       : 0;
+  /** The best yearly saving on the list — what the toggle's badge advertises. */
+  const bestSaving = (plans ?? []).reduce<PublicPlan["yearlySaving"]>(
+    (best, p) => (p.yearlySaving && (!best || p.yearlySaving.pct > best.pct) ? p.yearlySaving : best),
+    null,
+  );
+  /** Is this particular card being priced by the year right now? */
+  const yearlyHere = (p: PublicPlan) => cycle === "YEARLY" && p.yearlyFee != null;
 
   useEffect(() => {
     // CMS overrides are optional — defaults kick in on any failure
@@ -230,12 +278,13 @@ export default function HomePage() {
 
   useEffect(() => {
     // the price list comes from the same rows Platform → Plans edits, so the
-    // page cannot quote a price the platform has stopped charging
-    fetch(`${API_URL}/cms/plans`)
+    // page cannot quote a price the platform has stopped charging. Which shelf
+    // is asked for follows the switch above the cards.
+    fetch(`${API_URL}/cms/plans?audience=${audience}`)
       .then((r) => r.json())
       .then((d) => setPlans(Array.isArray(d) ? d : []))
       .catch(() => setPlans([]));
-  }, []);
+  }, [audience]);
 
   useEffect(() => {
     document.documentElement.style.scrollBehavior = "smooth";
@@ -253,6 +302,9 @@ export default function HomePage() {
             <a href="#features" className="hover:text-brand-700">Functionalities</a>
             <a href="#solutions" className="hover:text-brand-700">Solutions</a>
             <a href="#pricing" className="hover:text-brand-700">Pricing</a>
+            {/* the platform's other customer, which the nav did not mention at
+                all — an agency arriving here had no way to reach its own door */}
+            <a href="/signup/agency" className="hover:text-brand-700">For agencies</a>
           </nav>
           <div className="flex items-center gap-2">
             <Link href="/login" className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">
@@ -272,7 +324,7 @@ export default function HomePage() {
         {menuOpen && (
           <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
             <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["/login", "Log in"]].map(([h, l]) => (
+              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["/signup/agency", "For agencies"], ["/login", "Log in"]].map(([h, l]) => (
                 <a key={h} href={h} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
                   {l}
                 </a>
@@ -471,12 +523,78 @@ export default function HomePage() {
       <section id="pricing" className="bg-slate-50 py-20">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
-            <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Simple monthly plans</h2>
+            <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Simple plans</h2>
             <p className="mt-3 text-slate-500">
-              Per resort. Cancel anytime.
+              {audience === "AGENCY" ? "Per agency. Cancel anytime." : "Per resort. Cancel anytime."}
               {trialDays ? ` ${trialDays} days free on every plan.` : ""}
             </p>
           </div>
+
+          {/* Who the platform is selling to. Both sides of the marketplace,
+              because an agency that cannot find its own prices does not become
+              a customer. */}
+          <div className="mt-7 flex justify-center">
+            <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+              {(
+                [
+                  ["RESORT", "For resorts"],
+                  ["AGENCY", "For travel agencies"],
+                ] as const
+              ).map(([a, label]) => (
+                <button
+                  key={a}
+                  onClick={() => {
+                    setAudience(a);
+                    // the shelves price differently; a yearly toggle left on
+                    // from the other one would point at plans that may not
+                    // have a yearly price at all
+                    setCycle("MONTHLY");
+                  }}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                    audience === a ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/**
+           * The monthly / yearly switch.
+           *
+           * It only appears when there is something to switch to, so a price
+           * list sold by the month alone does not grow a control with one
+           * setting. The saving is the best one on offer across the plans,
+           * which is what the badge beside such a toggle always means.
+           */}
+          {bestSaving && (
+            <div className="mt-8 flex justify-center">
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+                {(["MONTHLY", "YEARLY"] as const).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCycle(c)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                      cycle === c ? "bg-brand-600 text-white" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {c === "MONTHLY" ? "Monthly" : "Yearly"}
+                    {c === "YEARLY" && (
+                      <span
+                        className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                          cycle === c ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        SAVE {bestSaving.pct}%
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className={`mt-12 grid gap-6 ${pricingColumns((plans ?? []).length)}`}>
             {(plans ?? []).map((p) => (
               <div key={p.name} className={`relative flex flex-col rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
@@ -487,21 +605,66 @@ export default function HomePage() {
                 )}
                 <div className="text-lg font-bold text-slate-900">{p.label}</div>
                 <div className="mt-1 text-xs text-slate-500">{p.blurb ?? ""}</div>
-                {/* four plans across leaves a card narrower than "৳12,000.00/month",
-                    so the price and the period are allowed to sit on two lines */}
+                {/**
+                 * On the yearly setting the big number is still per month —
+                 * the figure a reader can compare — with the amount actually
+                 * charged underneath. Quoting ৳120,000 against a rival's
+                 * ৳12,000 is how a cheaper plan reads as ten times the price.
+                 *
+                 * Four plans across leaves a card narrower than
+                 * "৳12,000.00/month", so the price and the period are allowed
+                 * to sit on two lines.
+                 */}
                 <div className="mt-5 flex flex-wrap items-baseline gap-x-1 text-3xl font-black text-slate-900 sm:text-4xl">
-                  <span>{formatMoney(p.monthlyFee, { currency: "BDT", locale: "en-IN" })}</span>
+                  <span>
+                    {formatMoney(yearlyHere(p) ? p.yearlyFee! / 12 : p.monthlyFee, {
+                      currency: "BDT",
+                      locale: "en-IN",
+                    })}
+                  </span>
                   <span className="text-sm font-medium text-slate-400">/month</span>
                 </div>
+                <div className="mt-1 min-h-[1.25rem] text-xs text-slate-500">
+                  {yearlyHere(p) ? (
+                    <>
+                      {formatMoney(p.yearlyFee!, { currency: "BDT", locale: "en-IN" })} billed yearly
+                      {p.yearlySaving && (
+                        <span className="ml-1.5 font-semibold text-emerald-700">
+                          — save {formatMoney(p.yearlySaving.amount, { currency: "BDT", locale: "en-IN" })}
+                        </span>
+                      )}
+                    </>
+                  ) : cycle === "YEARLY" ? (
+                    // this one is not sold by the year; say so rather than
+                    // silently showing its monthly price under a yearly toggle
+                    <span className="text-slate-400">Monthly only</span>
+                  ) : null}
+                </div>
                 <ul className="mt-6 mb-8 space-y-2.5">
-                  {planTicks(p).map((f) => (
+                  {planTicks(p, audience).map((f) => (
                     <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
                       <Check className="h-4 w-4 shrink-0 text-brand-600" /> {f}
                     </li>
                   ))}
                 </ul>
+                {/**
+                 * The door that matches the shelf.
+                 *
+                 * An agency picks its plan as it signs up, so the card carries
+                 * the plan across. A resort does not: no subscription is written
+                 * at resort signup unless an offer names one — the platform sets
+                 * the first one up — so a `plan` on that link would be a
+                 * parameter nothing reads. The rhythm travels either way,
+                 * because an offer does honour it.
+                 */}
                 <Link
-                  href="/signup"
+                  href={
+                    audience === "AGENCY"
+                      ? `/signup/agency?plan=${p.name}${yearlyHere(p) ? "&billing=YEARLY" : ""}`
+                      : yearlyHere(p)
+                        ? "/signup?billing=YEARLY"
+                        : "/signup"
+                  }
                   className={`mt-auto block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
                   Start free trial

@@ -44,6 +44,7 @@ import { PlatformSettingsService } from "../common/platform-settings.service";
 import { AuditService } from "../common/audit.service";
 import { SYSTEM_ACTOR_ID } from "../common/rbac";
 import { reachableEmail, reachablePhone } from "../common/contact";
+import { feeFor, isBillingCycle, monthsIn, soldYearly, type BillingCycle } from "../common/billing-cycle";
 import type { TemplateName } from "../notifications/templates";
 
 export interface BillingSweepResult {
@@ -68,6 +69,17 @@ const addMonths = (d: Date, n: number) => {
   r.setMonth(r.getMonth() + n);
   return r;
 };
+
+/**
+ * How long one period of this subscription is.
+ *
+ * Every date this service moves used to be `addMonths(x, 1)`, because a period
+ * was a month by definition. A yearly subscription's period is twelve, and a
+ * row carrying something else — an old value, a hand-edited one — bills monthly
+ * rather than refusing to bill at all.
+ */
+const periodMonths = (sub: { billingCycle: string }) =>
+  monthsIn(isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY");
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 const daysBetween = (from: Date, to: Date) => Math.ceil((to.getTime() - from.getTime()) / DAY_MS);
 
@@ -163,7 +175,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
         plan: sub.plan,
         date: isoDay(sub.trialEndsAt!),
         days: Math.max(0, daysBetween(now, sub.trialEndsAt!)),
-        amount: Number(sub.monthlyFee),
+        amount: Number(sub.fee),
       }, `sub:${sub.id}`);
       result.notices += sent;
     }
@@ -181,7 +193,7 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       const raised = await this.raiseDue(sub, periodStart);
       await this.prisma.subscription.update({
         where: { id: sub.id },
-        data: { status: "ACTIVE", renewsAt: addMonths(periodStart, 1) },
+        data: { status: "ACTIVE", renewsAt: addMonths(periodStart, periodMonths(sub)) },
       });
       result.trialsEnded++;
       if (raised) result.duesRaised++;
@@ -199,40 +211,50 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
     for (const sub of dueNow) {
       // a downgrade the owner asked for lands here, at the period boundary,
-      // so the first bill of the new period is already the new price
+      // so the first bill of the new period is already the new price — and so
+      // does a move from the yearly rhythm back to the monthly one
       await this.applyPendingPlan(sub);
       let periodStart = sub.renewsAt!;
-      let renewsAt = addMonths(periodStart, 1);
-      // catch up month by month if the sweep has not run for a long time
+      let months = periodMonths(sub);
+      let renewsAt = addMonths(periodStart, months);
+      // catch up period by period if the sweep has not run for a long time
       let guard = 0;
       while (guard++ < 24) {
         if (await this.raiseDue(sub, periodStart)) result.duesRaised++;
         if (renewsAt > now) break;
         periodStart = renewsAt;
-        renewsAt = addMonths(periodStart, 1);
+        // re-read each time round: a pending change applied above could have
+        // moved this subscription onto the other rhythm mid-catch-up
+        months = periodMonths(sub);
+        renewsAt = addMonths(periodStart, months);
       }
       await this.prisma.subscription.update({ where: { id: sub.id }, data: { renewsAt } });
     }
   }
 
   /**
-   * Applies a plan change that was waiting for the renewal.
+   * Applies a plan or rhythm change that was waiting for the renewal.
    *
    * An upgrade is immediate and billed pro rata by `SubscriptionService`; a
-   * downgrade is not, because the month the account is in has already been
-   * invoiced. `pendingPlan` holds it until this moment. The row is mutated in
-   * place as well as in the database so the bill raised straight after this
-   * carries the new fee.
+   * downgrade is not, because the period the account is in has already been
+   * invoiced. `pendingPlan` and `pendingCycle` hold those until this moment.
+   * The row is mutated in place as well as in the database so the bill raised
+   * straight after this carries the new fee and the new period length.
    */
   private async applyPendingPlan(sub: {
     id: bigint;
     accountId: number;
     plan: string;
-    monthlyFee: unknown;
+    fee: unknown;
+    billingCycle: string;
     pendingPlan: string | null;
+    pendingCycle: string | null;
   }): Promise<void> {
-    if (!sub.pendingPlan) return;
-    const target = await this.prisma.platformPlan.findUnique({ where: { name: sub.pendingPlan } });
+    if (!sub.pendingPlan && !sub.pendingCycle) return;
+
+    // the plan stays where it is unless a change was asked for
+    const name = sub.pendingPlan ?? sub.plan;
+    const target = await this.prisma.platformPlan.findUnique({ where: { name } });
     if (!target) {
       // the plan was deleted between the request and the renewal; keep the
       // subscription where it is rather than move it somewhere nobody chose
@@ -241,14 +263,39 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       sub.pendingPlan = null;
       return;
     }
-    const from = sub.plan;
+
+    const cycle: BillingCycle = isBillingCycle(sub.pendingCycle)
+      ? sub.pendingCycle
+      : isBillingCycle(sub.billingCycle)
+        ? sub.billingCycle
+        : "MONTHLY";
+    /**
+     * A plan whose yearly price was withdrawn while an account was waiting to
+     * move onto it has nothing to bill for a year. The account stays on the
+     * rhythm it is on rather than being billed a price nobody set.
+     */
+    const cycleToUse: BillingCycle = cycle === "YEARLY" && !soldYearly(target) ? "MONTHLY" : cycle;
+    if (cycleToUse !== cycle) {
+      this.logger.warn(`subscription ${sub.id}: ${target.name} is no longer sold by the year — kept monthly`);
+    }
+    const fee = feeFor(target, cycleToUse);
+
+    const from = { plan: sub.plan, cycle: sub.billingCycle };
     await this.prisma.subscription.update({
       where: { id: sub.id },
-      data: { plan: target.name, monthlyFee: target.monthlyFee, pendingPlan: null },
+      data: {
+        plan: target.name,
+        fee: fee as never,
+        billingCycle: cycleToUse,
+        pendingPlan: null,
+        pendingCycle: null,
+      },
     });
     sub.plan = target.name;
-    sub.monthlyFee = target.monthlyFee;
+    sub.fee = fee;
+    sub.billingCycle = cycleToUse;
     sub.pendingPlan = null;
+    sub.pendingCycle = null;
     const account = await this.account(sub.accountId);
     await this.audit.log({
       actorId: SYSTEM_ACTOR_ID,
@@ -256,17 +303,17 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       action: "billing.plan.applied",
       entity: "subscription",
       entityId: Number(sub.id),
-      diff: { accountId: account.id, from, to: target.name, monthlyFee: Number(target.monthlyFee) },
+      diff: { accountId: account.id, from, to: { plan: target.name, cycle: cycleToUse }, fee },
     });
   }
 
   /** Creates the bill for one period. Returns false when it already existed. */
   private async raiseDue(
-    sub: { id: bigint; accountId: number; monthlyFee: unknown; plan: string },
+    sub: { id: bigint; accountId: number; fee: unknown; plan: string; billingCycle: string },
     periodStart: Date,
   ): Promise<boolean> {
-    const periodEnd = addMonths(periodStart, 1);
-    const amount = Number(sub.monthlyFee);
+    const periodEnd = addMonths(periodStart, periodMonths(sub));
+    const amount = Number(sub.fee);
     try {
       const due = await this.prisma.subscriptionDue.create({
         data: {

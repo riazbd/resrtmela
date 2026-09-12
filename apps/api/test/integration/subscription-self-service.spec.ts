@@ -76,7 +76,7 @@ async function seedPlans() {
  * A resort that has been paying for a while: out of trial, mid-period, with
  * a renewal ten days away.
  */
-async function paying(plan: string, monthlyFee: number, renewsInDays = 10) {
+async function paying(plan: string, fee: number, renewsInDays = 10) {
   const now = new Date();
   const renewsAt = new Date(now.getTime() + renewsInDays * DAY);
   const periodStart = new Date(renewsAt);
@@ -86,7 +86,7 @@ async function paying(plan: string, monthlyFee: number, renewsInDays = 10) {
       accountId: fx.tenantId,
       plan,
       status: "ACTIVE",
-      monthlyFee: monthlyFee as never,
+      fee: fee as never,
       startedAt: periodStart,
       trialEndsAt: periodStart,
       renewsAt,
@@ -119,7 +119,7 @@ describe("what the owner can see", () => {
     expect(d.plan).toBe("STARTER");
     expect(d.planLabel).toBe("Starter");
     expect(d.status).toBe("ACTIVE");
-    expect(d.monthlyFee).toBe(2500);
+    expect(d.fee).toBe(2500);
     expect(d.renewsAt).toBe(sub.renewsAt!.toISOString());
   });
 
@@ -216,7 +216,7 @@ describe("upgrading", () => {
     expect(r.effective).toBe("now");
     const live = await liveRow();
     expect(live.plan).toBe("GROWTH");
-    expect(Number(live.monthlyFee)).toBe(5000);
+    expect(Number(live.fee)).toBe(5000);
   });
 
   it("bills only the difference, only for the days left", async () => {
@@ -271,7 +271,7 @@ describe("downgrading", () => {
     expect(r.effective).toBe("renewal");
     const live = await liveRow();
     expect(live.plan).toBe("GROWTH");
-    expect(Number(live.monthlyFee)).toBe(5000);
+    expect(Number(live.fee)).toBe(5000);
     expect(live.pendingPlan).toBe("STARTER");
   });
 
@@ -292,7 +292,7 @@ describe("downgrading", () => {
 
     const live = await liveRow();
     expect(live.plan).toBe("STARTER");
-    expect(Number(live.monthlyFee)).toBe(2500);
+    expect(Number(live.fee)).toBe(2500);
     expect(live.pendingPlan).toBeNull();
     const bill = await prisma.subscriptionDue.findFirstOrThrow({
       where: { accountId: fx.tenantId },
@@ -320,7 +320,7 @@ describe("during a trial", () => {
     await prisma.subscription.create({
       data: {
         accountId: fx.tenantId, plan: "STARTER", status: "TRIAL",
-        monthlyFee: 2500 as never, trialEndsAt, renewsAt: trialEndsAt,
+        fee: 2500 as never, trialEndsAt, renewsAt: trialEndsAt,
       },
     });
 
@@ -330,7 +330,7 @@ describe("during a trial", () => {
     expect(r.charged).toBe(0);
     const live = await liveRow();
     expect(live.plan).toBe("GROWTH");
-    expect(Number(live.monthlyFee)).toBe(5000);
+    expect(Number(live.fee)).toBe(5000);
     // and the trial is not handed out a second time
     expect(live.trialEndsAt!.toISOString()).toBe(trialEndsAt.toISOString());
   });

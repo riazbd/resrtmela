@@ -32,7 +32,7 @@ let superAdmin: JwtClaims;
 
 const limits = () => makePlanLimits(asPrismaService);
 const subscribe = (plan: string) =>
-  prisma.subscription.create({ data: { accountId: fx.tenantId, plan, status: "ACTIVE", monthlyFee: 2500 } });
+  prisma.subscription.create({ data: { accountId: fx.tenantId, plan, status: "ACTIVE", fee: 2500 } });
 
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);

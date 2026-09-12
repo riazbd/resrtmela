@@ -67,7 +67,7 @@ describe("an account with no resort", () => {
   it("is billed when its trial ends", async () => {
     const account = await agencyAccount();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", monthlyFee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
+      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
     });
 
     await makeBillingService(asPrisma).sweep(day(15));
@@ -80,7 +80,7 @@ describe("an account with no resort", () => {
   it("falls overdue, and is suspended when it does not pay — then comes back when it does", async () => {
     const account = await agencyAccount();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", monthlyFee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
+      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
     });
 
     // far enough past the first bill for every window of the default policy
@@ -111,12 +111,12 @@ describe("a chain owner's account", () => {
 
   it("cannot hold two live subscriptions — the database refuses the second", async () => {
     await prisma.subscription.create({
-      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", monthlyFee: 2500 } as never,
+      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", fee: 2500 } as never,
     });
 
     await expect(
       prisma.subscription.create({
-        data: { accountId: fx.tenantId, plan: "STARTER", status: "TRIAL", monthlyFee: 2500 } as never,
+        data: { accountId: fx.tenantId, plan: "STARTER", status: "TRIAL", fee: 2500 } as never,
       }),
     ).rejects.toThrow();
   });

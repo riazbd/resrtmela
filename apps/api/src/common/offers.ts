@@ -1,6 +1,7 @@
 import type { Prisma, PlatformPlan, Offer } from "@rh/db";
 import { sameEmail } from "./contact";
 import { round2 } from "./dates";
+import { feeFor, type BillingCycle } from "./billing-cycle";
 
 /** What the platform (or a resort's invitation) says an offer is. */
 export type OfferInput = {
@@ -51,17 +52,33 @@ export async function redeemOffer(
   return { offer, plan };
 }
 
-/** The first subscription of an account: the plan's terms, or the offer's where it has its own. */
-export function openingSubscription(accountId: number, plan: PlatformPlan, offer?: Offer | null, now = new Date()) {
+/**
+ * The first subscription of an account: the plan's terms, or the offer's where
+ * it has its own.
+ *
+ * The rhythm is the customer's choice at signup, and it decides what a period
+ * is and what one costs — a month's fee, or the year's own price. An offer's
+ * discount comes off whichever of the two was chosen, so "20% off" means the
+ * same thing on both shelves.
+ */
+export function openingSubscription(
+  accountId: number,
+  plan: PlatformPlan,
+  offer?: Offer | null,
+  now = new Date(),
+  billingCycle: BillingCycle = "MONTHLY",
+) {
   const trialDays = offer?.trialDays ?? plan.trialDays;
   const onTrial = trialDays > 0;
   const trialEndsAt = onTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
-  const monthlyFee = offer?.discountPct ? round2((Number(plan.monthlyFee) * (100 - offer.discountPct)) / 100) : Number(plan.monthlyFee);
+  const listFee = feeFor(plan, billingCycle);
+  const fee = offer?.discountPct ? round2((listFee * (100 - offer.discountPct)) / 100) : listFee;
   return {
     accountId,
     plan: plan.name,
     status: onTrial ? "TRIAL" : "ACTIVE",
-    monthlyFee,
+    billingCycle,
+    fee,
     trialEndsAt,
     renewsAt: onTrial ? trialEndsAt : now,
   };

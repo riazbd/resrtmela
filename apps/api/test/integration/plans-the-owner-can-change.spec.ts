@@ -79,7 +79,7 @@ describe("a plan the code has never heard of", () => {
     const sub = await platform().setSubscription(owner, fx.resortId, { plan: "SEASON" });
 
     expect(sub.plan).toBe("SEASON");
-    expect(Number(sub.monthlyFee)).toBe(7500);
+    expect(Number(sub.fee)).toBe(7500);
   });
 
   it("brings its own trial length rather than the platform's habit", async () => {
@@ -128,6 +128,28 @@ describe("what a plan may not be", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  /**
+   * ...but an agency plan is exactly that, and must be.
+   *
+   * An agency has no rooms and owns no resorts, so those two caps mean nothing
+   * on its shelf and are stored as zero. The floor of 1 was written for resort
+   * plans and applied to every plan, which made both agency plans unsavable:
+   * every edit — the price, the trial, the name on the pricing page — came
+   * back "maxRooms must not be less than 1". Two plans the platform sells
+   * could not be changed at all.
+   */
+  it("but an agency plan with no rooms, which is every agency plan", async () => {
+    const made = await platform().createPlan(owner, {
+      ...A_PLAN,
+      name: "AGENCY_X",
+      audience: "AGENCY",
+      maxRooms: 0,
+      maxResorts: 0,
+    });
+    expect(made.maxRooms).toBe(0);
+    expect(made.maxResorts).toBe(0);
+  });
+
   it("a free trial that never ends", async () => {
     await expect(
       platform().createPlan(owner, { ...A_PLAN, trialDays: 4000 }),
@@ -153,6 +175,52 @@ describe("what a plan may not be", () => {
     };
 
     await expect(platform().createPlan(resortAdmin, A_PLAN)).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("editing an agency plan", () => {
+  /** The two plans on the agency shelf, as the seed and the signup flow make them. */
+  async function anAgencyPlan() {
+    return platform().createPlan(owner, {
+      name: "AGENCY_ED",
+      label: "Agency Basic",
+      monthlyFee: 1200,
+      maxRooms: 0,
+      maxResorts: 0,
+      trialDays: 14,
+      audience: "AGENCY",
+      sortOrder: 1,
+      active: true,
+    });
+  }
+
+  it("takes a new price, without being asked for rooms it does not have", async () => {
+    await anAgencyPlan();
+    const updated = await platform().updatePlan(owner, "AGENCY_ED", {
+      monthlyFee: 1500,
+      // the panel posts the whole form back, zeros and all
+      maxRooms: 0,
+      maxResorts: 0,
+    });
+    expect(Number(updated.monthlyFee)).toBe(1500);
+  });
+
+  it("takes a new name on the pricing page and a new trial", async () => {
+    await anAgencyPlan();
+    const updated = await platform().updatePlan(owner, "AGENCY_ED", {
+      label: "Agency Starter",
+      trialDays: 30,
+      maxRooms: 0,
+      maxResorts: 0,
+    });
+    expect(updated.label).toBe("Agency Starter");
+    expect(updated.trialDays).toBe(30);
+  });
+
+  it("still refuses to leave a resort plan with no rooms", async () => {
+    await expect(
+      platform().updatePlan(owner, "STARTER", { maxRooms: 0 }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });
 

@@ -27,6 +27,7 @@ interface PublicPlan {
   label: string;
   maxRooms: number;
   trialDays: number;
+  yearlyFee: number | null;
 }
 
 export default function SignupPage() {
@@ -47,6 +48,18 @@ export default function SignupPage() {
   // disagree, and React threw the whole tree away and built it again.
   const [workspaceHost, setWorkspaceHost] = useState("");
   useEffect(() => setWorkspaceHost(window.location.host), []);
+
+  /**
+   * `?billing=YEARLY`, from the pricing page's toggle.
+   *
+   * Read after mounting for the same reason `window.location.host` is: the
+   * server has no query string of its own here, and reading one during render
+   * makes the first client render disagree with the server's HTML.
+   */
+  const [yearly, setYearly] = useState(false);
+  useEffect(() => {
+    setYearly(new URLSearchParams(window.location.search).get("billing") === "YEARLY");
+  }, []);
 
   useEffect(() => {
     fetch(`${API_URL}/cms/plans`)
@@ -102,6 +115,10 @@ export default function SignupPage() {
           password,
           slug: effectiveSlug || undefined,
           offer: usingOffer ? offer.code : undefined,
+          // which rhythm was picked on the pricing page. The API checks it
+          // against the plan and falls back to monthly rather than refusing,
+          // so a stale link cannot cost somebody their signup.
+          billingCycle: yearly ? "YEARLY" : "MONTHLY",
           agentsOpen: agentsOpen === true,
         },
       });
@@ -131,10 +148,12 @@ export default function SignupPage() {
   // the first row of the price list, which the API already orders and filters
   const entry = plans?.[0] ?? null;
   // an offer names the plan the workspace lands on
+  // and the rhythm, when the visitor arrived from the yearly side of the toggle
+  const onYear = yearly && entry?.yearlyFee != null;
   const entryLine = usingOffer
     ? offerLine(offer.offer!)
     : entry
-      ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
+      ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${onYear ? " · billed yearly" : ""}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
       : "";
 
   return (

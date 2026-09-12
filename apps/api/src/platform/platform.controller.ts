@@ -8,7 +8,10 @@ import { CommissionService } from "../common/commission.service";
 class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
-  @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
+  /** MONTHLY (the default) or YEARLY. Checked against the plan in the service. */
+  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
+  /** What this customer pays per period, when the super admin gives them their own price. */
+  @IsOptional() @IsNumber() @Min(0) fee?: number;
   /** This resort's trial, when it differs from the plan's. 0 means none. */
   @IsOptional() @IsInt() @Min(0) trialDays?: number;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
@@ -31,8 +34,16 @@ class PlanDto {
   @IsString() @MaxLength(16) name!: string;
   @IsString() @MaxLength(40) label!: string;
   @IsNumber() @Min(0) monthlyFee!: number;
-  @IsInt() @Min(1) maxRooms!: number;
-  @IsInt() @Min(1) maxResorts!: number;
+  /** What a year costs. Absent, or zero, means this plan is not sold by the year. */
+  @IsOptional() @IsNumber() @Min(0) yearlyFee?: number;
+  /**
+   * Zero is allowed here and refused in the service for a resort plan.
+   * Whether a zero cap is a mistake depends on which shelf the plan is sold
+   * from — an agency has no rooms and no resorts — and this layer cannot see
+   * the stored plan to know.
+   */
+  @IsInt() @Min(0) maxRooms!: number;
+  @IsInt() @Min(0) maxResorts!: number;
   @IsInt() @Min(0) trialDays!: number;
   @IsOptional() @IsInt() @Min(1) maxStaff?: number;
   @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
@@ -48,8 +59,10 @@ class PlanPatchDto {
   @IsOptional() @IsString() @MaxLength(16) name?: string;
   @IsOptional() @IsString() @MaxLength(40) label?: string;
   @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
-  @IsOptional() @IsInt() @Min(1) maxRooms?: number;
-  @IsOptional() @IsInt() @Min(1) maxResorts?: number;
+  @IsOptional() @IsNumber() @Min(0) yearlyFee?: number;
+  // see PlanDto: the floor is the service's to apply, because it depends on the shelf
+  @IsOptional() @IsInt() @Min(0) maxRooms?: number;
+  @IsOptional() @IsInt() @Min(0) maxResorts?: number;
   @IsOptional() @IsInt() @Min(0) trialDays?: number;
   @IsOptional() @IsInt() @Min(1) maxStaff?: number;
   @IsOptional() @IsArray() @IsString({ each: true }) features?: string[];
@@ -63,6 +76,8 @@ class PlanPatchDto {
 /** The owner asking to move plan. The plan table decides whether it exists. */
 class ChangePlanDto {
   @IsString() @MaxLength(16) plan!: string;
+  /** Absent means "keep the rhythm I am on" — the plan is the only thing moving. */
+  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
 }
 
 class ResortStatusDto {
@@ -72,6 +87,9 @@ class ResortStatusDto {
 }
 
 class RenewDto {
+  /** How many of this subscription's own periods — months on monthly, years on yearly. */
+  @IsOptional() @IsInt() @Min(1) periods?: number;
+  /** What the field was called while everything was billed by the month. */
   @IsOptional() @IsInt() @Min(1) months?: number;
 }
 
@@ -228,7 +246,7 @@ export class PlatformController {
     return this.platform.setSubscription(req.user, id, dto as never);
   }
   @Post("platform/subscriptions/:id/renew") renew(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: RenewDto) {
-    return this.platform.renewSubscription(req.user, id, dto.months ?? 1);
+    return this.platform.renewSubscription(req.user, id, dto.periods ?? dto.months ?? 1);
   }
   @Post("platform/subscriptions/:id/cancel") cancel(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.cancelSubscription(req.user, id);
@@ -335,7 +353,7 @@ export class PlatformController {
     return this.subscriptions.detail(req.user, id);
   }
   @Post("resorts/:id/subscription/plan") changePlan(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ChangePlanDto) {
-    return this.subscriptions.changePlan(req.user, id, dto.plan);
+    return this.subscriptions.changePlan(req.user, id, dto.plan, dto.billingCycle);
   }
 
   /**

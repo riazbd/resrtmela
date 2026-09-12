@@ -68,7 +68,7 @@ describe("plan definitions", () => {
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "ENTERPRISE" });
 
     expect(sub.plan).toBe("ENTERPRISE");
-    expect(Number(sub.monthlyFee)).toBe(40000);
+    expect(Number(sub.fee)).toBe(40000);
   });
 
   it("refuses a plan that does not exist", async () => {
@@ -102,6 +102,6 @@ describe("plan definitions", () => {
 
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "GROWTH" });
 
-    expect(Number(sub.monthlyFee)).toBe(7777);
+    expect(Number(sub.fee)).toBe(7777);
   });
 });

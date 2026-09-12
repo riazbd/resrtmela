@@ -161,50 +161,65 @@ export async function seedAccounts(
   // the closed one first, so the live subscription is the newest row — which is
   // the one every screen reads when it asks what plan this account is on
   await sub({
-    accountId: skyEco.id, plan: "GROWTH", status: "CANCELLED", monthlyFee: 5000,
+    accountId: skyEco.id, plan: "GROWTH", status: "CANCELLED", fee: 5000,
     startedAt: at(-380, 10), cancelledAt: at(-200, 10), note: "Replaced by the Chain plan",
   });
+  /**
+   * The chain pays by the year — a customer on the annual rhythm, so every
+   * screen that shows a fee has one of each to draw: ৳120,000 a year beside
+   * ৳5,000 a month, an MRR that has to divide one of them by twelve, and a
+   * renewal date a year out rather than a month.
+   */
   const skySub = await sub({
-    accountId: skyEco.id, plan: "CHAIN", status: "ACTIVE", monthlyFee: 12000,
-    startedAt: at(-200, 10), renewsAt: at(12, 10), note: "Moved up from Growth when Hilltop opened",
+    accountId: skyEco.id, plan: "CHAIN", status: "ACTIVE", billingCycle: "YEARLY", fee: 120000,
+    startedAt: at(-200, 10), renewsAt: at(165, 10), note: "Moved up from Growth when Hilltop opened, and took the year",
   });
   const coxSub = await sub({
-    accountId: coxBay.id, plan: "GROWTH", status: "TRIAL", monthlyFee: 5000,
+    accountId: coxBay.id, plan: "GROWTH", status: "TRIAL", fee: 5000,
     startedAt: at(-9, 12), trialEndsAt: at(51, 12), renewsAt: at(51, 12),
     pendingPlan: "STARTER", note: "Asked to move to Starter at renewal",
   });
   const greenSub = await sub({
-    accountId: greenLeaf.id, plan: "STARTER", status: "PAST_DUE", monthlyFee: 2500,
+    accountId: greenLeaf.id, plan: "STARTER", status: "PAST_DUE", fee: 2500,
     startedAt: at(-300, 10), renewsAt: at(-20, 10),
   });
+  /** An agency that has asked to come off the year and back onto months. */
   const seaSub = await sub({
-    accountId: seaBreeze.id, plan: "AGENCY_PRO", status: "ACTIVE", monthlyFee: 3500,
-    startedAt: at(-120, 11), renewsAt: at(9, 11),
+    accountId: seaBreeze.id, plan: "AGENCY_PRO", status: "ACTIVE", billingCycle: "YEARLY", fee: 35000,
+    startedAt: at(-120, 11), renewsAt: at(245, 11),
+    pendingCycle: "MONTHLY", note: "Going back to monthly at renewal",
   });
   const hillSub = await sub({
-    accountId: hillTrack.id, plan: "AGENCY_PRO", status: "TRIAL", monthlyFee: 3500,
+    accountId: hillTrack.id, plan: "AGENCY_PRO", status: "TRIAL", fee: 3500,
     startedAt: at(-6, 16), trialEndsAt: at(84, 16), renewsAt: at(84, 16), note: "90 days, from the Chattogram roadshow",
   });
   const padmaSub = await sub({
-    accountId: padma.id, plan: "AGENCY_BASIC", status: "PAST_DUE", monthlyFee: 1200,
+    accountId: padma.id, plan: "AGENCY_BASIC", status: "PAST_DUE", fee: 1200,
     startedAt: at(-160, 14), renewsAt: at(-25, 14),
   });
 
   const due = (data: Record<string, unknown>) => prisma.subscriptionDue.create({ data: data as never });
-  for (let i = 6; i >= 1; i--) {
+  /**
+   * Sky Eco pays by the year, so its bills are a year apart and a year's size.
+   * Monthly-sized rows against a yearly subscription would put ৳12,000 next to
+   * a ৳120,000 fee on the owner's own screen and quietly teach every reader
+   * that the two numbers have nothing to do with each other.
+   */
+  for (let i = 2; i >= 1; i--) {
     await due({
-      subscriptionId: skySub.id, accountId: skyEco.id, amount: 12000,
-      periodStart: at(-30 * i, 10), periodEnd: at(-30 * (i - 1), 10), dueDate: at(-30 * i + 7, 10),
-      status: "PAID", paidAt: at(-30 * i + 3, 15),
+      subscriptionId: skySub.id, accountId: skyEco.id, amount: 120000,
+      periodStart: at(-365 * i, 10), periodEnd: at(-365 * (i - 1), 10), dueDate: at(-365 * i + 7, 10),
+      status: "PAID", paidAt: at(-365 * i + 3, 15),
     });
   }
   await due({
-    subscriptionId: skySub.id, accountId: skyEco.id, amount: 12000,
-    periodStart: at(0, 10), periodEnd: at(30, 10), dueDate: at(7, 10), status: "DUE",
+    subscriptionId: skySub.id, accountId: skyEco.id, amount: 120000,
+    periodStart: at(0, 10), periodEnd: at(365, 10), dueDate: at(7, 10), status: "DUE",
   });
+  // the year before it moved onto the yearly rhythm, still billed by the month
   await due({
     subscriptionId: skySub.id, accountId: skyEco.id, amount: 12000,
-    periodStart: at(-210, 10), periodEnd: at(-180, 10), dueDate: at(-203, 10),
+    periodStart: at(-800, 10), periodEnd: at(-770, 10), dueDate: at(-793, 10),
     status: "WAIVED", note: "Waived: the calendar was down for three days that month",
   });
   for (let i = 3; i >= 2; i--) {
@@ -219,16 +234,16 @@ export async function seedAccounts(
     periodStart: at(-20, 10), periodEnd: at(10, 10), dueDate: at(-13, 10), status: "OVERDUE",
     note: "Two reminders sent; account suspended on the 15th day",
   });
-  for (let i = 3; i >= 1; i--) {
-    await due({
-      subscriptionId: seaSub.id, accountId: seaBreeze.id, amount: 3500,
-      periodStart: at(-30 * i, 11), periodEnd: at(-30 * (i - 1), 11), dueDate: at(-30 * i + 7, 11),
-      status: "PAID", paidAt: at(-30 * i + 2, 18),
-    });
-  }
+  // Sea Breeze also pays by the year — and has asked to come back to months
   await due({
-    subscriptionId: seaSub.id, accountId: seaBreeze.id, amount: 3500,
-    periodStart: at(0, 11), periodEnd: at(30, 11), dueDate: at(9, 11), status: "DUE",
+    subscriptionId: seaSub.id, accountId: seaBreeze.id, amount: 35000,
+    periodStart: at(-485, 11), periodEnd: at(-120, 11), dueDate: at(-478, 11),
+    status: "PAID", paidAt: at(-476, 18),
+  });
+  await due({
+    subscriptionId: seaSub.id, accountId: seaBreeze.id, amount: 35000,
+    periodStart: at(-120, 11), periodEnd: at(245, 11), dueDate: at(-113, 11),
+    status: "PAID", paidAt: at(-111, 18),
   });
   await due({
     subscriptionId: padmaSub.id, accountId: padma.id, amount: 1200,

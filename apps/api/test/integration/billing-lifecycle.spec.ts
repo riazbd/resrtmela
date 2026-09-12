@@ -52,7 +52,7 @@ async function subscription(over: Record<string, unknown> = {}) {
       accountId: fx.tenantId,
       plan: "STARTER",
       status: "TRIAL",
-      monthlyFee: 2500,
+      fee: 2500,
       trialEndsAt: day(14),
       renewsAt: day(14),
       ...over,
@@ -230,7 +230,7 @@ describe("subscription lifecycle sweep", () => {
         accountId: other.tenantId,
         plan: "STARTER",
         status: "ACTIVE",
-        monthlyFee: 2500,
+        fee: 2500,
         renewsAt: day(0),
       } as never,
     });

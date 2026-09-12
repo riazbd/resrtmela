@@ -160,7 +160,7 @@ describe("selling", () => {
     const account = await seededAgency("active");
     const now = new Date();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "AGENCY_BASIC", status: "TRIAL", monthlyFee: 1000, trialEndsAt: new Date(now.getTime() + 2 * 86_400_000) } as never,
+      data: { accountId: account.id, plan: "AGENCY_BASIC", status: "TRIAL", fee: 1000, trialEndsAt: new Date(now.getTime() + 2 * 86_400_000) } as never,
     });
 
     await makeBillingService(asPrisma).sweep(now);

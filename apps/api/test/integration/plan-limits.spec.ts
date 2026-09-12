@@ -31,7 +31,7 @@ afterAll(async () => {
 
 async function subscribe(plan: "STARTER" | "GROWTH" | "CHAIN") {
   await prisma.subscription.create({
-    data: { accountId: fx.tenantId, plan, status: "ACTIVE", monthlyFee: 2500 },
+    data: { accountId: fx.tenantId, plan, status: "ACTIVE", fee: 2500 },
   });
 }
 
@@ -71,7 +71,7 @@ describe("plan limits", () => {
     // STANDARD historically allowed 50 rooms; GROWTH allows 40. An existing
     // tenant must not lose capacity just because the tables were unified.
     await prisma.subscription.create({
-      data: { accountId: fx.tenantId, plan: "STANDARD", status: "ACTIVE", monthlyFee: 2500 },
+      data: { accountId: fx.tenantId, plan: "STANDARD", status: "ACTIVE", fee: 2500 },
     });
 
     for (let i = 3; i <= 41; i++) await addRoom(`room-${i}`);

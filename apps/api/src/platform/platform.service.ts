@@ -17,6 +17,14 @@ import { signToken } from "../common/auth.guard";
 import { randomBytes } from "node:crypto";
 import type { OfferInput } from "../common/offers";
 import { assertBrandValue, BRAND_KEYS, isBrandKey, type BrandKey } from "../common/brand";
+import {
+  feeFor,
+  isBillingCycle,
+  monthsIn,
+  soldYearly,
+  yearlySaving,
+  type BillingCycle,
+} from "../common/billing-cycle";
 import * as bcrypt from "bcryptjs";
 
 /**
@@ -42,6 +50,8 @@ export interface PlanInput {
   name: string;
   label: string;
   monthlyFee: number;
+  /** What a year costs. Absent or zero means the plan is not sold by the year. */
+  yearlyFee?: number | null;
   maxRooms: number;
   maxResorts: number;
   trialDays: number;
@@ -106,7 +116,10 @@ function assertShelf(audience: string, features: string[]) {
   }
 }
 
-function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean }) {
+function assertPlanFields(
+  input: PlanPatch,
+  { creating, audience }: { creating: boolean; audience: string },
+) {
   if (creating) {
     if (!input.name || !PLAN_NAME.test(input.name)) {
       throw badRequest("Plan name must be 2–16 characters, A–Z, 0–9 or _, starting with a letter (e.g. SEASON)");
@@ -135,6 +148,17 @@ function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean })
     }
     if (Math.round(fee * 100) !== fee * 100) throw badRequest("Monthly fee cannot be finer than a paisa");
   }
+  /**
+   * The yearly price is optional — most plans start without one, and a blank
+   * box means "not sold by the year" rather than "free for a year".
+   */
+  if (input.yearlyFee != null) {
+    const fee = input.yearlyFee;
+    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.monthlyFee) {
+      throw badRequest(`Yearly fee must be between 0 and ${PLAN_BOUNDS.monthlyFee}`);
+    }
+    if (Math.round(fee * 100) !== fee * 100) throw badRequest("Yearly fee cannot be finer than a paisa");
+  }
   if (input.features != null) {
     if (!Array.isArray(input.features)) throw badRequest("Features must be a list");
     /**
@@ -146,10 +170,23 @@ function assertPlanFields(input: PlanPatch, { creating }: { creating: boolean })
     const unknown = input.features.filter((k) => !isPlanFeature(k));
     if (unknown.length) throw badRequest(`Not a feature this platform can switch on: ${unknown.join(", ")}`);
   }
-  // a plan that sells no rooms sells nothing; a plan for no resorts reaches nobody
-  if (input.maxRooms != null) assertWholeNumber(input.maxRooms, "Room limit", 1, PLAN_BOUNDS.maxRooms);
+  /**
+   * A resort plan that sells no rooms sells nothing, and one for no resorts
+   * reaches nobody — so both floor at one. An agency has neither rooms nor
+   * resorts: those caps do not apply to it and are stored as zero.
+   *
+   * The floor of one used to be applied to every plan, whichever shelf it was
+   * on, and the agency plans hold zero in both. The result was that neither
+   * agency plan could be edited at all — the price, the trial, the name on the
+   * pricing page, all of it came back "Room limit must be a whole number
+   * between 1 and 100000", because the panel posts the whole form and the
+   * zeros came with it.
+   */
+  const capFloor = audience === "AGENCY" ? 0 : 1;
+  if (input.maxRooms != null) assertWholeNumber(input.maxRooms, "Room limit", capFloor, PLAN_BOUNDS.maxRooms);
+  if (input.maxResorts != null) assertWholeNumber(input.maxResorts, "Resort limit", capFloor, PLAN_BOUNDS.maxResorts);
+  // staff is the one cap an agency does have, so it floors at one on both shelves
   if (input.maxStaff != null) assertWholeNumber(input.maxStaff, "Staff limit", 1, PLAN_BOUNDS.maxStaff);
-  if (input.maxResorts != null) assertWholeNumber(input.maxResorts, "Resort limit", 1, PLAN_BOUNDS.maxResorts);
   // zero is a plan with no free trial, which is a real choice
   if (input.trialDays != null) assertWholeNumber(input.trialDays, "Trial length", 0, PLAN_BOUNDS.trialDays);
   if (input.sortOrder != null) assertWholeNumber(input.sortOrder, "Sort order", 0, PLAN_BOUNDS.sortOrder);
@@ -196,7 +233,7 @@ export class PlatformService {
     const [resorts, agents, subs, dues, rooms] = await Promise.all([
       this.prisma.resort.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
       this.prisma.user.findMany({ where: { role: "AGENT" }, select: { status: true } }),
-      this.prisma.subscription.findMany({ select: { status: true, monthlyFee: true } }),
+      this.prisma.subscription.findMany({ select: { status: true, fee: true, billingCycle: true } }),
       this.prisma.subscriptionDue.findMany({ where: { status: { in: ["DUE", "OVERDUE"] } }, select: { amount: true } }),
       this.prisma.room.count({ where: { deletedAt: null } }),
     ]);
@@ -218,7 +255,23 @@ export class PlatformService {
         active: activeSubs.length,
         pastDue: subs.filter((s) => s.status === "PAST_DUE").length,
         cancelled: subs.filter((s) => s.status === "CANCELLED").length,
-        mrr: activeSubs.reduce((sum, s) => sum + Number(s.monthlyFee), 0),
+        /**
+         * Monthly recurring revenue, with a year spread across its months.
+         *
+         * A yearly subscription counted at its full price would put a ৳25,000
+         * spike into the month it was sold and nothing into the eleven after
+         * it — the number would jump around with the sales calendar rather
+         * than describe the business. Normalising to a month is what the
+         * metric means everywhere it is quoted.
+         */
+        mrr: round2(
+          activeSubs.reduce(
+            (sum, s) =>
+              sum +
+              Number(s.fee) / monthsIn(isBillingCycle(s.billingCycle) ? s.billingCycle : "MONTHLY"),
+            0,
+          ),
+        ),
       },
       duesOutstanding: dues.reduce((sum, d) => sum + Number(d.amount), 0),
       rooms,
@@ -240,7 +293,7 @@ export class PlatformService {
             id: true,
             name: true,
             kind: true,
-            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, monthlyFee: true, renewsAt: true } },
+            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, fee: true, billingCycle: true, renewsAt: true } },
           },
         },
         _count: { select: { rooms: true, bookings: true, guests: true } },
@@ -408,7 +461,7 @@ export class PlatformService {
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
-    input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
+    input: { plan: string; fee?: number; note?: string; trialDays?: number; billingCycle?: string },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { tenantId: true } });
@@ -423,7 +476,7 @@ export class PlatformService {
   async setAccountSubscription(
     claims: JwtClaims,
     accountId: number,
-    input: { plan: string; monthlyFee?: number; note?: string; trialDays?: number },
+    input: { plan: string; fee?: number; note?: string; trialDays?: number; billingCycle?: string },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
@@ -466,7 +519,18 @@ export class PlatformService {
       orderBy: { id: "desc" },
     });
 
-    const monthlyFee = input.monthlyFee ?? Number(def.monthlyFee);
+    /**
+     * Which rhythm this account is put on, and what one period of it costs.
+     *
+     * `input.fee` is the super admin giving one customer a price of their own,
+     * exactly as it always could; what it overrides is now the price of a
+     * period rather than of a month.
+     */
+    const billingCycle: BillingCycle = isBillingCycle(input.billingCycle) ? input.billingCycle : "MONTHLY";
+    if (billingCycle === "YEARLY" && !soldYearly(def)) {
+      throw badRequest(`${def.label} is not sold by the year — set a yearly price on it first.`);
+    }
+    const fee = input.fee ?? feeFor(def, billingCycle);
     const sub = await this.prisma.$transaction(async (tx) => {
       if (existing) {
         await tx.subscription.update({
@@ -504,7 +568,8 @@ export class PlatformService {
           accountId,
           plan: input.plan,
           status,
-          monthlyFee,
+          billingCycle,
+          fee,
           startedAt: existing?.startedAt ?? now,
           trialEndsAt,
           renewsAt,
@@ -531,7 +596,7 @@ export class PlatformService {
   async createPlan(claims: JwtClaims, input: PlanInput) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
-    assertPlanFields(input, { creating: true });
+    assertPlanFields(input, { creating: true, audience: input.audience ?? "RESORT" });
     assertShelf(input.audience ?? "RESORT", input.features ?? []);
 
     if (await this.prisma.platformPlan.findUnique({ where: { name: input.name } })) {
@@ -543,6 +608,9 @@ export class PlatformService {
         name: input.name,
         label: input.label,
         monthlyFee: input.monthlyFee as never,
+        // zero and absent both mean "not sold by the year"; storing NULL keeps
+        // one answer to that question rather than two
+        yearlyFee: (input.yearlyFee ? input.yearlyFee : null) as never,
         maxRooms: input.maxRooms,
         maxResorts: input.maxResorts,
         maxStaff: input.maxStaff ?? 1,
@@ -575,9 +643,11 @@ export class PlatformService {
     if (input.name != null && input.name !== name) {
       throw badRequest("A plan's name is fixed — subscriptions point at it by name. Change the label instead.");
     }
-    assertPlanFields(input, { creating: false });
+    // the stored plan is read first: which shelf it is on decides whether a
+    // zero room cap is a mistake or the only correct value
     const current = await this.prisma.platformPlan.findUnique({ where: { name } });
     if (!current) throw badRequest("No such plan");
+    assertPlanFields(input, { creating: false, audience: input.audience ?? current.audience });
     if (input.audience != null && input.audience !== current.audience) {
       // the accounts already on it would be left on the wrong shelf
       const sold = await this.prisma.subscription.count({ where: { plan: name, status: { not: "CANCELLED" } } });
@@ -589,6 +659,10 @@ export class PlatformService {
       where: { name },
       data: {
         ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee as never } : {}),
+        // clearing the box takes the plan off the yearly shelf; accounts
+        // already on a year keep the price they were sold, which lives on
+        // their own subscription row
+        ...(input.yearlyFee !== undefined ? { yearlyFee: (input.yearlyFee ? input.yearlyFee : null) as never } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
         ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
         ...(input.maxStaff != null ? { maxStaff: input.maxStaff } : {}),
@@ -655,18 +729,28 @@ export class PlatformService {
     return { deleted: true as const, name };
   }
 
-  async renewSubscription(claims: JwtClaims, subscriptionId: number, months = 1) {
+  /**
+   * Renew by hand, from the Platform panel.
+   *
+   * `periods` counts this subscription's own periods, not months: renewing a
+   * yearly account by one adds a year and bills a year. It was months, which
+   * was the same thing while everything was billed monthly and would have
+   * charged a yearly customer a twelfth of their fee for a twelfth of their
+   * term.
+   */
+  async renewSubscription(claims: JwtClaims, subscriptionId: number, periods = 1) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const sub = await this.prisma.subscription.findUnique({ where: { id: BigInt(subscriptionId) } });
     if (!sub) throw badRequest("subscription not found");
     if (sub.status === "CANCELLED") throw badRequest("subscription cancelled — create a new one");
     const base = sub.renewsAt && sub.renewsAt > new Date() ? sub.renewsAt : new Date();
-    const renewsAt = addMonths(base, months);
+    const cycle: BillingCycle = isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY";
+    const renewsAt = addMonths(base, monthsIn(cycle) * periods);
     await this.prisma.subscriptionDue.create({
       data: {
         subscriptionId: sub.id,
         accountId: sub.accountId,
-        amount: Number(sub.monthlyFee) * months,
+        amount: Number(sub.fee) * periods,
         periodStart: base,
         periodEnd: renewsAt,
         dueDate: renewsAt,
@@ -676,7 +760,7 @@ export class PlatformService {
       where: { id: sub.id },
       data: { status: sub.status === "TRIAL" ? "ACTIVE" : sub.status, renewsAt },
     });
-    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { accountId: sub.accountId, months, renewsAt } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { accountId: sub.accountId, periods, billingCycle: cycle, renewsAt } });
     return updated;
   }
 
@@ -1614,7 +1698,9 @@ export class PlatformService {
       plan: s.plan,
       pendingPlan: s.pendingPlan,
       status: s.status,
-      monthlyFee: Number(s.monthlyFee),
+      billingCycle: s.billingCycle,
+      pendingCycle: s.pendingCycle,
+      fee: Number(s.fee),
       startedAt: s.startedAt,
       trialEndsAt: s.trialEndsAt,
       renewsAt: s.renewsAt,
@@ -1885,7 +1971,7 @@ export class PlatformService {
       where: { active: true, audience },
       orderBy: { sortOrder: "asc" },
       select: {
-        name: true, label: true, monthlyFee: true,
+        name: true, label: true, monthlyFee: true, yearlyFee: true,
         maxRooms: true, maxResorts: true, maxStaff: true, trialDays: true, blurb: true, highlight: true,
         // the ticks on the card are drawn from this, not from a map in the page
         features: true,
@@ -1894,6 +1980,14 @@ export class PlatformService {
     return rows.map((r) => ({
       ...r,
       monthlyFee: Number(r.monthlyFee),
+      /**
+       * Null where the plan is not sold by the year, so the page can hide its
+       * yearly column for that card rather than print a zero. The saving is
+       * computed here for the same reason every price is: one answer, and the
+       * page does not do arithmetic the invoice might disagree with.
+       */
+      yearlyFee: soldYearly(r) ? Number(r.yearlyFee) : null,
+      yearlySaving: yearlySaving(r),
       features: Array.isArray(r.features) ? (r.features as string[]) : [],
     }));
   }

@@ -33,6 +33,8 @@ class SignupDto {
   @IsString() @MinLength(8) password!: string;
   @IsOptional() @IsString() @MaxLength(80) slug?: string;
   @IsOptional() @IsString() @MaxLength(32) offer?: string;
+  /** MONTHLY or YEARLY, from the toggle on the pricing page. */
+  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
   @IsOptional() @IsBoolean() agentsOpen?: boolean;
 }
 
@@ -45,6 +47,7 @@ class SignupAgencyDto {
   // optional when an offer names the plan; the service refuses neither-given
   @IsOptional() @IsString() @MaxLength(16) plan?: string;
   @IsOptional() @IsString() @MaxLength(32) offer?: string;
+  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
 }
 
 class ForgotPasswordDto {

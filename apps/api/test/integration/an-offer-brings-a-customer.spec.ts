@@ -131,7 +131,8 @@ describe("signing up through an offer", () => {
     await resortSignup(offer.code);
 
     const sub = await liveSub((await accountOf("Offer Group")).id);
-    expect(Number(sub.monthlyFee)).toBe(Number(growth.monthlyFee) / 2);
+    // the subscription pays a period's `fee`; the plan quotes a `monthlyFee`
+    expect(Number(sub.fee)).toBe(Number(growth.monthlyFee) / 2);
   });
 });
 

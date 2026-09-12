@@ -92,8 +92,11 @@ export async function resetDb(prisma: PrismaClient): Promise<void> {
 export async function seedPlatformPlans(prisma: PrismaClient): Promise<void> {
   await prisma.platformPlan.createMany({
     data: [
-      { name: "STARTER", label: "Starter", monthlyFee: 2500 as never, maxRooms: 10, maxResorts: 1, sortOrder: 1 },
-      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2, highlight: true },
+      // two of the three carry a yearly price at ten months' fee, and CHAIN
+      // deliberately does not: "sold by the month only" is a state the code
+      // has to keep working through
+      { name: "STARTER", label: "Starter", monthlyFee: 2500 as never, yearlyFee: 25000 as never, maxRooms: 10, maxResorts: 1, sortOrder: 1 },
+      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, yearlyFee: 50000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2, highlight: true },
       { name: "CHAIN", label: "Chain", monthlyFee: 12000 as never, maxRooms: 10000, maxResorts: 10, sortOrder: 3 },
       // retired names existing tenants still carry, with the limits they had
       { name: "FREE", label: "Free (legacy)", monthlyFee: 0 as never, maxRooms: 10, maxResorts: 1, active: false, sortOrder: 90 },

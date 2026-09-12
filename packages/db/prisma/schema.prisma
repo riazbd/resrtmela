@@ -944,7 +944,22 @@ model Subscription {
   /// PlatformPlan.name — a string, not an enum, so a new plan needs no migration
   plan        String    @default("STARTER") @db.VarChar(16)
   status      String    @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
-  monthlyFee  Decimal   @db.Decimal(10, 2)
+
+  /// MONTHLY | YEARLY — how often this account is billed, and therefore what
+  /// one period is. `billingCycle` rather than `interval`, which is a reserved
+  /// word in MySQL and MariaDB.
+  billingCycle String   @default("MONTHLY") @db.VarChar(8)
+
+  /// What this subscription pays each period — a month's fee on MONTHLY, a
+  /// year's on YEARLY.
+  ///
+  /// This column was `monthlyFee`, which was true while the platform billed
+  /// only by the month. Holding a year's price under that name is the kind of
+  /// lie that produced "৳75,000 where the owner's report said ৳1,000" once
+  /// already, so the name says what the number is: the fee for one period.
+  /// The plan's own `monthlyFee` keeps its name, because it really is a
+  /// monthly price.
+  fee         Decimal   @db.Decimal(10, 2)
   startedAt   DateTime  @default(now())
   trialEndsAt DateTime?
   renewsAt    DateTime?
@@ -958,6 +973,12 @@ model Subscription {
   /// billing sweep applies it at the next renewal — the same pass that raises
   /// the first bill at the new price. NULL is the normal state.
   pendingPlan String?   @db.VarChar(16)
+
+  /// A move to the other billing rhythm, waiting for the renewal — the same
+  /// shape as `pendingPlan` and for the same reason. Going yearly costs more
+  /// now and lands at once; going back to monthly would take away a year that
+  /// has already been paid for, so it waits here.
+  pendingCycle String?  @db.VarChar(8)
 
   dues SubscriptionDue[]
 
@@ -1141,6 +1162,19 @@ model PlatformPlan {
   name       String  @unique @db.VarChar(16) // STARTER | GROWTH | CHAIN
   label      String  @db.VarChar(40)
   monthlyFee Decimal @db.Decimal(10, 2)
+
+  /// What a year of this plan costs, paid up front. NULL means the plan is not
+  /// sold by the year at all — the pricing page's yearly column skips it.
+  ///
+  /// A price rather than a discount percentage, and one plan rather than a
+  /// second "Starter Yearly" row: the plan is what carries the limits and the
+  /// features, and splitting it per rhythm would fork all of that and every
+  /// report that groups by plan. It is the shape every subscription billing
+  /// system uses — one product, a price per interval.
+  ///
+  /// The convention the panel suggests is ten months' fee, which is where
+  /// "two months free" comes from, but the number is the owner's to set.
+  yearlyFee  Decimal? @db.Decimal(10, 2)
   maxRooms   Int     @default(10)
   maxResorts Int     @default(1) // multi-resort gate: CHAIN allows several resorts per owner
   maxStaff   Int     @default(1) // "1 staff account" / "5 staff accounts" on the pricing card

@@ -84,7 +84,7 @@ describe("changing plan", () => {
     await platform.setSubscription(owner, fx.resortId, { plan: "GROWTH" });
 
     const rows = await live();
-    expect(Number(rows[0]!.monthlyFee)).toBe(5000);
+    expect(Number(rows[0]!.fee)).toBe(5000);
   });
 
   it("raises one bill a month, not two", async () => {
@@ -119,7 +119,7 @@ describe("the database itself", () => {
           accountId: fx.tenantId,
           plan: "GROWTH",
           status: "TRIAL",
-          monthlyFee: 5000 as never,
+          fee: 5000 as never,
         },
       }),
     ).rejects.toMatchObject({ code: "P2002" });

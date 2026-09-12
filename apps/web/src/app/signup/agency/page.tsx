@@ -15,6 +15,9 @@ interface AgencyPlan {
   name: string;
   label: string;
   monthlyFee: number;
+  /** null where this plan is sold by the month only. */
+  yearlyFee: number | null;
+  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
   trialDays: number;
   blurb: string | null;
 }
@@ -41,16 +44,36 @@ export default function AgencySignupPage() {
   const [err, setErr] = useState<string | null>(null);
   const offer = useOffer("AGENCY");
 
+  /**
+   * The plan and the rhythm the pricing page was showing when the visitor
+   * pressed the button. Read after mounting, like every other query-string
+   * read on these pages: the server renders without one, and reading it during
+   * render makes the first client render disagree with the server's HTML.
+   */
+  const [yearly, setYearly] = useState(false);
+  const [wanted, setWanted] = useState<string | null>(null);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    setYearly(q.get("billing") === "YEARLY");
+    setWanted(q.get("plan"));
+  }, []);
+
   useEffect(() => {
     fetch(`${API_URL}/cms/plans?audience=AGENCY`)
       .then((r) => r.json())
       .then((d: AgencyPlan[]) => {
         const list = Array.isArray(d) ? d : [];
         setPlans(list);
-        if (list[0]) setPlan(list[0].name);
+        // the plan they clicked, if it is still on sale; otherwise the first
+        const asked = wanted && list.some((p) => p.name === wanted) ? wanted : list[0]?.name;
+        if (asked) setPlan(asked);
       })
       .catch(() => setPlans([]));
-  }, []);
+  }, [wanted]);
+
+  const chosen = (plans ?? []).find((p) => p.name === plan) ?? null;
+  // a plan with no yearly price cannot be bought by the year, whatever the link said
+  const onYear = yearly && chosen?.yearlyFee != null;
 
   // an offer names the plan, so there is nothing to choose
   const usingOffer = !!offer.offer?.usable && !offer.problem;
@@ -70,7 +93,9 @@ export default function AgencySignupPage() {
     try {
       const res = await api<{ accessToken: string }>("/auth/signup/agency", {
         method: "POST",
-        body: usingOffer ? { agencyName, name, email, phone, password, offer: offer.code } : { agencyName, name, email, phone, password, plan },
+        body: usingOffer
+          ? { agencyName, name, email, phone, password, offer: offer.code, billingCycle: onYear ? "YEARLY" : "MONTHLY" }
+          : { agencyName, name, email, phone, password, plan, billingCycle: onYear ? "YEARLY" : "MONTHLY" },
       });
       const me = await adoptToken(res.accessToken);
       router.replace(landingFor(me.role));
@@ -131,6 +156,31 @@ export default function AgencySignupPage() {
                   </option>
                 ))}
               </select>
+
+              {/* Pay by the year, where this plan is sold that way. The saving
+                  is spelled out in taka as well as a percentage — a percentage
+                  of an unstated number is not something anyone can decide on. */}
+              {chosen?.yearlyFee != null && (
+                <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={onYear}
+                    onChange={() => setYearly(!onYear)}
+                    className="mt-0.5 h-4 w-4 accent-brand-600"
+                  />
+                  <span className="text-xs text-slate-600">
+                    Pay for a year — ৳{chosen.yearlyFee.toLocaleString("en-IN")}
+                    {chosen.yearlySaving && (
+                      <b className="text-emerald-700">
+                        {" "}save ৳{chosen.yearlySaving.amount.toLocaleString("en-IN")} ({chosen.yearlySaving.pct}%)
+                      </b>
+                    )}
+                    <span className="block text-[11px] text-slate-400">
+                      ৳{Math.round(chosen.yearlyFee / 12).toLocaleString("en-IN")} a month, billed yearly
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
             {err && <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{err}</p>}
             <Button type="submit" className="w-full" loading={busy} disabled={!!problem}>

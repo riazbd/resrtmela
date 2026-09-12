@@ -39,6 +39,15 @@ import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuditService } from "../common/audit.service";
 import { badRequest, requireResortAccess } from "../common/rbac";
 import { round2 } from "../common/dates";
+import {
+  cycleNoun,
+  feeFor,
+  isBillingCycle,
+  monthsIn,
+  soldYearly,
+  yearlySaving,
+  type BillingCycle,
+} from "../common/billing-cycle";
 
 const LIVE = ["TRIAL", "ACTIVE", "PAST_DUE"] as const;
 const OPEN = ["DUE", "OVERDUE"] as const;
@@ -58,6 +67,10 @@ export interface PlanOnSale {
   name: string;
   label: string;
   monthlyFee: number;
+  /** null when this plan is not sold by the year at all. */
+  yearlyFee: number | null;
+  /** What taking the year saves, for the badge the card wears. */
+  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
   maxRooms: number;
   maxResorts: number;
   blurb: string | null;
@@ -70,13 +83,20 @@ export interface SubscriptionDetail {
   blurb: string | null;
   /** TRIAL | ACTIVE | PAST_DUE, or NONE when the resort has no subscription. */
   status: string;
-  monthlyFee: number;
+  /** MONTHLY | YEARLY — what one period is, and therefore what `fee` covers. */
+  billingCycle: BillingCycle;
+  /** What this account pays each period: a month's fee, or a year's. */
+  fee: number;
+  /** The same money per month, so the two rhythms can be compared at a glance. */
+  feePerMonth: number;
   startedAt: string | null;
   trialEndsAt: string | null;
   renewsAt: string | null;
   /** A downgrade already asked for, landing at `renewsAt`. */
   pendingPlan: string | null;
   pendingPlanLabel: string | null;
+  /** A move back to monthly billing, landing at `renewsAt`. */
+  pendingCycle: BillingCycle | null;
   limits: { maxRooms: number; maxResorts: number; label: string };
   usage: { rooms: number; resorts: number };
   outstanding: { amount: number; count: number };
@@ -96,6 +116,8 @@ export interface SubscriptionDetail {
 export interface PlanChangeResult {
   plan: string;
   planLabel: string;
+  /** The rhythm the account is on, or moving to. */
+  billingCycle: BillingCycle;
   /** now — applied; renewal — parked until the period ends; cancelled — a pending change called off. */
   effective: "now" | "renewal" | "cancelled";
   effectiveFrom: string | null;
@@ -148,17 +170,20 @@ export class SubscriptionService {
     ]);
 
     const current = sub ? onSale.find((p) => p.name === sub.plan) : undefined;
+    const cycle: BillingCycle =
+      sub && isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY";
     /**
      * Direction is measured against what the resort actually pays, not against
-     * the plan row's list price.
+     * the plan row's list price — and per month, so the two rhythms compare.
      *
      * A super admin can discount a subscription for one customer, and
-     * `changePlan` decides immediate-and-billed vs wait-for-renewal on
-     * `sub.monthlyFee`. Labelling the button from the price list instead would
-     * let it read "Upgrade" on a move the service then schedules as a
-     * downgrade — the screen and the charge disagreeing about the same click.
+     * `changePlan` decides immediate-and-billed vs wait-for-renewal on what is
+     * being paid. Labelling the button from the price list instead would let
+     * it read "Upgrade" on a move the service then schedules as a downgrade —
+     * the screen and the charge disagreeing about the same click. Comparing a
+     * year's fee against a month's would do the same thing, more loudly.
      */
-    const currentFee = sub ? Number(sub.monthlyFee) : null;
+    const currentFee = sub ? Number(sub.fee) / monthsIn(cycle) : null;
     const pending = sub?.pendingPlan ? onSale.find((p) => p.name === sub.pendingPlan) : undefined;
 
     return {
@@ -166,12 +191,15 @@ export class SubscriptionService {
       planLabel: current?.label ?? sub?.plan ?? null,
       blurb: current?.blurb ?? null,
       status: sub?.status ?? "NONE",
-      monthlyFee: sub ? Number(sub.monthlyFee) : 0,
+      billingCycle: cycle,
+      fee: sub ? Number(sub.fee) : 0,
+      feePerMonth: sub ? round2(Number(sub.fee) / monthsIn(cycle)) : 0,
       startedAt: sub?.startedAt?.toISOString() ?? null,
       trialEndsAt: sub?.trialEndsAt?.toISOString() ?? null,
       renewsAt: sub?.renewsAt?.toISOString() ?? null,
       pendingPlan: sub?.pendingPlan ?? null,
       pendingPlanLabel: pending?.label ?? sub?.pendingPlan ?? null,
+      pendingCycle: isBillingCycle(sub?.pendingCycle) ? sub.pendingCycle : null,
       limits: { maxRooms: limits.maxRooms, maxResorts: limits.maxResorts, label: limits.label },
       usage: { rooms, resorts },
       outstanding: { amount: round2(Number(open._sum.amount ?? 0)), count: open._count },
@@ -189,9 +217,13 @@ export class SubscriptionService {
         name: p.name,
         label: p.label,
         monthlyFee: Number(p.monthlyFee),
+        yearlyFee: soldYearly(p) ? Number(p.yearlyFee) : null,
+        yearlySaving: yearlySaving(p),
         maxRooms: p.maxRooms,
         maxResorts: p.maxResorts,
         blurb: p.blurb,
+        // both sides per month, so a yearly customer is not told that every
+        // plan on the list is a downgrade
         direction: this.direction(p.name, Number(p.monthlyFee), sub?.plan ?? null, currentFee),
       })),
     };
@@ -210,11 +242,29 @@ export class SubscriptionService {
 
   // ─────────────────────────── changing ───────────────────────────
 
-  async changePlan(claims: JwtClaims, resortId: number, plan: string): Promise<PlanChangeResult> {
+  /**
+   * Move to another plan, another billing rhythm, or both at once.
+   *
+   * The rhythm follows exactly the rules the plan does, because it is the same
+   * question wearing a different hat: paying more lands now and is billed pro
+   * rata, paying less waits for the period that has already been invoiced to
+   * run out. Going from monthly to yearly costs more today, so it is immediate;
+   * going back to monthly would be asking for a year already paid for to be
+   * refunded, so it parks in `pendingCycle` and the sweep applies it.
+   */
+  async changePlan(
+    claims: JwtClaims,
+    resortId: number,
+    plan: string,
+    billingCycle?: string,
+  ): Promise<PlanChangeResult> {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "billing.manage");
 
     const name = plan.trim().toUpperCase();
+    if (billingCycle != null && !isBillingCycle(billingCycle)) {
+      throw badRequest("A subscription is billed MONTHLY or YEARLY");
+    }
     const target = await this.prisma.platformPlan.findUnique({ where: { name } });
     // the resort's own screen sells from the resort shelf only
     if (!target || !target.active || target.audience !== "RESORT") {
@@ -230,14 +280,26 @@ export class SubscriptionService {
       throw badRequest("This resort has no subscription yet — the platform sets the first one up.");
     }
 
-    // asking for the plan you are already on either calls off a pending
-    // downgrade, or is a no-op worth saying out loud
-    if (name === sub.plan) {
-      if (!sub.pendingPlan) throw badRequest(`Already on ${target.label}.`);
-      await this.prisma.subscription.update({ where: { id: sub.id }, data: { pendingPlan: null } });
-      await this.log(claims, resortId, sub.id, { action: "cancelled", from: sub.pendingPlan, to: name });
+    const fromCycle: BillingCycle = isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY";
+    // no rhythm asked for means "keep the one I am on"
+    const toCycle: BillingCycle = (billingCycle as BillingCycle | undefined) ?? fromCycle;
+    if (toCycle === "YEARLY" && !soldYearly(target)) {
+      throw badRequest(`${target.label} is not sold by the year.`);
+    }
+
+    // asking for exactly what you already have either calls off a pending
+    // change, or is a no-op worth saying out loud
+    if (name === sub.plan && toCycle === fromCycle) {
+      if (!sub.pendingPlan && !sub.pendingCycle) throw badRequest(`Already on ${target.label}.`);
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: { pendingPlan: null, pendingCycle: null },
+      });
+      await this.log(claims, resortId, sub.id, {
+        action: "cancelled", from: sub.pendingPlan ?? sub.pendingCycle, to: name,
+      });
       return {
-        plan: name, planLabel: target.label, effective: "cancelled",
+        plan: name, planLabel: target.label, billingCycle: toCycle, effective: "cancelled",
         effectiveFrom: sub.renewsAt?.toISOString() ?? null, charged: 0,
       };
     }
@@ -245,37 +307,153 @@ export class SubscriptionService {
     await this.assertFits(resortId, target);
 
     const now = new Date();
-    const currentFee = Number(sub.monthlyFee);
-    const targetFee = Number(target.monthlyFee);
+    /**
+     * Both sides per month, so the comparison is between like and like.
+     *
+     * A yearly customer's ৳25,000 against a plan's ৳5,000 would read as a
+     * downgrade on every move they could make, and park all of them until the
+     * renewal. What decides immediate-or-deferred is whether the account starts
+     * paying more per month, which is the same question for a change of plan
+     * and a change of rhythm.
+     */
+    const currentPerMonth = Number(sub.fee) / monthsIn(fromCycle);
+    const targetFee = feeFor(target, toCycle);
+    const targetPerMonth = targetFee / monthsIn(toCycle);
 
     /**
      * A trial has taken no money, so there is nothing to protect and nothing
-     * to charge — every change inside one lands at once. Outside a trial, only
-     * a move that costs the same or more can: a cheaper plan has to wait for
-     * the month already invoiced to run out.
+     * to charge — every change inside one lands at once.
+     *
+     * Outside a trial the question is whether the customer would lose time
+     * they have already paid for. A dearer plan takes nothing away, so it
+     * lands now and is billed pro rata; a cheaper one waits for the period
+     * already invoiced to run out.
+     *
+     * A change of rhythm is that same question, and the per-month prices
+     * answer it backwards, so it is decided by direction instead:
+     *
+     * - **Monthly → yearly lands now.** Per month it is cheaper, which would
+     *   park it until the renewal — but the customer is asking to hand over a
+     *   year up front, and making them wait a month to do it helps nobody. It
+     *   costs more today, and the unused days of the month come off the bill.
+     * - **Yearly → monthly waits.** Per month it is dearer, which would land
+     *   it at once — and at once means cancelling a year that has been paid
+     *   for in full. Every system defers this, and so does this one.
      */
-    const immediate = sub.status === "TRIAL" || targetFee >= currentFee;
+    const goingYearly = toCycle === "YEARLY" && fromCycle === "MONTHLY";
+    const goingMonthly = toCycle === "MONTHLY" && fromCycle === "YEARLY";
+    const immediate =
+      sub.status === "TRIAL" ||
+      (goingYearly ? true : goingMonthly ? false : targetPerMonth >= currentPerMonth);
     if (!immediate) {
-      await this.prisma.subscription.update({ where: { id: sub.id }, data: { pendingPlan: name } });
-      await this.log(claims, resortId, sub.id, { action: "scheduled", from: sub.plan, to: name, at: sub.renewsAt });
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          ...(name === sub.plan ? {} : { pendingPlan: name }),
+          ...(toCycle === fromCycle ? {} : { pendingCycle: toCycle }),
+        },
+      });
+      await this.log(claims, resortId, sub.id, {
+        action: "scheduled", from: { plan: sub.plan, cycle: fromCycle },
+        to: { plan: name, cycle: toCycle }, at: sub.renewsAt,
+      });
       return {
-        plan: name, planLabel: target.label, effective: "renewal",
+        plan: name, planLabel: target.label, billingCycle: toCycle, effective: "renewal",
         effectiveFrom: sub.renewsAt?.toISOString() ?? null, charged: 0,
       };
     }
 
-    const charged = sub.status === "TRIAL" ? 0 : await this.chargeDifference(sub, targetFee - currentFee, now);
+    const cycleChanged = toCycle !== fromCycle;
+    /**
+     * A change of plan is not a renewal, so `renewsAt` stays where it is. A
+     * change of rhythm *is* one: the customer has just bought a year, and the
+     * year starts now. Inside a trial neither happens — nothing has been paid,
+     * and the renewal is still the day the trial ends.
+     */
+    let charged = 0;
+    let newRenewsAt: Date | null = null;
+    if (sub.status !== "TRIAL") {
+      if (cycleChanged) {
+        charged = await this.startTerm(sub, fromCycle, toCycle, targetFee, now);
+        newRenewsAt = addMonths(now, monthsIn(toCycle));
+      } else {
+        charged = await this.chargeDifference(sub, targetFee - Number(sub.fee), now);
+      }
+    }
+
     await this.prisma.subscription.update({
       where: { id: sub.id },
-      // renewsAt is deliberately absent: a plan change is not a renewal
-      data: { plan: name, monthlyFee: targetFee as never, pendingPlan: null },
+      data: {
+        plan: name,
+        fee: targetFee as never,
+        billingCycle: toCycle,
+        pendingPlan: null,
+        pendingCycle: null,
+        ...(newRenewsAt ? { renewsAt: newRenewsAt } : {}),
+      },
     });
-    await this.log(claims, resortId, sub.id, { action: "upgraded", from: sub.plan, to: name, charged });
+    await this.log(claims, resortId, sub.id, {
+      action: "upgraded",
+      from: { plan: sub.plan, cycle: fromCycle },
+      to: { plan: name, cycle: toCycle },
+      charged,
+    });
 
     return {
-      plan: name, planLabel: target.label, effective: "now",
+      plan: name, planLabel: target.label, billingCycle: toCycle, effective: "now",
       effectiveFrom: now.toISOString(), charged,
     };
+  }
+
+  /**
+   * Starting a fresh term on the other rhythm, and billing it.
+   *
+   * The customer moving to yearly is buying a year that begins today, so the
+   * year's fee falls due today — less whatever is left of the period they have
+   * already paid for. Without that credit they would pay twice for the days
+   * between now and their old renewal date, which is the complaint every
+   * billing system's proration exists to prevent.
+   */
+  private async startTerm(
+    sub: { id: bigint; accountId: number; renewsAt: Date | null; fee: unknown },
+    fromCycle: BillingCycle,
+    toCycle: BillingCycle,
+    termFee: number,
+    now: Date,
+  ): Promise<number> {
+    const renewsAt = sub.renewsAt;
+    let credit = 0;
+    if (renewsAt && renewsAt > now) {
+      const periodStart = addMonths(renewsAt, -monthsIn(fromCycle));
+      const total = renewsAt.getTime() - periodStart.getTime();
+      const remaining = renewsAt.getTime() - now.getTime();
+      const share = total > 0 ? Math.min(1, Math.max(0, remaining / total)) : 0;
+      credit = round2(Number(sub.fee) * share);
+    }
+    const amount = round2(termFee - credit);
+    if (amount <= 0) return 0;
+
+    const termEnd = addMonths(now, monthsIn(toCycle));
+    try {
+      await this.prisma.subscriptionDue.create({
+        data: {
+          subscriptionId: sub.id,
+          accountId: sub.accountId,
+          amount: amount as never,
+          periodStart: now,
+          periodEnd: termEnd,
+          dueDate: now,
+          note:
+            credit > 0
+              ? `Switched to ${cycleNoun(toCycle)}ly billing — ${credit.toFixed(2)} credited from the ${cycleNoun(fromCycle)} already paid for`
+              : `Switched to ${cycleNoun(toCycle)}ly billing`,
+        },
+      });
+    } catch (e) {
+      // P2002 on (subscriptionId, periodStart): the same click arriving twice
+      if ((e as { code?: string }).code !== "P2002") throw e;
+    }
+    return amount;
   }
 
   /**

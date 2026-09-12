@@ -38,6 +38,8 @@ interface PlanOption {
   name: string;
   label: string;
   monthlyFee: number;
+  yearlyFee: number | null;
+  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
   maxRooms: number;
   maxResorts: number;
   blurb: string | null;
@@ -49,12 +51,16 @@ interface SubscriptionDetail {
   planLabel: string | null;
   blurb: string | null;
   status: string;
-  monthlyFee: number;
+  /** MONTHLY | YEARLY — what one period is, and what `fee` covers. */
+  billingCycle: "MONTHLY" | "YEARLY";
+  fee: number;
+  feePerMonth: number;
   startedAt: string | null;
   trialEndsAt: string | null;
   renewsAt: string | null;
   pendingPlan: string | null;
   pendingPlanLabel: string | null;
+  pendingCycle: "MONTHLY" | "YEARLY" | null;
   limits: { maxRooms: number; maxResorts: number; label: string };
   usage: { rooms: number; resorts: number };
   outstanding: { amount: number; count: number };
@@ -1664,6 +1670,57 @@ function ApiKeysTab({ rid }: { rid: number }) {
  * who expects the cheaper price this month and gets billed the old one has been
  * misled by the interface, not the invoice.
  */
+/**
+ * Pay monthly, or pay for the year.
+ *
+ * Shown only where there is a choice — a plan with no yearly price gets no
+ * control at all rather than a disabled half of one — and the saving is spelled
+ * out in taka as well as a percentage, because "save 17%" of an unstated number
+ * is not an amount anyone can decide on.
+ */
+function BillingCycleSwitch({
+  detail,
+  busy,
+  onSwitch,
+}: {
+  detail: SubscriptionDetail;
+  busy: string;
+  onSwitch: (to: "MONTHLY" | "YEARLY") => void;
+}) {
+  const here = detail.plans.find((p) => p.name === detail.plan);
+  if (!here?.yearlyFee) return null;
+  // a switch already booked for the renewal is shown above; offering the same
+  // move again here would be a button that does nothing
+  if (detail.pendingCycle) return null;
+
+  const yearly = detail.billingCycle === "YEARLY";
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+      <div className="text-xs text-slate-600">
+        {yearly ? (
+          <>
+            Billed yearly — <b>{money(here.yearlyFee)}</b> a year
+            {here.yearlySaving && <> , saving {money(here.yearlySaving.amount)} against monthly</>}
+          </>
+        ) : (
+          <>
+            Pay for a year and it is <b>{money(here.yearlyFee / 12)}</b> a month
+            {here.yearlySaving && <> — {here.yearlySaving.pct}% off, {money(here.yearlySaving.amount)} a year</>}
+          </>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant={yearly ? "ghost" : "primary"}
+        loading={busy === "__cycle"}
+        onClick={() => onSwitch(yearly ? "MONTHLY" : "YEARLY")}
+      >
+        {yearly ? "Switch to monthly" : "Switch to yearly"}
+      </Button>
+    </div>
+  );
+}
+
 function SubscriptionTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const qc = useQueryClient();
@@ -1674,18 +1731,31 @@ function SubscriptionTab({ rid }: { rid: number }) {
   });
   const d = q.data;
 
+  /**
+   * Move plan, keeping whatever rhythm the account is already on.
+   *
+   * Changing the rhythm is its own button below, because they are two separate
+   * decisions and rolling them into one "upgrade" would change the size of the
+   * bill without saying so.
+   */
   async function change(p: PlanOption) {
-    const fee = money(p.monthlyFee);
+    const cycle = d?.billingCycle ?? "MONTHLY";
+    const per = cycle === "YEARLY" ? "year" : "month";
+    const fee = money(cycle === "YEARLY" && p.yearlyFee != null ? p.yearlyFee : p.monthlyFee);
+    if (cycle === "YEARLY" && p.yearlyFee == null) {
+      window.alert(`${p.label} is sold by the month only. Switch to monthly billing first.`);
+      return;
+    }
     const ask =
       p.direction === "upgrade"
-        ? `Move to ${p.label} (${fee}/month)?\n\nIt applies immediately, and you are billed only the difference for the days left in this month.`
+        ? `Move to ${p.label} (${fee}/${per})?\n\nIt applies immediately, and you are billed only the difference for the days left in this ${per}.`
         : p.direction === "current"
           ? `Stay on ${p.label} and call off the change?`
-          : `Move down to ${p.label} (${fee}/month)?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that month is already paid for — and ${p.label} starts from then.`;
+          : `Move down to ${p.label} (${fee}/${per})?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that ${per} is already paid for — and ${p.label} starts from then.`;
     if (!window.confirm(ask)) return;
     setBusy(p.name);
     try {
-      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name } });
+      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name, billingCycle: cycle } });
       push(
         r.effective === "now"
           ? r.charged > 0
@@ -1697,6 +1767,47 @@ function SubscriptionTab({ rid }: { rid: number }) {
       );
       await qc.invalidateQueries({ queryKey: ["subscription", rid] });
       await qc.invalidateQueries({ queryKey: ["tenant-usage"] });
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /**
+   * Change how often you are billed, staying on the same plan.
+   *
+   * Going yearly is immediate: the year starts today, and the unused part of
+   * the month already paid for comes off the bill. Going back to monthly waits
+   * for the year to run out, for the same reason a downgrade does — that year
+   * has been paid for and is not something to hand back mid-term.
+   */
+  async function switchCycle(to: "MONTHLY" | "YEARLY") {
+    if (!d?.plan) return;
+    const here = d.plans.find((p) => p.name === d.plan);
+    if (to === "YEARLY" && !here?.yearlyFee) {
+      window.alert(`${d.planLabel} is sold by the month only.`);
+      return;
+    }
+    const ask =
+      to === "YEARLY"
+        ? `Pay for a year of ${d.planLabel} up front — ${money(here!.yearlyFee!)}?\n\nThat is ${money(here!.yearlyFee! / 12)} a month${here!.yearlySaving ? `, saving ${money(here!.yearlySaving.amount)} a year` : ""}. The year starts today, and what is left of the month you have paid for comes off the bill.`
+        : `Go back to monthly billing?\n\nYou keep the year you have paid for until ${when(d.renewsAt)}; monthly billing starts from then.`;
+    if (!window.confirm(ask)) return;
+    setBusy("__cycle");
+    try {
+      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, {
+        method: "POST",
+        body: { plan: d.plan, billingCycle: to },
+      });
+      push(
+        r.effective === "now"
+          ? r.charged > 0
+            ? `Billed yearly — ${money(r.charged)} due now`
+            : "Billed yearly"
+          : `Monthly billing starts ${when(r.effectiveFrom)}`,
+      );
+      await qc.invalidateQueries({ queryKey: ["subscription", rid] });
     } catch (ex) {
       push((ex as Error).message, "err");
     } finally {
@@ -1723,7 +1834,13 @@ function SubscriptionTab({ rid }: { rid: number }) {
           <>
             <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
               <Stat label="Status" value={STATUS_LABEL[d.status] ?? d.status} />
-              <Stat label="Monthly" value={money(d.monthlyFee)} />
+              <Stat
+                label={d.billingCycle === "YEARLY" ? "Yearly" : "Monthly"}
+                value={money(d.fee)}
+                // the per-month figure beside a yearly fee, because that is the
+                // number the customer compares against everything else
+                sub={d.billingCycle === "YEARLY" ? `${money(d.feePerMonth)}/month` : undefined}
+              />
               <Stat
                 label={d.status === "TRIAL" ? "Trial ends" : "Renews"}
                 value={when(d.status === "TRIAL" ? d.trialEndsAt : d.renewsAt)}
@@ -1740,6 +1857,13 @@ function SubscriptionTab({ rid }: { rid: number }) {
                 stay where you are.
               </div>
             )}
+            {d.pendingCycle && (
+              <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Switching to <b>{d.pendingCycle === "YEARLY" ? "yearly" : "monthly"}</b> billing on{" "}
+                {when(d.renewsAt)}.
+              </div>
+            )}
+            <BillingCycleSwitch detail={d} busy={busy} onSwitch={switchCycle} />
           </>
         ) : (
           <p className="text-sm text-slate-500">
@@ -1762,9 +1886,20 @@ function SubscriptionTab({ rid }: { rid: number }) {
                   <span className="text-[10px] font-bold uppercase text-brand-600">Current</span>
                 )}
               </div>
+              {/* priced in the rhythm this account is on, so the number beside
+                  "Upgrade" is the number the bill will carry */}
               <div className="mt-1 text-lg font-black tabular-nums text-slate-900">
-                {money(p.monthlyFee)}
+                {money(d.billingCycle === "YEARLY" && p.yearlyFee != null ? p.yearlyFee / 12 : p.monthlyFee)}
                 <span className="text-xs font-medium text-slate-400">/mo</span>
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {d.billingCycle === "YEARLY"
+                  ? p.yearlyFee != null
+                    ? `${money(p.yearlyFee)} a year`
+                    : "Monthly only"
+                  : p.yearlySaving
+                    ? `${money(p.yearlyFee!)} a year — save ${p.yearlySaving.pct}%`
+                    : ""}
               </div>
               <div className="mt-1 text-[11px] text-slate-500">
                 {p.maxRooms >= 1000 ? "Unlimited rooms" : `${p.maxRooms} rooms`} · {p.maxResorts} resort

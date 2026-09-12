@@ -119,7 +119,7 @@ describe("taking a credit pack", () => {
 describe("what the platform is owed", () => {
   it("counts one-off charges alongside subscription dues", async () => {
     const sub = await prisma.subscription.create({
-      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", monthlyFee: 2500 },
+      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", fee: 2500 },
     });
     await prisma.subscriptionDue.create({
       data: {

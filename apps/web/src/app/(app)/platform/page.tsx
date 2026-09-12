@@ -34,7 +34,7 @@ interface ResortRow {
     id: number;
     name: string;
     kind: string;
-    subscriptions: { id: string; plan: string; status: string; monthlyFee: string; renewsAt: string | null }[];
+    subscriptions: { id: string; plan: string; status: string; fee: string; billingCycle: string; renewsAt: string | null }[];
   };
   _count: { rooms: number; bookings: number; guests: number };
   userResorts?: { user: { id: number; name: string; phone: string } }[];
@@ -53,6 +53,8 @@ interface PlanDef {
   name: string;
   label: string;
   monthlyFee: string;
+  /** What a year costs. Null means this plan is not sold by the year. */
+  yearlyFee: string | null;
   maxRooms: number;
   maxResorts: number;
   maxStaff: number;
@@ -72,6 +74,8 @@ interface PlanDef {
 type PlanEdit = {
   label: string;
   monthlyFee: number;
+  /** Zero means "not sold by the year" — the API stores that as null. */
+  yearlyFee: number;
   maxRooms: number;
   maxResorts: number;
   maxStaff: number;
@@ -91,7 +95,10 @@ interface SubscriptionRow {
   plan: string;
   pendingPlan: string | null;
   status: string;
-  monthlyFee: number;
+  /** MONTHLY | YEARLY — what `fee` covers and how far apart the bills are. */
+  billingCycle: string;
+  pendingCycle: string | null;
+  fee: number;
   startedAt: string;
   trialEndsAt: string | null;
   renewsAt: string | null;
@@ -152,6 +159,8 @@ export default function PlatformPage() {
   const [subFor, setSubFor] = useState<ResortRow | null>(null);
   const [walletFor, setWalletFor] = useState<AgentRow | null>(null);
   const [subPlan, setSubPlan] = useState("");
+  /** MONTHLY unless the super admin says otherwise, like every signup. */
+  const [subCycle, setSubCycle] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
   const [subFee, setSubFee] = useState("5000");
   /** This resort's trial. Prefilled from the plan; "" means "whatever the plan says". */
   const [subTrial, setSubTrial] = useState("");
@@ -346,7 +355,18 @@ export default function PlatformPage() {
                     <div className="font-semibold text-slate-800">{r.name}</div>
                     <div className="text-xs text-slate-400">{r.location ?? "—"} · tenant {r.tenant.name}</div>
                   </Td>
-                  <Td>{sub(r) ? <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700">{sub(r)!.plan}</span> : <span className="text-xs text-slate-400">no subscription</span>}</Td>
+                  <Td>
+                    {sub(r) ? (
+                      <>
+                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700">{sub(r)!.plan}</span>
+                        {sub(r)!.billingCycle === "YEARLY" && (
+                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">YEARLY</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-xs text-slate-400">no subscription</span>
+                    )}
+                  </Td>
                   <Td>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>{r.status}</span>
                   </Td>
@@ -369,6 +389,7 @@ export default function PlatformPage() {
                           const first = (plansQ.data ?? []).find((pl) => pl.active);
                           setSubFor(r);
                           setSubPlan(first?.name ?? "");
+                          setSubCycle("MONTHLY");
                           setSubFee(first ? String(Number(first.monthlyFee)) : "");
                           setSubTrial(first ? String(first.trialDays) : "0");
                         }}
@@ -379,7 +400,10 @@ export default function PlatformPage() {
                       {sub(r) && (
                         <>
                           <button
-                            onClick={() => act(() => api(`/platform/subscriptions/${sub(r)!.id ?? ""}/renew`, { method: "POST", body: { months: 1 } }))}
+                            // one of this subscription's own periods: a month
+                            // for a monthly account, a year for a yearly one
+                            onClick={() => act(() => api(`/platform/subscriptions/${sub(r)!.id ?? ""}/renew`, { method: "POST", body: { periods: 1 } }))}
+                            title={`Renew for one ${sub(r)!.billingCycle === "YEARLY" ? "year" : "month"}`}
                             className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                           >
                             Renew
@@ -615,7 +639,19 @@ export default function PlatformPage() {
                         : "bg-slate-100 text-slate-500"}`}>{s.status}</span>
                     {s.note && <div className="mt-0.5 text-[11px] text-slate-400">{s.note}</div>}
                   </Td>
-                  <Td className="text-right font-bold">{money(s.monthlyFee)}</Td>
+                  {/* the fee is meaningless without the rhythm it is charged
+                      at: ৳120,000 is either an outlier or a year */}
+                  <Td className="text-right font-bold">
+                    {money(s.fee)}
+                    <div className="text-[10px] font-medium text-slate-400">
+                      {s.billingCycle === "YEARLY" ? "a year" : "a month"}
+                      {s.pendingCycle && s.pendingCycle !== s.billingCycle && (
+                        <span className="text-amber-600">
+                          {" "}→ {s.pendingCycle === "YEARLY" ? "yearly" : "monthly"}
+                        </span>
+                      )}
+                    </div>
+                  </Td>
                   <Td className="text-xs text-slate-500">{dmy(s.startedAt)}</Td>
                   <Td className="text-xs text-slate-500">
                     {s.cancelledAt ? `cancelled ${dmy(s.cancelledAt)}` : s.trialEndsAt ? `trial → ${dmy(s.trialEndsAt)}` : s.renewsAt ? dmy(s.renewsAt) : "—"}
@@ -812,7 +848,13 @@ export default function PlatformPage() {
                   setSubPlan(e.target.value);
                   const chosen = (plansQ.data ?? []).find((pl) => pl.name === e.target.value);
                   if (chosen) {
-                    setSubFee(String(Number(chosen.monthlyFee)));
+                    // a plan with no yearly price cannot be sold by the year,
+                    // so the rhythm falls back with it rather than sitting on
+                    // YEARLY and failing at the server
+                    const canYear = Number(chosen.yearlyFee ?? 0) > 0;
+                    const cycle = subCycle === "YEARLY" && canYear ? "YEARLY" : "MONTHLY";
+                    setSubCycle(cycle);
+                    setSubFee(String(cycle === "YEARLY" ? Number(chosen.yearlyFee) : Number(chosen.monthlyFee)));
                     setSubTrial(String(chosen.trialDays));
                   }
                 }}
@@ -822,7 +864,35 @@ export default function PlatformPage() {
                   <option key={pl.name} value={pl.name}>{pl.label} · {pl.name}</option>
                 ))}
               </select>
-              <label className="block text-xs font-semibold text-slate-500">Monthly fee ({cur()})</label>
+
+              <label className="block text-xs font-semibold text-slate-500">Billed</label>
+              <div className="flex overflow-hidden rounded-xl border border-slate-300">
+                {(["MONTHLY", "YEARLY"] as const).map((c) => {
+                  const chosen = (plansQ.data ?? []).find((pl) => pl.name === subPlan);
+                  const canYear = Number(chosen?.yearlyFee ?? 0) > 0;
+                  const off = c === "YEARLY" && !canYear;
+                  return (
+                    <button
+                      key={c}
+                      disabled={off}
+                      title={off ? "This plan has no yearly price — set one in the Plans tab" : undefined}
+                      onClick={() => {
+                        setSubCycle(c);
+                        if (chosen) setSubFee(String(c === "YEARLY" ? Number(chosen.yearlyFee) : Number(chosen.monthlyFee)));
+                      }}
+                      className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
+                        subCycle === c ? "bg-brand-600 text-white" : off ? "bg-slate-50 text-slate-300" : "bg-white text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      {c === "MONTHLY" ? "Monthly" : "Yearly"}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label className="block text-xs font-semibold text-slate-500">
+                Fee per {subCycle === "YEARLY" ? "year" : "month"} ({cur()})
+              </label>
               <input value={subFee} onChange={(e) => setSubFee(e.target.value)} type="number" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
               <label className="block text-xs font-semibold text-slate-500">Free trial (days) — 0 for none</label>
               <input value={subTrial} onChange={(e) => setSubTrial(e.target.value)} type="number" min={0} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
@@ -832,8 +902,8 @@ export default function PlatformPage() {
                 {subTrial.trim() === ""
                   ? "Whatever this plan sells."
                   : Number(subTrial) > 0
-                    ? `Free until ${dmy(new Date(Date.now() + Number(subTrial) * 86400000))}, then ${money(Number(subFee))} a month.`
-                    : "No free trial — the first month is due today."}
+                    ? `Free until ${dmy(new Date(Date.now() + Number(subTrial) * 86400000))}, then ${money(Number(subFee))} a ${subCycle === "YEARLY" ? "year" : "month"}.`
+                    : `No free trial — the first ${subCycle === "YEARLY" ? "year" : "month"} is due today.`}
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -842,7 +912,8 @@ export default function PlatformPage() {
                 disabled={busy}
                 onClick={() => act(async () => { await api(`/platform/resorts/${subFor.id}/subscription`, { method: "POST", body: {
                     plan: subPlan,
-                    monthlyFee: Number(subFee),
+                    billingCycle: subCycle,
+                    fee: Number(subFee),
                     // an empty box means "whatever the plan sells", not "none":
                     // Number("") is 0, and 0 is a real answer here
                     ...(subTrial.trim() === "" ? {} : { trialDays: Number(subTrial) }),
@@ -911,10 +982,67 @@ function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onTog
   );
 }
 
+/**
+ * What the yearly price means, under the box you type it into.
+ *
+ * A yearly fee is the one number on this card whose value is entirely in how
+ * it compares to another one: ৳25,000 says nothing, "two months free, saves
+ * 17%" says everything. Blank is a real answer — the plan is then sold by the
+ * month only — so the line says that too rather than leaving the owner to
+ * wonder whether zero meant free.
+ *
+ * The suggestion is ten months' fee, the convention almost every subscription
+ * business prices the year at, offered as a button rather than filled in: the
+ * owner's price list is theirs to set.
+ */
+function YearlyHint({
+  monthly,
+  yearly,
+  onSuggest,
+}: {
+  monthly: number;
+  yearly: number;
+  onSuggest: (n: number) => void;
+}) {
+  const suggestion = Math.round(monthly * 10);
+  if (!yearly) {
+    return (
+      <p className="text-[11px] text-slate-400">
+        Sold by the month only.
+        {suggestion > 0 && (
+          <button
+            onClick={() => onSuggest(suggestion)}
+            className="ml-1.5 font-semibold text-brand-700 hover:underline"
+          >
+            Offer a year at {money(suggestion)}?
+          </button>
+        )}
+      </p>
+    );
+  }
+  const twelve = monthly * 12;
+  if (!(twelve > 0)) return <p className="text-[11px] text-slate-400">Set a monthly fee to compare.</p>;
+  if (yearly >= twelve) {
+    return (
+      <p className="text-[11px] font-medium text-amber-700">
+        A year costs {money(yearly - twelve)} more than twelve months do — no saving will be shown.
+      </p>
+    );
+  }
+  const saved = twelve - yearly;
+  return (
+    <p className="text-[11px] text-emerald-700">
+      {money(yearly / 12)}/month · saves {money(saved)} ({Math.round((saved / twelve) * 100)}%) ·{" "}
+      {(saved / monthly).toFixed(1).replace(/\.0$/, "")} months free
+    </p>
+  );
+}
+
 function toEdit(plan: PlanDef): PlanEdit {
   return {
     label: plan.label,
     monthlyFee: Number(plan.monthlyFee),
+    yearlyFee: Number(plan.yearlyFee ?? 0),
     maxRooms: plan.maxRooms,
     maxResorts: plan.maxResorts,
     maxStaff: plan.maxStaff,
@@ -992,9 +1120,20 @@ function PlanCard({
 
         <div className="grid grid-cols-2 gap-2">
           <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
+          <NumField label={`Yearly fee (${cur()})`} value={form.yearlyFee} min={0} onChange={(n) => set("yearlyFee", n)} />
+          <div className="col-span-2 -mt-1">
+            <YearlyHint monthly={form.monthlyFee} yearly={form.yearlyFee} onSuggest={(n) => set("yearlyFee", n)} />
+          </div>
           <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
-          <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
-          <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+          {/* An agency owns no resorts and has no rooms, so both caps are zero
+              on that shelf and mean nothing. Shown, they read as settings
+              somebody ought to "fix" into numbers that gate nothing. */}
+          {form.audience !== "AGENCY" && (
+            <>
+              <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
+              <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+            </>
+          )}
           <NumField label="Staff accounts" value={form.maxStaff} min={1} onChange={(n) => set("maxStaff", n)} />
           <NumField label="Shown in position" value={form.sortOrder} min={0} onChange={(n) => set("sortOrder", n)} />
         </div>
@@ -1042,6 +1181,7 @@ const BLANK_PLAN: PlanEdit & { name: string } = {
   name: "",
   label: "",
   monthlyFee: 0,
+  yearlyFee: 0,
   maxRooms: 10,
   maxResorts: 1,
   maxStaff: 1,
@@ -1093,8 +1233,19 @@ function NewPlanCard({
           <span className="text-[11px] font-semibold text-slate-500">Sold to — a resort never sees an agency plan, and an agency never sees a resort plan</span>
           <select
             value={form.audience}
-            // a feature belongs to one shelf, so a change of shelf clears the ticks
-            onChange={(e) => setForm((f) => ({ ...f, audience: e.target.value, features: [] }))}
+            // a feature belongs to one shelf, so a change of shelf clears the
+            // ticks; and the room and resort caps are a resort's, so an agency
+            // plan carries zero for both rather than a number gating nothing
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                audience: e.target.value,
+                features: [],
+                ...(e.target.value === "AGENCY"
+                  ? { maxRooms: 0, maxResorts: 0 }
+                  : { maxRooms: Math.max(1, f.maxRooms), maxResorts: Math.max(1, f.maxResorts) }),
+              }))
+            }
             className="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm"
           >
             <option value="RESORT">Resorts</option>
@@ -1133,9 +1284,17 @@ function NewPlanCard({
 
         <div className="grid grid-cols-2 gap-2">
           <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
+          <NumField label={`Yearly fee (${cur()})`} value={form.yearlyFee} min={0} onChange={(n) => set("yearlyFee", n)} />
+          <div className="col-span-2 -mt-1">
+            <YearlyHint monthly={form.monthlyFee} yearly={form.yearlyFee} onSuggest={(n) => set("yearlyFee", n)} />
+          </div>
           <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
-          <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
-          <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+          {form.audience !== "AGENCY" && (
+            <>
+              <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />
+              <NumField label="Resorts per owner" value={form.maxResorts} min={1} onChange={(n) => set("maxResorts", n)} />
+            </>
+          )}
           <NumField label="Staff accounts" value={form.maxStaff} min={1} onChange={(n) => set("maxStaff", n)} />
           <NumField label="Shown in position" value={form.sortOrder} min={0} onChange={(n) => set("sortOrder", n)} />
         </div>
