@@ -2,8 +2,9 @@
 
 import { formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
+// one definition, in a module a server component may also import
+import { API_URL } from "./api-url";
+export { API_URL };
 
 export class ApiError extends Error {
   status: number;

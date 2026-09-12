@@ -18,7 +18,14 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-const HOME = path.resolve(process.cwd(), "src/app/(public)/page.tsx");
+/**
+ * Both halves: the server component that fetches, and the client one that
+ * draws. The trial used to be typed into the drawing half, so checking only
+ * the entry file would have missed it entirely once the page was split.
+ */
+const HOME_FILES = ["src/app/(public)/page.tsx", "src/app/(public)/home.tsx"].map((f) =>
+  path.resolve(process.cwd(), f),
+);
 
 /** JSX text and string literals — what a visitor can end up reading. */
 function readableText(src: string): string[] {
@@ -32,14 +39,18 @@ function readableText(src: string): string[] {
 }
 
 describe("the trial length on the homepage", () => {
-  const src = fs.readFileSync(HOME, "utf8");
+  const sources = HOME_FILES.map((f) => ({ name: path.basename(f), src: fs.readFileSync(f, "utf8") }));
 
   it("is read from the plans the API sends", () => {
-    expect(src).toMatch(/trialDays/);
+    expect(sources.some((s) => /trialDays/.test(s.src))).toBe(true);
   });
 
   it("is never written out as a literal number of days", () => {
-    const literals = readableText(src).filter((x) => /\b\d+\s*days?\b/i.test(x));
+    const literals = sources.flatMap(({ name, src }) =>
+      readableText(src)
+        .filter((x) => /\b\d+\s*days?\b/i.test(x))
+        .map((x) => `${name}: ${x}`),
+    );
     expect(
       literals,
       `these say a trial length the plan does not decide:\n${literals.join("\n")}`,
