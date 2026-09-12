@@ -63,19 +63,53 @@ async function allTables(prisma: PrismaClient, schema: string): Promise<string[]
   return rows.map((r) => r.TABLE_NAME).filter((t) => !NEVER_TRUNCATE.has(t));
 }
 
+/**
+ * The table list, asked once per process.
+ *
+ * The schema cannot change while a spec file runs — migrations happen in
+ * `test:setup`, before vitest starts — so asking information_schema before
+ * every test bought nothing and cost 54ms a call, which is forty seconds
+ * across the suite.
+ */
+let tableCache: string[] | undefined;
+
 /** Wipes the test database. Refuses to touch anything not named *_test. */
 export async function resetDb(prisma: PrismaClient): Promise<void> {
   const name = new URL(testDatabaseUrl()).pathname.slice(1);
   if (!name.endsWith("_test")) {
     throw new Error(`Refusing to reset "${name}" — the test database name must end in _test`);
   }
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
-  // FK checks are off, so the order does not matter — which is the other
-  // reason the hand-written list had no business existing
-  for (const table of await allTables(prisma, name)) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
-  }
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+  tableCache ??= await allTables(prisma, name);
+
+  /*
+   * DELETE, not TRUNCATE, and all of it in one round trip.
+   *
+   * TRUNCATE is DDL: InnoDB drops and recreates the tablespace and fsyncs it,
+   * which costs about 45ms whether or not the table holds a row. Fifty-six
+   * tables made that two and a half seconds, and this runs before every one of
+   * ~800 tests — half an hour of the suite, spent emptying empty tables.
+   * DELETE is ordinary DML and costs nothing on a table with no rows.
+   *
+   * The array form of `$transaction` matters as much as the DELETE does: it
+   * sends the statements down a single pooled connection, so the
+   * FOREIGN_KEY_CHECKS session variable is set on the same connection that
+   * runs the deletes. Setting it separately leaves that to luck, which is
+   * exactly how the seed script broke production.
+   *
+   * Losing TRUNCATE means auto-increment ids keep climbing across tests, and a
+   * test that writes a row id by hand will stop finding it. That is a feature:
+   * one spec did exactly that (`sales().get(agency, 2)`) and the switch caught
+   * it. Ids belong to the database, and a test should use the id it was given.
+   * The numbers a user actually sees -- BK-00001, QUO-000001 -- come from the
+   * counters table, which is emptied here like everything else.
+   */
+  await prisma.$transaction([
+    prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0"),
+    // FK checks are off, so the order does not matter — which is the other
+    // reason the hand-written list had no business existing
+    ...tableCache.map((table) => prisma.$executeRawUnsafe(`DELETE FROM \`${table}\``)),
+    prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1"),
+  ]);
   await seedPlatformPlans(prisma);
 }
 

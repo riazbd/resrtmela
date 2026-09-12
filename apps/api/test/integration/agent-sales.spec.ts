@@ -89,7 +89,10 @@ describe("a quotation", () => {
 
   it("counts up per agency, so one agency's numbering says nothing about another's", async () => {
     await sales().create(agency, QUOTE);
-    await sales().create(agency, QUOTE);
+    // the id it was actually given, not the id a fresh auto-increment happens
+    // to hand out: what this test is about is the per-agency number, and
+    // nothing here should care whether the table was emptied or dropped
+    const second = await sales().create(agency, QUOTE);
 
     const other = await prisma.user.create({
       data: { name: "Other Agency", phone: `8813${Date.now() % 100000000}`, email: `8813${Date.now() % 100000000}@example.com`, role: "AGENT" },
@@ -99,7 +102,7 @@ describe("a quotation", () => {
       { ...QUOTE, clientName: "Their client" },
     );
 
-    expect((await sales().get(agency, 2)).number).toBe("QUO-000002");
+    expect((await sales().get(agency, second.id)).number).toBe("QUO-000002");
     expect(
       (await sales().get({ userId: other.id, role: ROLE.AGENT, resortIds: [] }, theirs.id)).number,
     ).toBe("QUO-000001");
