@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api, dmy, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
@@ -176,7 +177,7 @@ ${payTo}` : "");
             {fail.error ? null : !history ? <Empty msg="Loading…" /> : history.length === 0 ? (
               <Empty msg="No campaigns yet" />
             ) : (
-              <div className="overflow-x-auto"><table className="w-full text-sm">
+              <Table minWidth={0} tableClassName="text-sm">
                 <thead className="border-b border-slate-100"><tr><th className="px-2 py-2 text-left text-[11px] font-semibold uppercase text-slate-400">Subject</th><th className="px-2 py-2 text-right text-[11px] font-semibold uppercase text-slate-400">Recipients</th><th className="px-2 py-2 text-right text-[11px] font-semibold uppercase text-slate-400">When</th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
                   {history.map((c) => (
@@ -187,7 +188,7 @@ ${payTo}` : "");
                     </tr>
                   ))}
                 </tbody>
-              </table></div>
+              </Table>
             )}
           </Card>
         </div>

@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
 import { Check, Undo2, Pencil, Plus } from "lucide-react";
+import { Table } from "@/components/patterns";
 
 function monthOptions() {
   const out: string[] = [];
@@ -142,8 +143,8 @@ export default function PayrollPage() {
 
       <Card title={`Salary sheet — ${month}`}>
         {!sheet ? <Empty msg="Loading…" /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <>
+            <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr><Th>Staff</Th><Th>Designation</Th><Th>Salary</Th><Th>Status</Th><Th>Paid</Th><Th /></tr>
               </thead>
@@ -178,16 +179,16 @@ export default function PayrollPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
             {sheet.rows.length === 0 && <Empty msg="No active staff yet — add them below" />}
-          </div>
+          </>
         )}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={`Staff list (${employees?.filter((e) => e.active).length ?? 0} active)`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <>
+            <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr><Th>Name</Th><Th>Phone</Th><Th>Salary</Th><Th /></tr>
               </thead>
@@ -219,9 +220,9 @@ export default function PayrollPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
             {employees?.length === 0 && <Empty msg="No staff added yet" />}
-          </div>
+          </>
         </Card>
 
         {canManage && (

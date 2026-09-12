@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Table } from "@/components/patterns";
 import { useSearchParams } from "next/navigation";
 import { bookingHandoff } from "@/lib/booking-handoff";
 import { FileDown } from "lucide-react";
@@ -585,7 +586,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         {b.payments.length === 0 ? (
           <div className="text-xs text-slate-400">No payments yet</div>
         ) : (
-          <table className="w-full">
+          <Table minWidth={0}>
             <tbody className="divide-y divide-slate-100">
               {b.payments.map((p) => (
                 <tr key={p.id}>
@@ -597,7 +598,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
         {isStaff && b.state !== "CANCELLED" && (
           <div className="mt-2"><AddPayment bookingId={b.id} onDone={async () => { await load(); onChanged(); }} /></div>
@@ -819,8 +820,7 @@ function BookingsInner() {
         ) : filtered.length === 0 ? (
           <Empty msg="No bookings match" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px]">
+          <Table minWidth={860}>
               <thead className="border-b border-slate-100">
                 <tr>
                   <Th>Code</Th><Th>Guest</Th><Th>Stay</Th><Th>Rooms</Th>
@@ -848,8 +848,7 @@ function BookingsInner() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
       <div className="text-xs text-slate-400">{filtered.length} of {total} bookings</div>

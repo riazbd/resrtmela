@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api, client, money, type FoodPackage, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState, Skeleton } from "@/components/error-state";
@@ -341,8 +342,7 @@ export default function FbPage() {
           {bills.length === 0 ? (
             <Empty msg="No bills in this period" />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px]">
+            <Table minWidth={760}>
                 <thead className="border-b border-slate-100">
                   <tr><Th>Bill</Th><Th>Date</Th><Th>Items</Th><Th>Guest / Room</Th><Th>Status</Th><Th className="text-right">Total</Th><Th className="text-right">Due</Th>{canManage && <Th />}</tr>
                 </thead>
@@ -366,8 +366,7 @@ export default function FbPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </Table>
           )}
         </Card>
       )}

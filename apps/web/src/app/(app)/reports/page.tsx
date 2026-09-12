@@ -6,7 +6,7 @@ import { useApi, keys } from "@/lib/query";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
-import { Tabs } from "@/components/patterns";
+import { Tabs, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 interface AgentRow {
@@ -267,8 +267,7 @@ export default function ReportsPage() {
         {!agents || agents.length === 0 ? (
           <Empty msg="No agent bookings in this period" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+          <Table minWidth={640}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Agent</Th><Th>Rate</Th><Th>Bookings</Th><Th className="text-right">Rent sold</Th><Th className="text-right">Dues</Th><Th className="text-right">Commission</Th></tr>
               </thead>
@@ -284,8 +283,7 @@ export default function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
       )}
@@ -295,8 +293,7 @@ export default function ReportsPage() {
         {!sources || sources.length === 0 ? (
           <Empty msg="No bookings in this period" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px]">
+          <Table minWidth={520}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Source</Th><Th>Bookings</Th><Th className="text-right">Rent</Th><Th className="text-right">Dues</Th></tr>
               </thead>
@@ -310,8 +307,7 @@ export default function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
       )}
@@ -322,7 +318,7 @@ export default function ReportsPage() {
       {tab === "Daily" && daily && daily.length > 0 && (
         <Card title="Daily revenue" className="!p-0">
           <div className="max-h-64 overflow-auto">
-            <table className="w-full min-w-[520px]">
+            <Table minWidth={520}>
               <thead className="sticky top-0 border-b border-slate-100 bg-white">
                 <tr><Th>Date</Th><Th className="text-right">Rooms</Th><Th className="text-right">F&B</Th><Th className="text-right">Expenses</Th><Th className="text-right">Net</Th></tr>
               </thead>
@@ -337,7 +333,7 @@ export default function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         </Card>
       )}
@@ -348,7 +344,7 @@ export default function ReportsPage() {
             <Empty msg="No audit entries yet" />
           ) : (
             <div className="max-h-[420px] overflow-auto">
-              <table className="w-full min-w-[680px]">
+              <Table minWidth={680}>
                 <thead className="sticky top-0 border-b border-slate-100 bg-white">
                   <tr><Th>When</Th><Th>Actor</Th><Th>Action</Th><Th>Entity</Th></tr>
                 </thead>
@@ -364,7 +360,7 @@ export default function ReportsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
         </Card>

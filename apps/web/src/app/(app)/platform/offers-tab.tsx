@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api } from "@/lib/api";
 
 interface OfferRow {
@@ -93,8 +94,7 @@ export function OffersTab() {
         ) : rows.length === 0 ? (
           <p className="text-xs text-slate-400">No offers yet. Make one to hand out a signup link with its own plan and trial.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
                   <th className="py-1 pr-3">Link</th>
@@ -128,8 +128,7 @@ export function OffersTab() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </section>
 

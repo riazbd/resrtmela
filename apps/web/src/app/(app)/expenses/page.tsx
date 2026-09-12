@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
-import { DateNav } from "@/components/patterns";
+import { DateNav, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 /** Daily cashbook register — the sheet's expense tab, with a live day total. */
@@ -176,7 +176,7 @@ export default function ExpensesPage() {
         ) : rows.length === 0 ? (
           <Empty msg={t("ex.none")} />
         ) : (
-          <div className="overflow-x-auto"><table className="w-full">
+          <Table minWidth={0}>
             <thead className="border-b border-slate-100">
               <tr><Th>{t("ex.category")}</Th><Th>{t("ex.details")}</Th><Th className="text-right">{cur()}</Th>{canManage && <Th />}</tr>
             </thead>
@@ -194,7 +194,7 @@ export default function ExpensesPage() {
                 </tr>
               ))}
             </tbody>
-          </table></div>
+          </Table>
         )}
       </Card>
     </div>

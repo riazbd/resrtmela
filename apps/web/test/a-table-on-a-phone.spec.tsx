@@ -18,11 +18,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Table } from "../src/components/table";
+import { Table } from "../src/components/patterns";
 
 function Sheet() {
   return (
-    <Table className="w-full">
+    <Table>
       <thead>
         <tr>
           <th>Room</th>
@@ -76,14 +76,34 @@ describe("a table on a phone", () => {
   });
 
   it("does not force a width that a phone cannot hold", () => {
-    // the whole complaint in one assertion: no min-w-[…] survives here
+    /**
+     * The whole complaint in one assertion. A minimum width may not reach the
+     * element as a class, because Tailwind would then apply it at every size,
+     * including the 390px screen the front desk is holding.
+     */
     const { container } = render(<Sheet />);
     const table = container.querySelector("table")!;
     expect(table.className).not.toMatch(/min-w-\[/);
+    expect(table.style.minWidth).toBe("");
   });
 
-  it("keeps the classes the page asked for", () => {
-    const { container } = render(<Sheet />);
-    expect(container.querySelector("table")!.className).toContain("w-full");
+  it("hands the page's minimum width back for wide screens only", () => {
+    // it returns as a custom property, which globals.css reads inside
+    // `@media (min-width: 640px)` and nowhere else
+    const { container } = render(
+      <Table minWidth={720}>
+        <thead>
+          <tr>
+            <th>Room</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Hilltop 2</td>
+          </tr>
+        </tbody>
+      </Table>,
+    );
+    expect(container.querySelector("table")!.style.getPropertyValue("--rm-min")).toBe("720px");
   });
 });

@@ -36,3 +36,67 @@
 
 html { scroll-behavior: smooth; }
 
+
+/* ---------------------------------------------------------------------------
+   Tables that become cards on a phone.
+
+   Every table in the console was written as `overflow-x-auto` around a
+   `min-w-[860px]` table, which keeps the columns and asks the reader to drag
+   sideways. Measured on a 390px screen on 2026-09-13, one of them came to
+   1009px. Below `sm` the rows stop being rows: each becomes a card, and each
+   cell prints the column name that `components/table.tsx` wrote onto it.
+
+   Above `sm` nothing changes — the minimum width the page asked for is handed
+   back through `--rm-min`, so wide tables still behave like wide tables on a
+   laptop.
+   --------------------------------------------------------------------------- */
+.rm-table-wrap { overflow-x: auto; }
+
+@media (min-width: 640px) {
+  .rm-table { min-width: var(--rm-min, 0); }
+}
+
+@media (max-width: 639px) {
+  .rm-table-wrap { overflow-x: visible; }
+  .rm-table,
+  .rm-table > tbody,
+  .rm-table > tbody > tr,
+  .rm-table > tbody > tr > td { display: block; width: 100%; }
+  .rm-table > thead { display: none; }
+
+  .rm-table > tbody > tr {
+    margin-bottom: 0.625rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.75rem;
+    padding: 0.125rem 0.875rem;
+    background: #fff;
+  }
+
+  .rm-table > tbody > tr > td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    text-align: right;
+    padding: 0.5rem 0 !important;
+    border-bottom: 1px solid rgb(241 245 249);
+  }
+  .rm-table > tbody > tr > td:last-child { border-bottom: 0; }
+
+  .rm-table > tbody > tr > td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    max-width: 45%;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: rgb(100 116 139);
+  }
+
+  /* the actions column, and anything else with no header of its own */
+  .rm-table > tbody > tr > td:not([data-label]) { justify-content: flex-start; text-align: left; }
+  /* an empty cell is a blank line in a card, and means nothing there */
+  .rm-table > tbody > tr > td:empty { display: none; }
+}

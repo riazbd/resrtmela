@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
-import { Tabs } from "@/components/patterns";
+import { Tabs, Table } from "@/components/patterns";
 import { PERMISSIONS, PERMISSION_GROUPS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
@@ -449,8 +449,7 @@ function ListsTab({ rid }: { rid: number }) {
         ) : rows.length === 0 ? (
           <Empty msg="Nothing on this list yet" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr>
                   <Th>Name</Th>
@@ -498,8 +497,7 @@ function ListsTab({ rid }: { rid: number }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
     </div>
@@ -782,8 +780,8 @@ function AccessTab({ rid }: { rid: number }) {
         </Card>
 
         <Card title={`Verified agencies (${rows.length})`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <>
+            <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr><Th>Agency</Th><Th>Selling here</Th><Th>Commission</Th><Th /></tr>
               </thead>
@@ -837,10 +835,10 @@ function AccessTab({ rid }: { rid: number }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
             <LoadFailed error={fail.error} onRetry={load} />
             {!fail.error && rows.length === 0 && <Empty msg="No agency has been verified on the platform yet" />}
-          </div>
+          </>
         </Card>
       </div>
 
@@ -1037,8 +1035,8 @@ function UsersTab({ rid }: { rid: number }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <Card title={`Team (${rows?.length ?? 0})`}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <>
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Name</Th><Th>Contact</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
             </thead>
@@ -1119,10 +1117,10 @@ function UsersTab({ rid }: { rid: number }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           <LoadFailed error={fail.error} onRetry={load} />
           {!fail.error && rows?.length === 0 && <Empty msg="No team members yet" />}
-        </div>
+        </>
       </Card>
 
       <Card title="Add team member">
@@ -1354,7 +1352,7 @@ function ActivityTab({ rid }: { rid: number }) {
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, phone, email or action…" />
       </div>
       <div className="max-h-[70vh] overflow-y-auto">
-        <table className="w-full text-sm">
+        <Table minWidth={0} tableClassName="text-sm">
           <thead>
             <tr><Th>When</Th><Th>Who</Th><Th>Action</Th><Th>Entity</Th><Th /></tr>
           </thead>
@@ -1378,7 +1376,7 @@ function ActivityTab({ rid }: { rid: number }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </Table>
         {rows.length === 0 && <Empty msg={q ? "No matches" : "No activity recorded yet"} />}
       </div>
     </Card>
@@ -1441,8 +1439,8 @@ function DiscountsTab({ rid }: { rid: number }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <Card title="Discount offers (auto-applied at booking)">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <>
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Name</Th><Th>Applies to</Th><Th>Discount</Th><Th>Valid</Th><Th>Status</Th><Th /></tr>
             </thead>
@@ -1470,9 +1468,9 @@ function DiscountsTab({ rid }: { rid: number }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {rows?.length === 0 && <Empty msg="No offers — bookings get no automatic discount" />}
-        </div>
+        </>
       </Card>
 
       <Card title="New offer">
@@ -1592,8 +1590,8 @@ function ApiKeysTab({ rid }: { rid: number }) {
           </Card>
         )}
         <Card title={`API keys (${rows?.length ?? 0})`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <>
+            <Table minWidth={0} tableClassName="text-sm">
               <thead>
                 <tr><Th>Name</Th><Th>Prefix</Th><Th>Status</Th><Th>Last used</Th><Th /></tr>
               </thead>
@@ -1614,9 +1612,9 @@ function ApiKeysTab({ rid }: { rid: number }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
             {rows?.length === 0 && <Empty msg="No keys yet" />}
-          </div>
+          </>
         </Card>
         <Card title="Use it on your website">
           <div className="overflow-x-auto rounded-lg bg-slate-900 p-4 font-mono text-[11px] leading-relaxed text-slate-300">
@@ -1952,8 +1950,7 @@ function SubscriptionTab({ rid }: { rid: number }) {
             <Empty msg="No bills yet" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px]">
+          <Table minWidth={560}>
               <thead>
                 <tr>
                   <Th>Period</Th>
@@ -1984,8 +1981,7 @@ function SubscriptionTab({ rid }: { rid: number }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
     </div>

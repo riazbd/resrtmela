@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -403,7 +404,7 @@ export default function ImportPage() {
           )}
           {rec.unexplained.length > 0 && (
             <div className="max-h-64 overflow-auto border-t border-slate-100">
-              <div className="overflow-x-auto"><table className="w-full">
+              <Table minWidth={0}>
                 <thead className="sticky top-0 bg-white">
                   <tr><Th>Date</Th><Th>Room</Th><Th>Kind</Th><Th>Sheet</Th><Th>Ours</Th></tr>
                 </thead>
@@ -418,7 +419,7 @@ export default function ImportPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table></div>
+              </Table>
             </div>
           )}
         </Card>
@@ -456,7 +457,7 @@ export default function ImportPage() {
           )}
           <Card title="Row detail" className="!p-0">
             <div className="max-h-[420px] overflow-auto">
-              <div className="overflow-x-auto"><table className="w-full min-w-[560px]">
+              <Table minWidth={560}>
                 <thead className="sticky top-0 border-b border-slate-100 bg-white">
                   <tr><Th>Row</Th><Th>Code</Th><Th>Outcome</Th><Th>Detail</Th></tr>
                 </thead>
@@ -470,7 +471,7 @@ export default function ImportPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table></div>
+              </Table>
             </div>
           </Card>
         </>

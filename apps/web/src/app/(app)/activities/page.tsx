@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api, money, dmy, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
@@ -201,8 +202,7 @@ export default function ActivitiesPage() {
         {rows.length === 0 ? (
           <Empty msg="No activities yet — add one and set a weekly schedule" />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
+          <Table minWidth={760}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Activity</Th><Th>Price</Th><Th>Duration</Th><Th>Weekly schedule</Th><Th>Upcoming</Th><Th>Status</Th><Th className="text-right">Actions</Th></tr>
               </thead>
@@ -235,8 +235,7 @@ export default function ActivitiesPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
 
@@ -260,7 +259,7 @@ export default function ActivitiesPage() {
             <Empty msg="No upcoming slots — set a schedule and generate" />
           ) : (
             <div className="max-h-[360px] overflow-auto">
-              <table className="w-full min-w-[560px]">
+              <Table minWidth={560}>
                 <thead className="sticky top-0 border-b border-slate-100 bg-white">
                   <tr><Th>When</Th><Th>Booked</Th><Th>Remaining</Th><Th /></tr>
                 </thead>
@@ -284,7 +283,7 @@ export default function ActivitiesPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
         </Card>

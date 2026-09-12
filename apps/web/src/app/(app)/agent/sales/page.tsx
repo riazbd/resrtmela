@@ -450,8 +450,7 @@ function DocEditor({
             </Button>
           )}
         </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[600px]">
+        <Table minWidth={600} className="rounded-xl border border-slate-200">
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
                 <Th>Item</Th>
@@ -504,8 +503,7 @@ function DocEditor({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

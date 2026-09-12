@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api, client, money, dmy, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
@@ -151,8 +152,7 @@ This cannot be undone.`;
         action={canEdit ? <Button size="sm" variant="ghost" onClick={() => setAddRoom(true)}>+ Add room</Button> : undefined}
         className="!p-0"
       >
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+        <Table minWidth={640}>
             <thead className="border-b border-slate-100"><tr><Th>Room</Th><Th>Type</Th><Th>Base rate</Th><Th>Extra persons</Th><Th>Status</Th>{canEdit && <Th className="text-right">Actions</Th>}</tr></thead>
             <tbody className="divide-y divide-slate-50">
               {rooms.map((r) => (
@@ -192,8 +192,7 @@ This cannot be undone.`;
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       </Card>
 
       <Card
@@ -227,7 +226,7 @@ This cannot be undone.`;
         {plans.length === 0 ? (
           <Empty msg="No seasonal rates — base rates apply year-round" />
         ) : (
-          <table className="w-full">
+          <Table minWidth={0}>
             <thead className="border-b border-slate-100"><tr><Th>Type</Th><Th>From</Th><Th>To</Th><Th className="text-right">Price/night</Th></tr></thead>
             <tbody className="divide-y divide-slate-50">
               {plans.map((p) => (
@@ -239,7 +238,7 @@ This cannot be undone.`;
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         )}
       </Card>
 

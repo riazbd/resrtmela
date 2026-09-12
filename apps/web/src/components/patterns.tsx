@@ -48,24 +48,62 @@ export function Tabs<T extends string>({
 }
 
 /**
- * A table that scrolls inside itself.
+ * A table on a laptop; a list of cards on a phone.
  *
- * Every table in the console was wrapped in this by hand, and the ones that
- * were not pushed the whole page sideways on a phone — which is what the
- * front desk actually carries.
+ * This used to scroll inside itself, which kept the whole page from moving
+ * sideways but left the content reachable only by dragging. Measured at 390px
+ * on 2026-09-13, Platform → Resorts came to 1009px in a 390px screen, with
+ * seven cells rendering below 13px. Scrolling was never the fix — a table is
+ * simply the wrong shape for a phone, and the right one is a card per row.
+ *
+ * The labels come from the table's own `<thead>`, written onto each cell as
+ * `data-label` for `globals.css` to print. Doing it here rather than in the
+ * pages means no page has to label its cells: the twenty-four files that draw
+ * tables keep the markup they already have.
+ *
+ * Why the DOM and not the React children: cells are produced by `.map()` over
+ * data, wrapped in `<Td>`, and spread across fragments and conditionals.
+ * Guessing a cell's column by walking rendered children is guesswork;
+ * `cellIndex` is the browser's own answer.
  */
 export function Table({
   children,
   minWidth = 640,
   className = "",
+  /** Classes for the `<table>` itself — `table-fixed`, `text-sm`, and the like. */
+  tableClassName = "",
 }: {
   children: React.ReactNode;
   minWidth?: number;
   className?: string;
+  tableClassName?: string;
 }) {
+  const host = useRef<HTMLTableElement>(null);
+
+  // no dependency list: rows change whenever the page re-renders, and
+  // re-reading a handful of cells is cheaper than tracking what changed
+  useEffect(() => {
+    const table = host.current;
+    if (!table) return;
+    const labels = [...table.querySelectorAll<HTMLTableCellElement>("thead th")].map((th) =>
+      (th.textContent ?? "").trim(),
+    );
+    for (const cell of table.querySelectorAll<HTMLTableCellElement>("tbody td")) {
+      const label = labels[cell.cellIndex];
+      // an empty header means a column of buttons; a card showing a blank
+      // label above them reads as a value that failed to load
+      if (label) cell.setAttribute("data-label", label);
+      else cell.removeAttribute("data-label");
+    }
+  });
+
   return (
-    <div className={`overflow-x-auto ${className}`}>
-      <table className="w-full" style={{ minWidth }}>
+    <div className={`rm-table-wrap ${className}`}>
+      <table
+        ref={host}
+        className={`rm-table w-full ${tableClassName}`.trim()}
+        style={{ "--rm-min": `${minWidth}px` } as React.CSSProperties}
+      >
         {children}
       </table>
     </div>

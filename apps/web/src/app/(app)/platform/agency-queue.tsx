@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api } from "@/lib/api";
 import { displayEmail, displayPhone } from "@/lib/contact";
 
@@ -56,8 +57,7 @@ export function AgencyQueue() {
       ) : rows.length === 0 ? (
         <p className="text-xs text-slate-400">No agency accounts yet.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
                 <th className="py-1 pr-3">Agency</th>
@@ -94,8 +94,7 @@ export function AgencyQueue() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       )}
     </section>
   );

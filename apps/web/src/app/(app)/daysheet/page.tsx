@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
-import { DateNav } from "@/components/patterns";
+import { DateNav, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 export default function DaySheetPage() {
@@ -52,8 +52,7 @@ export default function DaySheetPage() {
 
       {/* the register */}
       <Card className="!p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px]">
+        <Table minWidth={720}>
             <thead className="border-b border-slate-200">
               <tr className="bg-slate-50">
                 <Th className="!py-2.5">{t("ds.room")}</Th>
@@ -126,8 +125,7 @@ export default function DaySheetPage() {
                 );
               })}
             </tbody>
-          </table>
-        </div>
+        </Table>
       </Card>
 
       <p className="text-[11px] text-slate-400">

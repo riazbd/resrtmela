@@ -21,8 +21,14 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-// pnpm gives each package its own tree; walking up past the two paths above
-// finds the store's internal copies and can load a second React
-config.resolver.disableHierarchicalLookup = true;
+
+/**
+ * `disableHierarchicalLookup` is the usual advice for monorepos and is wrong
+ * here. It is meant for npm and yarn, where hoisting means a package found by
+ * walking up the tree is a duplicate. pnpm is the opposite: a package's own
+ * dependencies live in a `node_modules` beside it inside the store, and
+ * walking up is the only way to reach them. Switching it on cost a build —
+ * `expo` could not resolve `expo-modules-core`, its own dependency.
+ */
 
 module.exports = config;

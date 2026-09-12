@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, money, dmy, type CmsRow, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
-import { Tabs } from "@/components/patterns";
+import { Tabs, Table } from "@/components/patterns";
 import { useAuth } from "@/lib/auth";
 import { PLAN_FEATURES } from "@rh/shared";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
@@ -372,7 +372,7 @@ export default function PlatformPage() {
       {/* ── resorts ── */}
       {tab === "Resorts" && resorts && (
         <Card className="mt-5 overflow-x-auto">
-          <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr>
                 <Th>Resort</Th><Th>Plan</Th><Th>Status</Th><Th>Rooms</Th><Th>Bookings</Th><Th>Renews</Th><Th />
@@ -457,7 +457,7 @@ export default function PlatformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {resorts.length === 0 && <Empty msg="No resorts yet" />}
         </Card>
       )}
@@ -466,7 +466,7 @@ export default function PlatformPage() {
       {tab === "Agents" && <div className="mt-5"><AgencyQueue /></div>}
       {tab === "Agents" && agents && (
         <Card className="mt-5 overflow-x-auto">
-          <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Agent</Th><Th>Sold at</Th><Th>Bookings</Th><Th>Wallet</Th><Th>Status</Th><Th /></tr>
             </thead>
@@ -512,7 +512,7 @@ export default function PlatformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {agents.length === 0 && <Empty msg="No agents yet" />}
         </Card>
       )}
@@ -643,7 +643,7 @@ export default function PlatformPage() {
             <h3 className="text-sm font-bold text-slate-800">Subscriptions — {subs?.length ?? 0}</h3>
             <span className="text-xs text-slate-400">Every account the platform bills, resort owners and agencies alike. Closed ones stay, so the history reads.</span>
           </div>
-          <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Customer</Th><Th>Plan</Th><Th>Status</Th><Th className="text-right">Monthly</Th><Th>Started</Th><Th>Trial ends / renews</Th><Th className="text-right">Outstanding</Th></tr>
             </thead>
@@ -692,7 +692,7 @@ export default function PlatformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {subs && subs.length === 0 && <Empty msg="Nothing sold yet" />}
         </Card>
       )}
@@ -700,7 +700,7 @@ export default function PlatformPage() {
       {/* ── dues ── */}
       {tab === "Dues" && dues && (
         <Card className="mt-5 overflow-x-auto">
-          <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Customer</Th><Th>Plan</Th><Th>Period</Th><Th>Due date</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
             </thead>
@@ -728,7 +728,7 @@ export default function PlatformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {dues.length === 0 && <Empty msg="No dues — every resort is square" />}
         </Card>
       )}
@@ -741,7 +741,7 @@ export default function PlatformPage() {
               Credit packs and the like. The credits arrive at once; the money is collected here.
             </span>
           </div>
-          <table className="w-full text-sm">
+          <Table minWidth={0} tableClassName="text-sm">
             <thead>
               <tr><Th>Customer</Th><Th>What for</Th><Th>Raised</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
             </thead>
@@ -771,7 +771,7 @@ export default function PlatformPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
           {(chargesQ.data ?? []).length === 0 && <Empty msg="No one-off charges outstanding" />}
         </Card>
       )}
@@ -787,8 +787,7 @@ export default function PlatformPage() {
           ) : (creditOrders ?? []).length === 0 ? (
             <div className="p-4 text-sm text-slate-400">No requests yet.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+            <Table minWidth={720} tableClassName="text-sm">
                 <thead>
                   <tr><Th>Requested</Th><Th>Customer</Th><Th>Who</Th><Th className="text-right">Credits</Th><Th className="text-right">Price</Th><Th>Status</Th><Th /></tr>
                 </thead>
@@ -858,8 +857,7 @@ export default function PlatformPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </Table>
           )}
         </Card>
       )}
@@ -1544,7 +1542,7 @@ function WalletDrawer({
             {!view || view.txns.length === 0 ? (
               <p className="mt-2 text-sm text-slate-400">Nothing has moved yet.</p>
             ) : (
-              <table className="mt-2 w-full text-sm">
+              <Table minWidth={0} tableClassName="mt-2 text-sm">
                 <thead>
                   <tr>
                     <Th>When</Th>
@@ -1568,7 +1566,7 @@ function WalletDrawer({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             )}
           </div>
 

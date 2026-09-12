@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Table } from "@/components/patterns";
 import { client, money, dmy, type BookingRow } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
@@ -96,7 +97,7 @@ export default function DashboardPage() {
           {feed.arrivals.length === 0 ? (
             <Empty msg="No arrivals today" />
           ) : (
-            <div className="overflow-x-auto"><table className="w-full">
+            <Table minWidth={0}>
               <thead>
                 <tr>
                   <Th>Guest</Th>
@@ -120,7 +121,7 @@ export default function DashboardPage() {
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </Table>
           )}
         </Card>
 
@@ -128,7 +129,7 @@ export default function DashboardPage() {
           {feed.departures.length === 0 ? (
             <Empty msg="No departures today" />
           ) : (
-            <div className="overflow-x-auto"><table className="w-full">
+            <Table minWidth={0}>
               <thead>
                 <tr>
                   <Th>Guest</Th>
@@ -152,7 +153,7 @@ export default function DashboardPage() {
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </Table>
           )}
         </Card>
       </div>

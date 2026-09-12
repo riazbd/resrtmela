@@ -454,8 +454,7 @@ function PackageEditor({
             <Plus className="mr-1 h-3.5 w-3.5" /> Add a line
           </Button>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-200">
-          <table className="w-full min-w-[680px]">
+        <Table minWidth={680} className="rounded-xl border border-slate-200">
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
                 <Th>Category</Th>
@@ -524,8 +523,7 @@ function PackageEditor({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
       </div>
 
       <div className="mt-3 flex flex-wrap items-baseline justify-end gap-x-6 gap-y-1 text-sm">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Table } from "@/components/patterns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, money } from "@/lib/api";
@@ -279,7 +280,7 @@ export default function AgencyCalendarPage() {
                   is then shared equally between the day columns, so a bar
                   spanning four of them cannot pull the body out of step with
                   its own header. */}
-              <table className="w-full min-w-[860px] table-fixed border-collapse">
+              <Table minWidth={860} tableClassName="table-fixed border-collapse">
                 <colgroup>
                   <col className="w-[150px]" />
                   {days.map((day) => (
@@ -429,7 +430,7 @@ export default function AgencyCalendarPage() {
                     );
                   })}
                 </tbody>
-              </table>
+              </Table>
             </div>
           )}
 

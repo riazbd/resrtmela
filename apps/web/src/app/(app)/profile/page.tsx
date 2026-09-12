@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { api, money, dmy, type BookingRow } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
@@ -140,8 +141,7 @@ export default function ProfilePage() {
             {rows.length === 0 ? (
               <Empty msg="No bookings yet — create one from the Bookings tab" />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
+              <Table minWidth={640}>
                   <thead className="border-b border-slate-100">
                     <tr><Th>Code</Th><Th>Guest</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Due</Th></tr>
                   </thead>
@@ -156,8 +156,7 @@ export default function ProfilePage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                </Table>
             )}
           </Card>
 
@@ -167,8 +166,7 @@ export default function ProfilePage() {
               {staff.length === 0 ? (
                 <Empty msg="No agency users yet" />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <Table minWidth={0} tableClassName="text-sm">
                     <thead>
                       <tr><Th>Name</Th><Th>Login</Th><Th>Status</Th></tr>
                     </thead>
@@ -186,8 +184,7 @@ export default function ProfilePage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                </div>
+                  </Table>
               )}
             </Card>
             <Card title="Add agency user">

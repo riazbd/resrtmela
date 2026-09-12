@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Table } from "@/components/patterns";
 import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -132,8 +133,7 @@ export default function PaymentsPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px]">
+          <Table minWidth={820}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Code</Th><Th>Guest</Th><Th>Due from</Th><Th>Stay</Th><Th>Status</Th><Th className="text-right">Rent</Th><Th className="text-right">Paid</Th><Th className="text-right">Due</Th><Th /></tr>
               </thead>
@@ -165,8 +165,7 @@ export default function PaymentsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
         )}
       </Card>
 

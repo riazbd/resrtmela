@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Table } from "@/components/patterns";
 import { useRouter } from "next/navigation";
 import { client, type CalendarBooking, type Room, money } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
@@ -208,7 +209,7 @@ export default function CalendarPage() {
               four of them contains. Giving all of them a width instead shares
               the surplus in proportion, and the days drifted apart.
             */}
-            <table className="w-full min-w-[860px] table-fixed border-collapse">
+            <Table minWidth={860} tableClassName="table-fixed border-collapse">
               <colgroup>
                 <col className="w-[150px]" />
                 {days.map((day) => (
@@ -395,7 +396,7 @@ export default function CalendarPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </Table>
           </div>
         )}
       </Card>
