@@ -98,6 +98,10 @@ model Tenant {
   /// answer to "what plan is this customer on" and is gone.
   subscriptions    Subscription[]
   subscriptionDues SubscriptionDue[]
+  /// One-off charges and credit orders are billed to the customer, the same as
+  /// dues — an agency has no resort to put them on.
+  platformCharges  PlatformCharge[]
+  creditOrders     EmailCreditOrder[]
 
   /// The people who sign in for this account. Only agencies use it so far: a
   /// resort owner's people are reached through its resorts.
@@ -1237,9 +1241,12 @@ model EmailCreditOrder {
   id          BigInt    @id @default(autoincrement())
   userId      Int
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// the resort the charge lands on, fixed when the order is placed
-  resortId    Int
-  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// the customer the charge lands on, fixed when the order is placed
+  accountId   Int
+  account     Tenant    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// which resort asked, when one did; null for an agency
+  resortId    Int?
+  resort      Resort?   @relation(fields: [resortId], references: [id], onDelete: SetNull)
   credits     Int
   price       Decimal   @db.Decimal(10, 2)
   status      String    @default("PENDING") @db.VarChar(16) // PENDING | APPROVED | REJECTED
@@ -1250,7 +1257,7 @@ model EmailCreditOrder {
   decidedAt   DateTime?
   createdAt   DateTime  @default(now())
 
-  @@unique([resortId, clientRef])
+  @@unique([accountId, clientRef])
   @@index([status, createdAt])
   @@index([userId])
   @@map("email_credit_orders")
@@ -1258,8 +1265,15 @@ model EmailCreditOrder {
 
 model PlatformCharge {
   id          BigInt    @id @default(autoincrement())
-  resortId    Int
-  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// The customer billed — a resort owner or an agency, not a resort. Same
+  /// rule as SubscriptionDue: this was keyed to a resort, so an agency (which
+  /// has none) could not be charged for anything at all.
+  accountId   Int
+  account     Tenant    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Which resort the charge came out of, when it came out of one. Context for
+  /// an owner with several; null for an agency.
+  resortId    Int?
+  resort      Resort?   @relation(fields: [resortId], references: [id], onDelete: SetNull)
   kind        String    @db.VarChar(24) // EMAIL_CREDITS | ...
   description String    @db.VarChar(160) // what a person would put on the invoice
   amount      Decimal   @db.Decimal(10, 2)
@@ -1271,8 +1285,8 @@ model PlatformCharge {
   note        String?   @db.VarChar(255)
   createdAt   DateTime  @default(now())
 
-  @@unique([resortId, clientRef])
-  @@index([resortId, status])
+  @@unique([accountId, clientRef])
+  @@index([accountId, status])
   @@map("platform_charges")
 }
 

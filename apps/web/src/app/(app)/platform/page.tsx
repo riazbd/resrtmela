@@ -129,13 +129,18 @@ interface CreditOrderRow {
   createdAt: string;
   buyer: string;
   buyerContact: string;
-  resortName: string;
+  /** the customer billed — an agency has no resort to name */
+  accountName: string;
+  accountKind: string;
+  resortName: string | null;
 }
 
 /** A one-off amount a tenant owes, outside the subscription's monthly rhythm. */
 interface ChargeRow {
   id: number;
-  resort: { id: number; name: string };
+  /** billed to the customer, the same as a due; the resort is context */
+  account: { id: number; name: string; kind: string };
+  resort: { id: number; name: string } | null;
   kind: string;
   description: string;
   amount: number;
@@ -696,7 +701,7 @@ export default function PlatformPage() {
         <Card className="mt-5 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Resort</Th><Th>Plan</Th><Th>Period</Th><Th>Due date</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
+              <tr><Th>Customer</Th><Th>Plan</Th><Th>Period</Th><Th>Due date</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {dues.map((d) => (
@@ -737,12 +742,15 @@ export default function PlatformPage() {
           </div>
           <table className="w-full text-sm">
             <thead>
-              <tr><Th>Resort</Th><Th>What for</Th><Th>Raised</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
+              <tr><Th>Customer</Th><Th>What for</Th><Th>Raised</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr>
             </thead>
             <tbody>
               {(chargesQ.data ?? []).map((c) => (
                 <tr key={c.id} className="border-t border-slate-100">
-                  <Td className="font-semibold text-slate-800">{c.resort.name}</Td>
+                  <Td className="font-semibold text-slate-800">
+                    {c.account.name}
+                    {c.resort && <div className="text-[11px] font-normal text-slate-400">{c.resort.name}</div>}
+                  </Td>
                   <Td>{c.description}</Td>
                   <Td className="text-xs text-slate-500">{dmy(c.createdAt)}</Td>
                   <Td className="text-right font-bold">{money(c.amount)}</Td>
@@ -752,7 +760,7 @@ export default function PlatformPage() {
                   <Td>
                     {c.status !== "PAID" && (
                       <button onClick={() => setCollecting({
-                        what: `${c.resort.name} · ${c.description} — ${money(c.amount)}`,
+                        what: `${c.account.name} · ${c.description} — ${money(c.amount)}`,
                         pay: (m) => act(() => api(`/platform/charges/${c.id}/pay`, { method: "POST", body: { method: m } })),
                       })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
@@ -781,13 +789,16 @@ export default function PlatformPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
-                  <tr><Th>Requested</Th><Th>Resort</Th><Th>Who</Th><Th className="text-right">Credits</Th><Th className="text-right">Price</Th><Th>Status</Th><Th /></tr>
+                  <tr><Th>Requested</Th><Th>Customer</Th><Th>Who</Th><Th className="text-right">Credits</Th><Th className="text-right">Price</Th><Th>Status</Th><Th /></tr>
                 </thead>
                 <tbody>
                   {(creditOrders ?? []).map((o) => (
                     <tr key={o.id} className="border-t border-slate-100">
                       <Td className="text-xs text-slate-400">{new Date(o.createdAt).toLocaleDateString("en-GB")}</Td>
-                      <Td className="font-medium">{o.resortName}</Td>
+                      <Td className="font-medium">
+                        {o.accountName}
+                        {o.resortName && <div className="text-[11px] font-normal text-slate-400">{o.resortName}</div>}
+                      </Td>
                       <Td className="text-xs">
                         <div>{o.buyer}</div>
                         <div className="text-slate-400">{o.buyerContact}</div>
@@ -816,7 +827,7 @@ export default function PlatformPage() {
                                 // same list — typed free text here meant "bkash",
                                 // "Bkash" and "bKash" were three methods
                                 setCollecting({
-                                  what: `${o.resortName} · ${o.credits.toLocaleString("en-IN")} credits — ${money(o.price)}`,
+                                  what: `${o.accountName} · ${o.credits.toLocaleString("en-IN")} credits — ${money(o.price)}`,
                                   pay: (m) =>
                                     act(() =>
                                       api(`/platform/email-credit-orders/${o.id}/decision`, {
@@ -833,7 +844,7 @@ export default function PlatformPage() {
                               variant="ghost"
                               disabled={busy}
                               onClick={() => {
-                                const note = window.prompt(`Decline ${o.credits.toLocaleString("en-IN")} credits for ${o.resortName}. Reason (they will see it):`);
+                                const note = window.prompt(`Decline ${o.credits.toLocaleString("en-IN")} credits for ${o.accountName}. Reason (they will see it):`);
                                 if (note === null) return;
                                 void act(() => api(`/platform/email-credit-orders/${o.id}/decision`, { method: "POST", body: { decision: "REJECT", note: note || undefined } }));
                               }}

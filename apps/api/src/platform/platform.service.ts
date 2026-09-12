@@ -806,9 +806,9 @@ export class PlatformService {
         where: { status: { in: OPEN } },
         _sum: { amount: true },
       }),
-      // a one-off charge is still raised against a resort; it is owed by that resort's account
+      // a charge is billed to the customer, the same as a due
       this.prisma.platformCharge.groupBy({
-        by: ["resortId"],
+        by: ["accountId"],
         where: { status: { in: OPEN } },
         _sum: { amount: true },
       }),
@@ -821,9 +821,7 @@ export class PlatformService {
     const dueBy = new Map(dues.map((d) => [d.accountId, round2(Number(d._sum.amount ?? 0))]));
     const chargeBy = new Map<number, number>();
     for (const c of charges) {
-      const accountId = accountOf.get(c.resortId);
-      if (accountId == null) continue;
-      chargeBy.set(accountId, round2((chargeBy.get(accountId) ?? 0) + Number(c._sum.amount ?? 0)));
+      chargeBy.set(c.accountId, round2((chargeBy.get(c.accountId) ?? 0) + Number(c._sum.amount ?? 0)));
     }
     const ids = new Set([...dueBy.keys(), ...chargeBy.keys()]);
 

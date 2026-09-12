@@ -24,7 +24,7 @@ export class EngageService {
 
   // ─────────────── in-app notifications ───────────────
 
-  async notify(userIds: number[], n: { title: string; body?: string; kind?: string; link?: string; resortId?: number }) {
+  async notify(userIds: number[], n: { title: string; body?: string; kind?: string; link?: string; resortId?: number | null }) {
     if (userIds.length === 0) return;
     await this.prisma.notification.createMany({
       data: userIds.map((userId) => ({
@@ -139,16 +139,50 @@ export class EngageService {
    * A `clientRef` makes the submit replayable: a retried request finds its own
    * order instead of queuing a second one.
    */
+  /**
+   * Who pays, and which resort asked.
+   *
+   * Two customers buy from this platform and they are shaped differently: a
+   * resort owner acts through one of its resorts, an agency has none at all.
+   * The account is what they have in common, and it is what every other bill —
+   * `SubscriptionDue.accountId` — is already raised against.
+   *
+   * The permission is checked on whichever side the caller actually lives on.
+   * An agency's roles are its own; asking `perms.require(claims, resortId, …)`
+   * for someone with no resort is how this ended up refusing them.
+   */
+  private async billTo(claims: JwtClaims): Promise<{ accountId: number; resortId: number | null }> {
+    if (claims.role === ROLE.AGENT) {
+      const agency = await agencyOf(this.prisma, claims.userId);
+      if (agency.refusal || agency.accountId == null) {
+        throw forbid(agency.refusal ?? "This agency has no account to bill");
+      }
+      // `marketing.send` is in AGENT_PERMISSIONS too, and `resolve` scopes an
+      // agent to their agency and ignores the resort argument — so it is the
+      // same question, asked of whichever side the caller lives on
+      await this.perms.require(claims, undefined, "marketing.send");
+      return { accountId: agency.accountId, resortId: null };
+    }
+
+    const resortId = claims.resortIds[0];
+    if (resortId == null) throw badRequest("No resort on this account to bill the pack to");
+    await this.perms.require(claims, resortId, "marketing.send");
+    const resort = await this.prisma.resort.findUnique({
+      where: { id: resortId },
+      select: { tenantId: true },
+    });
+    if (!resort) throw badRequest("Resort not found");
+    return { accountId: resort.tenantId, resortId };
+  }
+
   async requestCredits(
     claims: JwtClaims,
     credits: number,
     opts: { clientRef?: string } = {},
   ) {
-    // the charge has to land on a resort's bill; someone with no resort at all
-    // has nowhere to send it
-    const resortId = claims.resortIds[0];
-    if (resortId == null) throw badRequest("No resort on this account to bill the pack to");
-    await this.perms.require(claims, resortId, "marketing.send");
+    // the customer is the account, not a resort: an agency has none, and
+    // refusing it here was the whole reason Bulk Email was a dead end for them
+    const { accountId, resortId } = await this.billTo(claims);
     const packs = await this.creditPacks();
     const pack = packs.find((p) => p.credits === credits);
     if (!pack) {
@@ -157,7 +191,7 @@ export class EngageService {
 
     if (opts.clientRef) {
       const seen = await this.prisma.emailCreditOrder.findUnique({
-        where: { resortId_clientRef: { resortId, clientRef: opts.clientRef } },
+        where: { accountId_clientRef: { accountId, clientRef: opts.clientRef } },
       });
       if (seen) return this.orderView(seen);
     }
@@ -165,6 +199,7 @@ export class EngageService {
     const order = await this.prisma.emailCreditOrder.create({
       data: {
         userId: claims.userId,
+        accountId,
         resortId,
         credits,
         price: pack.price as never,
@@ -201,6 +236,7 @@ export class EngageService {
       take: Math.min(take, 200),
       include: {
         user: { select: { id: true, name: true, email: true, phone: true } },
+        account: { select: { id: true, name: true, kind: true } },
         resort: { select: { id: true, name: true } },
       },
     });
@@ -209,7 +245,10 @@ export class EngageService {
       buyer: r.user.name,
       // a placeholder email is not how to reach the buyer; their phone is
       buyerContact: reachableEmail(r.user.email) ?? reachablePhone(r.user.phone) ?? "",
-      resortName: r.resort.name,
+      /** the customer billed; an agency has no resort to name */
+      accountName: r.account.name,
+      accountKind: r.account.kind,
+      resortName: r.resort?.name ?? null,
     }));
   }
 
@@ -284,6 +323,8 @@ export class EngageService {
       });
       await tx.platformCharge.create({
         data: {
+          // billed to the customer; the resort, if there was one, is context
+          accountId: order.accountId,
           resortId: order.resortId,
           kind: "EMAIL_CREDITS",
           description: `${order.credits.toLocaleString("en-IN")} email credits`,
