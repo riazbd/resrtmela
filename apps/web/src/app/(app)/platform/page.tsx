@@ -404,7 +404,7 @@ export default function PlatformPage() {
                   <Td>{r._count.bookings}</Td>
                   <Td>{sub(r)?.renewsAt ? dmy(sub(r)!.renewsAt) : "—"}</Td>
                   <Td>
-                    <div className="flex justify-end gap-1.5">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       {r.userResorts?.[0] && (
                         <button
                           onClick={() => loginAs(r.userResorts![0]!.user.id)}
@@ -484,7 +484,7 @@ export default function PlatformPage() {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${a.status === "active" ? "bg-emerald-50 text-emerald-700" : a.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{a.status}</span>
                   </Td>
                   <Td>
-                    <div className="flex justify-end gap-1.5">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       <button
                         onClick={() => loginAs(a.id)}
                         title={`Log in as ${a.name}`}
@@ -813,7 +813,7 @@ export default function PlatformPage() {
                       </Td>
                       <Td>
                         {o.status === "PENDING" && (
-                          <div className="flex justify-end gap-1.5">
+                          <div className="flex flex-wrap justify-end gap-1.5">
                             {/* Approval only ever follows payment — that is the
                                 rule this whole queue exists for. So the button
                                 asks how the money arrived, not whether it did,
@@ -945,7 +945,7 @@ export default function PlatformPage() {
                     : `No free trial — the first ${subCycle === "YEARLY" ? "year" : "month"} is due today.`}
               </div>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <Btn variant="ghost" onClick={() => setSubFor(null)}>Cancel</Btn>
               <Btn
                 disabled={busy}

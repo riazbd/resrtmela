@@ -1100,7 +1100,7 @@ function UsersTab({ rid }: { rid: number }) {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${u.status === "active" ? "bg-emerald-50 text-emerald-700" : u.status === "pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>{u.status}</span>
                   </Td>
                   <Td>
-                    <div className="flex justify-end gap-1.5">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       {u.status !== "active" && (
                         <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                           <Check className="inline h-3.5 w-3.5" /> Activate

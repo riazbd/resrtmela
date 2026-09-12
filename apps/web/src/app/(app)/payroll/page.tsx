@@ -163,7 +163,7 @@ export default function PayrollPage() {
                       {r.paid ? `${money(r.amount)} · ${r.method ?? ""} · ${r.paidAt ? new Date(r.paidAt).toLocaleDateString("en-GB") : ""}` : "—"}
                     </Td>
                     <Td>
-                      <div className="flex justify-end gap-1.5">
+                      <div className="flex flex-wrap justify-end gap-1.5">
                         {canManage && !r.paid && (
                           <button onClick={() => pay(r.employeeId)} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                             <Check className="inline h-3.5 w-3.5" /> Pay
@@ -202,7 +202,7 @@ export default function PayrollPage() {
                     <Td className="text-xs">{e.phone ?? "—"}</Td>
                     <Td>{money(e.salary)}</Td>
                     <Td>
-                      <div className="flex justify-end gap-1.5">
+                      <div className="flex flex-wrap justify-end gap-1.5">
                         {canManage && (
                           <>
                             <button onClick={() => setEditing(e)} className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">

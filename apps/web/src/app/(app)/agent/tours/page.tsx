@@ -196,7 +196,7 @@ function AddCategory({
       <Field label="Name" hint="Transport, Bus, AC — whatever you actually buy">
         <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </Field>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
@@ -538,7 +538,7 @@ function PackageEditor({
         </span>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>

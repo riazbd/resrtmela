@@ -221,7 +221,7 @@ function AddExpense({
           <Input value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} />
         </Field>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>

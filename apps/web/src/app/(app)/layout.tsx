@@ -405,7 +405,7 @@ function AddResortButton() {
             <div className="mb-3 text-lg font-bold text-slate-900">Add another resort</div>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New resort name" />
             <p className="mt-2 text-xs text-slate-500">Allowed by your subscription plan — extra resorts share the same login.</p>
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
               <Button onClick={create} loading={busy} disabled={!name.trim()}>Create resort</Button>
             </div>

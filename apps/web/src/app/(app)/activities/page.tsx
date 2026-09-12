@@ -347,7 +347,7 @@ export default function ActivitiesPage() {
 
             <Field label="Description"><Input value={editing.description ?? ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></Field>
 
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
               <Button onClick={saveActivity} loading={busy} disabled={!editing.name}>Save</Button>
             </div>

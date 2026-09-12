@@ -374,7 +374,10 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
             </div>
           </div>
           <div className="relative">
-            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-brand-100/70 to-teal-50" />
+            {/* the plate bleeds 16px past the card, which is the look — but on
+                a 390px screen that 16px is past the screen too, and the whole
+                homepage drags sideways. It bleeds where there is room for it. */}
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-brand-100/70 to-teal-50 sm:-inset-4" />
             <div className="relative">
               <MockDaySheet />
               <div className="absolute -bottom-6 -left-4 hidden rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg sm:block">

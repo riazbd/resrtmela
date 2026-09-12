@@ -289,7 +289,7 @@ function AddPerson({ onClose, onDone }: { onClose: () => void; onDone: () => voi
           />
         </Field>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
