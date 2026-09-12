@@ -214,6 +214,15 @@ export class RoomsService {
       baseRate?: number;
       status?: "ACTIVE" | "OUT_OF_SERVICE";
       name?: string;
+      /**
+       * A room entered under the wrong type has to be correctable.
+       *
+       * The alternative is deleting it and making it again, which takes every
+       * booking that points at it with it — so the mistake costs the history
+       * rather than a minute. Existing bookings are unaffected: their prices
+       * are recorded on the booking, not looked up from the type.
+       */
+      roomTypeId?: number;
       /** What THIS room takes, whatever its type says — rooms of one type differ in size. */
       extraPersonAllowed?: boolean;
       extraPersonRate?: number;
@@ -223,12 +232,19 @@ export class RoomsService {
     const existing = await this.prisma.room.findUniqueOrThrow({ where: { id: roomId } });
     requireResortAccess(claims, existing.resortId);
     await this.perms.require(claims, existing.resortId, "rooms.manage");
+    if (data.roomTypeId !== undefined) {
+      // a room and its type belong to the same resort; accepting an id from
+      // anywhere else would move one resort's room onto another's inventory
+      const type = await this.prisma.roomType.findUnique({ where: { id: data.roomTypeId } });
+      if (!type || type.resortId !== existing.resortId) throw badRequest("room type not found in this resort");
+    }
     const room = await this.prisma.room.update({
       where: { id: roomId },
       data: {
         ...(data.baseRate !== undefined ? { baseRate: data.baseRate as never } : {}),
         ...(data.status ? { status: data.status } : {}),
         ...(data.name ? { name: data.name } : {}),
+        ...(data.roomTypeId !== undefined ? { roomTypeId: data.roomTypeId } : {}),
         ...(data.extraPersonAllowed !== undefined ? { extraPersonAllowed: data.extraPersonAllowed } : {}),
         ...(data.extraPersonRate !== undefined ? { extraPersonRate: data.extraPersonRate as never } : {}),
         ...(data.extraPersonMax !== undefined ? { extraPersonMax: data.extraPersonMax } : {}),

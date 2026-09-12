@@ -37,9 +37,11 @@ class ExtraBedDto {
 }
 
 class UpdateRoomDto extends ExtraBedDto {
-  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() @MaxLength(120) name?: string;
   @IsOptional() @IsNumber() @Min(0) baseRate?: number;
   @IsOptional() @IsEnum(["ACTIVE", "OUT_OF_SERVICE"]) status?: "ACTIVE" | "OUT_OF_SERVICE";
+  /** A room entered under the wrong type is corrected, not deleted and remade. */
+  @IsOptional() @IsInt() roomTypeId?: number;
 }
 
 class CreateRatePlanDto {

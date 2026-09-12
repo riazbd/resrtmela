@@ -9,15 +9,19 @@ import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, T
 import { ErrorState, Skeleton } from "@/components/error-state";
 
 export default function RoomsPage() {
-  const { activeResort, isManagement, can } = useAuth();
+  const { activeResort, can } = useAuth();
   const { push } = useToast();
   const qc = useQueryClient();
   const [addRoom, setAddRoom] = useState(false);
   const [addType, setAddType] = useState(false);
   const [editType, setEditType] = useState<RoomType | null>(null);
+  const [editRoom, setEditRoom] = useState<Room | null>(null);
   const [addPlan, setAddPlan] = useState(false);
 
-  const canEdit = isManagement;
+  // the permission the API actually requires, not the account's kind. A role
+  // built with `rooms.manage` could not touch this screen's buttons, and a
+  // manager without it was shown buttons the server then refused.
+  const canEdit = can("rooms.manage");
   const canDelete = can("rooms.delete");
 
   const enabled = !!activeResort;
@@ -103,18 +107,6 @@ export default function RoomsPage() {
     }
   }
 
-  async function editRate(room: Room) {
-    const v = window.prompt(`New base rate for ${room.name} (${cur()})`, String(Number(room.baseRate)));
-    if (!v) return;
-    try {
-      await api(`/rooms/${room.id}`, { method: "PATCH", body: { baseRate: Number(v) } });
-      push(`${room.name} rate updated`);
-      void load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
   /**
    * Removing a room is the one action on this screen that cannot be undone by
    * clicking the same button again, so it says which of the two things will
@@ -174,7 +166,7 @@ This cannot be undone.`;
                   <Td><Badge value={r.status} /></Td>
                   {canEdit && (
                     <Td className="text-right">
-                      <Button size="sm" variant="ghost" onClick={() => editRate(r)}>Rate</Button>{" "}
+                      <Button size="sm" variant="ghost" onClick={() => setEditRoom(r)}>Edit</Button>{" "}
                       <Button size="sm" variant="ghost" onClick={() => void editExtraPersons(r)}>Extra persons</Button>{" "}
                       <Button size="sm" variant={r.status === "ACTIVE" ? "subtle" : "primary"} onClick={() => toggleRoom(r)}>
                         {r.status === "ACTIVE" ? "Out of service" : "Activate"}
@@ -243,6 +235,7 @@ This cannot be undone.`;
       </Card>
 
         <AddRoomTypeModal open={addType} onClose={() => setAddType(false)} onDone={() => void load()} />
+        <EditRoomModal room={editRoom} types={types} onClose={() => setEditRoom(null)} onDone={() => void load()} />
         <EditRoomTypeModal t={editType} onClose={() => setEditType(null)} onDone={() => void load()} />
       <AddPlanModal open={addPlan} onClose={() => setAddPlan(false)} onDone={() => void load()} types={types} />
       <AddRoomModal open={addRoom} onClose={() => setAddRoom(false)} onDone={() => void load()} types={types} />
@@ -288,6 +281,91 @@ function AddRoomModal({ open, onClose, onDone, types }: {
         </Field>
         <Field label={`Base rate (${cur()}/night)`}><Input type="number" min={0} value={rate || ""} onChange={(e) => setRate(Number(e.target.value))} /></Field>
         <div className="flex justify-end"><Button onClick={submit} loading={busy} disabled={!name || !typeId || rate <= 0}>Add</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Correcting a room.
+ *
+ * The only thing this screen could change about a room was its rate, through a
+ * `window.prompt` — so a room typed in as "Camelia", or filed under the wrong
+ * type, could not be fixed at all. The way out was deleting it and making it
+ * again, which takes every booking that points at it with it: the typo cost
+ * the history.
+ *
+ * Changing the type is safe for what is already booked. A booking records its
+ * own prices and its own occupancy when it is made; the type is what the next
+ * booking will be quoted from.
+ */
+function EditRoomModal({
+  room,
+  types,
+  onClose,
+  onDone,
+}: {
+  room: Room | null;
+  types: RoomType[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { push } = useToast();
+  const [name, setName] = useState("");
+  const [typeId, setTypeId] = useState<number | "">("");
+  const [rate, setRate] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (room) {
+      setName(room.name);
+      setTypeId(room.roomTypeId);
+      setRate(Number(room.baseRate));
+    }
+  }, [room]);
+
+  async function submit() {
+    if (!room) return;
+    if (!name.trim()) {
+      push("A room needs a name", "err");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api(`/rooms/${room.id}`, {
+        method: "PATCH",
+        body: { name: name.trim(), roomTypeId: typeId === "" ? undefined : Number(typeId), baseRate: rate },
+      });
+      push(`${name.trim()} updated`);
+      onDone();
+      onClose();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={!!room} onClose={onClose} title={`Edit room — ${room?.name ?? ""}`}>
+      <div className="space-y-3">
+        <Field label="Room name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Camellia" />
+        </Field>
+        <Field label="Room type" hint="what the next booking is quoted from; bookings already made keep their own prices">
+          <Select value={typeId} onChange={(e) => setTypeId(e.target.value === "" ? "" : Number(e.target.value))}>
+            {types.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={`Base rate (${cur()})`}>
+          <Input type="number" min={0} value={rate} onChange={(e) => setRate(Number(e.target.value))} />
+        </Field>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={submit} loading={busy}>Save</Button>
+        </div>
       </div>
     </Modal>
   );

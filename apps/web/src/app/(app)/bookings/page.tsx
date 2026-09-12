@@ -361,7 +361,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
 }
 
 function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { isStaff, isAgent, isManagement, activeResort } = useAuth();
+  const { isStaff, isAgent, isManagement, activeResort, can } = useAuth();
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
@@ -462,6 +462,34 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       push("Booking cancelled");
       await load();
       onChanged();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Delete, which is not cancel.
+   *
+   * Soft, as the API has always done it: the nights are freed and the booking
+   * leaves every list, but the row stays. A resort that has closed and
+   * reported a month cannot reconcile it against rows that were erased — and
+   * a wrong deletion would otherwise be unrecoverable.
+   */
+  async function deleteThis() {
+    const ask =
+      "Delete this booking?\n\n" +
+      "The rooms are freed for those nights and it leaves every list. It stays in the resort's " +
+      "history, so past reports still add up.\n\n" +
+      "To record that a guest called off a stay, use Cancel booking instead.";
+    if (!window.confirm(ask)) return;
+    setBusy(true);
+    try {
+      await client.bookings.remove(id);
+      push("Booking deleted");
+      onChanged();
+      onClose();
     } catch (ex) {
       push((ex as Error).message, "err");
     } finally {
@@ -687,14 +715,27 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         {isAgent && ["PENDING", "CONFIRMED"].includes(b.state) && b.cancelState === "NONE" && (
           <Button size="sm" variant="ghost" onClick={requestCancel} loading={busy}>Request cancellation</Button>
         )}
-        {!isStaff && !isAgent && isManagement && null}
+        {/**
+         * Delete, beside Cancel, because they are different answers.
+         *
+         * Cancelling records that a booking was called off — the guest changed
+         * their mind, and the resort's month should say so. Deleting is for a
+         * booking that should never have been here at all: a duplicate, or a
+         * row from an import that went in wrong. The endpoint has existed all
+         * along and nothing on this screen called it.
+         */}
+        {can("bookings.delete") && (
+          <Button size="sm" variant="ghost" className="!text-red-600" loading={busy} onClick={deleteThis}>
+            Delete
+          </Button>
+        )}
       </div>
     </div>
   );
 }
 
 function BookingsInner() {
-  const { activeResort, setActiveResort, me } = useAuth();
+  const { activeResort, setActiveResort, me, can } = useAuth();
   const qc = useQueryClient();
   const params = useSearchParams();
   const handoff = useMemo(() => bookingHandoff(params), [params]);
@@ -785,6 +826,55 @@ function BookingsInner() {
   // the server did the matching; these are the rows it matched
   const filtered = rows;
 
+  /**
+   * Deleting bookings, one or many.
+   *
+   * `bookings.delete` and not the account's kind: the API requires that
+   * permission and nothing else, so a role built with it should see the
+   * checkboxes and a manager without it should not.
+   *
+   * Deleting is soft — the nights are freed and the rows leave the lists, but
+   * they are still there. A month that has been closed and reported on cannot
+   * be reconciled against rows that were erased.
+   */
+  const canDelete = can("bookings.delete");
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const { push: toast } = useToast();
+
+  // a selection is about rows on screen; changing the filter leaves it holding
+  // ids the operator can no longer see, which is how the wrong thing gets deleted
+  useEffect(() => setPicked(new Set()), [state, source, group, from, to, dq, activeResort?.id]);
+
+  const toggle = (id: number) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  async function deletePicked() {
+    const rid = activeResort?.id;
+    if (!rid || picked.size === 0) return;
+    const ids = [...picked];
+    const ask =
+      `Delete ${ids.length} booking${ids.length === 1 ? "" : "s"}?\n\n` +
+      `The rooms are freed for those nights and the bookings leave every list. ` +
+      `They stay in the resort's history, so past reports still add up.`;
+    if (!window.confirm(ask)) return;
+    setDeleting(true);
+    try {
+      const out = await client.bookings.removeMany(rid, ids);
+      toast(`${out.deleted} deleted${out.alreadyGone ? `, ${out.alreadyGone} already gone` : ""}`);
+      setPicked(new Set());
+      await load();
+    } catch (ex) {
+      toast((ex as Error).message, "err");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -812,6 +902,22 @@ function BookingsInner() {
         </div>
       </div>
 
+      {/* only while something is chosen: a bar that is always there is a
+          delete button that is always there */}
+      {canDelete && picked.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5">
+          <span className="text-sm font-medium text-red-900">
+            {picked.size} booking{picked.size === 1 ? "" : "s"} selected
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>Clear</Button>
+            <Button size="sm" className="!bg-red-600 hover:!bg-red-700" loading={deleting} onClick={() => void deletePicked()}>
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Card className="!p-0">
         {listQ.error ? (
           <ErrorState error={listQ.error} />
@@ -823,6 +929,22 @@ function BookingsInner() {
           <Table minWidth={860}>
               <thead className="border-b border-slate-100">
                 <tr>
+                  {canDelete && (
+                    <Th>
+                      {/* select every row the filter is currently showing —
+                          never more, because what is off screen is what an
+                          operator has not looked at */}
+                      <input
+                        type="checkbox"
+                        aria-label="Select all shown"
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                        checked={filtered.length > 0 && picked.size === filtered.length}
+                        onChange={(e) =>
+                          setPicked(e.target.checked ? new Set(filtered.map((b) => b.id)) : new Set())
+                        }
+                      />
+                    </Th>
+                  )}
                   <Th>Code</Th><Th>Guest</Th><Th>Stay</Th><Th>Rooms</Th>
                   <Th>Source</Th><Th>Status</Th><Th>Payment</Th><Th className="text-right">Due</Th>
                 </tr>
@@ -834,6 +956,19 @@ function BookingsInner() {
                     onClick={() => setOpenId(b.id)}
                     className="cursor-pointer hover:bg-brand-50/40"
                   >
+                    {canDelete && (
+                      <Td>
+                        {/* the row opens the booking; the box must not */}
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${b.code}`}
+                          className="h-4 w-4 rounded border-slate-300 text-brand-600"
+                          checked={picked.has(b.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggle(b.id)}
+                        />
+                      </Td>
+                    )}
                     <Td className="font-medium text-brand-700">{b.code}{b.groupTag ? <div className="text-[10px] font-normal text-slate-400">{b.groupTag}</div> : null}</Td>
                     <Td>
                       <div>{b.guest?.fullName}</div>

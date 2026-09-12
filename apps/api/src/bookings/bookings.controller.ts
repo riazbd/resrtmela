@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
 import { Type } from "class-transformer";
 import {
   IsArray, IsBoolean, IsDateString, IsInt, IsNumber, IsObject, IsOptional,
@@ -105,6 +105,11 @@ class CancelRequestDto {
 
 class CancelDecisionDto {
   @IsBoolean() approve!: boolean;
+}
+
+/** The bookings a "delete selected" press is about. */
+class BulkDeleteDto {
+  @IsArray() @ArrayMinSize(1) @IsInt({ each: true }) ids!: number[];
 }
 
 class AvailabilityQuery {
@@ -279,5 +284,23 @@ export class BookingsController {
   @Delete("bookings/:id")
   softDelete(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.bookings.softDelete(req.user, id);
+  }
+
+  /**
+   * A selection, deleted together.
+   *
+   * POST rather than DELETE: a body on a DELETE is allowed by the spec and
+   * dropped by enough proxies to be a bad bet, and this one carries the whole
+   * point of the request. Scoped to the resort in the path so one stray id
+   * from somewhere else refuses the batch instead of being skipped in silence.
+   */
+  @Post("resorts/:resortId/bookings/delete")
+  @HttpCode(200)
+  softDeleteMany(
+    @Req() req: AuthedRequest,
+    @Param("resortId", ParseIntPipe) resortId: number,
+    @Body() dto: BulkDeleteDto,
+  ) {
+    return this.bookings.softDeleteMany(req.user, resortId, dto.ids);
   }
 }

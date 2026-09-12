@@ -115,6 +115,17 @@ export function createApiClient(http: Fetcher) {
       cancel: (id: number, reason?: string) =>
         http<BookingDetail>(`/bookings/${id}/cancel`, { method: "POST", body: { reason } }),
       remove: (id: number) => http<{ deleted: boolean }>(`/bookings/${id}`, { method: "DELETE" }),
+      /**
+       * A selection, deleted together and all-or-nothing.
+       *
+       * POST, not DELETE: a body on a DELETE is legal and dropped by enough
+       * proxies to be a bad bet, and the ids are the whole request.
+       */
+      removeMany: (resortId: number, ids: number[]) =>
+        http<{ deleted: number; alreadyGone: number }>(`/resorts/${resortId}/bookings/delete`, {
+          method: "POST",
+          body: { ids },
+        }),
       pay: (id: number, body: unknown) =>
         http<BookingDetail>(`/bookings/${id}/payments`, { method: "POST", body }),
       checkout: (id: number, body?: unknown) =>

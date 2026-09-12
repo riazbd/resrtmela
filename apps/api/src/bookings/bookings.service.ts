@@ -1151,6 +1151,57 @@ export class BookingsService {
     return { deleted: true };
   }
 
+  /**
+   * The same, for a selection.
+   *
+   * An import that went in wrong is not one booking, it is a hundred and
+   * sixty-eight, and a hundred and sixty-eight confirmations is not a recovery
+   * path — which is how sheets get fixed in the database instead.
+   *
+   * All or nothing, in one transaction. A bulk delete that half-succeeds
+   * leaves the operator guessing which half went, and the half that went is
+   * exactly the half pressing the button again will not bring back. Every id
+   * is checked against this resort before anything is written, so one stray id
+   * refuses the batch rather than quietly skipping itself.
+   */
+  async softDeleteMany(claims: JwtClaims, resortId: number, ids: number[]) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "bookings.delete");
+    const wanted = [...new Set(ids)].filter((id) => Number.isInteger(id) && id > 0);
+    if (wanted.length === 0) throw badRequest("Choose at least one booking to delete");
+    // a cap, because "select all" on a year of bookings is a transaction that
+    // holds every one of those rows while it runs
+    if (wanted.length > 500) throw badRequest("Delete at most 500 bookings at a time");
+
+    const found = await this.prisma.booking.findMany({
+      where: { id: { in: wanted } },
+      select: { id: true, resortId: true, deletedAt: true },
+    });
+    const strangers = found.filter((b) => b.resortId !== resortId).map((b) => b.id);
+    const missing = wanted.filter((id) => !found.some((b) => b.id === id));
+    if (strangers.length > 0 || missing.length > 0) {
+      throw badRequest(
+        `Not this resort's bookings: ${[...strangers, ...missing].join(", ")}. Nothing was deleted.`,
+      );
+    }
+
+    const live = found.filter((b) => b.deletedAt == null).map((b) => b.id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.booking.updateMany({ where: { id: { in: live } }, data: { deletedAt: new Date() } });
+      await tx.bookingNight.deleteMany({ where: { item: { bookingId: { in: live } } } });
+      for (const id of live) {
+        await this.activities.releaseBookingActivities(tx, id);
+        await this.audit.log(
+          { actorId: claims.userId, resortId, action: "booking.delete", entity: "booking", entityId: id },
+          tx,
+        );
+      }
+    });
+    // already-deleted ids are counted as asked-for rather than as failures:
+    // pressing delete twice on the same selection is not an error
+    return { deleted: live.length, alreadyGone: wanted.length - live.length };
+  }
+
   /** Calendar data: bookings overlapping [from,to) — client paints the matrix (doc §3.3). */
   async calendar(claims: JwtClaims, resortId: number, fromStr: string, toStr: string) {
     requireResortAccess(claims, resortId);
