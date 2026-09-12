@@ -8,7 +8,9 @@
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
     "backgroundColor": "#ffffff",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.resortmela.app",
       "versionCode": 1,
@@ -43,7 +45,11 @@
       ]
     ],
     "extra": {
-      "consoleUrl": "https://resortmela.rootcodebd.com"
-    }
+      "consoleUrl": "https://resortmela.rootcodebd.com",
+      "eas": {
+        "projectId": "e3df03f7-f176-4c28-a47a-248a2bc70d97"
+      }
+    },
+    "owner": "riaznur"
   }
 }

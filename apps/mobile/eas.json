@@ -11,8 +11,7 @@
     },
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "comment": "The build people install by hand. `apk`, not the default `aab`: an App Bundle is something Play opens, not something a phone can install."
+      "android": { "buildType": "apk" }
     },
     "production": {
       "distribution": "store",
