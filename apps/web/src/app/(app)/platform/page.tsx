@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { PLAN_FEATURES } from "@rh/shared";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
+import { HowItArrived, paymentMethodsFrom } from "./how-it-arrived";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 import { monthOf } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
@@ -166,6 +167,13 @@ export default function PlatformPage() {
   const [subTrial, setSubTrial] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  /**
+   * The collection waiting to be told how the money arrived.
+   *
+   * Both of these buttons used to post `method: "CASH"` regardless, so a bKash
+   * transfer and a bank transfer were both filed as cash — see how-it-arrived.
+   */
+  const [collecting, setCollecting] = useState<{ what: string; pay: (method: string) => void } | null>(null);
 
   // five independent reads: the overview lands first and the tables fill in
   // behind it, instead of every tab waiting on the slowest query
@@ -173,6 +181,9 @@ export default function PlatformPage() {
   const resortsQ = useApi(keys.platform("resorts"), () => api<ResortRow[]>("/platform/resorts"));
   const agentsQ = useApi(keys.platform("agents"), () => api<AgentRow[]>("/platform/agents"));
   const duesQ = useApi(keys.platform("dues"), () => api<DueRow[]>("/platform/dues"));
+  // the platform's own list, not an array written into this file
+  const settingsQ = useApi(keys.platform("settings"), () => api<Record<string, string>>("/platform/settings"));
+  const payMethods = paymentMethodsFrom(settingsQ.data ?? {});
   /**
    * One-off charges — an email credit pack today; SMS packs and setup fees will
    * be the same shape. They live beside the subscription dues rather than in
@@ -283,6 +294,19 @@ export default function PlatformPage() {
 
   return (
     <div>
+      {/* asked before anything is marked paid, for dues and for one-off charges */}
+      {collecting && (
+        <HowItArrived
+          methods={payMethods}
+          what={collecting.what}
+          onPick={(m) => {
+            const { pay } = collecting;
+            setCollecting(null);
+            pay(m);
+          }}
+          onCancel={() => setCollecting(null)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Platform</h1>
@@ -687,7 +711,10 @@ export default function PlatformPage() {
                   </Td>
                   <Td>
                     {d.status !== "PAID" && (
-                      <button onClick={() => act(() => api(`/platform/dues/${d.id}/pay`, { method: "POST", body: { method: "CASH" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                      <button onClick={() => setCollecting({
+                        what: `${d.account.name} · ${d.subscription.plan} — ${money(d.amount)}`,
+                        pay: (m) => act(() => api(`/platform/dues/${d.id}/pay`, { method: "POST", body: { method: m } })),
+                      })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
                     )}
@@ -724,7 +751,10 @@ export default function PlatformPage() {
                   </Td>
                   <Td>
                     {c.status !== "PAID" && (
-                      <button onClick={() => act(() => api(`/platform/charges/${c.id}/pay`, { method: "POST", body: { method: "CASH" } }))} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                      <button onClick={() => setCollecting({
+                        what: `${c.resort.name} · ${c.description} — ${money(c.amount)}`,
+                        pay: (m) => act(() => api(`/platform/charges/${c.id}/pay`, { method: "POST", body: { method: m } })),
+                      })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
                     )}
@@ -781,22 +811,21 @@ export default function PlatformPage() {
                                 second trip to the Dues tab. */}
                             <Btn
                               disabled={busy}
-                              onClick={() => {
-                                const how = window.prompt(
-                                  `Payment received for ${o.credits.toLocaleString("en-IN")} credits — ${o.resortName}, ${money(o.price)}.
-
-` +
-                                    `How did it arrive? bKash, bank transfer, cash…`,
-                                  "bKash",
-                                );
-                                if (how === null) return;
-                                void act(() =>
-                                  api(`/platform/email-credit-orders/${o.id}/decision`, {
-                                    method: "POST",
-                                    body: { decision: "APPROVE", method: how.trim() || undefined },
-                                  }),
-                                );
-                              }}
+                              onClick={() =>
+                                // the same question the Dues tab asks, from the
+                                // same list — typed free text here meant "bkash",
+                                // "Bkash" and "bKash" were three methods
+                                setCollecting({
+                                  what: `${o.resortName} · ${o.credits.toLocaleString("en-IN")} credits — ${money(o.price)}`,
+                                  pay: (m) =>
+                                    act(() =>
+                                      api(`/platform/email-credit-orders/${o.id}/decision`, {
+                                        method: "POST",
+                                        body: { decision: "APPROVE", method: m },
+                                      }),
+                                    ),
+                                })
+                              }
                             >
                               Approve
                             </Btn>
