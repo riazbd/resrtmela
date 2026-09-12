@@ -134,7 +134,20 @@ export class PermissionsService {
  * the name, and the first match wins. Agency keys are ignored — old rows still
  * carry them, and none of them should promote anybody.
  */
-const CAN_CHANGE_THE_RESORT = ["settings.manage", "users.manage", "rooms.manage", "payroll.manage"];
+/**
+ * What MANAGER has to mean, read off what the console unlocks for it.
+ *
+ * `isManagement` opens Settings entirely — Users & Roles, Permissions, the
+ * resort's own record — plus Import CSV and the audit trail. So the kind has
+ * to be earned by the permissions that govern exactly those things.
+ *
+ * `rooms.manage` was in this list and should not have been. Production has
+ * five people on a role called "Admin" holding `rooms.manage`, `reports.pl`
+ * and `billing.view` but *not* `settings.manage`: calling them MANAGER would
+ * have opened Settings for them and had the server refuse every write inside
+ * it. Changing the inventory is a senior front desk's job, not an owner's.
+ */
+const CAN_CHANGE_THE_RESORT = ["settings.manage", "users.manage", "roles.manage"];
 
 export function accountKindFor(permissions: readonly string[]): "RESORT_ADMIN" | "MANAGER" | "FRONT_DESK" | "HOUSEKEEPING" {
   const held = new Set(permissions.filter((p) => !p.startsWith("agent.")));

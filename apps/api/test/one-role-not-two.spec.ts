@@ -26,12 +26,30 @@ describe("the role a permission set implies", () => {
   });
 
   it("calls a set that can change the resort itself a manager", () => {
-    // settings, the team, the rooms and the rates: the things an owner would
-    // mind a front desk quietly altering
+    // the kind is read off what `isManagement` unlocks in the console: Settings
+    // entire, Import, the audit trail — so it is earned by the permissions
+    // that govern those, and by nothing else
     expect(accountKindFor(["bookings.view", "settings.manage"])).toBe("MANAGER");
     expect(accountKindFor(["bookings.view", "users.manage"])).toBe("MANAGER");
-    expect(accountKindFor(["bookings.view", "rooms.manage"])).toBe("MANAGER");
+    expect(accountKindFor(["bookings.view", "roles.manage"])).toBe("MANAGER");
     expect(accountKindFor(DEFAULT_ROLE_PERMISSIONS.Manager)).toBe("MANAGER");
+  });
+
+  it("does not promote a senior front desk to management", () => {
+    /**
+     * Production has five people on a role called "Admin": bookings, payments,
+     * expenses, `rooms.manage`, `reports.pl`, `billing.view` — and no
+     * `settings.manage`. Calling that MANAGER opens Settings for them, where
+     * every write is then refused. Running the inventory is not owning the
+     * resort.
+     */
+    const seniorDesk = [
+      "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
+      "payments.view", "payments.create", "expenses.view", "expenses.create",
+      "rooms.view", "rooms.manage", "guests.view", "reports.view", "reports.pl",
+      "payroll.view", "activities.manage", "auditlog.view", "billing.view", "export.run",
+    ];
+    expect(accountKindFor(seniorDesk)).toBe("FRONT_DESK");
   });
 
   it("calls a set that works the register a front desk", () => {
