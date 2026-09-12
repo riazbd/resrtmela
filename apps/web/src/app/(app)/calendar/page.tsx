@@ -10,7 +10,8 @@ import { Button, Card } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { mergeRuns } from "@/lib/calendar-bars";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
-import { monthOf, monthStart, monthLength } from "@/lib/calendar-month";
+import { monthOf, monthStart, monthLength, isWeekend, startsTheWeek } from "@/lib/calendar-month";
+import { MonthAvailability } from "@/components/month-availability";
 
 /**
  * The month, as a chart of stays.
@@ -52,11 +53,8 @@ const DUE_STRIPE: Record<string, string> = {
   PARTIAL: "bg-amber-500",
 };
 
-/** Thursday and Friday — the nights this market prices differently. */
-const WEEKEND = new Set([4, 5]);
 const SPANS = [7, 14, 30] as const;
 
-const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
 const dayNumber = (day: string) => Number(day.slice(8, 10));
 const monthLabel = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
@@ -76,6 +74,7 @@ export default function CalendarPage() {
    * paging to see one month was the tax on every such question.
    */
   const [span, setSpan] = useState<number>(30);
+  const [view, setView] = useState<"rooms" | "month">("rooms");
 
   const days = useMemo(
     () => Array.from({ length: span }, (_, i) => addDaysIso(start, i)),
@@ -203,6 +202,45 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
+          {/**
+           * Two questions, two shapes.
+           *
+           * The grid answers "who is in 103 on the 14th". `Month` answers the
+           * one asked far more often — "can I take a booking for the 22nd" —
+           * which the grid makes you count columns for.
+           */}
+          <div className="ml-1 flex overflow-hidden rounded-lg border border-slate-200">
+            {(["rooms", "month"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => {
+                  /**
+                   * The month view snaps the range to the month it draws.
+                   *
+                   * Its numbers come from the same occupancy the grid uses,
+                   * which only covers the days fetched — so a month drawn over
+                   * a range starting mid-month showed every earlier day as
+                   * completely free. Empty and unknown are not the same thing,
+                   * and a calendar that says a sold-out Saturday has eleven
+                   * rooms left is worse than one that cannot draw it.
+                   */
+                  if (v === "month") {
+                    const first = monthStart(monthOf(start));
+                    if (first) {
+                      setStart(first);
+                      setSpan(monthLength(monthOf(start)));
+                    }
+                  }
+                  setView(v);
+                }}
+                className={`px-2.5 py-1 text-xs font-semibold capitalize transition ${
+                  view === v ? "bg-brand-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -228,6 +266,22 @@ export default function CalendarPage() {
           <Skeleton rows={6} />
         ) : rooms.length === 0 ? (
           <p className="p-6 text-sm text-slate-500">No rooms yet — add them under Rooms.</p>
+        ) : view === "month" ? (
+          <div className="p-4">
+            {/* clicking a day takes the room grid to that week, which is the
+                next question once a day turns out to have something left */}
+            <MonthAvailability
+              month={monthOf(start)}
+              sellable={sellable.length}
+              load={occupancy}
+              today={today}
+              onPick={(day) => {
+                setStart(day);
+                setSpan(7);
+                setView("rooms");
+              }}
+            />
+          </div>
         ) : (
           <div className="overflow-x-auto">
             {/*
@@ -251,8 +305,8 @@ export default function CalendarPage() {
                   </th>
                   {days.map((day) => {
                     const isToday = day === today;
-                    const weekend = WEEKEND.has(weekdayOf(day));
-                    const weekStart = weekdayOf(day) === 6;
+                    const weekend = isWeekend(day);
+                    const weekStart = startsTheWeek(day);
                     return (
                       <th
                         key={day}
@@ -296,7 +350,7 @@ export default function CalendarPage() {
                         key={day}
                         title={`${taken} of ${sellable.length} sellable rooms on ${day}`}
                         className={`border-b border-slate-200 px-1 pb-1.5 text-center text-[10px] font-bold tabular-nums ${
-                          weekdayOf(day) === 6 ? "border-l border-l-slate-300" : ""
+                          startsTheWeek(day) ? "border-l border-l-slate-300" : ""
                         } ${
                           share === 0
                             ? "text-slate-300"
@@ -350,7 +404,7 @@ export default function CalendarPage() {
                       </td>
 
                       {runs.map((run) => {
-                        const edge = weekdayOf(run.from) === 6 ? "border-l border-l-slate-300" : "";
+                        const edge = startsTheWeek(run.from) ? "border-l border-l-slate-300" : "";
                         if (!run.value) {
                           /**
                            * Free nights stay one cell each.
@@ -369,7 +423,7 @@ export default function CalendarPage() {
                               <td
                                 key={night}
                                 className={`border-b border-slate-100 p-0.5 ${
-                                  weekdayOf(night) === 6 ? "border-l border-l-slate-300" : ""
+                                  startsTheWeek(night) ? "border-l border-l-slate-300" : ""
                                 }`}
                               >
                                 {/**

@@ -51,9 +51,17 @@ export const phoneKeyOf = (normalizedPhone: string) =>
 
 export const anonGuestKey = () => createHash("sha256").update("anon:" + randomUUID()).digest("hex");
 
-/** Bangladeshi mobile numbers, stored the way login reads them. */
+/**
+ * Bangladeshi mobile numbers, stored the way login reads them.
+ *
+ * Thirteen characters: `880` and ten. This produced twelve — `88017` and
+ * seven — which is not a number anybody can ring, and it is why every seeded
+ * environment needed the country code typed at the login box: what a person
+ * writes (`01700000101`) normalises to a correct thirteen that matched none
+ * of these, while typing the stored twelve verbatim matched exactly.
+ */
 export function phone(seq: number, prefix = "88017"): string {
-  return prefix + String(seq).padStart(7, "0");
+  return prefix + String(seq).padStart(13 - prefix.length, "0");
 }
 
 export const BD_NAMES = [

@@ -59,10 +59,40 @@ export async function findUserByIdentifier<T extends Pick<PrismaService, "user">
   identifierRaw: string,
 ) {
   if (!identifierRaw) return null;
-  const looksEmail = identifierRaw.includes("@");
-  return looksEmail
-    ? prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } })
-    : prisma.user.findFirst({ where: { phone: normalizePhone(identifierRaw) } });
+  if (identifierRaw.includes("@")) {
+    return prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } });
+  }
+
+  const exact = await prisma.user.findFirst({ where: { phone: normalizePhone(identifierRaw) } });
+  if (exact) return exact;
+
+  /**
+   * The number as it is stored, when that is not the number as it should be.
+   *
+   * Reported as "you have to type an extra 88 to sign in". Some accounts hold
+   * a phone a digit short — `880` and nine, where a Bangladeshi mobile is
+   * `880` and ten — so `normalizePhone("0170000101")` produces a correct
+   * thirteen that matches nothing, while typing the stored twelve verbatim
+   * matches exactly. The person is then told their own number is wrong
+   * because of how it was written into the table before they saw a login
+   * screen.
+   *
+   * So: fall back to the national part, the digits after the country code and
+   * any trunk zero. Nine digits at minimum — a suffix shorter than that would
+   * start matching strangers — and only when exactly one account ends that
+   * way. Two candidates is a refusal, because signing somebody into the wrong
+   * account is the one outcome worse than asking them to type more.
+   *
+   * Runs only after the exact match misses, and the user table is staff and
+   * agents rather than guests, so the scan is small.
+   */
+  const national = identifierRaw.replace(/\D/g, "").replace(/^880/, "").replace(/^0/, "");
+  if (national.length < 9) return null;
+  const candidates = await prisma.user.findMany({
+    where: { phone: { endsWith: national } },
+    take: 2,
+  });
+  return candidates.length === 1 ? candidates[0]! : null;
 }
 
 /**

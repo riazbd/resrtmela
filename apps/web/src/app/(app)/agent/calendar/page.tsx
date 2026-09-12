@@ -13,7 +13,8 @@ import { MapPin } from "lucide-react";
 import { occupancyCells, freeSpan, type CalendarCell } from "@/lib/agency-calendar";
 import { mergeRuns } from "@/lib/calendar-bars";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
-import { monthOf, monthStart, monthLength } from "@/lib/calendar-month";
+import { monthOf, monthStart, monthLength, isWeekend, startsTheWeek } from "@/lib/calendar-month";
+import { MonthAvailability } from "@/components/month-availability";
 import type { AgencyCalendar } from "@rh/shared";
 
 /**
@@ -58,16 +59,13 @@ const DUE_STRIPE: Record<string, string> = {
   PARTIAL: "bg-amber-500",
 };
 
-/** Thursday and Friday: the two days this market prices differently. */
-const WEEKEND = new Set([4, 5]);
 const SPANS = [7, 14, 30] as const;
 
-const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
 const dayNumber = (day: string) => Number(day.slice(8, 10));
 const monthLabel = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
 /** A hairline where the week turns over, so the eye has somewhere to land. */
-const weekEdge = (day: string) => (weekdayOf(day) === 6 ? "border-l border-l-slate-300" : "");
+const weekEdge = (day: string) => (startsTheWeek(day) ? "border-l border-l-slate-300" : "");
 
 export default function AgencyCalendarPage() {
   const router = useRouter();
@@ -80,6 +78,7 @@ export default function AgencyCalendarPage() {
   // of paging to see one month was the tax on every search
   const [span, setSpan] = useState<number>(30);
   const [resortId, setResortId] = useState<number | null>(null);
+  const [view, setView] = useState<"rooms" | "month">("rooms");
   /** The first night of a stay being picked out, waiting for its second click. */
   const [anchor, setAnchor] = useState<{ roomId: number; night: string } | null>(null);
 
@@ -223,6 +222,34 @@ export default function AgencyCalendarPage() {
               </button>
             ))}
           </div>
+          {/* the same two questions an agent has: who is where, and whether
+              the 22nd has anything left at all */}
+          <div className="ml-1 flex overflow-hidden rounded-lg border border-slate-200">
+            {(["rooms", "month"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => {
+                  // the month view reads the same occupancy the grid does, so
+                  // the range has to be the month or the days outside it read
+                  // as empty rather than as unknown
+                  if (v === "month") {
+                    const first = monthStart(monthOf(start));
+                    if (first) {
+                      setStart(first);
+                      setSpan(monthLength(monthOf(start)));
+                    }
+                  }
+                  setView(v);
+                  setAnchor(null);
+                }}
+                className={`px-2.5 py-1 text-xs font-semibold capitalize transition ${
+                  view === v ? "bg-brand-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
 
           {(data?.resorts.length ?? 0) > 1 && (
             <Select
@@ -291,6 +318,16 @@ export default function AgencyCalendarPage() {
 
           {rooms.length === 0 ? (
             <p className="p-6 text-sm text-slate-500">This resort has no rooms on sale.</p>
+          ) : view === "month" ? (
+            <div className="p-4">
+              <MonthAvailability
+                month={monthOf(start)}
+                sellable={sellable.length}
+                load={occupancy}
+                today={today}
+                onPick={(day) => { setStart(day); setSpan(7); setView("rooms"); }}
+              />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               {/* `table-fixed` with a width only on the room column: the surplus
@@ -311,7 +348,7 @@ export default function AgencyCalendarPage() {
                     </th>
                     {days.map((day) => {
                       const isToday = day === today;
-                      const weekend = WEEKEND.has(weekdayOf(day));
+                      const weekend = isWeekend(day);
                       return (
                         <th
                           key={day}
