@@ -39,12 +39,36 @@ import { reportCoverage, printCoverage } from "./seed/coverage";
 
 const prisma = new PrismaClient();
 
+/**
+ * Empty every table, foreign keys and all.
+ *
+ * `FOREIGN_KEY_CHECKS` is a *session* variable, and Prisma hands each query to
+ * whichever pooled connection is free. Switched off with a plain
+ * `$executeRawUnsafe` it was switched off on one connection while the
+ * truncates went out on others, which works for exactly as long as the pool
+ * happens to reuse the same socket — it did on a local MySQL and did not on
+ * the server's MariaDB, where the first table with a child row stopped the
+ * wipe half-done: "Cannot truncate a table referenced in a foreign key
+ * constraint".
+ *
+ * An interactive transaction is Prisma's one guarantee of a single connection
+ * for a block of statements, so the switch and the truncates are certain to be
+ * talking to the same session. TRUNCATE commits implicitly in MySQL and
+ * MariaDB, which makes the "transaction" no such thing — the point here is the
+ * connection, not the atomicity.
+ */
 async function wipe() {
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
-  for (const table of [...new Set(TABLES_IN_WIPE_ORDER)]) {
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
-  }
-  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
+      for (const table of [...new Set(TABLES_IN_WIPE_ORDER)]) {
+        await tx.$executeRawUnsafe(`TRUNCATE TABLE \`${table}\``);
+      }
+      await tx.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+    },
+    // a wipe of sixty tables on a slow disk outlasts the 5s default
+    { timeout: 120_000, maxWait: 30_000 },
+  );
 }
 
 async function main() {
