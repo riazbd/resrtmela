@@ -53,6 +53,24 @@ class CreateBookingDto {
   @IsOptional() @ValidateNested() @Type(() => AdvancePaymentDto) advancePayment?: AdvancePaymentDto;
 }
 
+/**
+ * What a price depends on — no guest, because a price does not need one.
+ *
+ * The form asks for this while the clerk is still choosing rooms and dates,
+ * long before there is a name to attach, so requiring guest details here would
+ * mean the total only appeared once it was too late to be useful.
+ */
+class QuoteBookingDto {
+  @IsInt() resortId!: number;
+  @IsArray() @ArrayMinSize(1) @IsInt({ each: true }) roomIds!: number[];
+  @IsDateString() checkIn!: string;
+  @IsDateString() checkOut!: string;
+  @IsInt() @Min(1) adults!: number;
+  @IsOptional() @IsInt() @Min(0) children?: number;
+  @IsOptional() @IsInt() @Min(0) @Type(() => Number) extraPersons?: number;
+  @IsOptional() @IsNumber() @Min(0) discount?: number;
+}
+
 class ListBookingsQuery {
   @IsOptional() @IsString() @MaxLength(24) group?: string;
   @Type(() => Number) @IsInt() resortId!: number;
@@ -171,6 +189,26 @@ export class BookingsController {
       advancePayment: dto.advancePayment,
     };
     return this.bookings.create(req.user, input);
+  }
+
+  /**
+   * The bill, before anything is created.
+   *
+   * POST rather than GET because it takes a room list and reads as the same
+   * shape as the create it precedes; it writes nothing.
+   */
+  @Post("bookings/quote")
+  quote(@Req() req: AuthedRequest, @Body() dto: QuoteBookingDto) {
+    return this.bookings.quote(req.user, {
+      resortId: dto.resortId,
+      roomIds: dto.roomIds,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      adults: dto.adults,
+      children: dto.children ?? 0,
+      extraPersons: dto.extraPersons,
+      discount: dto.discount,
+    });
   }
 
   /** Tour-group: N one-room bookings, one flow. */

@@ -40,6 +40,37 @@ export interface CreateBookingInput {
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
 
+/** Everything the price depends on, and nothing about who the guest is. */
+export interface QuoteBookingInput {
+  resortId: number;
+  roomIds: number[];
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  extraPersons?: number;
+  /** absent means "use the resort's standing offers", which is not the same as 0 */
+  discount?: number;
+}
+
+/** One printable line of the bill: what it is, and what it comes to. */
+export interface QuoteLine {
+  kind: "ROOM" | "EXTRA_PERSON";
+  label: string;
+  unitPrice: number;
+  qty: number;
+  nights: number;
+  /** how many extra people this line is for; absent on a room line */
+  persons?: number;
+  amount: number;
+}
+
+export type BookingQuote = ReturnType<typeof bookingTotals> & {
+  lines: QuoteLine[];
+  /** true when the discount came from a standing offer rather than the clerk */
+  discountIsAutomatic: boolean;
+};
+
 export interface RoomBookingTxParams {
   resortId: number;
   guestId: number;
@@ -189,6 +220,158 @@ export class BookingsService {
     return this.tax.rulesFor(resortId);
   }
 
+  /**
+   * What this stay is discounted by.
+   *
+   * Zero in the Discount box does not mean zero: leaving it alone asks for the
+   * best standing offer instead, priced per room and summed, because a
+   * room-level offer is about one room and must not be applied to both rooms
+   * of a two-room booking nor lost because the other room has none.
+   *
+   * Pulled out of `create` so the quote cannot answer this differently. A form
+   * that shows no discount and a booking that then applies one is the exact
+   * surprise the bill exists to prevent.
+   */
+  private async resolveDiscount(
+    resortId: number,
+    rooms: { id: number; roomTypeId: number; baseRate: number }[],
+    nights: number,
+    checkIn: Date,
+    manual: Money | null | undefined,
+    isAgent: boolean,
+  ): Promise<number> {
+    if (isAgent) return 0;
+    if (manual != null) return Number(manual);
+    let offered = 0;
+    for (const r of rooms) {
+      offered += await this.discounts.bestFor(resortId, r.roomTypeId, r.baseRate * nights, checkIn, r.id);
+    }
+    return offered;
+  }
+
+  /**
+   * What one room costs a night for these dates.
+   *
+   * A room's base rate is the fallback, not the answer: a rate plan covering
+   * the stay replaces it, and a stay spanning a season boundary is charged the
+   * average of its nights. `bookRoomsTx` writes exactly this number onto the
+   * booking item, so the quote asking the same question is the only way the
+   * form can promise the price it prints.
+   */
+  private async nightlyPrice(
+    resortId: number,
+    room: { roomTypeId: number; baseRate: number },
+    nights: Date[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<number> {
+    const rates = await this.rooms.effectiveRates(resortId, room.roomTypeId, nights, room.baseRate, tx);
+    return rates.length
+      ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100
+      : room.baseRate;
+  }
+
+  /**
+   * The bill, before anything is written down.
+   *
+   * The booking form asked for an Advance without ever saying what the stay
+   * came to. The clerk could not work it out on the screen either: the nightly
+   * rate may be seasonal, an untouched Discount box still picks up a standing
+   * offer, and the resort's tax rules are not in the browser at all. So the
+   * total is answered here, by the same code that will charge it, and
+   * `the-bill-before-you-book.spec.ts` pins quote and create to the same
+   * number.
+   *
+   * It deliberately does not check availability. Someone typing a booking
+   * wants the price while they are still choosing; a clash is the create
+   * call's answer to give, and refusing to price a night that turns out to be
+   * taken would leave the form silent at the moment it is most needed.
+   */
+  async quote(claims: JwtClaims, input: QuoteBookingInput): Promise<BookingQuote> {
+    await requireSellingAccess(this.prisma, claims, input.resortId);
+    const isAgent = claims.role === ROLE.AGENT;
+    await this.perms.require(claims, input.resortId, isAgent ? "agent.book" : "bookings.create");
+
+    const checkIn = dateOnly(input.checkIn);
+    const checkOut = dateOnly(input.checkOut);
+    const nights = nightsBetween(checkIn, checkOut);
+    if (nights <= 0) throw badRequest("checkOut must be after checkIn");
+    if (input.roomIds.length === 0) throw badRequest("At least one room required");
+
+    const roomRows = await this.prisma.room.findMany({
+      where: { id: { in: input.roomIds }, resortId: input.resortId, status: "ACTIVE", deletedAt: null },
+    });
+    if (roomRows.length !== input.roomIds.length) {
+      throw badRequest("One or more rooms missing/inactive for this resort");
+    }
+
+    const extraPersons = Math.max(0, Math.floor(input.extraPersons ?? 0));
+    // throws the same "those rooms take N, not M" as create, so the form finds
+    // out here rather than after the guest's details have been typed
+    const perRoom = this.spreadExtraPersons(roomRows, extraPersons);
+
+    const wanted = eachNight(checkIn, nights);
+    const lines: QuoteLine[] = [];
+    const items: { itemKind: "ROOM" | "EXTRA_PERSON"; unitPrice: number; qty: number }[] = [];
+
+    for (const room of roomRows) {
+      const unitPrice = await this.nightlyPrice(
+        input.resortId,
+        { roomTypeId: room.roomTypeId, baseRate: Number(room.baseRate) },
+        wanted,
+      );
+      items.push({ itemKind: "ROOM", unitPrice, qty: 1 });
+      lines.push({
+        kind: "ROOM",
+        label: room.name,
+        unitPrice,
+        qty: 1,
+        nights,
+        amount: round2(unitPrice * nights),
+      });
+    }
+
+    const names = new Map(roomRows.map((r) => [r.id, r.name]));
+    for (const extra of perRoom) {
+      if (extra.persons <= 0 || extra.rate <= 0) continue;
+      const qty = extra.persons * nights;
+      items.push({ itemKind: "EXTRA_PERSON", unitPrice: extra.rate, qty });
+      lines.push({
+        kind: "EXTRA_PERSON",
+        label: `Extra person — ${names.get(extra.roomId) ?? "room"}`,
+        unitPrice: extra.rate,
+        qty,
+        nights,
+        persons: extra.persons,
+        amount: round2(extra.rate * qty),
+      });
+    }
+
+    const discount = await this.resolveDiscount(
+      input.resortId,
+      roomRows.map((r) => ({ id: r.id, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) })),
+      nights,
+      checkIn,
+      input.discount,
+      isAgent,
+    );
+
+    const totals = bookingTotals({
+      items,
+      payments: [],
+      discount,
+      checkIn,
+      checkOut,
+      taxRules: await this.taxRulesFor(input.resortId),
+    });
+
+    /**
+     * `discountIsAutomatic` is the difference between "you left it at zero" and
+     * "the resort is giving them 500 off". Without it the form would show a
+     * discount the clerk did not type and could not explain.
+     */
+    return { ...totals, lines, discountIsAutomatic: input.discount == null && discount > 0 };
+  }
+
   async create(claims: JwtClaims, input: CreateBookingInput) {
     // for an agent this is the whole door: verified and paid up, the resort
     // open, the agency not blocked — asked now, not read from the token
@@ -240,27 +423,16 @@ export class BookingsService {
      */
     const extraPersonsPerRoom = this.spreadExtraPersons(roomRows, extraPersons);
 
-    let discount: number;
-    if (isAgent) {
-      discount = 0;
-    } else if (input.discount == null) {
-      /**
-       * No manual discount → the best standing offer.
-       *
-       * Priced per room and summed, not once for the booking: a room-level
-       * offer is about one room, so a two-room booking where only one room is
-       * discounted must not have that offer applied to both, nor lose it
-       * because the other room has none.
-       */
-      let offered = 0;
-      for (const r of roomRows) {
-        const roomRent = Number(r.baseRate) * nights;
-        offered += await this.discounts.bestFor(input.resortId, r.roomTypeId, roomRent, checkIn, r.id);
-      }
-      discount = offered;
-    } else {
-      discount = Number(input.discount);
-    }
+    // the same answer the form was given by `quote` — one copy, so the bill
+    // the clerk read is the bill the guest gets
+    const discount = await this.resolveDiscount(
+      input.resortId,
+      roomRows.map((r) => ({ id: r.id, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) })),
+      nights,
+      checkIn,
+      input.discount,
+      isAgent,
+    );
     /**
      * Nothing recorded is nothing recorded.
      *
@@ -471,16 +643,9 @@ export class BookingsService {
     });
 
     for (const room of p.rooms) {
-      const rates = await this.rooms.effectiveRates(
-        p.resortId,
-        room.roomTypeId,
-        wanted,
-        room.baseRate,
-        tx,
-      );
-      const unitPrice = rates.length
-        ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100
-        : room.baseRate;
+      // the same question the quote asked, so the price the form printed is
+      // the price written onto the item
+      const unitPrice = await this.nightlyPrice(p.resortId, room, wanted, tx);
       const item = await tx.bookingItem.create({
         data: { bookingId: created.id, itemKind: "ROOM", roomId: room.id, qty: 1, unitPrice: unitPrice as never },
       });

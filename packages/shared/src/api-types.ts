@@ -98,6 +98,41 @@ export interface BookingRow {
   due: number;
 }
 
+/** One printable line of a quoted bill: what it is, and what it comes to. */
+export interface QuoteLine {
+  kind: "ROOM" | "EXTRA_PERSON";
+  label: string;
+  unitPrice: number;
+  qty: number;
+  nights: number;
+  /** how many extra people this line is for; absent on a room line */
+  persons?: number;
+  amount: number;
+}
+
+/**
+ * What a stay will cost, answered before anything is created.
+ *
+ * The booking form cannot work this out on its own: the nightly rate may be
+ * seasonal, an untouched discount box still picks up the resort's standing
+ * offers, and the tax rules never reach the browser. So the server prices it
+ * with the same code that will charge it.
+ */
+export interface BookingQuote {
+  nights: number;
+  rent: number;
+  roomRent: number;
+  discount: number;
+  /** true when the discount came from a standing offer rather than the clerk */
+  discountIsAutomatic: boolean;
+  taxable: number;
+  taxRatePct: number;
+  tax: number;
+  taxLines: { code: string; label: string; ratePct: number; amount: number }[];
+  total: number;
+  lines: QuoteLine[];
+}
+
 export interface BookingDetail extends BookingRow {
   cancelState: string;
   /** present only for the agent who owns this booking, and only when the resort shows rates */

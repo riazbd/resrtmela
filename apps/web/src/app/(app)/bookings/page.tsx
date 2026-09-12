@@ -6,7 +6,7 @@ import { bookingHandoff } from "@/lib/booking-handoff";
 import { FileDown } from "lucide-react";
 import {
   api, client, money, dmy, iso,
-  type BookingDetail, type BookingRow, type RoomAvail, cur,
+  type BookingDetail, type BookingQuote, type BookingRow, type RoomAvail, cur,
 } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui";
 import { usePaymentMethods } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
+import { StayBill } from "./stay-bill";
+import { RoomChoice } from "./room-choice";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
 interface RoomTypeLite {
@@ -113,6 +115,45 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const extraMax = extraSlots.length;
   const extraCost = extraSlots.slice(0, extraPersons).reduce((sum, rate) => sum + rate, 0);
 
+  /**
+   * The bill, asked of the server rather than added up here.
+   *
+   * Three of the numbers are not in this browser: the nightly rate can be a
+   * seasonal one rather than the room's base rate, an untouched Discount box
+   * still picks up the resort's standing offers, and the tax rules are not
+   * shipped to the console at all. A sum done here would be confidently wrong
+   * in all three cases — and a bill that disagrees with the invoice is worse
+   * than no bill, because the clerk has already read it out to the guest.
+   *
+   * Keyed on everything the price depends on, so it re-asks as the clerk
+   * changes rooms, dates or the discount, and is not asked at all until a room
+   * is picked.
+   */
+  const quoteQ = useApi(
+    ["booking-quote", activeResort?.id, picked.join(","), checkIn, checkOut, extraPersons, isStaff ? discount : null],
+    () =>
+      api<BookingQuote>("/bookings/quote", {
+        method: "POST",
+        body: {
+          resortId: activeResort!.id,
+          roomIds: picked,
+          checkIn,
+          checkOut,
+          adults,
+          children,
+          extraPersons: extraPersons > 0 ? extraPersons : undefined,
+          discount: isStaff ? discount : undefined,
+        },
+      }),
+    {
+      enabled: open && !!activeResort && picked.length > 0 && !!checkIn && !!checkOut,
+      // keep the old figures on screen while the new ones are on their way,
+      // rather than blanking the bill on every keystroke
+      placeholderData: (prev) => prev,
+    },
+  );
+  const quote = quoteQ.data ?? null;
+
 
   const [walkIn, setWalkIn] = useState(false);
   const [isGroup, setIsGroup] = useState(false);
@@ -197,44 +238,16 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
             Rooms {loadingGrid && <span className="text-slate-400">· checking availability…</span>}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {grid.map((r) => {
-              const conflict = r.busyNights.length > 0;
-              const checked = picked.includes(r.roomId);
-              return (
-                <button
-                  key={r.roomId}
-                  disabled={conflict}
-                  onClick={() =>
-                    setPicked((p) => (checked ? p.filter((x) => x !== r.roomId) : [...p, r.roomId]))
-                  }
-                  className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    conflict
-                      ? "cursor-not-allowed border-red-200 bg-red-50 text-red-400"
-                      : checked
-                        ? "border-brand-500 bg-brand-50 text-brand-900 ring-1 ring-brand-500"
-                        : "border-slate-200 bg-white hover:border-brand-300"
-                  }`}
-                >
-                  <div className="font-medium">{r.roomName}</div>
-                  {/* The agent's own rate comes from the server, which knows
-                      whether their terms are a percentage or a flat fee. This
-                      used to be worked out here as `rate × (1 − pct/100)`,
-                      which quietly showed a flat-fee agent the wrong price. */}
-                  <div className="text-[11px]">
-                    {r.agentRate != null ? (
-                      <>
-                        <span className="text-slate-400 line-through">{money(Number(r.baseRate))}</span>
-                        {" "}<span className="font-bold text-brand-700">{money(r.agentRate)}</span>
-                        <span className="text-slate-400"> your price</span>
-                      </>
-                    ) : (
-                      <>{money(Number(r.baseRate))}</>
-                    )}
-                    {conflict && ` · busy (${r.busyNights.length}n)`}
-                  </div>
-                </button>
-              );
-            })}
+            {grid.map((r) => (
+              <RoomChoice
+                key={r.roomId}
+                room={r}
+                checked={picked.includes(r.roomId)}
+                onToggle={(id) =>
+                  setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
+                }
+              />
+            ))}
           </div>
         </div>
 
@@ -282,6 +295,8 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
             <Field label={`Discount (${cur()})`}><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></Field>
           )}
         </div>
+
+        <StayBill quote={quote} advance={advAmount} loading={quoteQ.isFetching} />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label={`Advance (${cur()})`}><Input type="number" min={0} value={advAmount} onChange={(e) => setAdvAmount(Number(e.target.value))} /></Field>
