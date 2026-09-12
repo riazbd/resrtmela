@@ -10,6 +10,7 @@ import { PLAN_FEATURES } from "@rh/shared";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { HowItArrived, paymentMethodsFrom } from "./how-it-arrived";
+import { POLICY_FIELDS } from "./policy-fields";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 import { monthOf } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
@@ -1408,14 +1409,6 @@ const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
  * redeploy. The sweep runs hourly on its own; the button is here so a changed
  * term can be seen taking effect rather than taken on trust.
  */
-const POLICY_FIELDS: { key: string; label: string; hint: string; unit?: string }[] = [
-  { key: "billing.graceDays", label: "Grace period", unit: "days", hint: "after the due date before the bill is marked overdue. bKash and bank transfers have a human in the loop — a day is not enough." },
-  { key: "billing.suspendAfterDays", label: "Suspend after", unit: "days", hint: "days past the due date before the resort stops accepting new entries. Reads and exports always stay open." },
-  { key: "billing.noticeDays", label: "Notice before", unit: "days", hint: "warning sent before a trial ends and before a suspension lands." },
-  { key: "platform.name", label: "Platform name", hint: "how the platform signs the mail it sends tenants about their account." },
-  { key: "platform.supportEmail", label: "Support email", hint: "shown to tenants who need to sort out a bill." },
-  { key: "platform.supportPhone", label: "Support phone", hint: "same, for the ones who would rather call." },
-];
 
 /**
  * What a pack costs, and where the buyer sends the money.
@@ -1711,7 +1704,10 @@ function PackPricesCard() {
           value={payTo}
           onChange={(e) => setPayTo(e.target.value)}
           rows={3}
-          placeholder="bKash 01XXXXXXXXX (personal) — send the amount, then WhatsApp the TrxID"
+          placeholder={
+            "e.g. bKash (personal) 01XXXXXXXXX — send the amount, then WhatsApp the TrxID\n" +
+            "e.g. bank transfer: <account name>, <bank>, A/C <number>"
+          }
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
       </label>
@@ -1778,6 +1774,7 @@ function PolicyTab() {
                 <input
                   value={values[f.key] ?? ""}
                   onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}
+                  placeholder={f.placeholder}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
                 {f.unit && <span className="text-xs text-slate-400">{f.unit}</span>}
