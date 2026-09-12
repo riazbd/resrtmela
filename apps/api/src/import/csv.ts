@@ -66,24 +66,56 @@ const MONTHS: Record<string, number> = {
   jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
-/** Sheet formats: 17-Aug-2026 | 8/18/2026 (M/D/Y) | 2026-08-18 → UTC midnight */
+/**
+ * A year as a sheet writes it.
+ *
+ * Two digits mean this century. A booking register is about now — `26` is
+ * 2026 — and `99` on one is somebody's typo rather than 1999; reading it as
+ * 2099 keeps it visible as a wrong date instead of silently inventing a
+ * plausible past one.
+ */
+function sheetYear(raw: string): number {
+  const n = Number(raw);
+  return raw.length <= 2 ? 2000 + n : n;
+}
+
+/**
+ * Sheet formats: 17-Aug-2026 | 17-Aug-26 | 8/18/2026 | 8/18/26 | 2026-08-18,
+ * all to **UTC midnight**.
+ *
+ * The two-digit year is not a nicety. Without it `21-Aug-26` matched none of
+ * the patterns and fell through to `new Date(s)`, which reads a bare date as
+ * *local* midnight — 18:00 UTC the previous day in Dhaka. Every reader takes
+ * the UTC date part, because every other branch here produces UTC midnight, so
+ * an imported sheet arrived with all of its dates one day early. The sheet
+ * that found it had 168 rows and not one four-digit year in it.
+ */
 export function parseSheetDate(raw: string | undefined | null): Date | null {
   if (!raw) return null;
   const s = raw.trim();
   if (!s) return null;
 
-  let m = s.match(/^(\d{1,2})[-/\s.]+([A-Za-z]{3,})[-/\s.]+(\d{4})$/);
+  let m = s.match(/^(\d{1,2})[-/\s.]+([A-Za-z]{3,})[-/\s.]+(\d{2}|\d{4})$/);
   if (m) {
     const mo = MONTHS[m[2]!.slice(0, 3).toLowerCase()];
-    if (mo !== undefined) return new Date(Date.UTC(Number(m[3]), mo, Number(m[1])));
+    if (mo !== undefined) return new Date(Date.UTC(sheetYear(m[3]!), mo, Number(m[1])));
   }
-  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])));
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (m) return new Date(Date.UTC(sheetYear(m[3]!), Number(m[1]) - 1, Number(m[2])));
   m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
 
+  /**
+   * Last resort, and deliberately dragged to UTC midnight.
+   *
+   * `new Date(s)` reads anything it recognises as local time, which is the
+   * bug above in general form: whatever this parses, the rest of the platform
+   * will read its UTC date part. Taking the *local* Y-M-D it decided on and
+   * rebuilding it in UTC keeps the day the sheet wrote.
+   */
   const fallback = new Date(s);
-  return isNaN(fallback.getTime()) ? null : fallback;
+  if (isNaN(fallback.getTime())) return null;
+  return new Date(Date.UTC(fallback.getFullYear(), fallback.getMonth(), fallback.getDate()));
 }
 
 /** "৳ 12,500 " → 12500 | "" → 0 */
