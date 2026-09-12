@@ -3,10 +3,10 @@
  *
  * These lived in three places: the API's own service return types, a block of
  * interfaces in the web app's api.ts, and a hand-rolled copy in whichever page
- * or screen needed one — 64 of them across the console and 9 more in the
- * mobile app. Three copies of one contract is three chances to drift, and the
- * drift is silent: a renamed field type-checks on both sides and breaks only
- * in the browser.
+ * needed one — 64 of them across the console, plus 9 more in an Expo app that
+ * has since been deleted. Three copies of one contract is three chances to
+ * drift, and the drift is silent: a renamed field type-checks on both sides
+ * and breaks only in the browser.
  *
  * One definition, imported by everyone. Where the API and this file could
  * still disagree, the API imports from here too (see common/page.ts).

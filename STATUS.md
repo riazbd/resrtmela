@@ -20,9 +20,10 @@ A multi-tenant SaaS for resort operations: bookings, front desk, restaurant,
 expenses, payroll, agents, reports. Its customers are resort owners; its
 product is the software; its revenue is subscriptions.
 
-Turborepo + pnpm. NestJS 11 + Prisma → MySQL 8 / MariaDB. Next.js 15 console,
-Expo mobile app. ~22,000 lines of source across `apps/api`, `apps/web`,
-`apps/mobile`, `packages/db`, `packages/shared`.
+Turborepo + pnpm. NestJS 11 + Prisma → MySQL 8 / MariaDB. Next.js 15 console —
+responsive, and the only client there is; the Expo app was deleted on
+2026-09-13. ~37,600 lines of source across `apps/api`, `apps/web`,
+`packages/db`, `packages/shared`.
 
 **One thing to hold on to:** it is a platform, not one resort's software. Sky
 Eco Resort is a tenant whose spreadsheet the domain model was read out of. Its

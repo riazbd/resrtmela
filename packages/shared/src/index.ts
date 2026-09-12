@@ -2,7 +2,7 @@ export * from "./api-types";
 export * from "./client";
 export * from "./import-samples";
 
-/** Cross-app constants shared by api, web and mobile. */
+/** Cross-app constants shared by the API and the console. */
 
 export const ROLE = {
   SUPER_ADMIN: "SUPER_ADMIN",

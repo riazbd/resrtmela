@@ -13,5 +13,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "exclude": ["node_modules", "dist", ".next", ".expo"]
+  "exclude": ["node_modules", "dist", ".next"]
 }

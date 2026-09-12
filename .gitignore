@@ -6,8 +6,6 @@ node_modules/
 dist/
 .next/
 out/
-.expo/
-web-build/
 # TypeScript's incremental build cache: a machine-local file that changes on
 # every typecheck, so tracking it puts noise in a diff nobody can review
 *.tsbuildinfo

@@ -100,8 +100,8 @@ export async function download(path: string, fallbackName: string): Promise<void
 }
 
 /**
- * The response shapes live in @rh/shared, so the API, this console and the
- * mobile app cannot drift apart. They are re-exported here because many files
+ * The response shapes live in @rh/shared, so the API and this console cannot
+ * drift apart. They are re-exported here because many files
  * import them from "@/lib/api", and moving the definition should not mean
  * touching every one of them.
  */

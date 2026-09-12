@@ -110,7 +110,7 @@ Only change-while-logged-in exists (`POST /auth/me/password`). Add OTP-based res
 **Superseded (2026-09-11):** built, but not as OTP — a mailed single-use reset link, requestable by either email or phone. See `docs/superpowers/specs/2026-09-11-two-sided-platform-design.md` §4.4.
 
 ### 8. Mobile app release
-The Expo app (`apps/mobile`) is feature-complete in code but not built/published to the Play Store. Guest booking works on the web meanwhile. Requires: EAS build, store listing, `EXPO_PUBLIC_API_URL` already set in `.env`.
+**Dropped (2026-09-13):** `apps/mobile` is deleted. It was a guest app, and the platform stopped having guests on 2026-09-11 — the endpoints it called are gone, so it was a client for a server that no longer exists. It had also never been built once: no `android.package`, no `ios.bundleIdentifier`, no push, no offline, no Bangla. The console is responsive and is how staff work from a phone. If a native app is ever wanted it is a new product decision, not a release of this one.
 
 ### 9. Terms of Service & Privacy Policy pages
 Public signup exists (`/signup`) — legally the SaaS should ship both pages. Add `apps/web/src/app/(public)/legal/...` and link from the footer + signup form.

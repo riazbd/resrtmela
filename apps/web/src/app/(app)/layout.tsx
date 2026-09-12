@@ -95,7 +95,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const gate = consoleGate({ loading, me, activeResort });
 
   useEffect(() => {
-    // guests don't get the console — they use the mobile app
+    // nobody is signed in — `consoleGate` says so before it says anything else
     if (gate === "login") router.replace("/login");
   }, [gate, router]);
 

@@ -1,5 +1,5 @@
 /**
- * One typed client, shared by the console and the mobile app.
+ * One typed client for every caller of the API.
  *
  * The problem it solves is not typing for its own sake. There were 164 routes
  * and three separate descriptions of what they return — the API's service
@@ -11,8 +11,8 @@
  * comes from api-types.ts — the same file the API itself imports its page
  * envelope from.
  *
- * The transport is injected: the console keeps its token in localStorage and
- * the mobile app in secure storage, and neither concern belongs here.
+ * The transport is injected: the console keeps its token in localStorage, and
+ * where a token lives is not this file's concern.
  */
 import type {
   AgencyEmployee,
