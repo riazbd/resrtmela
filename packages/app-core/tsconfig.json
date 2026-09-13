@@ -4,7 +4,15 @@
     "outDir": "dist",
     "rootDir": ".",
     "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM"]
+    /**
+     * DOM for the *tests*, which render with react-dom in jsdom, and node for
+     * the purity guard, which reads `src` off the disk. Neither is a licence
+     * for `src` itself: `no-browser-in-here.spec.ts` scans every file in there
+     * for window, document, localStorage, navigator and react-dom, because a
+     * compiler setting that permits something is not the same as a rule.
+     */
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
   },
   "include": ["src", "test"]
 }

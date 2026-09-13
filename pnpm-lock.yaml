@@ -217,6 +217,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@19.2.5(@types/react@19.2.5))(@types/react@19.2.5)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.20.1
       '@types/react':
         specifier: 19.2.5
         version: 19.2.5
@@ -266,6 +269,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.20.1
       typescript:
         specifier: ^5.7.2
         version: 5.8.3

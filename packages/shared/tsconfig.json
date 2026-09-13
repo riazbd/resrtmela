@@ -3,7 +3,21 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "declaration": true
+    "declaration": true,
+    /**
+     * Node's types, not the DOM's.
+     *
+     * This package is compiled by the API, by Next, and by Metro, and each of
+     * those supplies its own globals — so it built cleanly everywhere except
+     * on its own, where `tsc -p` uses the base `lib: ["ES2022"]` and nothing
+     * else. `URLSearchParams`, `fetch` and `RequestInit` are all standard in
+     * Node 18+, in every browser, and in React Native.
+     *
+     * `"DOM"` would also have fixed it, and is the wrong fix: it would admit
+     * `window` and `document` to a package whose whole purpose is to run where
+     * neither exists.
+     */
+    "types": ["node"]
   },
   "include": ["src"]
 }
