@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { BookingState } from "@rh/db";
-import { ROLE, type Role, type JwtClaims } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, sheetReceiptName } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { agencyOf } from "../common/selling-access";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
@@ -451,6 +451,54 @@ export class ReportsService {
     const nameOf = new Map(names.map((u) => [u.id, u.name]));
 
     /**
+     * The receipts nobody is credited with, split by the name the sheet wrote.
+     *
+     * The owner's spreadsheet had a receiver column and the importer put what
+     * it said into the note — but the lookup for a matching account found
+     * nothing, so `receivedById` stayed null and this report called the whole
+     * lot "Unassigned". 39 of the client's 42 payments name a person in the
+     * next column along.
+     *
+     * Grouped in the database like everything else here, and by type for the
+     * same reason: a refund went back out and subtracts. Notes that are not a
+     * sheet's receiver line — "imported", or anything somebody typed — fold
+     * back into Unassigned, which is what they are.
+     */
+    const noteRows = await this.prisma.payment.groupBy({
+      by: ["note", "paymentType"],
+      where: { ...where, receivedById: null },
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const fromSheet = new Map<string, { count: number; total: number }>();
+    let anonCount = 0;
+    let anonTotal = 0;
+    for (const g of noteRows) {
+      const sign = g.paymentType === "REFUND" ? -1 : 1;
+      const amount = sign * Number(g._sum.amount ?? 0);
+      const who = sheetReceiptName(g.note);
+      if (!who) {
+        anonCount += g._count._all;
+        anonTotal += amount;
+        continue;
+      }
+      const entry = fromSheet.get(who) ?? { count: 0, total: 0 };
+      entry.count += g._count._all;
+      entry.total += amount;
+      fromSheet.set(who, entry);
+    }
+
+    /**
+     * One key per card, because two of them can now have no user id.
+     *
+     * The screen used `userId ?? "x"` as its React key, which was fine while
+     * exactly one row could be null and stops being fine the moment three
+     * sheet names appear.
+     */
+    const keyOf = (p: { receivedById: number | null; note: string | null }) =>
+      p.receivedById != null ? `u:${p.receivedById}` : `s:${sheetReceiptName(p.note) ?? ""}`;
+
+    /**
      * How the money arrived, which on a platform with no payment gateway is
      * half the question.
      *
@@ -502,26 +550,57 @@ export class ReportsService {
      * of a second unbounded read, and are named `recentCodes` rather than
      * `codes` so nobody reads them as the whole of it.
      */
-    const codesOf = new Map<number | null, string[]>();
+    const codesOf = new Map<string, string[]>();
     for (const p of rows) {
-      const seen = codesOf.get(p.receivedById) ?? [];
+      const seen = codesOf.get(keyOf(p)) ?? [];
       if (!seen.includes(p.booking.code)) seen.push(p.booking.code);
-      codesOf.set(p.receivedById, seen);
+      codesOf.set(keyOf(p), seen);
     }
 
     return {
       /** the period's whole take, so the cards never have to be added up by eye */
       total: round2(grouped.reduce((sum, g) => sum + Number(g._sum.amount ?? 0), 0)),
       byMethod,
-      rows: grouped
-        .map((g) => ({
-          userId: g.receivedById,
-          name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
-          count: g._count._all,
-          total: round2(Number(g._sum.amount ?? 0)),
-          recentCodes: codesOf.get(g.receivedById) ?? [],
-        }))
-        .sort((a, b) => b.total - a.total),
+      /**
+       * One card per person: the accounts first, then the names only a
+       * spreadsheet knows, then whatever is left over with no name at all.
+       *
+       * `fromSheet` is on every row because the two kinds are not the same
+       * claim. An account means somebody pressed a button in the app and the
+       * app recorded who. A sheet name means the owner wrote it in a column.
+       * Both are worth showing; a report that blurs them is overstating what
+       * it knows.
+       */
+      rows: [
+        ...grouped
+          .filter((g) => g.receivedById != null)
+          .map((g) => ({
+            userId: g.receivedById,
+            name: nameOf.get(g.receivedById!) ?? "Unknown",
+            count: g._count._all,
+            total: round2(Number(g._sum.amount ?? 0)),
+            fromSheet: false,
+            recentCodes: codesOf.get(`u:${g.receivedById}`) ?? [],
+          })),
+        ...[...fromSheet.entries()].map(([name, v]) => ({
+          userId: null,
+          name,
+          count: v.count,
+          total: round2(v.total),
+          fromSheet: true,
+          recentCodes: codesOf.get(`s:${name}`) ?? [],
+        })),
+        ...(anonCount > 0
+          ? [{
+              userId: null,
+              name: "Unassigned",
+              count: anonCount,
+              total: round2(anonTotal),
+              fromSheet: false,
+              recentCodes: codesOf.get("s:") ?? [],
+            }]
+          : []),
+      ].sort((a, b) => b.total - a.total),
       recent: rows.map((p) => ({
         id: p.id,
         at: p.receivedAt,
@@ -532,7 +611,9 @@ export class ReportsService {
         // a refund reads as money leaving, and a line that does not say so
         // looks like a collection
         type: p.paymentType,
-        receivedBy: p.receivedBy?.name ?? null,
+        receivedBy: p.receivedBy?.name ?? sheetReceiptName(p.note),
+        /** true when that name came out of a spreadsheet, not out of an account */
+        fromSheet: p.receivedById == null && sheetReceiptName(p.note) != null,
       })),
     };
   }

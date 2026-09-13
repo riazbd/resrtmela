@@ -18,6 +18,13 @@ interface SourceRow { source: string; bookings: number; rent: number; due: numbe
 interface CollectorRow {
   userId: number | null; name: string; count: number; total: number;
   /**
+   * True when the name came out of an imported spreadsheet rather than an
+   * account. The two are different claims — the app recording who pressed the
+   * button, against the owner writing a name in a column — and a card that
+   * showed them identically would overstate what the report knows.
+   */
+  fromSheet?: boolean;
+  /**
    * A sample of the bookings behind the total, not all of them.
    *
    * This was `codes`, and the report stopped sending it when the totals moved
@@ -39,7 +46,7 @@ interface Collectors {
   /** `method` is null for receipts imported before a method column existed */
   byMethod: { method: string | null; count: number; total: number }[];
   rows: CollectorRow[];
-  recent: { id: number; at: string; amount: number; method: string | null; bookingCode: string; guest: string; type: string; receivedBy: string | null }[];
+  recent: { id: number; at: string; amount: number; method: string | null; bookingCode: string; guest: string; type: string; receivedBy: string | null; fromSheet?: boolean }[];
 }
 interface FiscalYear { label: string; from: string; to: string }
 interface Metrics {
@@ -307,8 +314,21 @@ export default function ReportsPage() {
                 <div className="mb-1.5 text-xs font-semibold text-slate-500">Who took it</div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {collectors.rows.map((r) => (
-                    <div key={r.userId ?? "x"} className="rounded-lg border border-slate-200 p-3">
-                      <div className="text-sm font-semibold">{r.name}</div>
+                    <div
+                      key={r.userId != null ? `u${r.userId}` : `s${r.name}`}
+                      className="rounded-lg border border-slate-200 p-3"
+                    >
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-sm font-semibold">{r.name}</span>
+                        {r.fromSheet && (
+                          <span
+                            className="rounded bg-slate-100 px-1 py-0.5 text-[10px] font-medium text-slate-500"
+                            title="This name came from your imported spreadsheet, not from an account in the app"
+                          >
+                            from the sheet
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-400">{r.count} payment(s)</div>
                       <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
                       <div className="mt-1 text-[10px] text-slate-400">
@@ -324,13 +344,18 @@ export default function ReportsPage() {
                   reason is not a fault: a spreadsheet has no column for who
                   took the cash, so the importer refused to invent one.
                 */}
-                {collectors.rows.some((r) => r.userId == null) && (
+                {collectors.rows.some((r) => r.fromSheet) && (
                   <p className="mt-2 text-xs text-slate-500">
-                    <b>Unassigned</b> is money that arrived without a name against it — a
-                    spreadsheet imported before the importer read a <b>Received By</b> column, or
-                    one whose column was blank. Anything recorded in the app carries the name of
-                    whoever entered it, and a fresh import with that column filled in carries the
-                    name from the sheet.
+                    <b>From the sheet</b> means the name your spreadsheet recorded in its
+                    &quot;Received By&quot; column. Nobody by that name has an account here, so the
+                    app cannot confirm it — it is your own record, shown as such.
+                  </p>
+                )}
+                {collectors.rows.some((r) => r.name === "Unassigned") && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    <b>Unassigned</b> is money that arrived with no name against it at all — an
+                    import whose receiver column was blank or absent. Anything recorded in the app
+                    carries the name of whoever entered it.
                   </p>
                 )}
               </div>
@@ -357,7 +382,16 @@ export default function ReportsPage() {
                         <tr key={p.id} className="hover:bg-slate-50/50">
                           <Td className="whitespace-nowrap text-xs text-slate-500">{dmy(p.at)}</Td>
                           <Td className="text-xs">
-                            {p.receivedBy ?? <span className="text-slate-400">not recorded</span>}
+                            {p.receivedBy ? (
+                              <>
+                                {p.receivedBy}
+                                {p.fromSheet && (
+                                  <span className="ml-1 text-[10px] text-slate-400">(sheet)</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-slate-400">not recorded</span>
+                            )}
                           </Td>
                           <Td className="text-xs">{p.guest}</Td>
                           <Td className="text-xs text-slate-500">{p.bookingCode}</Td>

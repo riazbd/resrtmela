@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, sheetReceiptNote } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { normalizePhone, phoneKey, nightsBetween, round2 } from "../common/dates";
 import { AuditService } from "../common/audit.service";
@@ -582,7 +582,7 @@ export class ImportService {
                 paymentType: "ADVANCE",
                 receivedById,
                 receivedAt: row.bookingDate ?? new Date(),
-                note: row.advanceReceiver ? `received by ${row.advanceReceiver} (sheet)` : "imported",
+                note: row.advanceReceiver ? sheetReceiptNote(row.advanceReceiver) : "imported",
               },
             });
           }
