@@ -34,3 +34,11 @@ export {
   type OutboxValue,
   type OutboxProviderProps,
 } from "./outbox";
+export {
+  QueryProvider,
+  useApi,
+  useMutation,
+  useQueryClient,
+  worthRetrying,
+  keys,
+} from "./query";
