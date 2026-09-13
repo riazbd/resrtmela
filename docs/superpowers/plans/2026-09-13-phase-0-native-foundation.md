@@ -46,9 +46,34 @@ The one thing that is not portable between the console and the app is
 Twelve files, no state, no storage, no React. Moved, then re-exported from their
 old paths so no call site in `apps/web` changes.
 
-`console-access.ts` · `agency-calendar.ts` · `contact.ts` · `calendar-month.ts` ·
-`resort-dates.ts` · `calendar-bars.ts` · `brand.ts` · `resort-options.ts` ·
-`booking-handoff.ts` · `password-reset.ts` · `import-outcomes.ts` · `api-url.ts`
+Planned as twelve files. Reading them first cut it to ten, in two batches:
+
+**Batch 1, moved unchanged (7)** — `console-access.ts` · `agency-calendar.ts` ·
+`calendar-month.ts` · `calendar-bars.ts` · `booking-handoff.ts` ·
+`password-reset.ts` · `resort-dates.ts`
+
+**Batch 2, need a signature change (3)** — `contact.ts` (imports `@rh/shared`,
+which becomes relative) · `brand.ts` and `api-url.ts` (both read
+`process.env.NEXT_PUBLIC_API_URL`, which does not exist on a phone: the
+normalisation is shared, the value is passed in)
+
+**Two files the plan was wrong about, corrected on reading them:**
+
+- **`resort-options.ts` is not pure.** It imports `@/lib/api` and `@/lib/query`
+  — it is a React hook, not a rule. It moves in stage B, not here.
+- **`import-outcomes.ts` stays in `apps/web` this phase.** Its `style` values
+  are Tailwind class strings, which mean nothing in React Native. The labels
+  deserve to be shared and the classes do not, but the semantic vocabulary that
+  would replace them can only be chosen with the native import screen in front
+  of me — which is phase 2. Splitting it now is the same guess this project
+  refused to make for `MonthGrid`.
+
+**One name collision, found by moving them.** `calendar-month.ts` and
+`resort-dates.ts` both exported `monthOf`, and they are different functions: one
+truncates a date to its month, the other does arithmetic on one. A package with
+a single front door cannot export both, so `resort-dates`'s becomes
+`shiftMonth` in shared and the console's shim aliases it back. No call site in
+the console changed.
 
 **The net is already built.** These existing console specs cover the surface and
 must pass unchanged, before and after:

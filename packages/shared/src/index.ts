@@ -2,6 +2,23 @@ export * from "./api-types";
 export * from "./client";
 export * from "./import-samples";
 
+/**
+ * The rules that decide behaviour, moved out of `apps/web/src/lib` so the
+ * phone can reach them too.
+ *
+ * These are pure: no React, no storage, no `window`. Anything needing one of
+ * those is in `@rh/app-core` instead, and anything needing a browser stays in
+ * the console. The point of moving them is not tidiness — it is that a
+ * permission rule with two implementations will eventually have two answers.
+ */
+export * from "./console-access";
+export * from "./agency-calendar";
+export * from "./calendar-month";
+export * from "./calendar-bars";
+export * from "./booking-handoff";
+export * from "./password-reset";
+export * from "./resort-dates";
+
 /** Cross-app constants shared by the API and the console. */
 
 export const ROLE = {
