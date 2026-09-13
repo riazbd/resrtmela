@@ -251,6 +251,16 @@ export class PlatformController {
   @Post("platform/subscriptions/:id/cancel") cancel(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.cancelSubscription(req.user, id);
   }
+  /** The platform's cash book: what came in, from whom, and who confirmed it. */
+  @Get("platform/money-received") moneyReceived(
+    @Req() req: AuthedRequest,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.platform.moneyReceived(req.user, { from, to, take: take ? Number(take) : undefined });
+  }
+
   @Get("platform/dues") dues(@Req() req: AuthedRequest, @Query("resortId") resortId?: string, @Query("status") status?: string) {
     return this.platform.listDues(req.user, { resortId: resortId ? Number(resortId) : undefined, status });
   }

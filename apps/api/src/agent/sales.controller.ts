@@ -68,6 +68,15 @@ class SendDto {
 
 class DocPaymentDto {
   @IsNumber() @Min(0.01) amount!: number;
+  /**
+   * How the money arrived — CASH, BKASH, BANK.
+   *
+   * Declared here because it has to be: the app validates with
+   * `whitelist: true`, which silently drops any field a DTO does not name. A
+   * screen sending BKASH would have been recorded as the default, with nothing
+   * anywhere saying so.
+   */
+  @IsOptional() @IsString() @MaxLength(24) method?: string;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
   @IsOptional() @IsString() @MaxLength(64) clientRef?: string;
 }
@@ -81,6 +90,16 @@ class StatusDto {
 @UseGuards(AuthGuard)
 export class SalesController {
   constructor(@Inject(SalesService) private readonly sales: SalesService) {}
+
+  /** What this agency took, and who took it. */
+  @Get("money-received") moneyReceived(
+    @Req() req: AuthedRequest,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.sales.moneyReceived(req.user, { from, to, take: take ? Number(take) : undefined });
+  }
 
   @Get() list(
     @Req() req: AuthedRequest,

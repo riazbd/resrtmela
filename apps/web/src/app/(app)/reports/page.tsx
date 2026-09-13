@@ -15,7 +15,7 @@ interface AgentRow {
 }
 interface SourceRow { source: string; bookings: number; rent: number; due: number }
 interface CollectorRow {
-  userId: number | null; name: string; advances: number; total: number;
+  userId: number | null; name: string; count: number; total: number;
   /**
    * A sample of the bookings behind the total, not all of them.
    *
@@ -29,7 +29,7 @@ interface CollectorRow {
 }
 interface Collectors {
   rows: CollectorRow[];
-  recent: { id: number; at: string; amount: number; method: string; bookingCode: string; guest: string; receivedBy: string | null }[];
+  recent: { id: number; at: string; amount: number; method: string; bookingCode: string; guest: string; type: string; receivedBy: string | null }[];
 }
 interface FiscalYear { label: string; from: string; to: string }
 interface Metrics {
@@ -185,12 +185,15 @@ export default function ReportsPage() {
       <Tabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
       {tab === "Summary" && collectors && collectors.rows.length > 0 && (
-        <Card title="Advance collectors (who received cash)">
+        <Card title="Who received money">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {collectors.rows.map((r) => (
               <div key={r.userId ?? "x"} className="rounded-lg border border-slate-200 p-3">
                 <div className="text-sm font-semibold">{r.name}</div>
-                <div className="text-xs text-slate-400">{r.advances} advance(s)</div>
+                {/* every kind of payment, not only the deposits: a restaurant
+                    bill settled to a room and a balance taken at check-out are
+                    both money this person handled */}
+                <div className="text-xs text-slate-400">{r.count} payment(s)</div>
                 <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
                 <div className="mt-1 text-[10px] text-slate-400">
                   {(r.recentCodes ?? []).slice(0, 6).join(", ")}
@@ -199,6 +202,49 @@ export default function ReportsPage() {
               </div>
             ))}
           </div>
+
+          {/*
+            The receipts themselves, under the totals.
+            The data was already in the payload and nothing drew it, so the
+            report answered "how much did each person take" and not "when, from
+            whom, and what for" — which is the question somebody asks when a
+            number looks wrong.
+          */}
+          {collectors.recent.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-xs font-semibold text-slate-500">
+                Recent receipts ({collectors.recent.length})
+              </div>
+              <Table minWidth={720}>
+                <thead className="border-b border-slate-100">
+                  <tr>
+                    <Th>When</Th>
+                    <Th>Who took it</Th>
+                    <Th>From</Th>
+                    <Th>For</Th>
+                    <Th>How</Th>
+                    <Th className="text-right">Amount</Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                {collectors.recent.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50/50">
+                    <Td className="whitespace-nowrap text-xs text-slate-500">{dmy(p.at)}</Td>
+                    <Td className="text-xs">{p.receivedBy ?? "—"}</Td>
+                    <Td className="text-xs">{p.guest}</Td>
+                    <Td className="text-xs text-slate-500">{p.bookingCode}</Td>
+                    <Td className="text-xs text-slate-500">{p.method}</Td>
+                    {/* a refund is money leaving; a line that does not say so
+                        reads as a collection */}
+                    <Td className={`text-right text-xs font-semibold ${p.type === "REFUND" ? "text-red-600" : ""}`}>
+                      {p.type === "REFUND" ? `− ${money(p.amount)}` : money(p.amount)}
+                    </Td>
+                  </tr>
+                ))}
+                </tbody>
+              </Table>
+            </div>
+          )}
         </Card>
       )}
 

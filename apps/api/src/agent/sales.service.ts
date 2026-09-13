@@ -574,6 +574,74 @@ export class SalesService {
     return { id, paid, due: round2(totals.total - paid), status: settled ? "PAID" : doc.status };
   }
 
+  /**
+   * What this agency took, and who took it.
+   *
+   * The same question the resort's collectors report answers, asked of the
+   * agency's own side. An owner with staff needs it for the reason there is no
+   * gateway: money arrives in somebody's hand, and the only record of whose is
+   * what that person entered.
+   *
+   * Totals are grouped in the database so they are exact over every row; the
+   * list underneath is capped, because a list of recent receipts is meant to
+   * be recent.
+   */
+  async moneyReceived(claims: JwtClaims, range: { from?: string; to?: string; take?: number }) {
+    const ctx = await this.agency.require(claims, SALES);
+    const where = {
+      salesDoc: { agencyId: ctx.agencyId },
+      ...(range.from && range.to
+        ? { receivedAt: { gte: new Date(range.from), lt: new Date(range.to) } }
+        : {}),
+    };
+
+    const grouped = await this.prisma.salesPayment.groupBy({
+      by: ["receivedById"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const names = await this.prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.receivedById).filter((id): id is number => id != null) } },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(names.map((u) => [u.id, u.name]));
+
+    const rows = await this.prisma.salesPayment.findMany({
+      where,
+      include: {
+        receivedBy: { select: { name: true } },
+        salesDoc: { select: { number: true, clientName: true, kind: true } },
+      },
+      orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+      take: Math.min(range.take ?? 200, 500),
+    });
+
+    return {
+      total: round2(grouped.reduce((sum, g) => sum + Number(g._sum.amount ?? 0), 0)),
+      rows: grouped
+        .map((g) => ({
+          userId: g.receivedById,
+          name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
+          count: g._count._all,
+          total: round2(Number(g._sum.amount ?? 0)),
+        }))
+        .sort((a, b) => b.total - a.total),
+      recent: rows.map((p) => ({
+        id: Number(p.id),
+        at: p.receivedAt,
+        amount: Number(p.amount),
+        method: p.method,
+        /** whose money it was */
+        from: p.salesDoc.clientName,
+        /** what it was for */
+        document: p.salesDoc.number,
+        receivedBy: p.receivedBy?.name ?? null,
+        note: p.note,
+      })),
+    };
+  }
+
   // ─────────────────────────── plumbing ───────────────────────────
 
   /**
