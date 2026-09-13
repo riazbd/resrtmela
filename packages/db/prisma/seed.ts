@@ -238,18 +238,29 @@ async function main() {
   ] as const) {
     await prisma.emailCredit.create({ data: { userId: ownerId, credits, purchasedAt: at(-40, 12) } });
   }
+  /**
+   * A pack of credits, and the charge it raises, both belong to the *account*.
+   *
+   * `accountId` became required on both when an agency became a customer in
+   * its own right (18d921d) — an agency has no resort, so a charge hung off
+   * `resortId` alone had nobody to bill. The seed was never updated and has
+   * not completed since. `resortId` stays beside it: which of a chain's
+   * properties the credits were bought for is still worth saying.
+   */
+  const skyAccount = world.owners.skyEco.id;
+  const coxAccount = world.owners.coxBay.id;
   await prisma.emailCreditOrder.createMany({
     data: [
-      { userId: sky.admin.id, resortId: sky.resort.id, credits: 2000, price: 1800, status: "APPROVED", clientRef: `ord-${sky.resort.id}-1`, note: "Paid by bKash, trx 9F2K1L", decidedById: world.platformOwner.id, decidedAt: at(-40, 12), createdAt: at(-41, 18) },
-      { userId: sky.admin.id, resortId: sky.resort.id, credits: 10000, price: 7500, status: "PENDING", clientRef: `ord-${sky.resort.id}-2`, note: "Sending the transfer tomorrow", createdAt: at(-1, 17) },
-      { userId: cox.admin.id, resortId: cox.resort.id, credits: 500, price: 500, status: "REJECTED", clientRef: `ord-${cox.resort.id}-1`, note: "No payment received against this request", decidedById: world.platformOwner.id, decidedAt: at(-3, 11), createdAt: at(-6, 9) },
+      { userId: sky.admin.id, accountId: skyAccount, resortId: sky.resort.id, credits: 2000, price: 1800, status: "APPROVED", clientRef: `ord-${sky.resort.id}-1`, note: "Paid by bKash, trx 9F2K1L", decidedById: world.platformOwner.id, decidedAt: at(-40, 12), createdAt: at(-41, 18) },
+      { userId: sky.admin.id, accountId: skyAccount, resortId: sky.resort.id, credits: 10000, price: 7500, status: "PENDING", clientRef: `ord-${sky.resort.id}-2`, note: "Sending the transfer tomorrow", createdAt: at(-1, 17) },
+      { userId: cox.admin.id, accountId: coxAccount, resortId: cox.resort.id, credits: 500, price: 500, status: "REJECTED", clientRef: `ord-${cox.resort.id}-1`, note: "No payment received against this request", decidedById: world.platformOwner.id, decidedAt: at(-3, 11), createdAt: at(-6, 9) },
     ],
   });
   await prisma.platformCharge.createMany({
     data: [
-      { resortId: sky.resort.id, kind: "EMAIL_CREDITS", description: "2,000 email credits", amount: 1800, status: "PAID", clientRef: `chg-${sky.resort.id}-1`, createdById: world.platformOwner.id, paidAt: at(-39, 10), note: "bKash 9F2K1L", createdAt: at(-40, 12) },
-      { resortId: sky.resort.id, kind: "EMAIL_CREDITS", description: "10,000 email credits", amount: 7500, status: "DUE", clientRef: `chg-${sky.resort.id}-2`, createdById: world.platformOwner.id, createdAt: at(-1, 17) },
-      { resortId: cox.resort.id, kind: "SETUP", description: "Data import from the old spreadsheet", amount: 3000, status: "WAIVED", clientRef: `chg-${cox.resort.id}-1`, createdById: world.platformOwner.id, note: "Waived for the first month", createdAt: at(-8, 12) },
+      { accountId: skyAccount, resortId: sky.resort.id, kind: "EMAIL_CREDITS", description: "2,000 email credits", amount: 1800, status: "PAID", clientRef: `chg-${sky.resort.id}-1`, createdById: world.platformOwner.id, paidAt: at(-39, 10), note: "bKash 9F2K1L", createdAt: at(-40, 12) },
+      { accountId: skyAccount, resortId: sky.resort.id, kind: "EMAIL_CREDITS", description: "10,000 email credits", amount: 7500, status: "DUE", clientRef: `chg-${sky.resort.id}-2`, createdById: world.platformOwner.id, createdAt: at(-1, 17) },
+      { accountId: coxAccount, resortId: cox.resort.id, kind: "SETUP", description: "Data import from the old spreadsheet", amount: 3000, status: "WAIVED", clientRef: `chg-${cox.resort.id}-1`, createdById: world.platformOwner.id, note: "Waived for the first month", createdAt: at(-8, 12) },
     ],
   });
   await prisma.emailCampaign.createMany({
