@@ -1,20 +1,19 @@
 ﻿"use client";
 
-import { formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
+import { ApiError, formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
 
 // one definition, in a module a server component may also import
 import { API_URL } from "./api-url";
 export { API_URL };
 
-export class ApiError extends Error {
-  status: number;
-  payload: unknown;
-  constructor(status: number, message: string, payload?: unknown) {
-    super(message);
-    this.status = status;
-    this.payload = payload;
-  }
-}
+/**
+ * `ApiError` moved to `@rh/shared` and is re-exported here, where every caller
+ * already looks for it. It had to move: the offline queue decides whether a
+ * failed write is worth retrying by reading its status, and this module is
+ * `"use client"` — so asking that question used to mean importing the browser,
+ * which a phone cannot do.
+ */
+export { ApiError };
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;

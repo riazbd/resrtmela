@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import {
-  OfflineQueue,
+  browserQueue,
   canWaitOffline,
   isNetworkError,
   type QueuedKind,
@@ -46,8 +46,10 @@ const Ctx = createContext<OutboxValue | null>(null);
 
 export function OutboxProvider({ children }: { children: React.ReactNode }) {
   const qc = useQueryClient();
+  // `browserQueue` supplies what the browser knows and the shared queue cannot:
+  // where to write, and whether there is a network
   const queue = useMemo(
-    () => new OfflineQueue((path, body) => api(path, { method: "POST", body })),
+    () => browserQueue((path, body) => api(path, { method: "POST", body })),
     [],
   );
   const [pending, setPending] = useState<QueuedWrite[]>([]);

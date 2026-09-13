@@ -20,6 +20,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OfflineQueue, isNetworkError } from "@/lib/offline-queue";
+import { browserStorage } from "@/lib/offline-cache";
 import { ApiError } from "@/lib/api";
 
 beforeEach(() => {
@@ -51,22 +52,22 @@ describe("what counts as offline", () => {
 
 describe("the queue", () => {
   it("gives every write an identity, so a replay cannot double-charge", () => {
-    const q = new OfflineQueue(vi.fn());
+    const q = new OfflineQueue(vi.fn(), browserStorage);
     const id = q.enqueue(action());
     expect(q.pending()[0]!.clientRef).toMatch(/.+/);
     expect(q.pending()[0]!.id).toBe(id);
   });
 
   it("survives a reload, because the browser may be closed before the network returns", () => {
-    new OfflineQueue(vi.fn()).enqueue(action());
-    const reloaded = new OfflineQueue(vi.fn());
+    new OfflineQueue(vi.fn(), browserStorage).enqueue(action());
+    const reloaded = new OfflineQueue(vi.fn(), browserStorage);
     expect(reloaded.pending()).toHaveLength(1);
     expect(reloaded.pending()[0]!.label).toContain("BK-00042");
   });
 
   it("sends the client reference with the body when it replays", async () => {
     const send = vi.fn().mockResolvedValue({ ok: true });
-    const q = new OfflineQueue(send);
+    const q = new OfflineQueue(send, browserStorage);
     q.enqueue(action());
 
     await q.flush();
@@ -82,7 +83,7 @@ describe("the queue", () => {
     const q = new OfflineQueue(async (path: string) => {
       seen.push(path);
       return {};
-    });
+    }, browserStorage);
     q.enqueue(action({ path: "/a" }));
     q.enqueue(action({ path: "/b" }));
     q.enqueue(action({ path: "/c" }));
@@ -96,7 +97,7 @@ describe("the queue", () => {
     const q = new OfflineQueue(async (path: string) => {
       if (path === "/b") throw new TypeError("Failed to fetch");
       return {};
-    });
+    }, browserStorage);
     q.enqueue(action({ path: "/a" }));
     q.enqueue(action({ path: "/b" }));
     q.enqueue(action({ path: "/c" }));
@@ -110,7 +111,7 @@ describe("the queue", () => {
   it("drops a write the server refused, and says which one", async () => {
     const q = new OfflineQueue(async () => {
       throw new ApiError(400, "amount must be > 0");
-    });
+    }, browserStorage);
     q.enqueue(action());
 
     const result = await q.flush();
@@ -123,7 +124,7 @@ describe("the queue", () => {
   });
 
   it("counts a replay of something that already landed as done", async () => {
-    const q = new OfflineQueue(async () => ({ replayed: true }));
+    const q = new OfflineQueue(async () => ({ replayed: true }), browserStorage);
     q.enqueue(action());
 
     const result = await q.flush();
@@ -141,7 +142,7 @@ describe("the queue", () => {
       await new Promise((r) => setTimeout(r, 5));
       inFlight--;
       return {};
-    });
+    }, browserStorage);
     q.enqueue(action({ path: "/a" }));
     q.enqueue(action({ path: "/b" }));
 

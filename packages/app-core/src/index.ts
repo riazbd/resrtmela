@@ -19,3 +19,12 @@ export {
   describeAge,
   type Cached,
 } from "./offline-cache";
+export {
+  OfflineQueue,
+  canWaitOffline,
+  isNetworkError,
+  type FlushResult,
+  type QueuedKind,
+  type QueuedWrite,
+  type Sender,
+} from "./offline-queue";

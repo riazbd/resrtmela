@@ -110,7 +110,7 @@ describe("replaying what waited", () => {
     const sent: string[] = [];
     const queue = new OfflineQueue(async (path) => {
       sent.push(path);
-    });
+    }, browserStorage);
 
     queue.enqueue({ kind: "expense", label: "Fuel ৳800", path: "/agent/expenses", body: { amount: 800 } });
     queue.enqueue({
@@ -136,7 +136,7 @@ describe("replaying what waited", () => {
         firstTry = false;
         throw new TypeError("Failed to fetch");
       }
-    });
+    }, browserStorage);
     queue.enqueue({ kind: "expense", label: "Fuel ৳800", path: "/agent/expenses", body: { amount: 800 } });
 
     await queue.flush();

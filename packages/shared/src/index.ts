@@ -11,6 +11,7 @@ export * from "./import-samples";
  * the console. The point of moving them is not tidiness — it is that a
  * permission rule with two implementations will eventually have two answers.
  */
+export * from "./api-error";
 export * from "./placeholders";
 export * from "./contact";
 export * from "./brand";

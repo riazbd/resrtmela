@@ -1,0 +1,239 @@
+import { ApiError } from "@rh/shared";
+import type { Storage } from "./storage";
+
+/**
+ * The front desk when the connection drops.
+ *
+ * Sajek, Bandarban and the hill districts lose connectivity for minutes at a
+ * time as a matter of routine. A front desk that cannot check a guest in
+ * because the network dropped is worse than the paper register it replaced —
+ * paper always works — and it is the reason a resort keeps the register on the
+ * counter next to the software it is paying for. No competitor selling into
+ * this market handles it.
+ *
+ * So a write that fails for want of a network is written here and replayed in
+ * order when the network returns.
+ *
+ * **What may wait, and what may not.** The first version of this queued three
+ * actions — check in, check out, take money — on the grounds that they cannot
+ * be postponed. That was right about the danger and wrong about the boundary.
+ * What makes a write safe to replay is not urgency, it is *identity*: a write
+ * that creates a brand-new row and carries its own reference can be replayed
+ * all day and still produce one row, because the server treats the reference
+ * as the row's identity. So creating an expense, a quotation, an invoice or a
+ * tour package now waits happily on a bus with no signal.
+ *
+ * Editing or deleting a row is a different act. Two devices that both edit the
+ * same row offline cannot both be right, and there is no reference that makes
+ * them so — the second write would silently overwrite the first and nobody
+ * would ever know. Those still require a connection, and say so.
+ *
+ * Two properties make this safe rather than clever:
+ *
+ * 1. **Every write carries its own identity.** The server treats `clientRef`
+ *    as the identity of the payment, so replaying a request that actually
+ *    succeeded — the common case, where the request landed and the response
+ *    was lost coming back — returns the original instead of taking the money
+ *    a second time.
+ * 2. **Nothing is dropped silently.** A write the server refuses leaves the
+ *    queue, because retrying it forever would block every later write behind
+ *    something that can never succeed — but it is reported, never swallowed.
+ */
+
+/**
+ * The kinds of write this queue knows about.
+ *
+ * Everything up to `package` creates a new row carrying a client reference, so
+ * replaying it is safe. `edit` and `delete` are named here so callers have a
+ * word for what they are doing and get a clear refusal instead of silence.
+ */
+export type QueuedKind =
+  | "payment"
+  | "checkin"
+  | "checkout"
+  | "booking"
+  | "expense"
+  | "quotation"
+  | "invoice"
+  | "package"
+  | "payroll"
+  | "edit"
+  | "delete";
+
+/** Writes that create a new row, each identified by its own `clientRef`. */
+const CREATES_A_ROW: readonly QueuedKind[] = [
+  "payment",
+  "checkin",
+  "checkout",
+  "booking",
+  "expense",
+  "quotation",
+  "invoice",
+  "package",
+  "payroll",
+];
+
+/**
+ * Whether this kind of write can be held until the network returns.
+ *
+ * The answer is about replay safety, not importance: a write the server can
+ * recognise as one it has already seen may wait; one that would silently
+ * overwrite somebody else's change may not.
+ */
+export function canWaitOffline(kind: QueuedKind): boolean {
+  return CREATES_A_ROW.includes(kind);
+}
+
+export interface QueuedWrite {
+  id: string;
+  kind: QueuedKind;
+  /** what to tell the user this was, in their words: "Collect ৳3,000 for BK-00042" */
+  label: string;
+  path: string;
+  body: Record<string, unknown>;
+  clientRef: string;
+  queuedAt: number;
+  attempts: number;
+}
+
+export interface FlushResult {
+  sent: number;
+  failed: number;
+  remaining: number;
+  /** writes the server refused; they have left the queue and need a human */
+  rejected?: { write: QueuedWrite; reason: string }[];
+}
+
+export type Sender = (path: string, body: Record<string, unknown>) => Promise<unknown>;
+
+const STORAGE_KEY = "rh.outbox";
+
+/**
+ * Whether this failure means "try again later" or "this will never work".
+ *
+ * A fetch that never got an answer is a dropped connection. So is a 5xx: the
+ * desk did nothing wrong and the same request may well succeed in a minute.
+ * A 4xx is the server refusing, and refusing again in ten minutes.
+ *
+ * `online` used to be read here as `navigator.onLine`. React Native has no such
+ * property — connectivity there comes from NetInfo — and even in a browser it
+ * is the wrong question at a resort, where the wifi is routinely up while the
+ * uplink is down. So the caller says what it knows. The default is the
+ * conservative one: assume the network is fine, and treat only the failures
+ * that are unambiguously the network as worth retrying.
+ */
+export function isNetworkError(error: unknown, online = true): boolean {
+  if (error instanceof ApiError) return error.status >= 500 || error.status === 0;
+  // fetch rejects with a TypeError when it cannot reach the host at all
+  return error instanceof TypeError || !online;
+}
+
+function newRef(): string {
+  const rand =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return rand.slice(0, 40);
+}
+
+export class OfflineQueue {
+  private flushing = false;
+
+  /**
+   * `isOnline` is asked at the moment a write fails, not held as a value: the
+   * whole point of this queue is that connectivity changes while it is running.
+   * It defaults to "yes", which makes `isNetworkError` fall back to judging the
+   * error alone — the conservative reading, and the right one when the host has
+   * no reliable answer.
+   */
+  constructor(
+    private readonly send: Sender,
+    private readonly storage: Storage,
+    private readonly isOnline: () => boolean = () => true,
+  ) {}
+
+  private read(): QueuedWrite[] {
+    try {
+      const raw = this.storage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as QueuedWrite[]) : [];
+    } catch {
+      // a corrupt outbox must not brick the desk; better to lose it than to
+      // make every screen throw on load
+      return [];
+    }
+  }
+
+  private write(rows: QueuedWrite[]) {
+    try {
+      this.storage.setItem(STORAGE_KEY, JSON.stringify(rows));
+    } catch {
+      // storage full or blocked — the caller already has the error path
+    }
+  }
+
+  pending(): QueuedWrite[] {
+    return this.read();
+  }
+
+  /** Adds a write to the outbox and returns its id. */
+  enqueue(input: { kind: QueuedKind; label: string; path: string; body: Record<string, unknown> }): string {
+    const write: QueuedWrite = {
+      id: newRef(),
+      kind: input.kind,
+      label: input.label,
+      path: input.path,
+      body: input.body,
+      // generated once, here: a reference regenerated on each attempt would
+      // defeat the whole point of having one
+      clientRef: newRef(),
+      queuedAt: Date.now(),
+      attempts: 0,
+    };
+    this.write([...this.read(), write]);
+    return write.id;
+  }
+
+  remove(id: string) {
+    this.write(this.read().filter((w) => w.id !== id));
+  }
+
+  /**
+   * Sends what is queued, oldest first.
+   *
+   * It stops at the first thing that fails. Sending the rest would reorder the
+   * day — a check-out landing before the check-in it follows — and the desk
+   * would have no way to reason about what actually reached the server.
+   */
+  async flush(): Promise<FlushResult> {
+    // two flushes at once would send everything twice; the server would answer
+    // the duplicates correctly, but the outbox would be a lie in the meantime
+    if (this.flushing) return { sent: 0, failed: 0, remaining: this.read().length };
+    this.flushing = true;
+    try {
+      const rejected: { write: QueuedWrite; reason: string }[] = [];
+      let sent = 0;
+      let failed = 0;
+
+      for (const write of this.read()) {
+        try {
+          await this.send(write.path, { ...write.body, clientRef: write.clientRef });
+          this.remove(write.id);
+          sent++;
+        } catch (error) {
+          if (isNetworkError(error, this.isOnline())) {
+            failed++;
+            break; // still offline — leave this and everything after it
+          }
+          // the server refused: it will refuse again, so it leaves the queue
+          this.remove(write.id);
+          rejected.push({ write, reason: (error as Error).message });
+        }
+      }
+
+      const remaining = this.read().length;
+      return rejected.length > 0 ? { sent, failed, remaining, rejected } : { sent, failed, remaining };
+    } finally {
+      this.flushing = false;
+    }
+  }
+}
