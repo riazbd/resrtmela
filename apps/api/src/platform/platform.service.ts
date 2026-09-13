@@ -949,7 +949,9 @@ export class PlatformService {
         amount: Number(d.amount),
         method: d.paidMethod,
         from: d.account.name,
-        what: `Subscription ${d.periodStart.toISOString().slice(0, 10)} to ${d.periodEnd.toISOString().slice(0, 10)}`,
+        // the period alone: the screen prefixes the kind, and "Subscription ·
+        // Subscription 2026-09-12 to ..." is what saying it twice reads like
+        what: `${d.periodStart.toISOString().slice(0, 10)} to ${d.periodEnd.toISOString().slice(0, 10)}`,
         receivedBy: d.paidBy?.name ?? null,
         note: d.note,
       })),
