@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Table } from "@/components/patterns";
 import { useSearchParams } from "next/navigation";
 import { bookingHandoff } from "@/lib/booking-handoff";
-import { FileDown } from "lucide-react";
+import { Download, FileDown, Printer } from "lucide-react";
 import {
   api, client, money, dmy, iso,
   type BookingDetail, type BookingQuote, type BookingRow, type RoomAvail, cur,
@@ -13,6 +13,7 @@ import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
+import { invoiceHref } from "@/lib/invoice-intent";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
@@ -671,7 +672,10 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             onClick={async () => {
               try {
                 await api(`/bookings/${b.id}/invoice`, { method: "POST" });
-                push("Invoice generated");
+                // says where the next step is, because the Download and Print
+                // buttons appear in place of this one and a toast that only
+                // says "done" leaves the reader looking for them
+                push("Invoice generated — Download or Print it below");
                 await load();
               } catch (ex) {
                 push((ex as Error).message, "err");
@@ -682,14 +686,37 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
           </Button>
         )}        {isStaff && b.invoiceNo && (
           <>
+            {/*
+              Two buttons, not one link that forces the print dialog.
+              "Invoice PDF" used to open the invoice and fire print at it after
+              600ms, so saving a copy meant dismissing a dialog, finding a
+              second button on that page, and pressing it. The choice belongs
+              here, where the invoice was made.
+
+              The invoice number is stated once beside them rather than inside
+              each: it names the document, it is not an instruction.
+            */}
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+              <FileDown className="h-3.5 w-3.5 text-slate-400" />
+              {b.invoiceNo}
+            </span>
             <a
-              href={`/invoice/${b.id}?print=1`}
+              href={invoiceHref(b.id, "download")}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              title="Open invoice and print / save as PDF"
+              title="Save the invoice as a PDF on this device"
             >
-              <FileDown className="mr-1.5 inline h-3.5 w-3.5" /> Invoice PDF {b.invoiceNo}
+              <Download className="mr-1.5 inline h-3.5 w-3.5" /> Download
+            </a>
+            <a
+              href={invoiceHref(b.id, "print")}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              title="Open the invoice and print it"
+            >
+              <Printer className="mr-1.5 inline h-3.5 w-3.5" /> Print
             </a>
             <Button
               size="sm"

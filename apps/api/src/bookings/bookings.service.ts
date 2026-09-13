@@ -846,6 +846,17 @@ export class BookingsService {
       state: b.state,
       cancelState: b.cancelState,
       source: b.source,
+      /**
+       * Without this the screen cannot tell "no invoice yet" from "an invoice
+       * nobody told me about", and those want opposite buttons. Generating one
+       * wrote the number, showed a toast, and left the panel offering to
+       * generate it again — so the owner pressed it again.
+       *
+       * `BookingDetail` declares it `invoiceNo?: string`, which is why nothing
+       * caught it: through a `?`, a field that is sometimes absent and a field
+       * that is never present look exactly alike.
+       */
+      invoiceNo: b.invoiceNo,
       agent: b.agentUser,
       createdBy: b.createdBy,
       checkIn: b.checkIn,
