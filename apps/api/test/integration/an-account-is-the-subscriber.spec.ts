@@ -13,7 +13,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, seedPlanSchedules, scheduleOf, type Fixture } from "../helpers/db";
 import { makeBillingService, makePlatformService, makePlanLimits } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -41,7 +41,12 @@ beforeEach(async () => {
     create: { name: "AGENCY_START", label: "Agency Start", monthlyFee: 1000, maxRooms: 0, maxResorts: 0, trialDays: 14, audience: "AGENCY" } as never,
     update: {},
   });
+  // a plan this spec made itself still needs somewhere to keep its price
+  await seedPlanSchedules(prisma as unknown as PrismaClient);
 });
+
+/** STARTER's only schedule — where a price lives now. */
+const starter = () => scheduleOf(prisma as unknown as PrismaClient, "STARTER");
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -67,7 +72,7 @@ describe("an account with no resort", () => {
   it("is billed when its trial ends", async () => {
     const account = await agencyAccount();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
+      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, scheduleId: await starter(), trialEndsAt: day(14), renewsAt: day(14) } as never,
     });
 
     await makeBillingService(asPrisma).sweep(day(15));
@@ -80,7 +85,7 @@ describe("an account with no resort", () => {
   it("falls overdue, and is suspended when it does not pay — then comes back when it does", async () => {
     const account = await agencyAccount();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, trialEndsAt: day(14), renewsAt: day(14) } as never,
+      data: { accountId: account.id, plan: "STARTER", status: "TRIAL", fee: 2500, scheduleId: await starter(), trialEndsAt: day(14), renewsAt: day(14) } as never,
     });
 
     // far enough past the first bill for every window of the default policy
@@ -111,7 +116,7 @@ describe("a chain owner's account", () => {
 
   it("cannot hold two live subscriptions — the database refuses the second", async () => {
     await prisma.subscription.create({
-      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", fee: 2500 } as never,
+      data: { accountId: fx.tenantId, plan: "STARTER", status: "ACTIVE", fee: 2500, scheduleId: await starter() } as never,
     });
 
     await expect(

@@ -7,19 +7,16 @@ import { ensureResortRoles } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
 import { openingSubscription, redeemOffer } from "../common/offers";
 import { agencyOf, sellableFor } from "../common/selling-access";
-import { isBillingCycle, soldYearly, type BillingCycle } from "../common/billing-cycle";
+import { scheduleFor } from "../common/plan-schedules";
 import { ROLE, type Role } from "@rh/shared";
 
 /**
  * The rhythm a new account starts on.
  *
- * Asking for a year of a plan that has no yearly price is not worth refusing a
- * signup over — a stale pricing page, a bookmarked link — so it quietly starts
- * monthly, which is the plan's only price and what the invoice will say.
+ * Asking for a schedule the plan does not have is not worth refusing a signup
+ * over — a stale pricing page, a bookmarked link — so `scheduleFor` quietly
+ * falls back to the plan's first, which is what the invoice will say.
  */
-function cycleFor(asked: string | undefined, plan: { monthlyFee: unknown; yearlyFee: unknown }): BillingCycle {
-  return isBillingCycle(asked) && asked === "YEARLY" && soldYearly(plan) ? "YEARLY" : "MONTHLY";
-}
 
 /**
  * Sign-in for the platform's two customers — a resort's staff and a travel
@@ -148,7 +145,7 @@ export class AuthService {
     /** the plan picked on the pricing page; the entry plan when unsaid */
     plan?: string;
     /** MONTHLY or YEARLY, as picked on the pricing page. Monthly when unsaid. */
-    billingCycle?: string;
+    scheduleId?: number;
     /** the onboarding question: open to travel agencies? Unanswered is closed. */
     agentsOpen?: boolean;
   }) {
@@ -203,7 +200,13 @@ export class AuthService {
       // or the entry plan the signup page was showing while they typed
       const plan = redeemed?.plan ?? chosenPlan!;
       await tx.subscription.create({
-        data: openingSubscription(tenant.id, plan, redeemed?.offer, new Date(), cycleFor(input.billingCycle, plan)),
+        data: openingSubscription(
+          tenant.id,
+          plan,
+          await scheduleFor(tx, plan, input.scheduleId),
+          redeemed?.offer,
+          new Date(),
+        ),
       });
       const resort = await tx.resort.create({
         data: {
@@ -265,7 +268,7 @@ export class AuthService {
     plan?: string;
     offer?: string;
     /** MONTHLY or YEARLY, as picked on the agency pricing cards. */
-    billingCycle?: string;
+    scheduleId?: number;
   }) {
     const phone = contactPhone(input.phone);
     const email = contactEmail(input.email);
@@ -312,7 +315,13 @@ export class AuthService {
       // no link to the resort that invited it: once verified it sells every
       // open resort, that one included (the offer keeps who invited it)
       await tx.subscription.create({
-        data: openingSubscription(account.id, plan, redeemed?.offer, new Date(), cycleFor(input.billingCycle, plan)),
+        data: openingSubscription(
+          account.id,
+          plan,
+          await scheduleFor(tx, plan, input.scheduleId),
+          redeemed?.offer,
+          new Date(),
+        ),
       });
       await tx.auditLog.create({
         data: { actorId: u.id, action: "agency.signup", entity: "tenant", entityId: BigInt(account.id), diff: { slug, plan: plan.name, offer: offerCode ?? null } },

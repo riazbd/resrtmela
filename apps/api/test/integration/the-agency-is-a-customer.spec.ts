@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, seedPlanSchedules, type Fixture, scheduleOf } from "../helpers/db";
 import {
   makeBillingService, makeBookingsService, makePlatformService, makeSubscriptionService,
 } from "../helpers/services";
@@ -43,6 +43,8 @@ beforeEach(async () => {
   await prisma.platformPlan.create({
     data: { name: "AGENCY_BASIC", label: "Agency Basic", monthlyFee: 1000, trialDays: 30, audience: "AGENCY", features: [] } as never,
   });
+  // a plan this spec made itself still needs somewhere to keep its price
+  await seedPlanSchedules(prisma as unknown as PrismaClient);
 });
 
 afterAll(async () => {
@@ -160,7 +162,7 @@ describe("selling", () => {
     const account = await seededAgency("active");
     const now = new Date();
     await prisma.subscription.create({
-      data: { accountId: account.id, plan: "AGENCY_BASIC", status: "TRIAL", fee: 1000, trialEndsAt: new Date(now.getTime() + 2 * 86_400_000) } as never,
+      data: { accountId: account.id, plan: "AGENCY_BASIC", status: "TRIAL", fee: 1000, scheduleId: await scheduleOf(prisma as unknown as PrismaClient, "AGENCY_BASIC"), trialEndsAt: new Date(now.getTime() + 2 * 86_400_000) } as never,
     });
 
     await makeBillingService(asPrisma).sweep(now);

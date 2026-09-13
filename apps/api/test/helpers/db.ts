@@ -139,6 +139,76 @@ export async function seedPlatformPlans(prisma: PrismaClient): Promise<void> {
     ],
     skipDuplicates: true,
   });
+  await seedPlanSchedules(prisma);
+}
+
+/**
+ * The prices again, in the place prices actually live now.
+ *
+ * `monthlyFee` and `yearlyFee` are on their way out: a plan's prices are rows
+ * under a schedule, so an owner can sell a week free and six months at half
+ * price without a migration. What the fixture builds is what migration
+ * 20260914090000_plans_carry_their_own_ladder built out of the existing
+ * columns — one rung, running forever — because that is what a plan with a
+ * single price has always been.
+ *
+ * A ladder with more than one rung is a thing individual specs construct for
+ * themselves. Putting one here would make every unrelated billing test depend
+ * on a promotion it never asked for.
+ */
+export async function seedPlanSchedules(prisma: PrismaClient): Promise<void> {
+  const plans = await prisma.platformPlan.findMany();
+  for (const plan of plans) {
+    const already = await prisma.planSchedule.count({ where: { planId: plan.id } });
+    if (already > 0) continue;
+    const monthly = await prisma.planSchedule.create({
+      data: { planId: plan.id, label: "Monthly", sortOrder: 0 },
+    });
+    await prisma.planPhase.create({
+      data: {
+        scheduleId: monthly.id,
+        seq: 1,
+        count: 1,
+        unit: "MONTH",
+        price: plan.monthlyFee,
+        repeats: null,
+      },
+    });
+    // only where the plan is genuinely on the yearly shelf — CHAIN is not, and
+    // "sold by the month only" is a state the code has to keep working through
+    if (plan.yearlyFee != null && Number(plan.yearlyFee) > 0) {
+      const yearly = await prisma.planSchedule.create({
+        data: { planId: plan.id, label: "Yearly", sortOrder: 1 },
+      });
+      await prisma.planPhase.create({
+        data: {
+          scheduleId: yearly.id,
+          seq: 1,
+          count: 1,
+          unit: "YEAR",
+          price: plan.yearlyFee,
+          repeats: null,
+        },
+      });
+    }
+  }
+}
+
+/**
+ * The schedule a plan is sold on, for the specs that write a subscription row
+ * straight into the database instead of going through the signup path.
+ *
+ * A subscription with no schedule has no price, and the sweep deliberately
+ * refuses to bill one — so a fixture that forgets this does not fail loudly,
+ * it just never raises a bill. Asking here keeps that one line out of a dozen
+ * spec files.
+ */
+export async function scheduleOf(prisma: PrismaClient, plan: string, label?: string): Promise<number> {
+  const row = await prisma.planSchedule.findFirstOrThrow({
+    where: { plan: { name: plan }, active: true, ...(label ? { label } : {}) },
+    orderBy: { sortOrder: "asc" },
+  });
+  return row.id;
 }
 
 export interface Fixture {

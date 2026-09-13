@@ -7,7 +7,8 @@ import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Tabs, Table } from "@/components/patterns";
 import { MoneyReceived } from "@/components/money-received";
 import { useAuth } from "@/lib/auth";
-import { PLAN_FEATURES } from "@rh/shared";
+import { PLAN_FEATURES, scheduleSentence, type Phase } from "@rh/shared";
+import { PlanLadder } from "./plan-ladder";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { HowItArrived, paymentMethodsFrom } from "./how-it-arrived";
@@ -37,7 +38,7 @@ interface ResortRow {
     id: number;
     name: string;
     kind: string;
-    subscriptions: { id: string; plan: string; status: string; fee: string; billingCycle: string; renewsAt: string | null }[];
+    subscriptions: { id: string; plan: string; status: string; fee: string; scheduleLabel: string | null; renewsAt: string | null }[];
   };
   _count: { rooms: number; bookings: number; guests: number };
   userResorts?: { user: { id: number; name: string; phone: string } }[];
@@ -55,6 +56,14 @@ interface PlanDef {
   id: string;
   name: string;
   label: string;
+  schedules: {
+    id: number;
+    label: string;
+    active: boolean;
+    phases: Phase[];
+    openingFee: number;
+    perMonth: number;
+  }[];
   monthlyFee: string;
   /** What a year costs. Null means this plan is not sold by the year. */
   yearlyFee: string | null;
@@ -99,8 +108,10 @@ interface SubscriptionRow {
   pendingPlan: string | null;
   status: string;
   /** MONTHLY | YEARLY — what `fee` covers and how far apart the bills are. */
-  billingCycle: string;
-  pendingCycle: string | null;
+  scheduleId: number | null;
+  scheduleLabel: string | null;
+  pendingScheduleId: number | null;
+  pendingScheduleLabel: string | null;
   fee: number;
   startedAt: string;
   trialEndsAt: string | null;
@@ -196,7 +207,9 @@ export default function PlatformPage() {
   const [walletFor, setWalletFor] = useState<AgentRow | null>(null);
   const [subPlan, setSubPlan] = useState("");
   /** MONTHLY unless the super admin says otherwise, like every signup. */
-  const [subCycle, setSubCycle] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [subShelf, setSubShelf] = useState<number | null>(null);
+  /** kept beside the id so a change of plan can keep the same shelf by name */
+  const [subShelfLabel, setSubShelfLabel] = useState("");
   const [subFee, setSubFee] = useState("5000");
   /** This resort's trial. Prefilled from the plan; "" means "whatever the plan says". */
   const [subTrial, setSubTrial] = useState("");
@@ -425,8 +438,12 @@ export default function PlatformPage() {
                     {sub(r) ? (
                       <>
                         <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-700">{sub(r)!.plan}</span>
-                        {sub(r)!.billingCycle === "YEARLY" && (
-                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">YEARLY</span>
+                        {/* the term, in the owner's own word for it — ৳120,000
+                            is either an outlier or a year, and only this says which */}
+                        {sub(r)!.scheduleLabel && (
+                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                            {sub(r)!.scheduleLabel}
+                          </span>
                         )}
                       </>
                     ) : (
@@ -453,10 +470,12 @@ export default function PlatformPage() {
                       <button
                         onClick={() => {
                           const first = (plansQ.data ?? []).find((pl) => pl.active);
+                          const shelf = first?.schedules.find((x) => x.active) ?? null;
                           setSubFor(r);
                           setSubPlan(first?.name ?? "");
-                          setSubCycle("MONTHLY");
-                          setSubFee(first ? String(Number(first.monthlyFee)) : "");
+                          setSubShelf(shelf?.id ?? null);
+                          setSubShelfLabel(shelf?.label ?? "");
+                          setSubFee(shelf ? String(shelf.openingFee) : "");
                           setSubTrial(first ? String(first.trialDays) : "0");
                         }}
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
@@ -466,10 +485,10 @@ export default function PlatformPage() {
                       {sub(r) && (
                         <>
                           <button
-                            // one of this subscription's own periods: a month
-                            // for a monthly account, a year for a yearly one
+                            // one of this subscription's own periods, whatever
+                            // length the rung it is standing on says that is
                             onClick={() => act(() => api(`/platform/subscriptions/${sub(r)!.id ?? ""}/renew`, { method: "POST", body: { periods: 1 } }))}
-                            title={`Renew for one ${sub(r)!.billingCycle === "YEARLY" ? "year" : "month"}`}
+                            title={`Renew for one more ${sub(r)!.scheduleLabel?.toLowerCase() ?? ""} period`}
                             className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                           >
                             Renew
@@ -705,16 +724,14 @@ export default function PlatformPage() {
                         : "bg-slate-100 text-slate-500"}`}>{s.status}</span>
                     {s.note && <div className="mt-0.5 text-[11px] text-slate-400">{s.note}</div>}
                   </Td>
-                  {/* the fee is meaningless without the rhythm it is charged
-                      at: ৳120,000 is either an outlier or a year */}
+                  {/* the fee is meaningless without the term it is charged
+                      over: ৳120,000 is either an outlier or a year */}
                   <Td className="text-right font-bold">
                     {money(s.fee)}
                     <div className="text-[10px] font-medium text-slate-400">
-                      {s.billingCycle === "YEARLY" ? "a year" : "a month"}
-                      {s.pendingCycle && s.pendingCycle !== s.billingCycle && (
-                        <span className="text-amber-600">
-                          {" "}→ {s.pendingCycle === "YEARLY" ? "yearly" : "monthly"}
-                        </span>
+                      {s.scheduleLabel ?? "no schedule"}
+                      {s.pendingScheduleLabel && s.pendingScheduleLabel !== s.scheduleLabel && (
+                        <span className="text-amber-600"> → {s.pendingScheduleLabel}</span>
                       )}
                     </div>
                   </Td>
@@ -957,13 +974,18 @@ export default function PlatformPage() {
                   setSubPlan(e.target.value);
                   const chosen = (plansQ.data ?? []).find((pl) => pl.name === e.target.value);
                   if (chosen) {
-                    // a plan with no yearly price cannot be sold by the year,
-                    // so the rhythm falls back with it rather than sitting on
-                    // YEARLY and failing at the server
-                    const canYear = Number(chosen.yearlyFee ?? 0) > 0;
-                    const cycle = subCycle === "YEARLY" && canYear ? "YEARLY" : "MONTHLY";
-                    setSubCycle(cycle);
-                    setSubFee(String(cycle === "YEARLY" ? Number(chosen.yearlyFee) : Number(chosen.monthlyFee)));
+                    /**
+                     * Every plan has its own shelves, so one selected for the
+                     * last plan does not exist on this one. Keeping the label
+                     * where it survives is what stops the form jumping back to
+                     * the first row on every change.
+                     */
+                    const here = chosen.schedules.filter((x) => x.active);
+                    const same = here.find((x) => x.label === subShelfLabel);
+                    const shelf = same ?? here[0] ?? null;
+                    setSubShelf(shelf?.id ?? null);
+                    setSubShelfLabel(shelf?.label ?? "");
+                    setSubFee(shelf ? String(shelf.openingFee) : "");
                     setSubTrial(String(chosen.trialDays));
                   }
                 }}
@@ -974,33 +996,55 @@ export default function PlatformPage() {
                 ))}
               </select>
 
+              {/**
+               * Which way they are being sold it.
+               *
+               * This was two buttons, Monthly and Yearly, the second disabled
+               * when the plan had no yearly price. It is one button per shelf
+               * the owner wrote, each showing its ladder, so whoever clicks
+               * knows what the account pays after the first period as well as
+               * during it.
+               */}
               <label className="block text-xs font-semibold text-slate-500">Billed</label>
-              <div className="flex overflow-hidden rounded-xl border border-slate-300">
-                {(["MONTHLY", "YEARLY"] as const).map((c) => {
-                  const chosen = (plansQ.data ?? []).find((pl) => pl.name === subPlan);
-                  const canYear = Number(chosen?.yearlyFee ?? 0) > 0;
-                  const off = c === "YEARLY" && !canYear;
+              {(() => {
+                const chosen = (plansQ.data ?? []).find((pl) => pl.name === subPlan);
+                const here = (chosen?.schedules ?? []).filter((x) => x.active);
+                if (here.length === 0) {
                   return (
-                    <button
-                      key={c}
-                      disabled={off}
-                      title={off ? "This plan has no yearly price — set one in the Plans tab" : undefined}
-                      onClick={() => {
-                        setSubCycle(c);
-                        if (chosen) setSubFee(String(c === "YEARLY" ? Number(chosen.yearlyFee) : Number(chosen.monthlyFee)));
-                      }}
-                      className={`flex-1 px-3 py-2 text-xs font-semibold transition ${
-                        subCycle === c ? "bg-brand-600 text-white" : off ? "bg-slate-50 text-slate-300" : "bg-white text-slate-500 hover:bg-slate-50"
-                      }`}
-                    >
-                      {c === "MONTHLY" ? "Monthly" : "Yearly"}
-                    </button>
+                    <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      This plan has no price yet — set one in the Plans tab first.
+                    </p>
                   );
-                })}
-              </div>
+                }
+                return (
+                  <div className="space-y-1">
+                    {here.map((x) => (
+                      <button
+                        key={x.id}
+                        onClick={() => {
+                          setSubShelf(x.id);
+                          setSubShelfLabel(x.label);
+                          setSubFee(String(x.openingFee));
+                        }}
+                        className={`block w-full rounded-xl px-3 py-2 text-left text-xs transition ${
+                          subShelf === x.id
+                            ? "bg-brand-600 text-white"
+                            : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <b>{x.label}</b>
+                        <span className={subShelf === x.id ? "text-white/80" : "text-slate-400"}>
+                          {" — "}
+                          {scheduleSentence(x.phases, money)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
 
               <label className="block text-xs font-semibold text-slate-500">
-                Fee per {subCycle === "YEARLY" ? "year" : "month"} ({cur()})
+                First period&apos;s fee ({cur()}) — overrides the ladder once
               </label>
               <input value={subFee} onChange={(e) => setSubFee(e.target.value)} type="number" className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
               <label className="block text-xs font-semibold text-slate-500">Free trial (days) — 0 for none</label>
@@ -1011,8 +1055,8 @@ export default function PlatformPage() {
                 {subTrial.trim() === ""
                   ? "Whatever this plan sells."
                   : Number(subTrial) > 0
-                    ? `Free until ${dmy(new Date(Date.now() + Number(subTrial) * 86400000))}, then ${money(Number(subFee))} a ${subCycle === "YEARLY" ? "year" : "month"}.`
-                    : `No free trial — the first ${subCycle === "YEARLY" ? "year" : "month"} is due today.`}
+                    ? `Free until ${dmy(new Date(Date.now() + Number(subTrial) * 86400000))}, then ${money(Number(subFee))} for the first period.`
+                    : "No free trial — the first period is due today."}
               </div>
             </div>
             <div className="mt-5 flex flex-wrap justify-end gap-2">
@@ -1021,7 +1065,7 @@ export default function PlatformPage() {
                 disabled={busy}
                 onClick={() => act(async () => { await api(`/platform/resorts/${subFor.id}/subscription`, { method: "POST", body: {
                     plan: subPlan,
-                    billingCycle: subCycle,
+                    scheduleId: subShelf,
                     fee: Number(subFee),
                     // an empty box means "whatever the plan sells", not "none":
                     // Number("") is 0, and 0 is a real answer here
@@ -1091,61 +1135,6 @@ function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onTog
   );
 }
 
-/**
- * What the yearly price means, under the box you type it into.
- *
- * A yearly fee is the one number on this card whose value is entirely in how
- * it compares to another one: ৳25,000 says nothing, "two months free, saves
- * 17%" says everything. Blank is a real answer — the plan is then sold by the
- * month only — so the line says that too rather than leaving the owner to
- * wonder whether zero meant free.
- *
- * The suggestion is ten months' fee, the convention almost every subscription
- * business prices the year at, offered as a button rather than filled in: the
- * owner's price list is theirs to set.
- */
-function YearlyHint({
-  monthly,
-  yearly,
-  onSuggest,
-}: {
-  monthly: number;
-  yearly: number;
-  onSuggest: (n: number) => void;
-}) {
-  const suggestion = Math.round(monthly * 10);
-  if (!yearly) {
-    return (
-      <p className="text-[11px] text-slate-400">
-        Sold by the month only.
-        {suggestion > 0 && (
-          <button
-            onClick={() => onSuggest(suggestion)}
-            className="ml-1.5 font-semibold text-brand-700 hover:underline"
-          >
-            Offer a year at {money(suggestion)}?
-          </button>
-        )}
-      </p>
-    );
-  }
-  const twelve = monthly * 12;
-  if (!(twelve > 0)) return <p className="text-[11px] text-slate-400">Set a monthly fee to compare.</p>;
-  if (yearly >= twelve) {
-    return (
-      <p className="text-[11px] font-medium text-amber-700">
-        A year costs {money(yearly - twelve)} more than twelve months do — no saving will be shown.
-      </p>
-    );
-  }
-  const saved = twelve - yearly;
-  return (
-    <p className="text-[11px] text-emerald-700">
-      {money(yearly / 12)}/month · saves {money(saved)} ({Math.round((saved / twelve) * 100)}%) ·{" "}
-      {(saved / monthly).toFixed(1).replace(/\.0$/, "")} months free
-    </p>
-  );
-}
 
 function toEdit(plan: PlanDef): PlanEdit {
   return {
@@ -1227,12 +1216,24 @@ function PlanCard({
           />
         </label>
 
-        <div className="grid grid-cols-2 gap-2">
-          <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
-          <NumField label={`Yearly fee (${cur()})`} value={form.yearlyFee} min={0} onChange={(n) => set("yearlyFee", n)} />
-          <div className="col-span-2 -mt-1">
-            <YearlyHint monthly={form.monthlyFee} yearly={form.yearlyFee} onSuggest={(n) => set("yearlyFee", n)} />
+        {/**
+         * What this plan costs.
+         *
+         * There were two boxes here, "Monthly fee" and "Yearly fee", and they
+         * were the platform's entire vocabulary for pricing: a quarter, a
+         * three-year deal, or a free first week needed a migration. The prices
+         * are rows now, and this is where they are written. Saving the ladder
+         * is its own action — it is validated as a whole, and refused outright
+         * if a shelf being taken down still has accounts on it.
+         */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2.5">
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Prices
           </div>
+          <PlanLadder plan={plan.name} label={plan.label} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
           <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
           {/* An agency owns no resorts and has no rooms, so both caps are zero
               on that shelf and mean nothing. Shown, they read as settings
@@ -1391,13 +1392,23 @@ function NewPlanCard({
           />
         </label>
 
+        {/**
+         * A new plan gets one price and one way of buying it.
+         *
+         * The full ladder editor needs a plan to hang rows off, and this plan
+         * does not exist yet — so the opening price is a box, the server turns
+         * it into a single rung running forever, and the ladder is edited on
+         * the card once it is saved. The hint below says so, because a person
+         * looking for "free for a week" on this form should be told where it
+         * is rather than conclude the platform cannot do it.
+         */}
         <div className="grid grid-cols-2 gap-2">
-          <NumField label={`Monthly fee (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
-          <NumField label={`Yearly fee (${cur()})`} value={form.yearlyFee} min={0} onChange={(n) => set("yearlyFee", n)} />
-          <div className="col-span-2 -mt-1">
-            <YearlyHint monthly={form.monthlyFee} yearly={form.yearlyFee} onSuggest={(n) => set("yearlyFee", n)} />
-          </div>
+          <NumField label={`Price (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
           <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
+          <p className="col-span-2 -mt-1 text-[11px] text-slate-400">
+            Sold monthly to begin with. Save the plan, then set as many ways of buying it as you
+            like — a free first week, six months at half price, a three-year deal.
+          </p>
           {form.audience !== "AGENCY" && (
             <>
               <NumField label="Rooms per resort" value={form.maxRooms} min={1} onChange={(n) => set("maxRooms", n)} />

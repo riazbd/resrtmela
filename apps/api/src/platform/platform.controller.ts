@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, UseGuards, Inject } from "@nestjs/common";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { Type } from "class-transformer";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
 import { SubscriptionService } from "./subscription.service";
@@ -8,8 +9,8 @@ import { CommissionService } from "../common/commission.service";
 class SubscriptionDto {
   // validated against the plan table, not a list baked into the build
   @IsString() @MaxLength(16) plan!: string;
-  /** MONTHLY (the default) or YEARLY. Checked against the plan in the service. */
-  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
+  /** Which `PlanSchedule` of this plan. Absent means the plan's first. */
+  @IsOptional() @IsInt() @Min(1) scheduleId?: number;
   /** What this customer pays per period, when the super admin gives them their own price. */
   @IsOptional() @IsNumber() @Min(0) fee?: number;
   /** This resort's trial, when it differs from the plan's. 0 means none. */
@@ -73,11 +74,32 @@ class PlanPatchDto {
   @IsOptional() @IsString() @MaxLength(16) audience?: string;
 }
 
+/** One rung: how long a period is, what it costs, how many times it repeats. */
+class PhaseDto {
+  @IsInt() @Min(1) @Max(1000) count!: number;
+  /** Checked against `PERIOD_UNITS` in the service, which is where the calendar is. */
+  @IsString() @MaxLength(8) unit!: string;
+  @IsNumber() @Min(0) price!: number;
+  /** null is the last rung: forever. */
+  @IsOptional() @IsInt() @Min(1) @Max(1000) repeats?: number | null;
+}
+
+/** One way of buying a plan, with its ladder. */
+class ScheduleDto {
+  @IsString() @MaxLength(40) label!: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @ValidateNested({ each: true }) @Type(() => PhaseDto) @ArrayMaxSize(20) phases!: PhaseDto[];
+}
+
+class SchedulesDto {
+  @ValidateNested({ each: true }) @Type(() => ScheduleDto) @ArrayMaxSize(10) schedules!: ScheduleDto[];
+}
+
 /** The owner asking to move plan. The plan table decides whether it exists. */
 class ChangePlanDto {
   @IsString() @MaxLength(16) plan!: string;
-  /** Absent means "keep the rhythm I am on" — the plan is the only thing moving. */
-  @IsOptional() @IsString() @MaxLength(8) billingCycle?: string;
+  /** Absent means "keep the schedule I am on" — the plan is the only thing moving. */
+  @IsOptional() @IsInt() @Min(1) scheduleId?: number;
 }
 
 class ResortStatusDto {
@@ -337,6 +359,24 @@ export class PlatformController {
   @Patch("platform/plans/:name") updatePlan(@Req() req: AuthedRequest, @Param("name") name: string, @Body() dto: PlanPatchDto) {
     return this.platform.updatePlan(req.user, name, dto);
   }
+  /**
+   * A plan's ways of being bought, and their ladders.
+   *
+   * PUT rather than PATCH: the whole set is replaced, because a ladder is only
+   * correct as a unit and half of one leaves a plan whose next period has no
+   * price. The service validates before it writes anything.
+   */
+  @Get("platform/plans/:name/schedules") planSchedules(@Req() req: AuthedRequest, @Param("name") name: string) {
+    return this.platform.planSchedules(req.user, name);
+  }
+  @Put("platform/plans/:name/schedules") setSchedules(
+    @Req() req: AuthedRequest,
+    @Param("name") name: string,
+    @Body() dto: SchedulesDto,
+  ) {
+    return this.platform.setSchedules(req.user, name, dto.schedules);
+  }
+
   @Delete("platform/plans/:name") deletePlan(@Req() req: AuthedRequest, @Param("name") name: string) {
     return this.platform.deletePlan(req.user, name);
   }
@@ -378,7 +418,7 @@ export class PlatformController {
     return this.subscriptions.detail(req.user, id);
   }
   @Post("resorts/:id/subscription/plan") changePlan(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ChangePlanDto) {
-    return this.subscriptions.changePlan(req.user, id, dto.plan, dto.billingCycle);
+    return this.subscriptions.changePlan(req.user, id, dto.plan, dto.scheduleId);
   }
 
   /**

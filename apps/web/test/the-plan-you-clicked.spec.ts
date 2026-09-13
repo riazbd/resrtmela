@@ -20,32 +20,38 @@ import { signupHref, plannedPlan } from "../src/app/(public)/signup-href";
 
 describe("the link under a plan card", () => {
   it("names the plan for a resort", () => {
-    expect(signupHref({ audience: "RESORT", plan: "CHAIN", yearly: false })).toBe("/signup?plan=CHAIN");
+    expect(signupHref({ audience: "RESORT", plan: "CHAIN", scheduleId: null })).toBe("/signup?plan=CHAIN");
   });
 
   it("names the plan for an agency, as it always did", () => {
-    expect(signupHref({ audience: "AGENCY", plan: "GROWTH_AGENCY", yearly: false })).toBe(
+    expect(signupHref({ audience: "AGENCY", plan: "GROWTH_AGENCY", scheduleId: null })).toBe(
       "/signup/agency?plan=GROWTH_AGENCY",
     );
   });
 
-  it("carries the billing rhythm alongside the plan", () => {
-    expect(signupHref({ audience: "RESORT", plan: "GROWTH", yearly: true })).toBe(
-      "/signup?plan=GROWTH&billing=YEARLY",
+  /**
+   * This used to read "carries the billing rhythm", and carried one bit:
+   * `billing=YEARLY` or nothing, because monthly and yearly were the only two
+   * ways anything could be sold. The card knows which schedule it drew, and
+   * says so — whichever of the owner's shelves that is.
+   */
+  it("carries the shelf the card was showing, alongside the plan", () => {
+    expect(signupHref({ audience: "RESORT", plan: "GROWTH", scheduleId: 7 })).toBe(
+      "/signup?plan=GROWTH&schedule=7",
     );
-    expect(signupHref({ audience: "AGENCY", plan: "STARTER_AGENCY", yearly: true })).toBe(
-      "/signup/agency?plan=STARTER_AGENCY&billing=YEARLY",
+    expect(signupHref({ audience: "AGENCY", plan: "STARTER_AGENCY", scheduleId: 42 })).toBe(
+      "/signup/agency?plan=STARTER_AGENCY&schedule=42",
     );
   });
 
   it("escapes a plan name rather than pasting it into the URL", () => {
     // plan names come from the database, where a super admin types them
-    expect(signupHref({ audience: "RESORT", plan: "A&B", yearly: false })).toBe("/signup?plan=A%26B");
+    expect(signupHref({ audience: "RESORT", plan: "A&B", scheduleId: null })).toBe("/signup?plan=A%26B");
   });
 
   it("falls back to a plain signup when there is no plan to name", () => {
-    expect(signupHref({ audience: "RESORT", plan: "", yearly: false })).toBe("/signup");
-    expect(signupHref({ audience: "RESORT", plan: "", yearly: true })).toBe("/signup?billing=YEARLY");
+    expect(signupHref({ audience: "RESORT", plan: "", scheduleId: null })).toBe("/signup");
+    expect(signupHref({ audience: "RESORT", plan: "", scheduleId: 3 })).toBe("/signup?schedule=3");
   });
 });
 

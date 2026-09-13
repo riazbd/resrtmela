@@ -4,7 +4,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { PlatformService } from "../../src/platform/platform.service";
 import { AuditService } from "../../src/common/audit.service";
@@ -64,6 +64,8 @@ describe("plan definitions", () => {
         trialDays: 30,
       },
     });
+    // a plan this spec made itself still needs somewhere to keep its price
+    await seedPlanSchedules(prisma as unknown as PrismaClient);
 
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "ENTERPRISE" });
 
@@ -88,6 +90,8 @@ describe("plan definitions", () => {
         trialDays: 30,
       },
     });
+    // a plan this spec made itself still needs somewhere to keep its price
+    await seedPlanSchedules(prisma as unknown as PrismaClient);
 
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "ENTERPRISE" });
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { formatMoney, planFeatureLabel } from "@rh/shared";
+import { formatMoney, periodNoun, planFeatureLabel, scheduleSentence } from "@rh/shared";
 import { Logo } from "@/components/logo";
 import type { PublicPlan } from "./plan";
 import type { HomeData } from "./home-data";
@@ -232,13 +232,16 @@ function planTicks(p: PublicPlan, audience: "RESORT" | "AGENCY"): string[] {
 export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
   const [menuOpen, setMenuOpen] = useState(false);
   /**
-   * Which rhythm the price list is showing.
+   * Which shelf the price list is showing, by the owner's own label.
    *
-   * Monthly first, always: it is the smaller number and the one a visitor is
-   * comparing against. The yearly setting is a thing they choose, not a thing
-   * they are shown and have to talk themselves out of.
+   * This was `"MONTHLY" | "YEARLY"`, which was the whole problem: two words in
+   * the source deciding, for every resort on the platform, the only two ways
+   * anything could be sold. The shelves are rows now, so the toggle is built
+   * from whatever the owner wrote — and the first one is shown by default,
+   * because a visitor should meet the price the owner leads with rather than
+   * one they have to talk themselves out of.
    */
-  const [cycle, setCycle] = useState<"MONTHLY" | "YEARLY">("MONTHLY");
+  const [shelf, setShelf] = useState<string | null>(null);
   /**
    * Which of the platform's two customers the price list is for.
    *
@@ -261,13 +264,29 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
     plans && plans.length && plans.every((p) => p.trialDays === plans[0]!.trialDays)
       ? plans[0]!.trialDays
       : 0;
-  /** The best yearly saving on the list — what the toggle's badge advertises. */
-  const bestSaving = (plans ?? []).reduce<PublicPlan["yearlySaving"]>(
-    (best, p) => (p.yearlySaving && (!best || p.yearlySaving.pct > best.pct) ? p.yearlySaving : best),
-    null,
-  );
-  /** Is this particular card being priced by the year right now? */
-  const yearlyHere = (p: PublicPlan) => cycle === "YEARLY" && p.yearlyFee != null;
+  /**
+   * Every shelf on offer across this audience's plans, in the owner's order.
+   *
+   * A label rather than an id, because the toggle is one control across all
+   * the cards and each card's "Yearly" is its own row. A plan that is not on
+   * the chosen shelf says so, the way "Monthly only" always did.
+   */
+  const shelves = (() => {
+    const seen: string[] = [];
+    for (const p of plans ?? []) {
+      for (const sch of p.schedules) if (!seen.includes(sch.label)) seen.push(sch.label);
+    }
+    return seen;
+  })();
+  const showing = shelf && shelves.includes(shelf) ? shelf : (shelves[0] ?? null);
+  /** This card's schedule on the shelf being shown, or null if it is not on it. */
+  const shelfOf = (p: PublicPlan) => p.schedules.find((x) => x.label === showing) ?? null;
+  /** The best saving each shelf offers — what the toggle's badge advertises. */
+  const bestSavingOn = (label: string) =>
+    (plans ?? []).reduce(
+      (best, p) => Math.max(best, p.schedules.find((x) => x.label === label)?.savingPct ?? 0),
+      0,
+    );
 
   useEffect(() => {
     document.documentElement.style.scrollBehavior = "smooth";
@@ -533,10 +552,11 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                   key={a}
                   onClick={() => {
                     setAudience(a);
-                    // the shelves price differently; a yearly toggle left on
-                    // from the other one would point at plans that may not
-                    // have a yearly price at all
-                    setCycle("MONTHLY");
+                    // the two audiences are sold on their own shelves; a label
+                    // left selected from the other one may not exist here at
+                    // all, so the choice goes back to whatever this side leads
+                    // with
+                    setShelf(null);
                   }}
                   className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
                     audience === a ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-800"
@@ -549,36 +569,42 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
           </div>
 
           {/**
-           * The monthly / yearly switch.
+           * The shelf switch.
            *
-           * It only appears when there is something to switch to, so a price
-           * list sold by the month alone does not grow a control with one
-           * setting. The saving is the best one on offer across the plans,
-           * which is what the badge beside such a toggle always means.
+           * One button per way the owner sells, in their order, with their
+           * words on it. It only appears when there is something to switch to,
+           * so a price list sold one way alone does not grow a control with a
+           * single setting. The badge is the best saving that shelf offers
+           * across the plans, which is what the badge beside such a toggle has
+           * always meant — and it is computed, so adding a three-year deal
+           * gives it a correct badge without anybody typing a percentage.
            */}
-          {bestSaving && (
+          {shelves.length > 1 && (
             <div className="mt-8 flex justify-center">
-              <div className="inline-flex items-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-                {(["MONTHLY", "YEARLY"] as const).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setCycle(c)}
-                    className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
-                      cycle === c ? "bg-brand-600 text-white" : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    {c === "MONTHLY" ? "Monthly" : "Yearly"}
-                    {c === "YEARLY" && (
-                      <span
-                        className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
-                          cycle === c ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
-                        }`}
-                      >
-                        SAVE {bestSaving.pct}%
-                      </span>
-                    )}
-                  </button>
-                ))}
+              <div className="inline-flex flex-wrap items-center justify-center rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+                {shelves.map((label) => {
+                  const saving = bestSavingOn(label);
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setShelf(label)}
+                      className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                        showing === label ? "bg-brand-600 text-white" : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {label}
+                      {saving > 0 && (
+                        <span
+                          className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                            showing === label ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          SAVE {saving}%
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -594,40 +620,82 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                 <div className="text-lg font-bold text-slate-900">{p.label}</div>
                 <div className="mt-1 text-xs text-slate-500">{p.blurb ?? ""}</div>
                 {/**
-                 * On the yearly setting the big number is still per month —
-                 * the figure a reader can compare — with the amount actually
-                 * charged underneath. Quoting ৳120,000 against a rival's
-                 * ৳12,000 is how a cheaper plan reads as ten times the price.
+                 * Two numbers, never one.
+                 *
+                 * Where the plan is simply priced, the big figure is per month
+                 * — the one a reader can compare. Quoting ৳120,000 against a
+                 * rival's ৳12,000 is how a cheaper plan reads as ten times the
+                 * price, so a yearly shelf still leads with its monthly
+                 * equivalent and says what is actually charged underneath.
+                 *
+                 * Where the owner has built a ladder, the big figure is the
+                 * **opening** price and the line under it carries the whole
+                 * ladder, ending at the price the customer settles on. That
+                 * second clause is not decoration: a card that shows only the
+                 * number which gets somebody in is how renewal day becomes an
+                 * argument, and it is the single most common complaint against
+                 * every company that prices this way.
+                 *
+                 * The sentence is built by `scheduleSentence` in @rh/shared —
+                 * the same function the signup summary and the owner's own
+                 * billing screen call, so the three cannot drift.
                  *
                  * Four plans across leaves a card narrower than
                  * "৳12,000.00/month", so the price and the period are allowed
                  * to sit on two lines.
                  */}
-                <div className="mt-5 flex flex-wrap items-baseline gap-x-1 text-3xl font-black text-slate-900 sm:text-4xl">
-                  <span>
-                    {formatMoney(yearlyHere(p) ? p.yearlyFee! / 12 : p.monthlyFee, {
-                      currency: "BDT",
-                      locale: "en-IN",
-                    })}
-                  </span>
-                  <span className="text-sm font-medium text-slate-400">/month</span>
-                </div>
-                <div className="mt-1 min-h-[1.25rem] text-xs text-slate-500">
-                  {yearlyHere(p) ? (
+                {(() => {
+                  const sch = shelfOf(p);
+                  if (!sch) {
+                    // not on this shelf; say so rather than silently showing a
+                    // price from a different one
+                    return (
+                      <>
+                        <div className="mt-5 text-3xl font-black text-slate-300 sm:text-4xl">—</div>
+                        <div className="mt-1 min-h-[1.25rem] text-xs text-slate-400">
+                          No {showing} price
+                        </div>
+                      </>
+                    );
+                  }
+                  const money = (n: number) => formatMoney(n, { currency: "BDT", locale: "en-IN" });
+                  const opening = sch.phases[0]!;
+                  const ladder = sch.phases.length > 1;
+                  const plain = !ladder && opening.count === 1 && opening.unit === "MONTH";
+                  return (
                     <>
-                      {formatMoney(p.yearlyFee!, { currency: "BDT", locale: "en-IN" })} billed yearly
-                      {p.yearlySaving && (
-                        <span className="ml-1.5 font-semibold text-emerald-700">
-                          — save {formatMoney(p.yearlySaving.amount, { currency: "BDT", locale: "en-IN" })}
+                      <div className="mt-5 flex flex-wrap items-baseline gap-x-1 text-3xl font-black text-slate-900 sm:text-4xl">
+                        <span>
+                          {ladder
+                            ? opening.price === 0
+                              ? "Free"
+                              : money(opening.price)
+                            : money(sch.perMonth)}
                         </span>
-                      )}
+                        <span className="text-sm font-medium text-slate-400">
+                          {ladder
+                            ? opening.price === 0
+                              ? ""
+                              : `/${periodNoun(opening.unit)}`
+                            : "/month"}
+                        </span>
+                      </div>
+                      <div className="mt-1 min-h-[1.25rem] text-xs text-slate-500">
+                        {plain ? null : (
+                          <>
+                            {scheduleSentence(sch.phases, money)}
+                            {sch.savingPct > 0 && (
+                              <span className="font-semibold text-emerald-700">
+                                {" — save "}
+                                {money(sch.savingPerMonth)}/month
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </>
-                  ) : cycle === "YEARLY" ? (
-                    // this one is not sold by the year; say so rather than
-                    // silently showing its monthly price under a yearly toggle
-                    <span className="text-slate-400">Monthly only</span>
-                  ) : null}
-                </div>
+                  );
+                })()}
                 <ul className="mt-6 mb-8 space-y-2.5">
                   {planTicks(p, audience).map((f) => (
                     <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
@@ -647,7 +715,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                  * that clicked Chain opened on Starter for months.
                  */}
                 <Link
-                  href={signupHref({ audience, plan: p.name, yearly: yearlyHere(p) })}
+                  href={signupHref({ audience, plan: p.name, scheduleId: shelfOf(p)?.id ?? null })}
                   className={`mt-auto block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 >
                   Start free trial

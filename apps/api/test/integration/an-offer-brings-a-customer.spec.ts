@@ -18,7 +18,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
 import { makePlatformService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import { PlatformService } from "../../src/platform/platform.service";
@@ -95,6 +95,8 @@ beforeEach(async () => {
       { name: "AGENCY_PRO", label: "Agency Pro", monthlyFee: 3000, trialDays: 14, audience: "AGENCY", features: [] },
     ] as never,
   });
+  // a plan this spec made itself still needs somewhere to keep its price
+  await seedPlanSchedules(prisma as unknown as PrismaClient);
 });
 
 afterAll(async () => {

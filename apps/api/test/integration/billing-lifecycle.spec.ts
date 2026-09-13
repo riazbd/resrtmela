@@ -12,7 +12,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, scheduleOf, type Fixture } from "../helpers/db";
 import { makeBillingService, makePlatformService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -53,6 +53,9 @@ async function subscription(over: Record<string, unknown> = {}) {
       plan: "STARTER",
       status: "TRIAL",
       fee: 2500,
+      // the price lives on the schedule now; a subscription pointed at none is
+      // deliberately not billed at all
+      scheduleId: await scheduleOf(prisma as unknown as PrismaClient, "STARTER"),
       trialEndsAt: day(14),
       renewsAt: day(14),
       ...over,
@@ -231,6 +234,7 @@ describe("subscription lifecycle sweep", () => {
         plan: "STARTER",
         status: "ACTIVE",
         fee: 2500,
+        scheduleId: await scheduleOf(prisma as unknown as PrismaClient, "STARTER"),
         renewsAt: day(0),
       } as never,
     });

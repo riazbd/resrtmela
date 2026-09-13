@@ -28,7 +28,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, type Fixture, scheduleOf } from "../helpers/db";
 import { makeBillingService, makeSubscriptionService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -87,6 +87,7 @@ async function paying(plan: string, fee: number, renewsInDays = 10) {
       plan,
       status: "ACTIVE",
       fee: fee as never,
+      scheduleId: await scheduleOf(prisma as unknown as PrismaClient, plan),
       startedAt: periodStart,
       trialEndsAt: periodStart,
       renewsAt,
@@ -129,7 +130,9 @@ describe("what the owner can see", () => {
     const d = await makeSubscriptionService(asPrisma).detail(owner, fx.resortId);
 
     expect(d.plans.map((p) => p.name)).toEqual(["STARTER", "GROWTH", "CHAIN"]);
-    expect(d.plans.find((p) => p.name === "GROWTH")!.monthlyFee).toBe(5000);
+    // the price is on the schedule now, not on the plan row
+    const growth = d.plans.find((p) => p.name === "GROWTH")!;
+    expect(growth.schedules.find((x) => x.label === "Monthly")!.openingFee).toBe(5000);
   });
 
   it("marks which plan is theirs, and which way each other one moves", async () => {
@@ -321,6 +324,7 @@ describe("during a trial", () => {
       data: {
         accountId: fx.tenantId, plan: "STARTER", status: "TRIAL",
         fee: 2500 as never, trialEndsAt, renewsAt: trialEndsAt,
+        scheduleId: await scheduleOf(prisma as unknown as PrismaClient, "STARTER"),
       },
     });
 

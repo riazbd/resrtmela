@@ -5,7 +5,7 @@ import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
-import { PERMISSIONS, RESORT_PERMISSION_GROUPS } from "@rh/shared";
+import { PERMISSIONS, RESORT_PERMISSION_GROUPS, scheduleSentence, type Phase } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
@@ -36,9 +36,14 @@ interface ResortDetail {
 interface PlanOption {
   name: string;
   label: string;
-  monthlyFee: number;
-  yearlyFee: number | null;
-  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
+  /** Every way this plan is sold — rows the owner wrote, not two columns. */
+  schedules: {
+    id: number;
+    label: string;
+    phases: Phase[];
+    openingFee: number;
+    perMonth: number;
+  }[];
   maxRooms: number;
   maxResorts: number;
   blurb: string | null;
@@ -51,7 +56,8 @@ interface SubscriptionDetail {
   blurb: string | null;
   status: string;
   /** MONTHLY | YEARLY — what one period is, and what `fee` covers. */
-  billingCycle: "MONTHLY" | "YEARLY";
+  scheduleId: number | null;
+  scheduleLabel: string | null;
   fee: number;
   feePerMonth: number;
   startedAt: string | null;
@@ -59,7 +65,8 @@ interface SubscriptionDetail {
   renewsAt: string | null;
   pendingPlan: string | null;
   pendingPlanLabel: string | null;
-  pendingCycle: "MONTHLY" | "YEARLY" | null;
+  pendingScheduleId: number | null;
+  pendingScheduleLabel: string | null;
   limits: { maxRooms: number; maxResorts: number; label: string };
   usage: { rooms: number; resorts: number };
   outstanding: { amount: number; count: number };
@@ -1698,38 +1705,48 @@ function BillingCycleSwitch({
 }: {
   detail: SubscriptionDetail;
   busy: string;
-  onSwitch: (to: "MONTHLY" | "YEARLY") => void;
+  onSwitch: (to: { id: number; label: string }) => void;
 }) {
   const here = detail.plans.find((p) => p.name === detail.plan);
-  if (!here?.yearlyFee) return null;
+  const others = (here?.schedules ?? []).filter((x) => x.id !== detail.scheduleId);
+  // nothing to switch to means no control, rather than a disabled half of one
+  if (others.length === 0) return null;
   // a switch already booked for the renewal is shown above; offering the same
   // move again here would be a button that does nothing
-  if (detail.pendingCycle) return null;
+  if (detail.pendingScheduleId) return null;
 
-  const yearly = detail.billingCycle === "YEARLY";
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
-      <div className="text-xs text-slate-600">
-        {yearly ? (
-          <>
-            Billed yearly — <b>{money(here.yearlyFee)}</b> a year
-            {here.yearlySaving && <> , saving {money(here.yearlySaving.amount)} against monthly</>}
-          </>
-        ) : (
-          <>
-            Pay for a year and it is <b>{money(here.yearlyFee / 12)}</b> a month
-            {here.yearlySaving && <> — {here.yearlySaving.pct}% off, {money(here.yearlySaving.amount)} a year</>}
-          </>
-        )}
-      </div>
-      <Button
-        size="sm"
-        variant={yearly ? "ghost" : "primary"}
-        loading={busy === "__cycle"}
-        onClick={() => onSwitch(yearly ? "MONTHLY" : "YEARLY")}
-      >
-        {yearly ? "Switch to monthly" : "Switch to yearly"}
-      </Button>
+    <div className="mt-3 space-y-1.5">
+      {others.map((x) => (
+        <div
+          key={x.id}
+          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+        >
+          {/**
+           * The whole ladder, not the opening price.
+           *
+           * This used to be one line about paying for a year, because a year
+           * was the only alternative there was. An owner deciding whether to
+           * move needs what it costs on the day and what it costs afterwards,
+           * and `scheduleSentence` is where that sentence is written — the
+           * same one the pricing page and the signup summary print.
+           */}
+          <div className="text-xs text-slate-600">
+            <b>{x.label}</b> — {scheduleSentence(x.phases, money)}
+            {x.perMonth < (here?.schedules.find((y) => y.id === detail.scheduleId)?.perMonth ?? Infinity) && (
+              <span className="ml-1 font-semibold text-emerald-700">cheaper per month</span>
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={busy === `__shelf${x.id}`}
+            onClick={() => onSwitch({ id: x.id, label: x.label })}
+          >
+            Switch to {x.label.toLowerCase()}
+          </Button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1752,26 +1769,36 @@ function SubscriptionTab({ rid }: { rid: number }) {
    * bill without saying so.
    */
   async function change(p: PlanOption) {
-    const cycle = d?.billingCycle ?? "MONTHLY";
-    const per = cycle === "YEARLY" ? "year" : "month";
-    const fee = money(cycle === "YEARLY" && p.yearlyFee != null ? p.yearlyFee : p.monthlyFee);
-    if (cycle === "YEARLY" && p.yearlyFee == null) {
-      window.alert(`${p.label} is sold by the month only. Switch to monthly billing first.`);
+    /**
+     * The same shelf on the new plan, by the owner's own label.
+     *
+     * Matched by label rather than by id, because every plan has its own
+     * schedule rows — somebody on Starter "Yearly" moving to Growth wants
+     * Growth's "Yearly", a different row with the same meaning. A plan not on
+     * that shelf falls back to its first, and the sentence below says what
+     * they will actually pay.
+     */
+    const target =
+      p.schedules.find((x) => x.label === d?.scheduleLabel) ?? p.schedules[0];
+    if (!target) {
+      window.alert(`${p.label} has no price set yet.`);
       return;
     }
+    const per = target.label.toLowerCase();
+    const fee = scheduleSentence(target.phases, money);
     const ask = !d?.plan
       ? // the first plan is not a move from anywhere; the other two sentences
         // both describe leaving something, and there is nothing to leave
-        `Start on ${p.label} (${fee}/${per})?\n\nIt begins as a free trial — nothing is billed until the trial ends.`
+        `Start on ${p.label} — ${fee}?\n\nIt begins as a free trial — nothing is billed until the trial ends.`
       : p.direction === "upgrade"
-        ? `Move to ${p.label} (${fee}/${per})?\n\nIt applies immediately, and you are billed only the difference for the days left in this ${per}.`
+        ? `Move to ${p.label} — ${fee}?\n\nIt applies immediately, and you are billed only the difference for the days left in this term.`
         : p.direction === "current"
           ? `Stay on ${p.label} and call off the change?`
-          : `Move down to ${p.label} (${fee}/${per})?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that ${per} is already paid for — and ${p.label} starts from then.`;
+          : `Move down to ${p.label} — ${fee}?\n\nYou keep ${d?.planLabel ?? "your current plan"} until ${when(d?.renewsAt)} — that ${per} term is already paid for — and ${p.label} starts from then.`;
     if (!window.confirm(ask)) return;
     setBusy(p.name);
     try {
-      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name, billingCycle: cycle } });
+      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name, scheduleId: target.id } });
       push(
         r.effective === "now"
           ? r.charged > 0
@@ -1791,30 +1818,39 @@ function SubscriptionTab({ rid }: { rid: number }) {
   }
 
   /**
-   * Change how often you are billed, staying on the same plan.
+   * Change the term you are billed on, staying on the same plan.
    *
-   * Going yearly is immediate: the year starts today, and the unused part of
-   * the month already paid for comes off the bill. Going back to monthly waits
-   * for the year to run out, for the same reason a downgrade does — that year
-   * has been paid for and is not something to hand back mid-term.
+   * A longer term is immediate: it starts today, and the unused part of the
+   * period already paid for comes off the bill. A shorter one waits for the
+   * current term to run out, for the same reason a downgrade does — it has
+   * been paid for and is not something to hand back mid-term.
+   *
+   * Which of the two this is, the service decides from the length of the
+   * terms, so the sentence below describes both rather than promising one.
    */
-  async function switchCycle(to: "MONTHLY" | "YEARLY") {
+  async function switchCycle(to: { id: number; label: string }) {
     if (!d?.plan) return;
     const here = d.plans.find((p) => p.name === d.plan);
-    if (to === "YEARLY" && !here?.yearlyFee) {
-      window.alert(`${d.planLabel} is sold by the month only.`);
+    const target = here?.schedules.find((x) => x.id === to.id);
+    if (!target) {
+      window.alert(`${d.planLabel} is no longer sold that way.`);
       return;
     }
-    const ask =
-      to === "YEARLY"
-        ? `Pay for a year of ${d.planLabel} up front — ${money(here!.yearlyFee!)}?\n\nThat is ${money(here!.yearlyFee! / 12)} a month${here!.yearlySaving ? `, saving ${money(here!.yearlySaving.amount)} a year` : ""}. The year starts today, and what is left of the month you have paid for comes off the bill.`
-        : `Go back to monthly billing?\n\nYou keep the year you have paid for until ${when(d.renewsAt)}; monthly billing starts from then.`;
+    const mine = here!.schedules.find((x) => x.id === d.scheduleId);
+    const longer = mine != null && target.perMonth < mine.perMonth;
+    const ask = longer
+      ? `Move ${d.planLabel} to ${to.label} billing — ${scheduleSentence(target.phases, money)}?
+
+It starts today, and what is left of the term you have paid for comes off the bill.`
+      : `Move ${d.planLabel} to ${to.label} billing — ${scheduleSentence(target.phases, money)}?
+
+If it is a shorter term you keep what you have already paid for until ${when(d.renewsAt)}, and it starts from then.`;
     if (!window.confirm(ask)) return;
-    setBusy("__cycle");
+    setBusy(`__shelf${to.id}`);
     try {
       const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, {
         method: "POST",
-        body: { plan: d.plan, billingCycle: to },
+        body: { plan: d.plan, scheduleId: to.id },
       });
       push(
         r.effective === "now"
@@ -1851,11 +1887,14 @@ function SubscriptionTab({ rid }: { rid: number }) {
             <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
               <Stat label="Status" value={STATUS_LABEL[d.status] ?? d.status} />
               <Stat
-                label={d.billingCycle === "YEARLY" ? "Yearly" : "Monthly"}
+                label={d.scheduleLabel ?? "Billing"}
                 value={money(d.fee)}
-                // the per-month figure beside a yearly fee, because that is the
-                // number the customer compares against everything else
-                sub={d.billingCycle === "YEARLY" ? `${money(d.feePerMonth)}/month` : undefined}
+                // the per-month figure beside a term longer than a month,
+                // because that is the number the customer compares against
+                // everything else
+                sub={
+                  Math.abs(d.feePerMonth - d.fee) > 0.01 ? `${money(d.feePerMonth)}/month` : undefined
+                }
               />
               <Stat
                 label={d.status === "TRIAL" ? "Trial ends" : "Renews"}
@@ -1873,10 +1912,9 @@ function SubscriptionTab({ rid }: { rid: number }) {
                 stay where you are.
               </div>
             )}
-            {d.pendingCycle && (
+            {d.pendingScheduleId && (
               <div className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                Switching to <b>{d.pendingCycle === "YEARLY" ? "yearly" : "monthly"}</b> billing on{" "}
-                {when(d.renewsAt)}.
+                Switching to <b>{d.pendingScheduleLabel}</b> billing on {when(d.renewsAt)}.
               </div>
             )}
             <BillingCycleSwitch detail={d} busy={busy} onSwitch={switchCycle} />
@@ -1902,21 +1940,30 @@ function SubscriptionTab({ rid }: { rid: number }) {
                   <span className="text-[10px] font-bold uppercase text-brand-600">Current</span>
                 )}
               </div>
-              {/* priced in the rhythm this account is on, so the number beside
-                  "Upgrade" is the number the bill will carry */}
-              <div className="mt-1 text-lg font-black tabular-nums text-slate-900">
-                {money(d.billingCycle === "YEARLY" && p.yearlyFee != null ? p.yearlyFee / 12 : p.monthlyFee)}
-                <span className="text-xs font-medium text-slate-400">/mo</span>
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {d.billingCycle === "YEARLY"
-                  ? p.yearlyFee != null
-                    ? `${money(p.yearlyFee)} a year`
-                    : "Monthly only"
-                  : p.yearlySaving
-                    ? `${money(p.yearlyFee!)} a year — save ${p.yearlySaving.pct}%`
-                    : ""}
-              </div>
+              {/**
+               * Priced on the shelf this account is on, so the number beside
+               * "Upgrade" is the number the bill will carry — and the line
+               * under it is the whole ladder, so an introductory rung cannot
+               * be mistaken for the price.
+               */}
+              {(() => {
+                const shelf =
+                  p.schedules.find((x) => x.label === d.scheduleLabel) ?? p.schedules[0];
+                if (!shelf) return <div className="mt-1 text-lg font-black text-slate-300">—</div>;
+                return (
+                  <>
+                    <div className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                      {money(shelf.perMonth)}
+                      <span className="text-xs font-medium text-slate-400">/mo</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      {shelf.label !== d.scheduleLabel
+                        ? `${d.scheduleLabel ?? "That term"} not sold — ${shelf.label}`
+                        : scheduleSentence(shelf.phases, money)}
+                    </div>
+                  </>
+                );
+              })()}
               <div className="mt-1 text-[11px] text-slate-500">
                 {p.maxRooms >= 1000 ? "Unlimited rooms" : `${p.maxRooms} rooms`} · {p.maxResorts} resort
                 {p.maxResorts === 1 ? "" : "s"}

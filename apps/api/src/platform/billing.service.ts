@@ -44,7 +44,7 @@ import { PlatformSettingsService } from "../common/platform-settings.service";
 import { AuditService } from "../common/audit.service";
 import { SYSTEM_ACTOR_ID } from "../common/rbac";
 import { reachableEmail, reachablePhone } from "../common/contact";
-import { feeFor, isBillingCycle, monthsIn, soldYearly, type BillingCycle } from "../common/billing-cycle";
+import { addPeriod, isPeriodUnit, type Phase } from "@rh/shared";
 import type { TemplateName } from "../notifications/templates";
 
 export interface BillingSweepResult {
@@ -64,23 +64,34 @@ export const ACCOUNT_KIND = { RESORT_OWNER: "RESORT_OWNER", AGENCY: "AGENCY" } a
 
 const DAY_MS = 86_400_000;
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY_MS);
-const addMonths = (d: Date, n: number) => {
-  const r = new Date(d);
-  r.setMonth(r.getMonth() + n);
-  return r;
-};
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
- * How long one period of this subscription is.
+ * The private `addMonths` that used to live here is gone, and so are the two
+ * copies of it in `platform.service.ts` and `subscription.service.ts`. All
+ * three were `r.setMonth(r.getMonth() + n)`, which does not clamp: 31 January
+ * plus one month was **3 March**, so February was never a billing period, and
+ * every renewal after it inherited the slide. `addPeriod` in @rh/shared clamps,
+ * works in UTC, and knows units the calendar has other than the month.
  *
- * Every date this service moves used to be `addMonths(x, 1)`, because a period
- * was a month by definition. A yearly subscription's period is twelve, and a
- * row carrying something else — an old value, a hand-edited one — bills monthly
- * rather than refusing to bill at all.
+ * How far the sweep will walk in one pass. A period can now be a day long, so
+ * an account whose sweep has not run for a year has a legitimate three hundred
+ * and sixty-five periods to catch up on; the old bound of 24 was written when
+ * the shortest period was a month. It is still a bound, because an unbounded
+ * loop over a bad row is how a billing sweep becomes an outage.
  */
-const periodMonths = (sub: { billingCycle: string }) =>
-  monthsIn(isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY");
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+const MAX_CATCHUP_PERIODS = 400;
+
+/**
+ * The rung a subscription says it is standing on.
+ *
+ * Falls back to the **last** rung, not the first: a missing `seq` means the
+ * owner edited the ladder under a live account, and the settle price is the
+ * honest reading of that. Restarting them at the bottom would hand back an
+ * introductory price they have already used up.
+ */
+const rungFor = (phases: Phase[], seq: number): Phase =>
+  phases.find((p) => p.seq === seq) ?? phases[phases.length - 1]!;
 const daysBetween = (from: Date, to: Date) => Math.ceil((to.getTime() - from.getTime()) / DAY_MS);
 
 /**
@@ -187,16 +198,28 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     });
     for (const sub of ended) {
       await this.applyPendingPlan(sub);
-      // the first period starts when the trial ended, not today: a sweep that
-      // ran late must not hand the account free days it did not sell
+      /**
+       * The first period starts when the trial ended, not today: a sweep that
+       * ran late must not hand the account free days it did not sell.
+       *
+       * No bill is raised here any more. The account is put on the bottom rung
+       * with `renewsAt` in the past, and `raiseRenewals` — which runs next in
+       * this same pass — walks it up. One piece of code climbs the ladder, so
+       * a trial ending and a sweep catching up cannot disagree about what the
+       * second period costs.
+       */
       const periodStart = sub.trialEndsAt!;
-      const raised = await this.raiseDue(sub, periodStart);
       await this.prisma.subscription.update({
         where: { id: sub.id },
-        data: { status: "ACTIVE", renewsAt: addMonths(periodStart, periodMonths(sub)) },
+        data: {
+          status: "ACTIVE",
+          phaseSeq: 1,
+          phaseDone: 0,
+          phaseStartedAt: periodStart,
+          renewsAt: periodStart,
+        },
       });
       result.trialsEnded++;
-      if (raised) result.duesRaised++;
     }
   }
 
@@ -212,23 +235,67 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     for (const sub of dueNow) {
       // a downgrade the owner asked for lands here, at the period boundary,
       // so the first bill of the new period is already the new price — and so
-      // does a move from the yearly rhythm back to the monthly one
+      // does a move onto a different schedule
       await this.applyPendingPlan(sub);
-      let periodStart = sub.renewsAt!;
-      let months = periodMonths(sub);
-      let renewsAt = addMonths(periodStart, months);
-      // catch up period by period if the sweep has not run for a long time
-      let guard = 0;
-      while (guard++ < 24) {
-        if (await this.raiseDue(sub, periodStart)) result.duesRaised++;
-        if (renewsAt > now) break;
-        periodStart = renewsAt;
-        // re-read each time round: a pending change applied above could have
-        // moved this subscription onto the other rhythm mid-catch-up
-        months = periodMonths(sub);
-        renewsAt = addMonths(periodStart, months);
+
+      const phases = await this.ladder(sub.scheduleId);
+      if (!phases) {
+        /**
+         * A schedule is the only place a price lives. An account pointed at
+         * none is skipped and said out loud, rather than billed a number
+         * somebody guessed — a silent zero on an invoice is worse than a gap
+         * somebody has to come and fix.
+         */
+        this.logger.warn(
+          `subscription ${sub.id} (${sub.plan}) has no pricing schedule — not billed`,
+        );
+        continue;
       }
-      await this.prisma.subscription.update({ where: { id: sub.id }, data: { renewsAt } });
+
+      let rung = rungFor(phases, sub.phaseSeq);
+      let done = sub.phaseDone;
+      /**
+       * Where this rung began, and what every period inside it is measured
+       * from. Chaining each date off the last is what made a month-end clamp
+       * permanent; from a fixed anchor, the 31st comes back in March.
+       */
+      let anchor = sub.phaseStartedAt ?? sub.renewsAt!;
+      let periodStart = sub.renewsAt!;
+
+      let guard = 0;
+      while (guard++ < MAX_CATCHUP_PERIODS) {
+        const periodEnd = addPeriod(anchor, (done + 1) * rung.count, rung.unit);
+        if (await this.raiseDue(sub, rung.price, periodStart, periodEnd)) result.duesRaised++;
+        done++;
+        if (rung.repeats != null && done >= rung.repeats) {
+          const next = phases[phases.indexOf(rung) + 1];
+          // no next rung means the ladder is malformed — `phasesAreSane`
+          // refuses to store one — so stay on this price rather than stop
+          // billing an account that is still being served
+          if (next) {
+            rung = next;
+            done = 0;
+            anchor = periodEnd;
+          }
+        }
+        periodStart = periodEnd;
+        if (periodEnd > now) break;
+      }
+      if (guard >= MAX_CATCHUP_PERIODS) {
+        this.logger.warn(`subscription ${sub.id}: catch-up hit ${MAX_CATCHUP_PERIODS} periods`);
+      }
+
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          renewsAt: periodStart,
+          phaseSeq: rung.seq,
+          phaseDone: done,
+          phaseStartedAt: anchor,
+          // what the account pays now, for the notices and the owner's screen
+          fee: rung.price as never,
+        },
+      });
     }
   }
 
@@ -246,15 +313,19 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
     accountId: number;
     plan: string;
     fee: unknown;
-    billingCycle: string;
+    scheduleId: number | null;
+    phaseStartedAt: Date | null;
     pendingPlan: string | null;
-    pendingCycle: string | null;
+    pendingScheduleId: number | null;
   }): Promise<void> {
-    if (!sub.pendingPlan && !sub.pendingCycle) return;
+    if (!sub.pendingPlan && !sub.pendingScheduleId) return;
 
     // the plan stays where it is unless a change was asked for
     const name = sub.pendingPlan ?? sub.plan;
-    const target = await this.prisma.platformPlan.findUnique({ where: { name } });
+    const target = await this.prisma.platformPlan.findUnique({
+      where: { name },
+      include: { schedules: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
+    });
     if (!target) {
       // the plan was deleted between the request and the renewal; keep the
       // subscription where it is rather than move it somewhere nobody chose
@@ -264,38 +335,68 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const cycle: BillingCycle = isBillingCycle(sub.pendingCycle)
-      ? sub.pendingCycle
-      : isBillingCycle(sub.billingCycle)
-        ? sub.billingCycle
-        : "MONTHLY";
     /**
-     * A plan whose yearly price was withdrawn while an account was waiting to
-     * move onto it has nothing to bill for a year. The account stays on the
-     * rhythm it is on rather than being billed a price nobody set.
+     * The schedule they asked for, if it is still on this plan's shelf.
+     *
+     * A schedule the owner withdrew — or one belonging to a different plan —
+     * is not something to bill against, so the plan's first active schedule
+     * stands in. The old code had the same shape for a narrower case: a plan
+     * whose yearly price was taken away while somebody was waiting to move
+     * onto it fell back to monthly rather than being billed a price nobody set.
      */
-    const cycleToUse: BillingCycle = cycle === "YEARLY" && !soldYearly(target) ? "MONTHLY" : cycle;
-    if (cycleToUse !== cycle) {
-      this.logger.warn(`subscription ${sub.id}: ${target.name} is no longer sold by the year — kept monthly`);
+    const asked = sub.pendingScheduleId
+      ? target.schedules.find((x) => x.id === sub.pendingScheduleId)
+      : target.schedules.find((x) => x.id === sub.scheduleId);
+    const schedule = asked ?? target.schedules[0];
+    if (!schedule) {
+      this.logger.warn(
+        `subscription ${sub.id}: ${target.name} has no pricing schedule — kept on ${sub.plan}`,
+      );
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: { pendingPlan: null, pendingScheduleId: null },
+      });
+      sub.pendingPlan = null;
+      sub.pendingScheduleId = null;
+      return;
     }
-    const fee = feeFor(target, cycleToUse);
+    if (sub.pendingScheduleId && schedule.id !== sub.pendingScheduleId) {
+      this.logger.warn(
+        `subscription ${sub.id}: schedule ${sub.pendingScheduleId} is gone — using ${schedule.label}`,
+      );
+    }
 
-    const from = { plan: sub.plan, cycle: sub.billingCycle };
+    const bottom = (await this.ladder(schedule.id))?.[0];
+    const fee = bottom ? bottom.price : Number(sub.fee);
+
+    /**
+     * A plan change restarts the new plan's ladder at its bottom rung, with
+     * today as the anchor. The customer bought this plan, so they get this
+     * plan's terms — and whether those terms open with an introductory price
+     * at all is the owner's decision, written in the schedule, not ours.
+     */
+    const from = { plan: sub.plan, scheduleId: sub.scheduleId };
     await this.prisma.subscription.update({
       where: { id: sub.id },
       data: {
         plan: target.name,
         fee: fee as never,
-        billingCycle: cycleToUse,
+        scheduleId: schedule.id,
+        phaseSeq: bottom?.seq ?? 1,
+        phaseDone: 0,
+        // the anchor goes with the old ladder: the caller re-reads it as the
+        // period boundary this change is landing on
+        phaseStartedAt: null,
         pendingPlan: null,
-        pendingCycle: null,
+        pendingScheduleId: null,
       },
     });
     sub.plan = target.name;
     sub.fee = fee;
-    sub.billingCycle = cycleToUse;
+    sub.scheduleId = schedule.id;
+    sub.phaseStartedAt = null;
     sub.pendingPlan = null;
-    sub.pendingCycle = null;
+    sub.pendingScheduleId = null;
     const account = await this.account(sub.accountId);
     await this.audit.log({
       actorId: SYSTEM_ACTOR_ID,
@@ -303,17 +404,50 @@ export class BillingService implements OnModuleInit, OnModuleDestroy {
       action: "billing.plan.applied",
       entity: "subscription",
       entityId: Number(sub.id),
-      diff: { accountId: account.id, from, to: { plan: target.name, cycle: cycleToUse }, fee },
+      diff: { accountId: account.id, from, to: { plan: target.name, scheduleId: schedule.id }, fee },
     });
   }
 
-  /** Creates the bill for one period. Returns false when it already existed. */
+  /**
+   * The rungs of a subscription's schedule, oldest first, or null when it has
+   * none to stand on.
+   *
+   * Read per subscription rather than joined into the sweep's query: a catch-up
+   * walks one account's ladder many times over and every other account's not at
+   * all, and the list is three rows.
+   */
+  private async ladder(scheduleId: number | null): Promise<Phase[] | null> {
+    if (scheduleId == null) return null;
+    const rows = await this.prisma.planPhase.findMany({
+      where: { scheduleId },
+      orderBy: { seq: "asc" },
+    });
+    if (rows.length === 0) return null;
+    return rows.map((r) => ({
+      seq: r.seq,
+      count: r.count,
+      // a unit the calendar does not know is a row somebody hand-edited; a
+      // month is the reading that bills rather than throws
+      unit: isPeriodUnit(r.unit) ? r.unit : ("MONTH" as const),
+      price: Number(r.price),
+      repeats: r.repeats,
+    }));
+  }
+
+  /**
+   * Creates the bill for one period. Returns false when it already existed.
+   *
+   * The amount and the period's end are arguments now rather than read off the
+   * subscription, because during a catch-up neither is a property of the row:
+   * each missed period belongs to the rung it fell on, and must be billed at
+   * that rung's price even if the account has since climbed past it.
+   */
   private async raiseDue(
-    sub: { id: bigint; accountId: number; fee: unknown; plan: string; billingCycle: string },
+    sub: { id: bigint; accountId: number; plan: string },
+    amount: number,
     periodStart: Date,
+    periodEnd: Date,
   ): Promise<boolean> {
-    const periodEnd = addMonths(periodStart, periodMonths(sub));
-    const amount = Number(sub.fee);
     try {
       const due = await this.prisma.subscriptionDue.create({
         data: {

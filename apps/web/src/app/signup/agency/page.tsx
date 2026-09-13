@@ -10,6 +10,7 @@ import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 import { OfferBanner, useOffer } from "../offer";
 import { LogoMark } from "@/components/logo";
+import { formatMoney, scheduleSentence, type Phase } from "@rh/shared";
 
 /** One plan from the agency shelf — never a resort plan. */
 interface AgencyPlan {
@@ -17,8 +18,15 @@ interface AgencyPlan {
   label: string;
   monthlyFee: number;
   /** null where this plan is sold by the month only. */
-  yearlyFee: number | null;
-  yearlySaving: { pct: number; monthsFree: number; amount: number } | null;
+  schedules: {
+    id: number;
+    label: string;
+    phases: Phase[];
+    openingFee: number;
+    perMonth: number;
+    savingPerMonth: number;
+    savingPct: number;
+  }[];
   trialDays: number;
   blurb: string | null;
 }
@@ -59,11 +67,12 @@ export default function AgencySignupPage() {
    * read on these pages: the server renders without one, and reading it during
    * render makes the first client render disagree with the server's HTML.
    */
-  const [yearly, setYearly] = useState(false);
+  const [pickedSchedule, setPickedSchedule] = useState<number | null>(null);
   const [wanted, setWanted] = useState<string | null>(null);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    setYearly(q.get("billing") === "YEARLY");
+    const asked = Number(q.get("schedule"));
+    setPickedSchedule(Number.isInteger(asked) && asked > 0 ? asked : null);
     setWanted(q.get("plan"));
   }, []);
 
@@ -81,8 +90,14 @@ export default function AgencySignupPage() {
   }, [wanted]);
 
   const chosen = (plans ?? []).find((p) => p.name === plan) ?? null;
-  // a plan with no yearly price cannot be bought by the year, whatever the link said
-  const onYear = yearly && chosen?.yearlyFee != null;
+  /**
+   * The shelf they arrived on, or the plan's first — a stale link may name a
+   * schedule belonging to a plan they are no longer looking at, and the card
+   * must describe what the button will actually charge.
+   */
+  const shelf =
+    chosen?.schedules.find((x) => x.id === pickedSchedule) ?? chosen?.schedules[0] ?? null;
+  const money = (n: number) => formatMoney(n, { currency: "BDT", locale: "en-IN" });
 
   // an offer names the plan, so there is nothing to choose
   const usingOffer = !!offer.offer?.usable && !offer.problem;
@@ -103,8 +118,8 @@ export default function AgencySignupPage() {
       const res = await api<{ accessToken: string }>("/auth/signup/agency", {
         method: "POST",
         body: usingOffer
-          ? { agencyName, name, email, phone, password, offer: offer.code, billingCycle: onYear ? "YEARLY" : "MONTHLY" }
-          : { agencyName, name, email, phone, password, plan, billingCycle: onYear ? "YEARLY" : "MONTHLY" },
+          ? { agencyName, name, email, phone, password, offer: offer.code, scheduleId: shelf?.id }
+          : { agencyName, name, email, phone, password, plan, scheduleId: shelf?.id },
       });
       const me = await adoptToken(res.accessToken);
       router.replace(landingFor(me.role));
@@ -162,34 +177,48 @@ export default function AgencySignupPage() {
               >
                 {(plans ?? []).map((p) => (
                   <option key={p.name} value={p.name}>
-                    {p.label} — ৳{p.monthlyFee.toLocaleString("en-IN")}/month{p.trialDays ? ` · ${p.trialDays} days free` : ""}
+                    {p.label} — {p.schedules[0] ? money(p.schedules[0].perMonth) : "—"}/month
+                    {p.trialDays ? ` · ${p.trialDays} days free` : ""}
                   </option>
                 ))}
               </select>
 
-              {/* Pay by the year, where this plan is sold that way. The saving
-                  is spelled out in taka as well as a percentage — a percentage
-                  of an unstated number is not something anyone can decide on. */}
-              {chosen?.yearlyFee != null && (
-                <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={onYear}
-                    onChange={() => setYearly(!onYear)}
-                    className="mt-0.5 h-4 w-4 accent-brand-600"
-                  />
-                  <span className="text-xs text-slate-600">
-                    Pay for a year — ৳{chosen.yearlyFee.toLocaleString("en-IN")}
-                    {chosen.yearlySaving && (
-                      <b className="text-emerald-700">
-                        {" "}save ৳{chosen.yearlySaving.amount.toLocaleString("en-IN")} ({chosen.yearlySaving.pct}%)
-                      </b>
-                    )}
-                    <span className="block text-[11px] text-slate-400">
-                      ৳{Math.round(chosen.yearlyFee / 12).toLocaleString("en-IN")} a month, billed yearly
-                    </span>
-                  </span>
-                </label>
+              {/**
+               * Which way to buy it, where the plan is sold more than one way.
+               *
+               * This was a single "pay for a year" checkbox, because a year
+               * was the only alternative there could be. It is one radio per
+               * shelf the owner wrote, each showing its own ladder in full and
+               * its saving in taka as well as a percentage — a percentage of
+               * an unstated number is not something anyone can decide on.
+               */}
+              {(chosen?.schedules.length ?? 0) > 1 && (
+                <div className="mt-2 space-y-1.5">
+                  {chosen!.schedules.map((x) => (
+                    <label
+                      key={x.id}
+                      className={`flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2 ${
+                        shelf?.id === x.id ? "bg-brand-50 ring-1 ring-brand-200" : "bg-slate-50"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="shelf"
+                        checked={shelf?.id === x.id}
+                        onChange={() => setPickedSchedule(x.id)}
+                        className="mt-0.5 h-4 w-4 accent-brand-600"
+                      />
+                      <span className="text-xs text-slate-600">
+                        <b>{x.label}</b> — {scheduleSentence(x.phases, money)}
+                        {x.savingPct > 0 && (
+                          <b className="text-emerald-700">
+                            {" "}save {money(x.savingPerMonth)}/month ({x.savingPct}%)
+                          </b>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               )}
             </div>
             {err && <p className="rounded-lg bg-red-50 p-2 text-xs text-red-700">{err}</p>}

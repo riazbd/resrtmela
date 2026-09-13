@@ -973,6 +973,67 @@ model Counter {
 // ───────────────────────── SaaS platform layer ─────────────────────────
 
 /// A resort's platform subscription ("booking" the resort makes with the platform).
+/// One way to buy a plan: a label the owner types, and a ladder of prices under
+/// it.
+///
+/// This replaces `BILLING_CYCLES = ["MONTHLY", "YEARLY"]`, which was a
+/// two-element array in code that decided, for every resort on the platform,
+/// the only two rhythms that could exist. Offering a three-year deal, or a
+/// quarter, or a week, meant a migration and a deploy — which is to say the
+/// owner could not offer one.
+///
+/// `label` is free text for exactly that reason. "Monthly" is not a constant
+/// here, it is a row somebody typed.
+model PlanSchedule {
+  id     Int          @id @default(autoincrement())
+  planId BigInt
+  plan   PlatformPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  /// The owner's own words, shown on the pricing toggle: "Monthly", "Yearly",
+  /// "3-year deal".
+  label     String  @db.VarChar(40)
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  phases        PlanPhase[]
+  subscriptions Subscription[] @relation("SubscriptionSchedule")
+  pendingFor    Subscription[] @relation("SubscriptionPendingSchedule")
+
+  @@index([planId])
+  @@map("plan_schedules")
+}
+
+/// One rung of a schedule: how long a period lasts, what it costs, and how many
+/// periods go by before the next rung takes over.
+///
+/// "Free for 7 days, then 500 a month for 6 months, then 1,500 a month" is
+/// three rows. So is every promotional price any SaaS has ever run, and so is
+/// the ordinary plan that has one price and no promotion — one row, forever.
+///
+/// The last rung of a schedule must have `repeat` NULL, or the period after it
+/// has no price at all. `phasesAreSane` in @rh/shared is the one place that
+/// rule is written, and both the editor and the service ask it.
+model PlanPhase {
+  id         Int          @id @default(autoincrement())
+  scheduleId Int
+  schedule   PlanSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  seq        Int
+
+  /// How long ONE period of this phase lasts: 7 DAY, 1 MONTH, 3 MONTH.
+  count Int    @default(1)
+  /// DAY | WEEK | MONTH | YEAR — `PERIOD_UNITS` in @rh/shared, and the one
+  /// thing here that cannot be data: `addPeriod` has to know what to add.
+  unit  String @default("MONTH") @db.VarChar(8)
+
+  price Decimal @db.Decimal(10, 2)
+
+  /// How many periods at this price. NULL is the last rung: forever.
+  repeats Int?
+
+  @@unique([scheduleId, seq])
+  @@map("plan_phases")
+}
+
 model Subscription {
   id          BigInt    @id @default(autoincrement())
   /// The customer — a resort owner or an agency — not one of its resorts.
@@ -985,7 +1046,50 @@ model Subscription {
   /// MONTHLY | YEARLY — how often this account is billed, and therefore what
   /// one period is. `billingCycle` rather than `interval`, which is a reserved
   /// word in MySQL and MariaDB.
+  ///
+  /// BEING RETIRED in favour of `scheduleId`. Two rhythms named in code is the
+  /// hardcoding this whole change exists to remove; the schedule a customer
+  /// picked is a row, and it carries its own ladder of prices. Kept here only
+  /// until the services are switched over and the data is verified.
   billingCycle String   @default("MONTHLY") @db.VarChar(8)
+
+  /// The way this account bought the plan — which `PlanSchedule` they picked,
+  /// and therefore the ladder their price walks up.
+  ///
+  /// Nullable because a subscription predates its schedule: every existing row
+  /// is matched to one by migration, and the services refuse to bill a live
+  /// subscription that has none rather than guessing a price.
+  scheduleId Int?
+  schedule   PlanSchedule? @relation("SubscriptionSchedule", fields: [scheduleId], references: [id])
+
+  /// Where on the ladder this subscription currently stands: which rung, and
+  /// how many periods of that rung have already been invoiced.
+  ///
+  /// Stored rather than counted from the dues, because the dues are not a
+  /// reliable count of periods lived: one can be WAIVED, and the owner can
+  /// edit a plan's phases under an account that is halfway up them.
+  phaseSeq  Int @default(1)
+  phaseDone Int @default(0)
+
+  /// A standing discount off every rung, as a percentage.
+  ///
+  /// `Offer.discountPct` used to be applied once, to `fee`, and `fee` never
+  /// moved again — so "20% off" meant twenty percent off for as long as the
+  /// customer stayed. Prices come from the plan's ladder now and are re-read
+  /// every period, which would have turned every existing offer into a
+  /// one-period discount without anyone saying so. It is stored here instead,
+  /// and comes off whichever rung the account is standing on.
+  discountPct Int?
+
+  /// When the current rung began — the anchor every period inside it is
+  /// measured from.
+  ///
+  /// Not a convenience. Period dates used to be chained, each computed from
+  /// the one before, which turns a single clamp into a permanent slide: a
+  /// subscription renewing on the 31st hits a short month, lands on the 28th,
+  /// and stays on the 28th for the rest of its life. Measured from a fixed
+  /// anchor, the 31st comes back the moment a month is long enough to hold it.
+  phaseStartedAt DateTime?
 
   /// What this subscription pays each period — a month's fee on MONTHLY, a
   /// year's on YEARLY.
@@ -1015,7 +1119,15 @@ model Subscription {
   /// shape as `pendingPlan` and for the same reason. Going yearly costs more
   /// now and lands at once; going back to monthly would take away a year that
   /// has already been paid for, so it waits here.
+  ///
+  /// BEING RETIRED alongside `billingCycle`, and replaced by
+  /// `pendingScheduleId`.
   pendingCycle String?  @db.VarChar(8)
+
+  /// A move to a different schedule, waiting for the renewal — `pendingCycle`
+  /// generalised to however many ways the owner sells this plan.
+  pendingScheduleId Int?
+  pendingSchedule   PlanSchedule? @relation("SubscriptionPendingSchedule", fields: [pendingScheduleId], references: [id])
 
   dues SubscriptionDue[]
 
@@ -1027,6 +1139,7 @@ model Subscription {
   /// and 20260912100000_the_subscriber_is_an_account.
   @@index([accountId])
   @@index([status])
+  @@index([scheduleId])
   @@map("subscriptions")
 }
 
@@ -1229,6 +1342,13 @@ model PlatformPlan {
   ///
   /// The convention the panel suggests is ten months' fee, which is where
   /// "two months free" comes from, but the number is the owner's to set.
+  ///
+  /// BEING RETIRED. `monthlyFee` and `yearlyFee` are two prices because the
+  /// platform could only ever sell two rhythms, both named in code. Prices now
+  /// live in `PlanSchedule` -> `PlanPhase`, where the owner can write as many
+  /// ways to buy as they like, each a ladder of as many steps. These two are
+  /// read by nothing once the services are switched over; the columns go in a
+  /// migration of their own, after the data is verified in its new home.
   yearlyFee  Decimal? @db.Decimal(10, 2)
   maxRooms   Int     @default(10)
   maxResorts Int     @default(1) // multi-resort gate: CHAIN allows several resorts per owner
@@ -1258,6 +1378,9 @@ model PlatformPlan {
   /// the service enforces — "at most one" is not something a unique index can
   /// say without storing NULL for false.
   highlight  Boolean @default(false)
+
+  /// Every way this plan can be bought. Empty until the owner writes one.
+  schedules  PlanSchedule[]
 
   @@map("platform_plans")
 }

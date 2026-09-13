@@ -17,14 +17,8 @@ import { signToken } from "../common/auth.guard";
 import { randomBytes } from "node:crypto";
 import type { OfferInput } from "../common/offers";
 import { assertBrandValue, BRAND_KEYS, isBrandKey, type BrandKey } from "../common/brand";
-import {
-  feeFor,
-  isBillingCycle,
-  monthsIn,
-  soldYearly,
-  yearlySaving,
-  type BillingCycle,
-} from "../common/billing-cycle";
+import { addPeriod, isPeriodUnit, perMonthEquivalent, phasesAreSane, settleMonths } from "@rh/shared";
+import { openingPosition, scheduleFor, schedulesFor, toPhases } from "../common/plan-schedules";
 import * as bcrypt from "bcryptjs";
 
 /**
@@ -204,6 +198,14 @@ function assertPlanFields(
 export const WALLET_KINDS = ["TOPUP", "PAYOUT", "ADJUST"] as const;
 export type WalletKindName = (typeof WALLET_KINDS)[number];
 
+/** One way of buying a plan, as the panel submits it. */
+export interface ScheduleInput {
+  label: string;
+  active?: boolean;
+  /** `undefined` and `null` both mean the same thing here: the last rung, forever. */
+  phases: { count: number; unit: string; price: number; repeats?: number | null }[];
+}
+
 function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * 86_400_000);
 }
@@ -233,11 +235,27 @@ export class PlatformService {
     const [resorts, agents, subs, dues, rooms] = await Promise.all([
       this.prisma.resort.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
       this.prisma.user.findMany({ where: { role: "AGENT" }, select: { status: true } }),
-      this.prisma.subscription.findMany({ select: { status: true, fee: true, billingCycle: true } }),
+      this.prisma.subscription.findMany({
+        select: { status: true, fee: true, scheduleId: true },
+      }),
       this.prisma.subscriptionDue.findMany({ where: { status: { in: ["DUE", "OVERDUE"] } }, select: { amount: true } }),
       this.prisma.room.count({ where: { deletedAt: null } }),
     ]);
     const activeSubs = subs.filter((s) => s.status === "ACTIVE");
+    /**
+     * How many months one period of each schedule covers, so a fee can be
+     * normalised to a month. This used to be `monthsIn(cycle)` — 1 or 12, the
+     * only two answers there were. A schedule the owner wrote can say three,
+     * or a fortnight; a subscription with no schedule contributes its fee as
+     * if monthly, which is the reading that keeps the number finite.
+     */
+    const scheduleMonths = new Map<number, number>();
+    for (const row of await this.prisma.planSchedule.findMany({
+      include: { phases: { orderBy: { seq: "asc" } } },
+    })) {
+      if (row.phases.length > 0) scheduleMonths.set(row.id, settleMonths(toPhases(row.phases)));
+    }
+    const monthsOf = (id: number | null) => (id != null ? (scheduleMonths.get(id) ?? 1) : 1);
     return {
       resorts: {
         total: resorts.length,
@@ -265,12 +283,7 @@ export class PlatformService {
          * metric means everywhere it is quoted.
          */
         mrr: round2(
-          activeSubs.reduce(
-            (sum, s) =>
-              sum +
-              Number(s.fee) / monthsIn(isBillingCycle(s.billingCycle) ? s.billingCycle : "MONTHLY"),
-            0,
-          ),
+          activeSubs.reduce((sum, s) => sum + Number(s.fee) / monthsOf(s.scheduleId), 0),
         ),
       },
       duesOutstanding: dues.reduce((sum, d) => sum + Number(d.amount), 0),
@@ -293,7 +306,7 @@ export class PlatformService {
             id: true,
             name: true,
             kind: true,
-            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, fee: true, billingCycle: true, renewsAt: true } },
+            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, fee: true, scheduleId: true, renewsAt: true } },
           },
         },
         _count: { select: { rooms: true, bookings: true, guests: true } },
@@ -501,7 +514,7 @@ export class PlatformService {
   async setSubscription(
     claims: JwtClaims,
     resortId: number,
-    input: { plan: string; fee?: number; note?: string; trialDays?: number; billingCycle?: string },
+    input: { plan: string; fee?: number; note?: string; trialDays?: number; scheduleId?: number },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { tenantId: true } });
@@ -516,7 +529,7 @@ export class PlatformService {
   async setAccountSubscription(
     claims: JwtClaims,
     accountId: number,
-    input: { plan: string; fee?: number; note?: string; trialDays?: number; billingCycle?: string },
+    input: { plan: string; fee?: number; note?: string; trialDays?: number; scheduleId?: number },
   ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
@@ -560,17 +573,16 @@ export class PlatformService {
     });
 
     /**
-     * Which rhythm this account is put on, and what one period of it costs.
+     * Which schedule this account is put on, and what its first period costs.
      *
      * `input.fee` is the super admin giving one customer a price of their own,
-     * exactly as it always could; what it overrides is now the price of a
-     * period rather than of a month.
+     * exactly as it always could. Note what it now overrides: the *opening*
+     * period only. From the renewal on, the sweep reads the ladder — so a
+     * hand-set price is a one-period courtesy, not a permanent discount. A
+     * standing discount is `discountPct`, which comes off every rung.
      */
-    const billingCycle: BillingCycle = isBillingCycle(input.billingCycle) ? input.billingCycle : "MONTHLY";
-    if (billingCycle === "YEARLY" && !soldYearly(def)) {
-      throw badRequest(`${def.label} is not sold by the year — set a yearly price on it first.`);
-    }
-    const fee = input.fee ?? feeFor(def, billingCycle);
+    const schedule = await scheduleFor(this.prisma, def, input.scheduleId);
+    const fee = input.fee ?? schedule.openingFee;
     const sub = await this.prisma.$transaction(async (tx) => {
       if (existing) {
         await tx.subscription.update({
@@ -608,12 +620,15 @@ export class PlatformService {
           accountId,
           plan: input.plan,
           status,
-          billingCycle,
           fee,
           startedAt: existing?.startedAt ?? now,
           trialEndsAt,
           renewsAt,
           note: input.note,
+          // the rung, the count and the anchor travel together: `renewsAt` is
+          // the day this account starts paying, and every period it is ever
+          // billed for is measured from there
+          ...openingPosition(schedule, renewsAt ?? now),
         },
       });
     });
@@ -630,7 +645,31 @@ export class PlatformService {
   async listPlans(claims: JwtClaims) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
-    return this.prisma.platformPlan.findMany({ orderBy: { sortOrder: "asc" } });
+    const rows = await this.prisma.platformPlan.findMany({
+      orderBy: { sortOrder: "asc" },
+      // the panel puts somebody on a plan, and a plan is bought on a shelf:
+      // without these the form has a plan name and no price to charge
+      include: {
+        schedules: {
+          orderBy: { sortOrder: "asc" },
+          include: { phases: { orderBy: { seq: "asc" } } },
+        },
+      },
+    });
+    return rows.map((r) => ({
+      ...r,
+      schedules: r.schedules.map((sch) => {
+        const phases = toPhases(sch.phases);
+        return {
+          id: sch.id,
+          label: sch.label,
+          active: sch.active,
+          phases,
+          openingFee: phases[0]?.price ?? 0,
+          perMonth: perMonthEquivalent(phases),
+        };
+      }),
+    }));
   }
 
   async createPlan(claims: JwtClaims, input: PlanInput) {
@@ -664,8 +703,71 @@ export class PlatformService {
       },
     });
     if (input.highlight) await this.featureOnly(plan.name);
+    await this.ensureSchedules(plan);
     await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
+  }
+
+  /**
+   * A plan with no way to buy it is a plan nobody can be put on — `scheduleFor`
+   * refuses, and the billing sweep will not invoice a subscription with no
+   * schedule. So a plan that has none gets one built from the fees it was
+   * created with: a single rung, running forever, which is exactly what a plan
+   * with one price has always been.
+   *
+   * TRANSITIONAL, and it goes when `monthlyFee` and `yearlyFee` do. The real
+   * path is the ladder editor calling `setSchedules`; this is what keeps the
+   * plan form working in the meantime, and what stops a plan created through
+   * the API from being unsellable.
+   */
+  private async ensureSchedules(plan: {
+    id: bigint;
+    monthlyFee: unknown;
+    yearlyFee: unknown;
+  }): Promise<void> {
+    const existing = await this.prisma.planSchedule.findMany({
+      where: { planId: plan.id },
+      include: { phases: true },
+    });
+    if (existing.length > 0) {
+      /**
+       * The fee boxes and the ladder are two ways of saying the same thing
+       * while both exist, so editing one has to move the other — a plan whose
+       * price box says 7,777 and whose schedule still says 5,000 would bill
+       * the old number and show the new one.
+       *
+       * Only where the schedule is a single rung. Once somebody has built a
+       * real ladder under a plan, a number typed in a legacy box is not
+       * allowed to flatten it.
+       */
+      for (const sched of existing) {
+        if (sched.phases.length !== 1) continue;
+        const rung = sched.phases[0]!;
+        const fee = rung.unit === "YEAR" ? plan.yearlyFee : plan.monthlyFee;
+        if (fee == null || Number(fee) === Number(rung.price)) continue;
+        await this.prisma.planPhase.update({
+          where: { id: rung.id },
+          data: { price: fee as never },
+        });
+      }
+      return;
+    }
+    const monthly = await this.prisma.planSchedule.create({
+      data: { planId: plan.id, label: "Monthly", sortOrder: 0 },
+    });
+    await this.prisma.planPhase.create({
+      data: { scheduleId: monthly.id, seq: 1, count: 1, unit: "MONTH", price: plan.monthlyFee as never },
+    });
+    // zero and null both mean "not sold by the year", which is the reading
+    // `soldYearly` always gave them
+    if (plan.yearlyFee != null && Number(plan.yearlyFee) > 0) {
+      const yearly = await this.prisma.planSchedule.create({
+        data: { planId: plan.id, label: "Yearly", sortOrder: 1 },
+      });
+      await this.prisma.planPhase.create({
+        data: { scheduleId: yearly.id, seq: 1, count: 1, unit: "YEAR", price: plan.yearlyFee as never },
+      });
+    }
   }
 
   async updatePlan(claims: JwtClaims, name: string, input: PlanPatch) {
@@ -717,6 +819,7 @@ export class PlatformService {
       },
     });
     if (input.highlight) await this.featureOnly(name);
+    await this.ensureSchedules(plan);
     await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
   }
@@ -745,6 +848,145 @@ export class PlatformService {
    * pointing at nothing — including a cancelled subscription, which is the
    * record of what they used to pay and has to stay readable.
    */
+  /**
+   * Every way a plan is sold, as the editor draws it.
+   *
+   * Includes inactive shelves, which `schedulesFor` filters out: the panel is
+   * where somebody turns one back on, and a row it cannot see is a row it
+   * cannot restore.
+   */
+  async planSchedules(claims: JwtClaims, name: string): Promise<ScheduleInput[]> {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const rows = await this.prisma.planSchedule.findMany({
+      where: { plan: { name } },
+      orderBy: { sortOrder: "asc" },
+      include: { phases: { orderBy: { seq: "asc" } } },
+    });
+    return rows.map((r) => ({
+      label: r.label,
+      active: r.active,
+      phases: toPhases(r.phases).map((p) => ({
+        count: p.count, unit: p.unit, price: p.price, repeats: p.repeats,
+      })),
+    }));
+  }
+
+  /**
+   * Replaces a plan's shelves and their ladders, whole.
+   *
+   * Whole, rather than rung by rung, because a ladder is only correct as a
+   * unit: `phasesAreSane` insists the last rung runs forever, and a half-saved
+   * edit leaves a plan whose next period has no price. One write, one
+   * validation, one transaction — so a refusal leaves exactly what was there.
+   *
+   * Matching by label is what lets an edit keep its subscribers. The rows are
+   * rebuilt, but a shelf whose label survives keeps its id, so the accounts
+   * standing on it stand on it still and simply meet the new prices at their
+   * next renewal. That is how a price rise is supposed to work.
+   */
+  async setSchedules(claims: JwtClaims, name: string, input: ScheduleInput[]) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const plan = await this.prisma.platformPlan.findUnique({ where: { name } });
+    if (!plan) throw badRequest("No such plan");
+
+    if (input.length === 0) {
+      throw badRequest(`${plan.label} needs at least one way to buy it.`);
+    }
+    const labels = input.map((x) => (x.label ?? "").trim());
+    if (labels.some((l) => !l)) throw badRequest("Every way of buying needs a name.");
+    if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) {
+      throw badRequest("Two ways of buying cannot share a name.");
+    }
+    for (const [i, sched] of input.entries()) {
+      const phases = toPhases(
+        (sched.phases ?? []).map((ph, n) => ({ ...ph, seq: n + 1, repeats: ph.repeats ?? null })),
+      );
+      // the unit has to survive the round trip: `toPhases` reads an unknown
+      // one as a month, which would quietly accept "FORTNIGHT" as monthly
+      const unknown = (sched.phases ?? []).find((ph) => !isPeriodUnit(ph.unit));
+      if (unknown) throw badRequest(`"${unknown.unit}" is not a period the calendar knows.`);
+      const wrong = phasesAreSane(phases);
+      if (wrong) throw badRequest(`${labels[i]}: ${wrong}`);
+    }
+
+    /**
+     * A shelf cannot be taken down while somebody is being billed on it.
+     *
+     * `Subscription.scheduleId` is ON DELETE SET NULL, so removing the row
+     * would not fail — it would detach the account, and the billing sweep
+     * would then decline to invoice a customer who is still being served. An
+     * invisible hole in the revenue, found a month later.
+     */
+    const existing = await this.prisma.planSchedule.findMany({
+      where: { planId: plan.id },
+      include: {
+        _count: {
+          select: {
+            subscriptions: { where: { status: { not: "CANCELLED" } } },
+            pendingFor: { where: { status: { not: "CANCELLED" } } },
+          },
+        },
+      },
+    });
+    const keeping = new Set(labels.map((l) => l.toLowerCase()));
+    const inUse = existing.filter(
+      (e) => !keeping.has(e.label.toLowerCase()) && e._count.subscriptions + e._count.pendingFor > 0,
+    );
+    if (inUse.length > 0) {
+      const which = inUse.map((e) => `${e.label} (${e._count.subscriptions + e._count.pendingFor})`);
+      throw badRequest(
+        `Cannot remove ${which.join(", ")} — accounts are still being billed on it. Move them first.`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const byLabel = new Map(existing.map((e) => [e.label.toLowerCase(), e]));
+      for (const [i, sched] of input.entries()) {
+        const label = labels[i]!;
+        const kept = byLabel.get(label.toLowerCase());
+        const id = kept
+          ? (
+              await tx.planSchedule.update({
+                where: { id: kept.id },
+                data: { label, sortOrder: i, active: sched.active ?? true },
+              })
+            ).id
+          : (
+              await tx.planSchedule.create({
+                data: { planId: plan.id, label, sortOrder: i, active: sched.active ?? true },
+              })
+            ).id;
+        // the rungs are rewritten rather than diffed: they have no identity of
+        // their own, and nothing points at them
+        await tx.planPhase.deleteMany({ where: { scheduleId: id } });
+        await tx.planPhase.createMany({
+          data: (sched.phases ?? []).map((ph, n) => ({
+            scheduleId: id,
+            seq: n + 1,
+            count: ph.count,
+            unit: ph.unit,
+            price: ph.price as never,
+            repeats: ph.repeats ?? null,
+          })),
+        });
+        byLabel.delete(label.toLowerCase());
+      }
+      // whatever is left had no line in the new set, and nobody is on it
+      for (const gone of byLabel.values()) {
+        await tx.planSchedule.delete({ where: { id: gone.id } });
+      }
+    });
+
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "platform.plan.schedules",
+      entity: "platform_plan",
+      entityId: Number(plan.id),
+      diff: { plan: name, schedules: input as never },
+    });
+    return this.planSchedules(claims, name);
+  }
+
   async deletePlan(claims: JwtClaims, name: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     await ensurePlans(this.prisma);
@@ -778,14 +1020,38 @@ export class PlatformService {
    * charged a yearly customer a twelfth of their fee for a twelfth of their
    * term.
    */
+  /**
+   * The rung a subscription is standing on — or a month, when it has no
+   * schedule to stand on at all. A month is the reading that lets a date be
+   * pushed out rather than the request failing; the sweep is stricter, because
+   * raising money against a price nobody set is a different matter.
+   */
+  private async rungOf(sub: { scheduleId: number | null; phaseSeq: number }) {
+    const fallback = { count: 1, unit: "MONTH" as const };
+    if (sub.scheduleId == null) return fallback;
+    const rows = await this.prisma.planPhase.findMany({
+      where: { scheduleId: sub.scheduleId },
+      orderBy: { seq: "asc" },
+    });
+    if (rows.length === 0) return fallback;
+    const phases = toPhases(rows);
+    return phases.find((x) => x.seq === sub.phaseSeq) ?? phases[phases.length - 1]!;
+  }
+
   async renewSubscription(claims: JwtClaims, subscriptionId: number, periods = 1) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const sub = await this.prisma.subscription.findUnique({ where: { id: BigInt(subscriptionId) } });
     if (!sub) throw badRequest("subscription not found");
     if (sub.status === "CANCELLED") throw badRequest("subscription cancelled — create a new one");
     const base = sub.renewsAt && sub.renewsAt > new Date() ? sub.renewsAt : new Date();
-    const cycle: BillingCycle = isBillingCycle(sub.billingCycle) ? sub.billingCycle : "MONTHLY";
-    const renewsAt = addMonths(base, monthsIn(cycle) * periods);
+    /**
+     * The length of a period comes from the rung the account is standing on.
+     * Hand-renewing does not walk the ladder — it is the super admin pushing a
+     * date out, not the sweep billing a term — so the rung stays where it is
+     * and the price is the one the account is already paying.
+     */
+    const rung = await this.rungOf(sub);
+    const renewsAt = addPeriod(base, rung.count * periods, rung.unit);
     await this.prisma.subscriptionDue.create({
       data: {
         subscriptionId: sub.id,
@@ -800,7 +1066,7 @@ export class PlatformService {
       where: { id: sub.id },
       data: { status: sub.status === "TRIAL" ? "ACTIVE" : sub.status, renewsAt },
     });
-    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { accountId: sub.accountId, periods, billingCycle: cycle, renewsAt } });
+    await this.audit.log({ actorId: claims.userId, action: "platform.subscription.renew", entity: "subscription", entityId: Number(sub.id), diff: { accountId: sub.accountId, periods, scheduleId: sub.scheduleId, renewsAt } });
     return updated;
   }
 
@@ -1925,6 +2191,9 @@ export class PlatformService {
       include: {
         account: { select: { id: true, name: true, kind: true, status: true } },
         dues: { select: { amount: true, status: true } },
+        // the label is what stops ৳25,000 being read as a month's fee
+        schedule: { select: { id: true, label: true } },
+        pendingSchedule: { select: { id: true, label: true } },
       },
       orderBy: [{ id: "desc" }],
     });
@@ -1934,8 +2203,10 @@ export class PlatformService {
       plan: s.plan,
       pendingPlan: s.pendingPlan,
       status: s.status,
-      billingCycle: s.billingCycle,
-      pendingCycle: s.pendingCycle,
+      scheduleId: s.schedule?.id ?? null,
+      scheduleLabel: s.schedule?.label ?? null,
+      pendingScheduleId: s.pendingSchedule?.id ?? null,
+      pendingScheduleLabel: s.pendingSchedule?.label ?? null,
       fee: Number(s.fee),
       startedAt: s.startedAt,
       trialEndsAt: s.trialEndsAt,
@@ -2207,25 +2478,45 @@ export class PlatformService {
       where: { active: true, audience },
       orderBy: { sortOrder: "asc" },
       select: {
-        name: true, label: true, monthlyFee: true, yearlyFee: true,
+        id: true, name: true, label: true,
         maxRooms: true, maxResorts: true, maxStaff: true, trialDays: true, blurb: true, highlight: true,
         // the ticks on the card are drawn from this, not from a map in the page
         features: true,
       },
     });
-    return rows.map((r) => ({
-      ...r,
-      monthlyFee: Number(r.monthlyFee),
-      /**
-       * Null where the plan is not sold by the year, so the page can hide its
-       * yearly column for that card rather than print a zero. The saving is
-       * computed here for the same reason every price is: one answer, and the
-       * page does not do arithmetic the invoice might disagree with.
-       */
-      yearlyFee: soldYearly(r) ? Number(r.yearlyFee) : null,
-      yearlySaving: yearlySaving(r),
-      features: Array.isArray(r.features) ? (r.features as string[]) : [],
-    }));
+    return Promise.all(
+      rows.map(async (r) => {
+        const { id: _id, ...card } = r;
+        const schedules = (await schedulesFor(this.prisma, r.id)).map((x) => ({
+          id: x.id,
+          label: x.label,
+          phases: x.phases,
+          openingFee: x.openingFee,
+          perMonth: perMonthEquivalent(x.phases),
+        }));
+        /**
+         * What each way of buying saves against the dearest way of buying the
+         * same plan — the badge on the pricing toggle.
+         *
+         * Computed, never typed, and computed from the price the customer
+         * settles on rather than the one that gets them in. A badge read off
+         * an introductory rung would swing every time a promotion changed,
+         * while the customer's actual lifetime saving had not moved at all.
+         * This used to be `yearlySaving`, which could only ever compare two
+         * things because there were only ever two.
+         */
+        const dearest = schedules.reduce((max, x) => Math.max(max, x.perMonth), 0);
+        return {
+          ...card,
+          schedules: schedules.map((x) => ({
+            ...x,
+            savingPerMonth: round2(dearest - x.perMonth),
+            savingPct: dearest > 0 ? Math.round(((dearest - x.perMonth) / dearest) * 100) : 0,
+          })),
+          features: Array.isArray(r.features) ? (r.features as string[]) : [],
+        };
+      }),
+    );
   }
 
   async putCms(claims: JwtClaims, key: string, value: string) {

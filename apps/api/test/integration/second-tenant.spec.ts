@@ -8,7 +8,7 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
 import { makeBookingsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { PlatformService } from "../../src/platform/platform.service";
@@ -133,6 +133,8 @@ describe("a second tenant, configured entirely through data", () => {
         trialDays: 45,
       },
     });
+    // a plan this spec made itself still needs somewhere to keep its price
+    await seedPlanSchedules(prisma as unknown as PrismaClient);
     const platform = new PlatformService(
       asPrismaService,
       new AuditService(asPrismaService),

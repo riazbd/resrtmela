@@ -48,6 +48,15 @@ describe("the platform's own shopfront", () => {
     const plans = await controller().plans();
 
     expect(Array.isArray(plans[0]!.features)).toBe(true);
-    expect(typeof plans[0]!.monthlyFee).toBe("number");
+    /**
+     * A card with no way to buy it is the failure this test is here to catch.
+     * The price used to be a field on the plan; it is a rung on a schedule
+     * now, and a plan reaching the shopfront with no schedule at all would
+     * render a card with a name, some ticks, and no number under them.
+     */
+    const schedules = plans[0]!.schedules;
+    expect(schedules.length).toBeGreaterThan(0);
+    expect(typeof schedules[0]!.openingFee).toBe("number");
+    expect(schedules[0]!.phases.length).toBeGreaterThan(0);
   });
 });

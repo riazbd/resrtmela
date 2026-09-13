@@ -1,7 +1,7 @@
 import type { Prisma, PlatformPlan, Offer } from "@rh/db";
 import { sameEmail } from "./contact";
 import { round2 } from "./dates";
-import { feeFor, type BillingCycle } from "./billing-cycle";
+import { openingPosition, type ResolvedSchedule } from "./plan-schedules";
 
 /** What the platform (or a resort's invitation) says an offer is. */
 export type OfferInput = {
@@ -56,30 +56,40 @@ export async function redeemOffer(
  * The first subscription of an account: the plan's terms, or the offer's where
  * it has its own.
  *
- * The rhythm is the customer's choice at signup, and it decides what a period
- * is and what one costs — a month's fee, or the year's own price. An offer's
- * discount comes off whichever of the two was chosen, so "20% off" means the
- * same thing on both shelves.
+ * The schedule is the customer's choice at signup, and it decides everything
+ * about the money: how long a period is, what the first one costs, and what
+ * the ones after it cost. An offer's discount is stored rather than baked into
+ * the opening fee, because the fee is re-read from the ladder every period and
+ * a discount that vanished at the first renewal would be a worse promise than
+ * no discount.
+ *
+ * `renewsAt` and the phase anchor are the same instant — the day the paying
+ * relationship starts, which is the end of the trial where there is one. Every
+ * period this account is ever billed for is measured from it.
  */
 export function openingSubscription(
   accountId: number,
   plan: PlatformPlan,
+  schedule: ResolvedSchedule,
   offer?: Offer | null,
   now = new Date(),
-  billingCycle: BillingCycle = "MONTHLY",
 ) {
   const trialDays = offer?.trialDays ?? plan.trialDays;
   const onTrial = trialDays > 0;
   const trialEndsAt = onTrial ? new Date(now.getTime() + trialDays * 86_400_000) : null;
-  const listFee = feeFor(plan, billingCycle);
-  const fee = offer?.discountPct ? round2((listFee * (100 - offer.discountPct)) / 100) : listFee;
+  const startsPaying = trialEndsAt ?? now;
+  const discountPct = offer?.discountPct ?? null;
+  const fee = discountPct
+    ? round2((schedule.openingFee * (100 - discountPct)) / 100)
+    : schedule.openingFee;
   return {
     accountId,
     plan: plan.name,
     status: onTrial ? "TRIAL" : "ACTIVE",
-    billingCycle,
     fee,
+    discountPct,
     trialEndsAt,
-    renewsAt: onTrial ? trialEndsAt : now,
+    renewsAt: startsPaying,
+    ...openingPosition(schedule, startsPaying),
   };
 }

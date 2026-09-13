@@ -14,19 +14,28 @@
 export function signupHref({
   audience,
   plan,
-  yearly,
+  scheduleId,
 }: {
   audience: "RESORT" | "AGENCY";
   /** The plan's `name`, as the platform stores it. */
   plan: string;
-  yearly: boolean;
+  /**
+   * Which way they were being shown it — the `PlanSchedule` behind the card
+   * they pressed.
+   *
+   * This was `yearly: boolean`, which carried exactly one bit because there
+   * were exactly two shelves. An id carries whichever one the owner wrote, so
+   * a visitor who pressed a card reading "Free for a week, then ৳500" arrives
+   * at a signup that charges that and not something else.
+   */
+  scheduleId: number | null;
 }): string {
   const path = audience === "AGENCY" ? "/signup/agency" : "/signup";
   const params = new URLSearchParams();
   // encoded, not interpolated: the name is typed by a super admin, and an `&`
   // pasted straight into the URL would silently split it into two parameters
   if (plan) params.set("plan", plan);
-  if (yearly) params.set("billing", "YEARLY");
+  if (scheduleId != null) params.set("schedule", String(scheduleId));
   const query = params.toString();
   return query ? `${path}?${query}` : path;
 }

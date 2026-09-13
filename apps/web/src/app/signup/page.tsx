@@ -10,6 +10,7 @@ import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 import { OfferBanner, offerLine, useOffer } from "./offer";
 import { plannedPlan } from "../(public)/signup-href";
+import { formatMoney, scheduleSentence, type Phase } from "@rh/shared";
 import { LogoMark } from "@/components/logo";
 
 interface SignupResult {
@@ -29,7 +30,8 @@ interface PublicPlan {
   label: string;
   maxRooms: number;
   trialDays: number;
-  yearlyFee: number | null;
+  /** Every way this plan is sold; the card the visitor pressed named one. */
+  schedules: { id: number; label: string; phases: Phase[]; openingFee: number }[];
 }
 
 export default function SignupPage() {
@@ -60,24 +62,30 @@ export default function SignupPage() {
   useEffect(() => setWorkspaceHost(window.location.host), []);
 
   /**
-   * `?billing=YEARLY`, from the pricing page's toggle.
+   * `?schedule=7`, from the card the visitor pressed.
+   *
+   * This was `?billing=YEARLY`, a single bit, because monthly and yearly were
+   * the only two ways anything could be sold. It names a `PlanSchedule` now,
+   * so somebody who pressed a card reading "Free for a week, then ৳500 a
+   * month" signs up on exactly that and not on something adjacent to it.
    *
    * Read after mounting for the same reason `window.location.host` is: the
    * server has no query string of its own here, and reading one during render
    * makes the first client render disagree with the server's HTML.
    */
-  const [yearly, setYearly] = useState(false);
+  const [pickedSchedule, setPickedSchedule] = useState<number | null>(null);
   /**
    * `?plan=CHAIN`, from the card that was clicked.
    *
-   * Read here for the same reason `billing` is, and it is the same trip: the
+   * Read here for the same reason `schedule` is, and it is the same trip: the
    * two travel together from the pricing page, and until today only one of
    * them was picked up. A workspace that chose Chain opened on Starter.
    */
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    setYearly(q.get("billing") === "YEARLY");
+    const asked = Number(q.get("schedule"));
+    setPickedSchedule(Number.isInteger(asked) && asked > 0 ? asked : null);
     setPicked(q.get("plan"));
   }, []);
 
@@ -142,7 +150,7 @@ export default function SignupPage() {
           // which rhythm was picked on the pricing page. The API checks it
           // against the plan and falls back to monthly rather than refusing,
           // so a stale link cannot cost somebody their signup.
-          billingCycle: yearly ? "YEARLY" : "MONTHLY",
+          scheduleId: shelf?.id,
           agentsOpen: agentsOpen === true,
         },
       });
@@ -172,13 +180,29 @@ export default function SignupPage() {
   // the plan the pricing card named, or the first row of the price list — which
   // the API already orders and filters — when the visitor arrived without one
   const entry = plannedPlan(plans, picked);
-  // an offer names the plan the workspace lands on
-  // and the rhythm, when the visitor arrived from the yearly side of the toggle
-  const onYear = yearly && entry?.yearlyFee != null;
+  /**
+   * The shelf they arrived on, or the plan's first.
+   *
+   * A schedule id from a stale link may belong to a plan they are no longer
+   * looking at, so it is only honoured when this plan actually has it — the
+   * same rule `scheduleFor` applies on the server, said once more here so the
+   * summary line and the charge cannot disagree.
+   */
+  const shelf =
+    entry?.schedules.find((x) => x.id === pickedSchedule) ?? entry?.schedules[0] ?? null;
+  /**
+   * What they are agreeing to, in full — the ladder included.
+   *
+   * A summary that named only the opening price would be the renewal-shock
+   * complaint in miniature, on the one screen where somebody is actually
+   * deciding.
+   */
+  const money = (n: number) => formatMoney(n, { currency: "BDT", locale: "en-IN" });
+  const priceLine = shelf ? scheduleSentence(shelf.phases, money) : "";
   const entryLine = usingOffer
     ? offerLine(offer.offer!)
     : entry
-      ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${onYear ? " · billed yearly" : ""}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
+      ? `${entry.label} · ${entry.maxRooms >= 1000 ? "unlimited rooms" : `${entry.maxRooms} rooms`}${priceLine ? ` · ${priceLine}` : ""}${entry.trialDays ? ` · ${entry.trialDays} days free` : ""}`
       : "";
 
   return (

@@ -15,6 +15,7 @@ export * from "./api-error";
 export * from "./placeholders";
 export * from "./payment-method";
 export * from "./imported-receipt";
+export * from "./plan-schedule";
 export * from "./contact";
 export * from "./brand";
 export * from "./api-url";
