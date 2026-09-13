@@ -67,6 +67,21 @@ export class EngageService {
    * sell yet.
    */
   async discoverResorts(claims: JwtClaims) {
+    /**
+     * An agency, or nobody.
+     *
+     * `agencyOf` *returns* its refusal rather than throwing, and the branch
+     * below reads any refusal as "an agency that cannot sell yet" — a real and
+     * deliberate state, where an unverified agency looks around while it waits.
+     * Somebody who is not an agent at all fell into the same branch and
+     * inherited the same affordance, so a resort's manager could read this list.
+     *
+     * What that hands over is a competitor's shopfront: every resort courting
+     * agencies, with its location, its room count, and the lowest rate it sells
+     * a room at. The "may look" state belongs to agencies waiting on us, not to
+     * everybody who happens to hold a token.
+     */
+    if (claims.role !== ROLE.AGENT) throw forbid("Agents only");
     const agency = await agencyOf(this.prisma, claims.userId);
     const resorts = await this.prisma.resort.findMany({
       where: {
