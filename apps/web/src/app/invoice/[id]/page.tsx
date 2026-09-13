@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { api, money, dmy } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { invoiceIntent } from "@/lib/invoice-intent";
+import { methodLabel } from "@rh/shared";
 import { Download, Printer } from "lucide-react";
 
 interface InvoiceData {
@@ -231,7 +232,7 @@ export default function InvoicePage() {
           </div>
           {inv.payments.map((p, i) => (
             <div key={i}>
-              {dmy(p.date)} · {p.method} · {p.type} · {money(p.amount)}
+              {dmy(p.date)} · {methodLabel(p.method)} · {p.type} · {money(p.amount)}
               {p.receivedBy ? ` (by ${p.receivedBy})` : ""}
             </div>
           ))}

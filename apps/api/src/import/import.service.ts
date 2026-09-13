@@ -13,7 +13,7 @@ import { fbBillTotals } from "../common/money";
 import { anonGuestKey } from "../common/dates";
 import { BookingsService } from "../bookings/bookings.service";
 import {
-  parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource,
+  parseCsv, parseSheetDate, parseMoney, mapSheetStatus, mapSheetSource, mapSheetMethod,
 } from "./csv";
 
 interface SheetRow {
@@ -30,6 +30,7 @@ interface SheetRow {
   discount: number;
   advance: number;
   paymentStatusRaw: string;
+  methodRaw: string;
   sourceRaw: string;
   advanceReceiver: string;
   adults: number;
@@ -82,6 +83,17 @@ export interface ImportReport {
    * described at the match site below.
    */
   unmatchedAgents: string[];
+  /**
+   * Names in the receiver column that matched nobody working at this resort.
+   *
+   * Those payments are imported unattributed, and the screen says whose names
+   * went unrecognised so the owner can add the person or fix the spelling. The
+   * lookup this replaced searched every user on the platform by name
+   * substring — no resort, no tenant, no role — so a sheet naming "Rahim"
+   * could stamp another client's staff onto this resort's money, and nothing
+   * anywhere said it had happened.
+   */
+  unmatchedReceivers: string[];
   rows: ImportRowResult[];
 }
 
@@ -154,8 +166,19 @@ export class ImportService {
       discount: col("discount"),
       advance: col("advance"),
       paymentStatus: col("payment status"),
+      /**
+       * How the money arrived. New, and optional: sheets written before this
+       * existed have no such column and get no method, which is the truth
+       * about them.
+       */
+      method: col("payment method", "method", "payment mode", "paid via", "paid by"),
       source: col("booking source", "source"),
-      advanceReceiver: col("advance received"),
+      /**
+       * Who took the money. "Advance received" is the header the client's own
+       * workbook uses; the clearer spellings are accepted so a sheet written
+       * from the sample does not have to copy that one.
+       */
+      advanceReceiver: col("advance received", "received by", "advance received by", "collected by"),
       adults: col("adults"),
       children: col("children"),
       status: col("status"),
@@ -185,6 +208,7 @@ export class ImportService {
         discount: parseMoney(get(r, c.discount)),
         advance: parseMoney(get(r, c.advance)),
         paymentStatusRaw: get(r, c.paymentStatus),
+        methodRaw: get(r, c.method),
         sourceRaw: get(r, c.source),
         advanceReceiver: get(r, c.advanceReceiver),
         adults: Math.max(1, parseMoney(get(r, c.adults)) || 2),
@@ -213,11 +237,37 @@ export class ImportService {
       dryRun, totalRows: rows.length, imported: 0, skipped: 0,
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
       paymentsCreated: 0, roomTypeCreated: null, rows: [], unmatchedAgents: [],
-      replacedDeleted: 0,
+      unmatchedReceivers: [], replacedDeleted: 0,
     };
 
     // the resort's own channel list, so an import can name one it invented
     const sourceCodes = (await this.options.active(resortId, "BOOKING_SOURCE")).map((o) => o.code);
+    // and its own list of ways to be paid, for the same reason
+    const methodCodes = (await this.options.active(resortId, "PAYMENT_METHOD")).map((o) => o.code);
+
+    /**
+     * Everyone who works at this resort, read once for the whole file.
+     *
+     * The receiver column is matched against these and nobody else. Read here
+     * rather than inside the row loop because the answer cannot change during
+     * an import, and a 168-row sheet was issuing 168 of these queries.
+     */
+    const people = await this.prisma.user.findMany({
+      where: { resorts: { some: { resortId } }, status: "active" },
+      select: { id: true, name: true },
+    });
+    const receiverFor = (raw: string): number | null => {
+      const name = raw.trim().toLowerCase();
+      if (!name) return null;
+      const match =
+        people.find((u) => u.name.toLowerCase() === name) ??
+        people.find((u) => u.name.toLowerCase().includes(name)) ??
+        people.find((u) => name.includes(u.name.toLowerCase())) ??
+        null;
+      return match?.id ?? null;
+    };
+    /** names the receiver column used that nobody here answers to */
+    const unmatchedReceivers = new Set<string>();
 
     /**
      * Which of the sheet's Booking IDs this resort already holds, and whether
@@ -258,9 +308,22 @@ export class ImportService {
           continue;
         }
         if (held) report.replacedDeleted++;
+        /**
+         * Ask the receiver question here too, not only on the real import.
+         *
+         * A dry run is where somebody looks before committing 168 rows, and
+         * "this column names people nobody here answers to" is precisely the
+         * kind of thing to find out first. The same reasoning as the claimed-
+         * code map above: the two runs disagreeing is the fault a dry run
+         * exists to rule out.
+         */
+        if (row.advance > 0 && row.advanceReceiver && receiverFor(row.advanceReceiver) === null) {
+          unmatchedReceivers.add(row.advanceReceiver);
+        }
         report.imported++;
         report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "imported" });
       }
+      report.unmatchedReceivers = [...unmatchedReceivers];
       return report;
     }
 
@@ -489,18 +552,35 @@ export class ImportService {
             }
           }
 
-          // advance → ledger
+          /**
+           * advance → ledger
+           *
+           * Two values here used to be invented rather than read. `method` was
+           * the literal `"CASH"` — so a resort's whole imported history claims
+           * to be notes in a drawer, and the money report can draw one bar for
+           * a year of bank transfers. And the receiver was found by searching
+           * every user on the platform for a name substring, unscoped by
+           * resort, tenant or role: the agent-matching block above was fixed
+           * for exactly that, and this one was left holding the same knife.
+           *
+           * Both now say nothing when the sheet says nothing, which is what
+           * the sheet actually told us.
+           */
           if (row.advance > 0) {
-            const receiver = row.advanceReceiver
-              ? await tx.user.findFirst({ where: { name: { contains: row.advanceReceiver } } })
-              : null;
+            let receivedById: number | null = null;
+            if (row.advanceReceiver) {
+              receivedById = receiverFor(row.advanceReceiver);
+              // only a row that carries money has a receipt to attribute, so a
+              // name beside a zero advance is not a name anybody need chase
+              if (receivedById === null) unmatchedReceivers.add(row.advanceReceiver);
+            }
             await tx.payment.create({
               data: {
                 bookingId: booking.id,
                 amount: row.advance as never,
-                method: "CASH",
+                method: mapSheetMethod(row.methodRaw, methodCodes),
                 paymentType: "ADVANCE",
-                receivedById: receiver?.id ?? null,
+                receivedById,
                 receivedAt: row.bookingDate ?? new Date(),
                 note: row.advanceReceiver ? `received by ${row.advanceReceiver} (sheet)` : "imported",
               },
@@ -528,6 +608,8 @@ export class ImportService {
         });
       }
     }
+
+    report.unmatchedReceivers = [...unmatchedReceivers];
 
     // advance the BK-counter past imported codes
     let maxCode = 0;

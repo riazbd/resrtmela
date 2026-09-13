@@ -1,0 +1,14 @@
+-- `payments.method` stops defaulting to CASH.
+--
+-- The importer had no method column to read and no way to say so, because the
+-- column would not take a null. So it wrote the literal "CASH" on every
+-- payment it created, and a client's entire imported history now claims to be
+-- notes in a drawer. The money report groups receipts by method precisely so a
+-- manager can count the cash tonight and match the rest against a statement;
+-- against imported rows it can only ever draw one bar.
+--
+-- Relaxing only. Existing rows keep the value they have — including the 42
+-- production rows that say CASH on the strength of that literal, which are a
+-- separate question and not one a migration should answer. Nothing is dropped
+-- and nothing is rewritten.
+ALTER TABLE `payments` MODIFY `method` VARCHAR(24) NULL;

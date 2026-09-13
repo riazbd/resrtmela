@@ -13,6 +13,7 @@ export * from "./import-samples";
  */
 export * from "./api-error";
 export * from "./placeholders";
+export * from "./payment-method";
 export * from "./contact";
 export * from "./brand";
 export * from "./api-url";

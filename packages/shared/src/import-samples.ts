@@ -23,17 +23,34 @@
 /**
  * Bookings. Required: Booking ID, Guest Name, Room, Check-In. Everything else
  * may be blank, and the last row shows what a blank column looks like.
+ *
+ * **Payment Method** and **Received By** are the two columns the importer used
+ * to have no answer for. It wrote `CASH` on every payment it created, because
+ * `payments.method` defaulted to it and there was no column to read instead;
+ * and it found the receiver by searching every user on the platform for a name
+ * substring. A client's entire imported history now claims to be notes in a
+ * drawer, taken by nobody.
+ *
+ * Both stay optional — a sheet written before they existed still imports — but
+ * a blank one now means "nobody recorded this", which is what the money report
+ * shows, rather than a confident wrong answer. `Received By` is matched
+ * against the resort's own staff and nobody else's, and a name matching nobody
+ * is listed back on the import screen instead of being guessed at.
  */
 export const SAMPLE_BOOKINGS_CSV = [
-  "Booking ID,Booking Date,Guest Name,Mobile,NID/Passport No,Room,Check-In,Check-Out,Nights,Room Rate,Rent,Discount,Advance,Due,Payment Status,Booking Source,Advance received,Adults,Children,Status,Remarks",
-  "BK-00001,01-Nov-2026,Rahima Khatun,01711000001,,101,05-Nov-2026,07-Nov-2026,2,5000,10000,0,3000,7000,Partial,Direct,,2,0,Confirmed,Late check-in",
-  "BK-00002,02-Nov-2026,Shafiqul Islam,01711000002,1234567890,102,06-Nov-2026,08-Nov-2026,2,5000,10000,500,9500,0,Paid,Facebook,,2,1,Confirmed,",
-  "BK-00003,03-Nov-2026,Tanvir Ahmed,01711000003,,103,10-Nov-2026,12-Nov-2026,2,6500,13000,0,,13000,Unpaid,Agent,,2,0,Confirmed,No advance taken yet",
-  "BK-00004,04-Nov-2026,Nusrat Jahan,01711000004,,101,15-Nov-2026,16-Nov-2026,1,5000,5000,0,5000,0,Paid,Walk-in,,1,0,Cancelled,Guest cancelled",
+  "Booking ID,Booking Date,Guest Name,Mobile,NID/Passport No,Room,Check-In,Check-Out,Nights,Room Rate,Rent,Discount,Advance,Due,Payment Status,Payment Method,Received By,Booking Source,Adults,Children,Status,Remarks",
+  "BK-00001,01-Nov-2026,Rahima Khatun,01711000001,,101,05-Nov-2026,07-Nov-2026,2,5000,10000,0,3000,7000,Partial,Cash,Karim Uddin,Direct,2,0,Confirmed,Late check-in",
+  "BK-00002,02-Nov-2026,Shafiqul Islam,01711000002,1234567890,102,06-Nov-2026,08-Nov-2026,2,5000,10000,500,9500,0,Paid,bKash,Karim Uddin,Facebook,2,1,Confirmed,",
+  // no advance taken, so there is nothing to say about a method or a receiver
+  "BK-00003,03-Nov-2026,Tanvir Ahmed,01711000003,,103,10-Nov-2026,12-Nov-2026,2,6500,13000,0,,13000,Unpaid,,,Agent,2,0,Confirmed,No advance taken yet",
+  // Payment Method deliberately blank on a row that *was* paid: an older sheet
+  // has no such column, and a blank one imports as "not recorded" rather than
+  // being filed as cash on the strength of a database default
+  "BK-00004,04-Nov-2026,Nusrat Jahan,01711000004,,101,15-Nov-2026,16-Nov-2026,1,5000,5000,0,5000,0,Paid,,,Walk-in,1,0,Cancelled,Guest cancelled",
   // a blocked room, not a booking: the importer reads "out of service" from
   // Guest Name or Remarks, so writing it only in Status books a phantom guest
   // into a room that was shut
-  "BK-00005,05-Nov-2026,Out of service,,,104,18-Nov-2026,20-Nov-2026,2,,,,,,,,,,,,Bathroom repair",
+  "BK-00005,05-Nov-2026,Out of service,,,104,18-Nov-2026,20-Nov-2026,2,,,,,,,,,,,,,Bathroom repair",
 ].join("\r\n");
 
 /**

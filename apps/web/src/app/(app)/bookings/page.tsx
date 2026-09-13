@@ -14,6 +14,7 @@ import { useOutbox } from "@/lib/outbox";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { invoiceHref } from "@/lib/invoice-intent";
+import { methodLabel } from "@rh/shared";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
@@ -621,7 +622,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
                 <tr key={p.id}>
                   <Td className="!py-1.5 text-xs">{dmy(p.receivedAt)}</Td>
                   <Td className="!py-1.5 text-xs">{p.type}</Td>
-                  <Td className="!py-1.5 text-xs">{p.method}</Td>
+                  <Td className="!py-1.5 text-xs">{methodLabel(p.method)}</Td>
                   <Td className="!py-1.5 text-xs text-slate-400">{p.receivedBy}</Td>
                   <Td className="!py-1.5 text-right text-xs font-medium">{money(p.amount)}</Td>
                 </tr>

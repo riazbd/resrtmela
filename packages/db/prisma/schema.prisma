@@ -711,7 +711,16 @@ model Payment {
   bookingId    Int
   booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   amount       Decimal       @db.Decimal(10, 2)
-  method       String        @default("CASH") @db.VarChar(24)
+  /// A code from the resort's own PAYMENT_METHOD list, or null.
+  ///
+  /// Nullable since 2026-09-13. This was `@default("CASH")` and the importer
+  /// leaned on it: every payment it created said CASH whatever the sheet
+  /// said, because there was nothing else to write. Null means "nobody
+  /// recorded how this arrived" — which the money report can show as its own
+  /// thing, where a defaulted CASH was indistinguishable from cash somebody
+  /// counted. The desk still requires one: `payments.create` puts every
+  /// method through `assertAccepted`.
+  method       String?       @db.VarChar(24)
   paymentType  PaymentType   @default(ADVANCE)
   receivedById Int?
   receivedBy   User?         @relation("PaymentReceivedBy", fields: [receivedById], references: [id])

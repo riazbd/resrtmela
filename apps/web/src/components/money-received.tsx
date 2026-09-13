@@ -17,6 +17,7 @@
 import { money, dmy } from "@/lib/api";
 import { Card, Empty, Td, Th } from "@/components/ui";
 import { Table } from "@/components/patterns";
+import { methodLabel } from "@rh/shared";
 
 export interface MoneyLine {
   id: number | string;
@@ -107,8 +108,8 @@ export function MoneyReceived({
                   <Td className="text-xs">{p.receivedBy ?? <span className="text-slate-400">not recorded</span>}</Td>
                   <Td className="text-xs">{p.from}</Td>
                   <Td className="text-xs text-slate-500">{p.what}</Td>
-                  <Td className="text-xs text-slate-500">
-                    {p.method ?? <span className="text-slate-300">—</span>}
+                  <Td className={`text-xs ${p.method ? "text-slate-500" : "text-slate-400"}`}>
+                    {methodLabel(p.method)}
                   </Td>
                   <Td className={`text-right text-xs font-semibold ${p.negative ? "text-red-600" : ""}`}>
                     {p.negative ? `− ${money(p.amount)}` : money(p.amount)}

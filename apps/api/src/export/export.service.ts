@@ -25,6 +25,7 @@ import { requireResortAccess, badRequest } from "../common/rbac";
 import { bookingTotals, fbBillTotals } from "../common/money";
 import { reachableEmail, reachablePhone } from "../common/contact";
 import { toCsv, type CsvValue } from "./csv-writer";
+import { methodLabel } from "@rh/shared";
 import type { JwtClaims } from "@rh/shared";
 
 export interface Dataset {
@@ -187,7 +188,7 @@ export class ExportService {
       headers: ["receivedAt", "booking", "guest", "type", "method", "amount", "receivedBy", "note"],
       rows: rows.map((p) => [
         iso(p.receivedAt), p.booking.code, p.booking.guest.fullName,
-        p.paymentType, p.method, Number(p.amount), p.receivedBy?.name ?? "", p.note ?? "",
+        p.paymentType, methodLabel(p.method), Number(p.amount), p.receivedBy?.name ?? "", p.note ?? "",
       ]),
     };
   }

@@ -170,3 +170,49 @@ export function mapSheetSource(
   if (s.includes("direct") || s.includes("walk")) return has("DIRECT");
   return null;
 }
+
+/**
+ * The sheet's payment-method column, matched against what the resort accepts.
+ *
+ * There was no such column and no such function. The importer wrote
+ * `method: "CASH"` as a literal on every payment it created, so a resort's
+ * whole imported history claims to be notes in a drawer: bank transfers,
+ * bKash, a card on the terminal, all of it. The money report added last week
+ * groups receipts by method so a manager can count the cash tonight and match
+ * the rest against a statement, and against imported data it can only ever
+ * show one bar.
+ *
+ * So this reads the column when the sheet has one, and — like `mapSheetSource`
+ * above, and for the same reason — returns null when it does not. An empty
+ * cell is not evidence of cash. `Payment.method` was made nullable to let this
+ * function say so; the alternative was picking a value nobody wrote down and
+ * making it indistinguishable from one somebody did.
+ *
+ * `codes` is the resort's own PAYMENT_METHOD list, so a resort that added
+ * Rocket can import a sheet naming it, and a resort with no card terminal does
+ * not acquire card payments because a spreadsheet said CARD.
+ */
+export function mapSheetMethod(
+  raw: string | undefined | null,
+  codes: string[] = [],
+): string | null {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return null;
+  const exact = codes.find(
+    (c) => c.toLowerCase() === s || c.toLowerCase().replace(/_/g, " ") === s,
+  );
+  if (exact) return exact;
+  const has = (code: string) => (codes.length === 0 || codes.includes(code) ? code : null);
+  if (s.includes("bkash") || s.includes("bikash") || s.includes("বিকাশ")) return has("BKASH");
+  if (s.includes("nagad") || s.includes("নগদ")) return has("NAGAD");
+  if (s.includes("rocket")) return has("ROCKET");
+  if (s.includes("upay")) return has("UPAY");
+  if (s.includes("cheque") || s.includes("check")) return has("CHEQUE");
+  // "bank transfer", "bank", "neft", "beftn" — anything naming the bank itself
+  if (s.includes("bank") || s.includes("beftn") || s.includes("transfer")) return has("BANK");
+  if (s.includes("card") || s.includes("visa") || s.includes("master") || s.includes("pos")) {
+    return has("CARD");
+  }
+  if (s.includes("cash") || s.includes("নগদ অর্থ") || s.includes("hand")) return has("CASH");
+  return null;
+}

@@ -26,6 +26,10 @@ interface ImportReport {
   roomTypeCreated: { name: string; assumed: boolean } | null;
   /** Bookings whose ID was already here but deleted, and which this import replaced. */
   replacedDeleted: number;
+  /** Names in Booking Source = Agent rows that matched no agent working here. */
+  unmatchedAgents: string[];
+  /** Names in the Received By column that matched nobody on this resort's staff. */
+  unmatchedReceivers: string[];
   rows: {
     rowNo: number;
     code: string;
@@ -244,7 +248,10 @@ export default function ImportPage() {
             Required columns: <strong>Booking ID, Guest Name, Room, Check-In</strong>. Everything else may
             be blank. Dates like <code>05-Nov-2026</code>, <code>2026-11-05</code> or <code>11/5/2026</code>.
             Guests are deduped by mobile; BK-codes are preserved; advances become ledger entries;
-            &quot;out of service&quot; rows flip the room status instead of creating bookings. Always dry-run first.
+            &quot;out of service&quot; rows flip the room status instead of creating bookings. Add{" "}
+            <strong>Payment Method</strong> and <strong>Received By</strong> and each advance is
+            filed the way it actually arrived and credited to the person who took it — leave them
+            out and it says so, rather than guessing. Always dry-run first.
           </p>
         )}
         {tab === "expenses" && (
@@ -449,6 +456,50 @@ export default function ImportPage() {
               sheet uses the same Booking {report.replacedDeleted === 1 ? "ID" : "IDs"}. The
               deleted {report.replacedDeleted === 1 ? "one is" : "ones are"} gone for good; what is
               in the sheet is what you have now.
+            </div>
+          )}
+
+          {/*
+            Names the sheet used that nobody here answers to.
+            
+            Both lookups are scoped to this resort — the receiver one only
+            since 2026-09-13, when it was found searching every user on the
+            platform by name substring and stamping strangers onto a resort's
+            money. Scoping it means some names now match nothing, and the
+            honest thing is to say which rather than let the rows go quiet:
+            these are a misspelling or a person who is not on the staff list
+            yet, and both are one click to fix.
+          */}
+          {(report.unmatchedReceivers?.length > 0 || report.unmatchedAgents?.length > 0) && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <div className="font-semibold">Names nobody here matches</div>
+              {report.unmatchedReceivers?.length > 0 && (
+                <div className="mt-1.5">
+                  <span className="text-amber-800">Received By:</span>{" "}
+                  {report.unmatchedReceivers.map((n, i) => (
+                    <span key={i} className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium">
+                      {n}
+                    </span>
+                  ))}
+                  <div className="mt-1 text-xs text-amber-800">
+                    Those payments came in without anyone credited. Add the person under Settings →
+                    Team, or fix the spelling in the sheet, and import again.
+                  </div>
+                </div>
+              )}
+              {report.unmatchedAgents?.length > 0 && (
+                <div className="mt-2">
+                  <span className="text-amber-800">Agent:</span>{" "}
+                  {report.unmatchedAgents.map((n, i) => (
+                    <span key={i} className="mr-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium">
+                      {n}
+                    </span>
+                  ))}
+                  <div className="mt-1 text-xs text-amber-800">
+                    Those bookings have no agent attached, so no commission is calculated for them.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

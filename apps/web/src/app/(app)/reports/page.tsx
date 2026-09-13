@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
 import { Tabs, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
+import { methodLabel } from "@rh/shared";
 
 interface AgentRow {
   agentId: number; name: string; commissionRate: number; commissionKind: string;
@@ -274,10 +275,27 @@ export default function ReportsPage() {
                   <div className="mb-1.5 text-xs font-semibold text-slate-500">How it arrived</div>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {collectors.byMethod.map((m) => (
-                      <div key={m.method} className="rounded-lg border border-slate-200 p-3">
-                        <div className="text-xs font-semibold text-slate-600">{m.method}</div>
+                      <div
+                        key={m.method ?? "unrecorded"}
+                        className={`rounded-lg border p-3 ${m.method ? "border-slate-200" : "border-dashed border-slate-300 bg-slate-50"}`}
+                      >
+                        <div className={`text-xs font-semibold ${m.method ? "text-slate-600" : "text-slate-500"}`}>
+                          {methodLabel(m.method)}
+                        </div>
                         <div className="text-[11px] text-slate-400">{m.count} payment(s)</div>
                         <div className="mt-1 text-lg font-bold text-slate-800">{money(m.total)}</div>
+                        {/*
+                          A dashed card, because this is a gap and not a
+                          channel. These are rows an import created before the
+                          sheet had a method column — every one of them used to
+                          say CASH, which was the column default and not
+                          anything anybody wrote down.
+                        */}
+                        {!m.method && (
+                          <div className="mt-1 text-[10px] leading-snug text-slate-400">
+                            imported before a method was recorded
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -307,9 +325,11 @@ export default function ReportsPage() {
                 */}
                 {collectors.rows.some((r) => r.userId == null) && (
                   <p className="mt-2 text-xs text-slate-500">
-                    <b>Unassigned</b> is money that arrived without a name against it — payments
-                    imported from a spreadsheet, which has no column for who took them. Anything
-                    recorded in the app from now on carries the name of whoever entered it.
+                    <b>Unassigned</b> is money that arrived without a name against it — a
+                    spreadsheet imported before the importer read a <b>Received By</b> column, or
+                    one whose column was blank. Anything recorded in the app carries the name of
+                    whoever entered it, and a fresh import with that column filled in carries the
+                    name from the sheet.
                   </p>
                 )}
               </div>
@@ -340,7 +360,9 @@ export default function ReportsPage() {
                           </Td>
                           <Td className="text-xs">{p.guest}</Td>
                           <Td className="text-xs text-slate-500">{p.bookingCode}</Td>
-                          <Td className="text-xs text-slate-500">{p.method}</Td>
+                          <Td className={`text-xs ${p.method ? "text-slate-500" : "text-slate-400"}`}>
+                            {methodLabel(p.method)}
+                          </Td>
                           <Td className={`text-right text-xs font-semibold ${p.type === "REFUND" ? "text-red-600" : ""}`}>
                             {p.type === "REFUND" ? `− ${money(p.amount)}` : money(p.amount)}
                           </Td>
