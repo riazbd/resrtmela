@@ -163,7 +163,8 @@ export interface BookingDetail extends BookingRow {
   payments: {
     id: number;
     amount: number;
-    method: string;
+    /** null when nobody recorded how it arrived — an import with no method column */
+    method: string | null;
     type: string;
     receivedBy: string | null;
     receivedAt: string;

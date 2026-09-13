@@ -36,9 +36,10 @@ interface Collectors {
    * cash is in a drawer and has to be counted tonight, bKash and a bank
    * transfer are somebody else's statement and have to be matched against it.
    */
-  byMethod: { method: string; count: number; total: number }[];
+  /** `method` is null for receipts imported before a method column existed */
+  byMethod: { method: string | null; count: number; total: number }[];
   rows: CollectorRow[];
-  recent: { id: number; at: string; amount: number; method: string; bookingCode: string; guest: string; type: string; receivedBy: string | null }[];
+  recent: { id: number; at: string; amount: number; method: string | null; bookingCode: string; guest: string; type: string; receivedBy: string | null }[];
 }
 interface FiscalYear { label: string; from: string; to: string }
 interface Metrics {

@@ -22,7 +22,7 @@ interface InvoiceData {
   };
   guest: { fullName: string; phone: string; nidPassportNo: string | null };
   items: { description: string; nights: number | null; qty: number; unitPrice: number; amount: number }[];
-  payments: { date: string; method: string; type: string; amount: number; receivedBy: string | null }[];
+  payments: { date: string; method: string | null; type: string; amount: number; receivedBy: string | null }[];
   rent: number; discount: number; paid: number; due: number;
   taxable: number; taxRatePct: number; tax: number; total: number;
   taxLines?: { code: string; label: string; ratePct: number; amount: number }[];
