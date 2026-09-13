@@ -24,6 +24,8 @@ interface ImportReport {
   guestsCreated: number;
   paymentsCreated: number;
   roomTypeCreated: { name: string; assumed: boolean } | null;
+  /** Bookings whose ID was already here but deleted, and which this import replaced. */
+  replacedDeleted: number;
   rows: {
     rowNo: number;
     code: string;
@@ -433,6 +435,23 @@ export default function ImportPage() {
             <MiniStat label="Skipped" value={String(report.skipped)} tone={report.skipped ? "red" : "default"} />
             <MiniStat label="Out-of-service → room status" value={String(report.outOfService)} tone="amber" />
           </div>
+          {/*
+            A band rather than a fifth number in the row above: replacing rows
+            somebody deleted is something to read, not to glance at. It is
+            phrased as what happened rather than as a warning, because it is
+            what the owner asked for by putting those Booking IDs in the sheet.
+          */}
+          {report.replacedDeleted > 0 && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              {report.dryRun ? "Would replace " : "Replaced "}
+              <b>{report.replacedDeleted}</b>{" "}
+              {report.replacedDeleted === 1 ? "booking" : "bookings"} you had deleted, because the
+              sheet uses the same Booking {report.replacedDeleted === 1 ? "ID" : "IDs"}. The
+              deleted {report.replacedDeleted === 1 ? "one is" : "ones are"} gone for good; what is
+              in the sheet is what you have now.
+            </div>
+          )}
+
           {report.roomTypeCreated?.assumed && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               This resort had no room types, so the rooms were filed under{" "}
