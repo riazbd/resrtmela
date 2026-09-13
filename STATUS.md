@@ -1449,7 +1449,29 @@ to the server first (`… | ssh host 'cat > /opt/resortmela/.deploy.sh'`, then
 `ssh host 'bash /opt/…'`). `scp` to this host answers "Connection closed".
 
 Take a `mariadb-dump` before the migration step and check it ends with
-"Dump completed". The notes below predate the first deployment and are kept for
+"Dump completed" — and then **restore it into a scratch database and count the
+rows against the live ones**. A dump that exists is not a dump that restores,
+and the moment to find that out is not after a migration.
+
+**Run `pnpm typecheck` and `pnpm build` at the repo root, not per package.**
+The deploy of 2026-09-13 stopped on `pnpm -F @rh/shared build` with three
+errors — `URLSearchParams`, `fetch`, `RequestInit` — in code that had been
+typechecked all afternoon. The API, Next and Metro each compile shared's
+*sources* under their own tsconfig, which supplies those globals; on its own
+`tsc -p` uses the base `lib: ["ES2022"]` and nothing else. `pnpm -F @rh/api
+typecheck` and `pnpm -F @rh/web typecheck` both pass while the package itself
+will not build. The root commands run all six and take about the same time.
+
+Nothing was restarted, because the build failed first — which is the order to
+keep: **build before `pm2 restart`, always.** A deploy that fails at the build
+step leaves the site running the old code, and that is the cheap failure.
+
+**`/health` answers `degraded` for reasons that are not the deploy.** It reports
+`degraded` whenever a notification job has exhausted its retries — on
+2026-09-13 that was seven SMS jobs with "invalid msisdn", four of them a day
+old. Read the body, not the status. And give the API ten seconds before asking:
+`curl` against a process four seconds into boot answers `000`, which looks like
+a much worse thing than it is. The notes below predate the first deployment and are kept for
 the reasoning.
 
 
