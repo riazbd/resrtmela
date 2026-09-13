@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { OCCUPIED, DUE_STRIPE, FREE_CELL, type OccupiedState } from "@/lib/calendar-colors";
 import { useApi, keys } from "@/lib/query";
 import { Button, Card, Empty, Select, Spinner } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
@@ -42,22 +43,11 @@ import type { AgencyCalendar } from "@rh/shared";
  */
 
 /**
- * The four states that hold a room, coloured as the resort's calendar colours
- * them. An agent reading both screens in one afternoon should not have to learn
- * two vocabularies for the same fact.
+ * The states that hold a room, and what is still owed on them, both from
+ * `lib/calendar-colors` — one definition, so the two calendars cannot come to
+ * disagree about what a colour means. Green is a free night and nothing else;
+ * red is a night that is held, with the shade carrying the state.
  */
-const BAR: Record<string, { fill: string; text: string; label: string }> = {
-  PENDING: { fill: "bg-amber-400", text: "text-amber-950", label: "Pending" },
-  CONFIRMED: { fill: "bg-emerald-500", text: "text-white", label: "Confirmed" },
-  CHECKED_IN: { fill: "bg-sky-600", text: "text-white", label: "In house" },
-  CHECKED_OUT: { fill: "bg-slate-300", text: "text-slate-700", label: "Departed" },
-};
-
-/** What is still owed, as a stripe under the bar rather than a fifth colour. */
-const DUE_STRIPE: Record<string, string> = {
-  UNPAID: "bg-red-500",
-  PARTIAL: "bg-amber-500",
-};
 
 const SPANS = [7, 14, 30] as const;
 
@@ -267,14 +257,20 @@ export default function AgencyCalendarPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {Object.entries(BAR).map(([state, look]) => (
+          {Object.entries(OCCUPIED).map(([state, look]) => (
             <span key={state} className="flex items-center gap-1.5 text-[11px] text-slate-500">
               <span className={`h-2.5 w-4 rounded-sm ${look.fill}`} />
               {look.label}
             </span>
           ))}
+          {/* free comes first: it is the commonest cell on the grid and the
+              one the whole colour rule is built around */}
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="h-2.5 w-4 rounded-sm bg-slate-200 ring-1 ring-inset ring-red-500" />
+            <span className={`h-2.5 w-4 rounded-sm ${FREE_CELL.idle}`} />
+            Free
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <span className="h-2.5 w-4 rounded-sm bg-red-200 ring-1 ring-inset ring-slate-900" />
             Payment due
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -534,7 +530,7 @@ function StayBar({
     );
   }
 
-  const look = BAR[cell.state] ?? BAR.CONFIRMED!;
+  const look = OCCUPIED[cell.state as OccupiedState] ?? OCCUPIED.CONFIRMED;
   const stripe = cell.paymentState ? DUE_STRIPE[cell.paymentState] : undefined;
   return (
     <td colSpan={nights} className={`border-b border-slate-100 p-0.5 ${edge}`}>
@@ -615,8 +611,12 @@ function FreeNights({
                     : // a free night is inventory, not a gap: `bg-slate-50` was
                       // the page's own background, so an empty row read as a
                       // hole in the table. The resting tint is the hover colour,
-                      // quieter, and hovering deepens it
-                      "bg-brand-50 ring-1 ring-inset ring-brand-100 hover:bg-brand-100 hover:ring-brand-400"
+                      // quieter, and hovering deepens it.
+                      //
+                      // All three of these are green, and that is the rule
+                      // rather than an accident: anchor and reachable are still
+                      // *free* nights, only further along a selection.
+                      `${FREE_CELL.idle} ${FREE_CELL.hover}`
               }`}
             />
           </td>
