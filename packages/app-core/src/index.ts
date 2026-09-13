@@ -42,3 +42,13 @@ export {
   worthRetrying,
   keys,
 } from "./query";
+export {
+  DICTS,
+  DEFAULT_LANG,
+  LangProvider,
+  isStateKey,
+  useLang,
+  useT,
+  type Lang,
+  type DictKey,
+} from "./i18n";
