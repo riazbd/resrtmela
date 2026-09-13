@@ -1,0 +1,17 @@
+-- An invoice says what it said on the day it was issued.
+--
+-- `invoicePayload` rebuilt the whole document from live rows on every read.
+-- Renaming the resort, correcting its address, changing a tax rule or editing
+-- a rate rewrote every invoice ever issued — including ones already printed,
+-- emailed and filed. A test written against the old behaviour turned a ৳15,000
+-- invoice into ৳299,997 with one rate correction.
+--
+-- This column holds the document as issued: seller, guest, line items, nights,
+-- tax and total. What it deliberately does not hold is the settlement —
+-- payments, paid, due — which stays live, because a guest paying the balance
+-- next week belongs on the invoice rather than in a second document.
+--
+-- Nullable, and left null for every invoice already issued. Those go on
+-- rendering live: freezing today's values and calling them "as issued" would
+-- be a worse lie than admitting the gap. Nothing is backfilled.
+ALTER TABLE `bookings` ADD COLUMN `invoiceSnapshot` JSON NULL;

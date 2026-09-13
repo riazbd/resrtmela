@@ -1664,6 +1664,24 @@ export class BookingsService {
         data: { invoiceNo, invoiceAt: new Date() },
       });
     });
+
+    /**
+     * Freeze the document now, while it is true.
+     *
+     * Built after the transaction rather than inside it because the payload
+     * reads a dozen relations and runs the tax rules; holding the invoice
+     * counter's row lock through all of that would serialise every desk in the
+     * resort behind one checkout.
+     *
+     * A failure here leaves the invoice numbered and unfrozen, which is
+     * exactly the state every invoice issued before this column existed is in
+     * — and which `invoicePayload` already handles by rendering live. So it is
+     * not worth failing the checkout over.
+     */
+    const issued = await this.invoicePayload(claims, bookingId);
+    await this.prisma.booking
+      .update({ where: { id: b.id }, data: { invoiceSnapshot: issued as never } })
+      .catch(() => undefined);
     await this.audit.log({
       actorId: claims.userId, resortId: b.resortId,
       action: "booking.invoice.generate", entity: "booking", entityId: bookingId,
@@ -1672,6 +1690,19 @@ export class BookingsService {
     return this.invoicePayload(claims, bookingId);
   }
 
+  /**
+   * The invoice, as issued — with what has been paid against it since.
+   *
+   * The charge is read from the snapshot taken when the number was assigned,
+   * so renaming the resort or correcting a rate cannot rewrite a document
+   * somebody has already filed. The settlement is read live, because a guest
+   * paying the balance next week belongs on their invoice rather than in a
+   * second piece of paper.
+   *
+   * An invoice issued before the snapshot existed has none, and is rendered
+   * live in full. That is the honest fallback: inventing a snapshot out of
+   * today's rows would put a date on values nobody ever issued.
+   */
   async invoicePayload(claims: JwtClaims, bookingId: number) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
@@ -1687,7 +1718,34 @@ export class BookingsService {
     await this.requireOwnBooking(claims, b);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
     const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
-    return {
+
+    /**
+     * What has been paid against this invoice, read fresh every time.
+     *
+     * These four and the ledger below are the only fields that may move after
+     * issue. Everything else describes the charge, and a charge that changes
+     * after it was billed is not a charge.
+     */
+    const settlement = {
+      payments: b.payments.map((p) => ({
+        date: p.receivedAt,
+        method: p.method,
+        type: p.paymentType,
+        amount: Number(p.amount),
+        receivedBy: p.receivedBy?.name ?? null,
+      })),
+      paid: totals.paid,
+      refunded: totals.refunded,
+      due: totals.due,
+      paymentState: totals.paymentState,
+    };
+
+    /**
+     * The charge, as the rows say it is *today*. Used directly for invoices
+     * issued before snapshots existed, and as the shape the frozen one is read
+     * back through.
+     */
+    const live = {
       invoiceNo: b.invoiceNo,
       issuedAt: b.invoiceAt,
       resort: {
@@ -1726,15 +1784,13 @@ export class BookingsService {
         unitPrice: Number(i.unitPrice),
         amount: round2(Number(i.unitPrice) * i.qty * (i.itemKind === "ROOM" ? totals.nights : 1)),
       })),
-      payments: b.payments.map((p) => ({
-        date: p.receivedAt,
-        method: p.method,
-        type: p.paymentType,
-        amount: Number(p.amount),
-        receivedBy: p.receivedBy?.name ?? null,
-      })),
       ...totals,
     };
+
+    // an invoice that was frozen says what it said; one that never was falls
+    // back to `live`, which is every invoice issued before this column existed
+    const frozen = b.invoiceSnapshot as typeof live | null;
+    return { ...(frozen && typeof frozen === "object" ? frozen : live), ...settlement };
   }
 
   // today dashboard feed

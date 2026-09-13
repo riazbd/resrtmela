@@ -571,6 +571,24 @@ model Booking {
   bookedAt     DateTime      @default(now())
   invoiceNo    String?       @db.VarChar(20) // SER-00001, per-resort invoice counter
   invoiceAt    DateTime?
+  /// The invoice exactly as it was issued: seller, guest, line items, nights,
+  /// tax and total, frozen at that moment.
+  ///
+  /// It used to be rebuilt from live rows on every read, so renaming the
+  /// resort, correcting an address or editing a rate rewrote every invoice
+  /// ever issued — one test here turned a ৳15,000 invoice into ৳299,997 with
+  /// a single rate correction. A copy in a drawer and a copy on the screen
+  /// have to agree.
+  ///
+  /// What is *not* in here is the settlement: payments, paid, due. Those stay
+  /// live, because a guest paying the balance next week belongs on the
+  /// invoice rather than in a second document. The charge is frozen; what has
+  /// been paid against it is current.
+  ///
+  /// Null for invoices issued before this column existed. They go on
+  /// rendering live — freezing today's values and calling them "as issued"
+  /// would be a worse lie than the gap.
+  invoiceSnapshot Json?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   deletedAt    DateTime? // soft delete; never hard-delete history
