@@ -152,6 +152,51 @@ describe("when the connection comes back", () => {
     await waitFor(() => expect(queue.pending()).toHaveLength(0));
   });
 
+  /**
+   * Connectivity is subscribed to once, not once per render.
+   *
+   * A host writes its callbacks as inline arrows — that is the ordinary way to
+   * write a wrapper, and what the console's does — so this provider is handed
+   * new function objects on every render. If those reach the effect's
+   * dependency array, the connectivity subscription is torn down and rebuilt
+   * every time anything on the screen changes. In a browser that is waste; on a
+   * phone, where this is a NetInfo listener, it is a listener churning against
+   * the OS for the life of the app.
+   *
+   * (An earlier version of this test claimed the retry *timer* would never fire
+   * for the same reason. It does fire — subscribing re-reports the current
+   * state, which triggers a flush of its own — so the claim was wrong and the
+   * test said so. This is what is actually observable.)
+   */
+  it("subscribes to connectivity once, however often its props change identity", async () => {
+    let subscribes = 0;
+    const send = vi.fn(async () => ({}));
+    const queue = new OfflineQueue(send as never, memoryStorage());
+    // hoisted: a client rebuilt per render would change the query context and
+    // legitimately re-run the effect, which would test the test rather than the
+    // provider
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = (n: number) => (
+      <QueryClientProvider client={client}>
+        <OutboxProvider
+          queue={queue}
+          send={send}
+          watchOnline={(cb) => {
+            subscribes++;
+            cb(true);
+            return () => {};
+          }}
+          announceRejected={() => void n}
+        >
+          <Probe />
+        </OutboxProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(0));
+    for (let n = 1; n <= 5; n++) rerender(view(n));
+    expect(subscribes).toBe(1);
+  });
+
   it("tells a person about a write the server refused on replay, never swallows it", async () => {
     let refuse = false;
     const send = vi.fn(async () => {

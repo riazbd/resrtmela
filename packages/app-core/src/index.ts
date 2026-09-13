@@ -52,3 +52,4 @@ export {
   type Lang,
   type DictKey,
 } from "./i18n";
+export { AuthProvider, useAuth, type AuthValue, type AuthPorts } from "./auth";

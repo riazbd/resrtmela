@@ -110,6 +110,38 @@ One commit each, in dependency order, console suite green between every one.
 navigation, not storage: it becomes an injected `navigate(path)` callback, which
 the console fills with a location assignment and the app with a router push.
 
+### What stage B actually cost, recorded as it went
+
+Each of these was invisible until the module was moved.
+
+- **`ApiError` had to move too.** `offline-queue` asks whether a failure was a
+  5xx or a 403, and the class lived in `lib/api.ts` — a `"use client"` module.
+  Asking that question therefore meant importing the browser. It is now in
+  `@rh/shared`.
+- **`navigator.onLine` is not portable and was never right.** React Native has
+  no such property, and at a resort the wifi is routinely up while the uplink is
+  down. `isNetworkError` takes the answer from its caller now.
+- **`CacheStore` must be handed an *unguarded* store.** It has a better answer
+  to a full quota than `guardedStorage` does — drop the oldest half and retry —
+  and a guard would have silently retired it.
+- **`AuthProvider` must be handed a *guarded* one.** `isImpersonating` is read
+  during render, so it runs while Next prerenders on the server. The moved code
+  carried a `typeof window` check for exactly that.
+- **The retry rule was hiding in a lambda.** Extracted as `worthRetrying`: a 4xx
+  is never retried, and nothing could check that before.
+- **Two providers needed splitting, not moving.** `load-state`'s hook is
+  portable and its `<ErrorState>` renderer is not; `outbox`'s judgement is
+  portable and its three browser errands — connectivity, alerting, the call —
+  became props.
+- **jsdom is the test harness, not a permission.** `no-browser-in-here.spec.ts`
+  scans `src` for `window`, `document`, `localStorage`, `navigator` and
+  react-dom, with comments stripped, so the rule is checked rather than trusted.
+
+**A gap the suites cannot see.** vitest runs in jsdom, where `window` exists, so
+nothing in either suite exercises server prerendering. `pnpm -F @rh/web build`
+is the only proof that the guarded-storage decision above is right, and it is
+run before this phase is called done.
+
 **If a file will not move cleanly**, it stays in `apps/web` and is reimplemented
 in the app. That outcome is recorded in this plan and moved past — it is not a
 reason to force a refactor through a red suite.

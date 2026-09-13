@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   canWaitOffline,
@@ -80,6 +80,19 @@ export function OutboxProvider({
   const [online, setOnline] = useState(true);
   const [flushing, setFlushing] = useState(false);
 
+  /**
+   * The callbacks are held in refs and read when they are called, never listed
+   * as effect dependencies.
+   *
+   * A host writes these as inline arrows — the ordinary way to write a wrapper
+   * — so they are new objects on every render. Depending on them would tear
+   * down and rebuild the connectivity subscription every time anything on the
+   * screen changed: waste in a browser, and a NetInfo listener churning against
+   * the OS on a phone.
+   */
+  const latest = useRef({ send, watchOnline, announceRejected });
+  latest.current = { send, watchOnline, announceRejected };
+
   const refresh = useCallback(() => setPending(queue.pending()), [queue]);
 
   const flush = useCallback(async () => {
@@ -93,16 +106,16 @@ export function OutboxProvider({
         await qc.invalidateQueries();
       }
       for (const r of result.rejected ?? []) {
-        announceRejected(r.write.label, r.reason);
+        latest.current.announceRejected(r.write.label, r.reason);
       }
     } finally {
       setFlushing(false);
     }
-  }, [queue, qc, refresh, announceRejected]);
+  }, [queue, qc, refresh]);
 
   useEffect(() => {
     refresh();
-    const stop = watchOnline((up) => {
+    const stop = latest.current.watchOnline((up) => {
       setOnline(up);
       if (up) void flush();
     });
@@ -119,12 +132,12 @@ export function OutboxProvider({
       stop();
       clearInterval(timer);
     };
-  }, [flush, refresh, queue, watchOnline, retryEveryMs]);
+  }, [flush, refresh, queue, retryEveryMs]);
 
   const submit: OutboxValue["submit"] = useCallback(
     async (input) => {
       try {
-        await send(input.path, input.body, input.method ?? "POST");
+        await latest.current.send(input.path, input.body, input.method ?? "POST");
         return { queued: false };
       } catch (error) {
         if (!isNetworkError(error, online)) throw error;
@@ -140,7 +153,7 @@ export function OutboxProvider({
         return { queued: true };
       }
     },
-    [queue, refresh, send, online],
+    [queue, refresh, online],
   );
 
   const discard = useCallback(
