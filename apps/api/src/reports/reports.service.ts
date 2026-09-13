@@ -450,6 +450,40 @@ export class ReportsService {
     });
     const nameOf = new Map(names.map((u) => [u.id, u.name]));
 
+    /**
+     * How the money arrived, which on a platform with no payment gateway is
+     * half the question.
+     *
+     * Cash is in a drawer and has to be counted tonight; bKash and a bank
+     * transfer are somebody else's statement and have to be matched against
+     * it. One number covering both is not a reconciliation, it is an average.
+     *
+     * Grouped by method *and* type for the same reason the per-person totals
+     * are: `groupBy` sums what it is handed, and a refund went back out
+     * through the method it came in on.
+     */
+    const methodRows = await this.prisma.payment.groupBy({
+      by: ["method", "paymentType"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const byMethod = [...new Set(methodRows.map((m) => m.method))]
+      .map((method) => {
+        const mine = methodRows.filter((m) => m.method === method);
+        return {
+          method,
+          count: mine.reduce((n, m) => n + m._count._all, 0),
+          total: round2(
+            mine.reduce(
+              (sum, m) => sum + (m.paymentType === "REFUND" ? -1 : 1) * Number(m._sum.amount ?? 0),
+              0,
+            ),
+          ),
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+
     const rows = await this.prisma.payment.findMany({
       where,
       include: {
@@ -476,6 +510,9 @@ export class ReportsService {
     }
 
     return {
+      /** the period's whole take, so the cards never have to be added up by eye */
+      total: round2(grouped.reduce((sum, g) => sum + Number(g._sum.amount ?? 0), 0)),
+      byMethod,
       rows: grouped
         .map((g) => ({
           userId: g.receivedById,

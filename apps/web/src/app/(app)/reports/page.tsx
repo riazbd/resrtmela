@@ -28,6 +28,14 @@ interface CollectorRow {
   recentCodes?: string[];
 }
 interface Collectors {
+  /** the period's whole take, so the cards never have to be added up by eye */
+  total: number;
+  /**
+   * How the money arrived. With no payment gateway this is half the question:
+   * cash is in a drawer and has to be counted tonight, bKash and a bank
+   * transfer are somebody else's statement and have to be matched against it.
+   */
+  byMethod: { method: string; count: number; total: number }[];
   rows: CollectorRow[];
   recent: { id: number; at: string; amount: number; method: string; bookingCode: string; guest: string; type: string; receivedBy: string | null }[];
 }
@@ -77,12 +85,24 @@ function PLRow({ label, value, tone = "default", bold = false, muted = false }: 
  * The period picker stays above the tabs, because it is the one control that
  * belongs to all of them.
  */
-const REPORT_TABS = ["Summary", "Profit & loss", "Agents", "Sources", "Daily", "Audit trail"] as const;
+const REPORT_TABS = ["Money", "Summary", "Profit & loss", "Agents", "Sources", "Daily", "Audit trail"] as const;
 type ReportTab = (typeof REPORT_TABS)[number];
 
 export default function ReportsPage() {
   const { activeResort, isStaff, isManagement } = useAuth();
-  const [tab, setTab] = useState<ReportTab>("Summary");
+  const [tab, setTab] = useState<ReportTab>("Money");
+
+  /**
+   * The money tab keeps its own dates.
+   *
+   * The card above is labelled "Check-in from/to" and the rest of this page
+   * means it — but this report filters on when the money *arrived*, and a stay
+   * in September and a payment in September are not the same set. An owner
+   * counting a drawer means the second, so it asks its own question in its own
+   * words rather than borrowing one that is wrong for it.
+   */
+  const [moneyFrom, setMoneyFrom] = useState("");
+  const [moneyTo, setMoneyTo] = useState("");
   // the resort's day, not the browser's: after 18:00 in Dhaka these differ
   const today = todayIn(activeResort?.timezone);
   const [from, setFrom] = useState("");
@@ -106,7 +126,12 @@ export default function ReportsPage() {
 
   const agentsQ = useApi(keys.reports(rid, "agents", period), () => client.reports.agents(rid!, range) as Promise<{ rows: AgentRow[] }>, { enabled, placeholderData: (prev) => prev });
   const sourcesQ = useApi(keys.reports(rid, "sources", period), () => client.reports.sources(rid!, range) as Promise<{ rows: SourceRow[] }>, { enabled, placeholderData: (prev) => prev });
-  const collectorsQ = useApi(keys.reports(rid, "collectors", period), () => client.reports.collectors(rid!, range) as Promise<Collectors>, { enabled, placeholderData: (prev) => prev });
+  const moneyRange = { from: moneyFrom || undefined, to: moneyTo || undefined };
+  const collectorsQ = useApi(
+    keys.reports(rid, "collectors", `${moneyFrom}:${moneyTo}`),
+    () => client.reports.collectors(rid!, moneyRange) as Promise<Collectors>,
+    { enabled, placeholderData: (prev) => prev },
+  );
   const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range) as Promise<Metrics>, { enabled, placeholderData: (prev) => prev });
   // the three heavy reads wait until their tab is open; the four light ones
   // stay eager because the page's own loading and error states read them
@@ -147,6 +172,12 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
+      {/*
+        Hidden on the Money tab, which asks its own question with its own
+        dates. Two date pickers on one screen, one of which does nothing to
+        what is shown, is worse than none.
+      */}
+      {tab !== "Money" && (
       <Card
         title="Report period"
         action={
@@ -181,73 +212,155 @@ export default function ReportsPage() {
           <Field label="Check-in to"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
       </Card>
+      )}
 
       <Tabs tabs={visibleTabs} value={tab} onChange={setTab} />
 
-      {tab === "Summary" && collectors && collectors.rows.length > 0 && (
-        <Card title="Who received money">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {collectors.rows.map((r) => (
-              <div key={r.userId ?? "x"} className="rounded-lg border border-slate-200 p-3">
-                <div className="text-sm font-semibold">{r.name}</div>
-                {/* every kind of payment, not only the deposits: a restaurant
-                    bill settled to a room and a balance taken at check-out are
-                    both money this person handled */}
-                <div className="text-xs text-slate-400">{r.count} payment(s)</div>
-                <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
-                <div className="mt-1 text-[10px] text-slate-400">
-                  {(r.recentCodes ?? []).slice(0, 6).join(", ")}
-                  {(r.recentCodes ?? []).length > 6 ? "…" : ""}
-                </div>
-              </div>
-            ))}
+      {tab === "Money" && (
+        <Card title="Money received">
+          {/*
+            Its own dates, and its own words for them: this is when the money
+            arrived, not when the guest does. The three shortcuts are the three
+            questions anybody actually brings — what came in today, this month,
+            and since the beginning.
+          */}
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <Field label="Received from">
+              <Input type="date" value={moneyFrom} onChange={(e) => setMoneyFrom(e.target.value)} />
+            </Field>
+            <Field label="Received to">
+              <Input type="date" value={moneyTo} onChange={(e) => setMoneyTo(e.target.value)} />
+            </Field>
+            <div className="flex gap-1.5 pb-0.5">
+              {([
+                ["Today", today, addDaysIso(today, 1)],
+                ["This month", `${today.slice(0, 7)}-01`, addDaysIso(today, 1)],
+                ["All time", "", ""],
+              ] as const).map(([label, f, t]) => (
+                <button
+                  key={label}
+                  onClick={() => { setMoneyFrom(f); setMoneyTo(t); }}
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                    moneyFrom === f && moneyTo === t
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/*
-            The receipts themselves, under the totals.
-            The data was already in the payload and nothing drew it, so the
-            report answered "how much did each person take" and not "when, from
-            whom, and what for" — which is the question somebody asks when a
-            number looks wrong.
-          */}
-          {collectors.recent.length > 0 && (
-            <div className="mt-4">
-              <div className="mb-1.5 text-xs font-semibold text-slate-500">
-                Recent receipts ({collectors.recent.length})
+          {!collectors ? (
+            <Empty msg="Loading…" />
+          ) : collectors.recent.length === 0 && collectors.rows.length === 0 ? (
+            <Empty msg="No money was received in this period" />
+          ) : (
+            <>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Received in this period
               </div>
-              <Table minWidth={720}>
-                <thead className="border-b border-slate-100">
-                  <tr>
-                    <Th>When</Th>
-                    <Th>Who took it</Th>
-                    <Th>From</Th>
-                    <Th>For</Th>
-                    <Th>How</Th>
-                    <Th className="text-right">Amount</Th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                {collectors.recent.map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50/50">
-                    <Td className="whitespace-nowrap text-xs text-slate-500">{dmy(p.at)}</Td>
-                    <Td className="text-xs">{p.receivedBy ?? "—"}</Td>
-                    <Td className="text-xs">{p.guest}</Td>
-                    <Td className="text-xs text-slate-500">{p.bookingCode}</Td>
-                    <Td className="text-xs text-slate-500">{p.method}</Td>
-                    {/* a refund is money leaving; a line that does not say so
-                        reads as a collection */}
-                    <Td className={`text-right text-xs font-semibold ${p.type === "REFUND" ? "text-red-600" : ""}`}>
-                      {p.type === "REFUND" ? `− ${money(p.amount)}` : money(p.amount)}
-                    </Td>
-                  </tr>
-                ))}
-                </tbody>
-              </Table>
-            </div>
+              <div className="text-3xl font-bold text-brand-700">{money(collectors.total)}</div>
+
+              {/*
+                How it arrived, before who took it. Cash has to be counted
+                tonight; bKash and a bank transfer have to be matched against
+                somebody else's statement. One number for both is an average,
+                not a reconciliation.
+              */}
+              {collectors.byMethod.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-1.5 text-xs font-semibold text-slate-500">How it arrived</div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {collectors.byMethod.map((m) => (
+                      <div key={m.method} className="rounded-lg border border-slate-200 p-3">
+                        <div className="text-xs font-semibold text-slate-600">{m.method}</div>
+                        <div className="text-[11px] text-slate-400">{m.count} payment(s)</div>
+                        <div className="mt-1 text-lg font-bold text-slate-800">{money(m.total)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4">
+                <div className="mb-1.5 text-xs font-semibold text-slate-500">Who took it</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {collectors.rows.map((r) => (
+                    <div key={r.userId ?? "x"} className="rounded-lg border border-slate-200 p-3">
+                      <div className="text-sm font-semibold">{r.name}</div>
+                      <div className="text-xs text-slate-400">{r.count} payment(s)</div>
+                      <div className="mt-1 text-lg font-bold text-brand-700">{money(r.total)}</div>
+                      <div className="mt-1 text-[10px] text-slate-400">
+                        {(r.recentCodes ?? []).slice(0, 6).join(", ")}
+                        {(r.recentCodes ?? []).length > 6 ? "…" : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/*
+                  Said once, under the cards, because "Unassigned" holding every
+                  taka in the resort is alarming until you know why — and the
+                  reason is not a fault: a spreadsheet has no column for who
+                  took the cash, so the importer refused to invent one.
+                */}
+                {collectors.rows.some((r) => r.userId == null) && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    <b>Unassigned</b> is money that arrived without a name against it — payments
+                    imported from a spreadsheet, which has no column for who took them. Anything
+                    recorded in the app from now on carries the name of whoever entered it.
+                  </p>
+                )}
+              </div>
+
+              {collectors.recent.length > 0 && (
+                <div className="mt-5">
+                  <div className="mb-1.5 text-xs font-semibold text-slate-500">
+                    Receipts ({collectors.recent.length}
+                    {collectors.recent.length >= 300 ? ", most recent" : ""})
+                  </div>
+                  <Table minWidth={720}>
+                    <thead className="border-b border-slate-100">
+                      <tr>
+                        <Th>When</Th>
+                        <Th>Who took it</Th>
+                        <Th>From</Th>
+                        <Th>For</Th>
+                        <Th>How</Th>
+                        <Th className="text-right">Amount</Th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {collectors.recent.map((p) => (
+                        <tr key={p.id} className="hover:bg-slate-50/50">
+                          <Td className="whitespace-nowrap text-xs text-slate-500">{dmy(p.at)}</Td>
+                          <Td className="text-xs">
+                            {p.receivedBy ?? <span className="text-slate-400">not recorded</span>}
+                          </Td>
+                          <Td className="text-xs">{p.guest}</Td>
+                          <Td className="text-xs text-slate-500">{p.bookingCode}</Td>
+                          <Td className="text-xs text-slate-500">{p.method}</Td>
+                          <Td className={`text-right text-xs font-semibold ${p.type === "REFUND" ? "text-red-600" : ""}`}>
+                            {p.type === "REFUND" ? `− ${money(p.amount)}` : money(p.amount)}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </>
           )}
         </Card>
       )}
 
+      {/*
+        "Who received money" used to be here, above the P&L boxes, with the
+        page's own "Check-in from/to" filter — which this report does not
+        honour. It has its own tab and its own dates now. One copy, because two
+        would drift.
+      */}
       {tab === "Summary" && metrics && (
         <Card title="P&L summary (management metrics)">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
