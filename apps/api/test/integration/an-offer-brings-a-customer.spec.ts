@@ -91,8 +91,8 @@ beforeEach(async () => {
   admin = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
   await prisma.platformPlan.createMany({
     data: [
-      { name: "AGENCY_BASIC", label: "Agency Basic", monthlyFee: 1000, trialDays: 14, audience: "AGENCY", features: [] },
-      { name: "AGENCY_PRO", label: "Agency Pro", monthlyFee: 3000, trialDays: 14, audience: "AGENCY", features: [] },
+      { name: "AGENCY_BASIC", label: "Agency Basic", trialDays: 14, audience: "AGENCY", features: [] },
+      { name: "AGENCY_PRO", label: "Agency Pro", trialDays: 14, audience: "AGENCY", features: [] },
     ] as never,
   });
   // a plan this spec made itself still needs somewhere to keep its price
@@ -128,13 +128,18 @@ describe("signing up through an offer", () => {
 
   it("charges the discounted fee when the offer carries a discount", async () => {
     const offer = await platform().createOffer(superAdmin, { audience: "RESORT", plan: "GROWTH", discountPct: 50, maxUses: 5 });
-    const growth = await prisma.platformPlan.findUniqueOrThrow({ where: { name: "GROWTH" } });
+    const growth = await prisma.planPhase.findFirstOrThrow({
+      where: { schedule: { plan: { name: "GROWTH" }, label: "Monthly" } },
+      orderBy: { seq: "asc" },
+    });
 
     await resortSignup(offer.code);
 
     const sub = await liveSub((await accountOf("Offer Group")).id);
-    // the subscription pays a period's `fee`; the plan quotes a `monthlyFee`
-    expect(Number(sub.fee)).toBe(Number(growth.monthlyFee) / 2);
+    // the subscription pays a period's `fee`; the plan's price is a rung
+    expect(Number(sub.fee)).toBe(Number(growth.price) / 2);
+    // and the discount outlives that first period — it is kept on the row
+    expect(sub.discountPct).toBe(50);
   });
 });
 

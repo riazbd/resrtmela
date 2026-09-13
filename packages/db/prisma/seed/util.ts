@@ -103,5 +103,7 @@ export const TABLES_IN_WIPE_ORDER = [
   "password_resets", "agent_roles",
   "resort_agencies", "resorts",
   "users", "tenants", "offers",
+  // a plan's prices: rungs before shelves, shelves before the plan they hang off
+  "plan_phases", "plan_schedules",
   "platform_plans", "platform_settings", "cms_settings",
 ] as const;

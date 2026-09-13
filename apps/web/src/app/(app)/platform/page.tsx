@@ -64,9 +64,6 @@ interface PlanDef {
     openingFee: number;
     perMonth: number;
   }[];
-  monthlyFee: string;
-  /** What a year costs. Null means this plan is not sold by the year. */
-  yearlyFee: string | null;
   maxRooms: number;
   maxResorts: number;
   maxStaff: number;
@@ -85,9 +82,6 @@ interface PlanDef {
 /** Every field the panel can send. `name` is absent on purpose: it is fixed. */
 type PlanEdit = {
   label: string;
-  monthlyFee: number;
-  /** Zero means "not sold by the year" — the API stores that as null. */
-  yearlyFee: number;
   maxRooms: number;
   maxResorts: number;
   maxStaff: number;
@@ -1139,8 +1133,6 @@ function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onTog
 function toEdit(plan: PlanDef): PlanEdit {
   return {
     label: plan.label,
-    monthlyFee: Number(plan.monthlyFee),
-    yearlyFee: Number(plan.yearlyFee ?? 0),
     maxRooms: plan.maxRooms,
     maxResorts: plan.maxResorts,
     maxStaff: plan.maxStaff,
@@ -1287,11 +1279,10 @@ function PlanCard({
   );
 }
 
-const BLANK_PLAN: PlanEdit & { name: string } = {
+const BLANK_PLAN: PlanEdit & { name: string; price: number } = {
   name: "",
   label: "",
-  monthlyFee: 0,
-  yearlyFee: 0,
+  price: 0,
   maxRooms: 10,
   maxResorts: 1,
   maxStaff: 1,
@@ -1403,7 +1394,7 @@ function NewPlanCard({
          * is rather than conclude the platform cannot do it.
          */}
         <div className="grid grid-cols-2 gap-2">
-          <NumField label={`Price (${cur()})`} value={form.monthlyFee} min={0} onChange={(n) => set("monthlyFee", n)} />
+          <NumField label={`Price (${cur()})`} value={form.price} min={0} onChange={(n) => set("price", n)} />
           <NumField label="Free trial (days)" value={form.trialDays} min={0} onChange={(n) => set("trialDays", n)} />
           <p className="col-span-2 -mt-1 text-[11px] text-slate-400">
             Sold monthly to begin with. Save the plan, then set as many ways of buying it as you

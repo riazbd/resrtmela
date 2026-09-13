@@ -28,24 +28,45 @@ import * as bcrypt from "bcryptjs";
  * the old backfill reset maxResorts on every call, silently undoing edits.
  */
 const PLAN_SEEDS = [
-  { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
-  { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, maxResorts: 2, trialDays: 14, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
-  { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, maxResorts: 10, trialDays: 14, blurb: "For multi-resort owners", sortOrder: 3 },
+  { name: "STARTER", label: "Starter", price: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14, blurb: "For small resorts getting off spreadsheets", sortOrder: 1 },
+  { name: "GROWTH", label: "Growth", price: 5000, maxRooms: 40, maxResorts: 2, trialDays: 14, blurb: "For busy resorts with restaurant & agents", sortOrder: 2 },
+  { name: "CHAIN", label: "Chain", price: 12000, maxRooms: 10000, maxResorts: 10, trialDays: 14, blurb: "For multi-resort owners", sortOrder: 3 },
 ];
 
 /** Seeds the starting plans on an empty platform. Never edits existing rows. */
+/**
+ * The plans a brand-new platform starts with, and the one way of buying each.
+ *
+ * `createMany` no longer does: a plan without a schedule has no price, and
+ * `scheduleFor` refuses to sell it. The seeds are written one at a time so
+ * each gets its Monthly shelf in the same breath.
+ */
 async function ensurePlans(prisma: PrismaService) {
-  if ((await prisma.platformPlan.count()) === 0) {
-    await prisma.platformPlan.createMany({ data: PLAN_SEEDS as never });
+  if ((await prisma.platformPlan.count()) > 0) return;
+  for (const seed of PLAN_SEEDS) {
+    const { price, ...plan } = seed as typeof seed & { price: number };
+    const row = await prisma.platformPlan.create({ data: plan as never });
+    const monthly = await prisma.planSchedule.create({
+      data: { planId: row.id, label: "Monthly", sortOrder: 0 },
+    });
+    await prisma.planPhase.create({
+      data: { scheduleId: monthly.id, seq: 1, count: 1, unit: "MONTH", price: price as never },
+    });
   }
 }
 
 export interface PlanInput {
   name: string;
   label: string;
-  monthlyFee: number;
-  /** What a year costs. Absent or zero means the plan is not sold by the year. */
-  yearlyFee?: number | null;
+  /**
+   * What one month of this plan costs to begin with.
+   *
+   * Not a column — it becomes the single rung of the plan's Monthly schedule,
+   * which is then edited in the ladder editor like any other. A plan is
+   * created with one price because that is all a form can sensibly ask for
+   * before the plan exists to hang shelves off.
+   */
+  price: number;
   maxRooms: number;
   maxResorts: number;
   trialDays: number;
@@ -87,7 +108,7 @@ const PLAN_NAME = /^[A-Z][A-Z0-9_]{1,15}$/;
 const PLAN_BOUNDS = {
   label: 40, // VarChar(40)
   blurb: 200, // VarChar(200)
-  monthlyFee: 99_999_999.99, // Decimal(10,2)
+  price: 99_999_999.99, // Decimal(10,2) on the phase
   maxRooms: 100_000,
   maxResorts: 1_000,
   maxStaff: 10_000,
@@ -118,7 +139,7 @@ function assertPlanFields(
     if (!input.name || !PLAN_NAME.test(input.name)) {
       throw badRequest("Plan name must be 2–16 characters, A–Z, 0–9 or _, starting with a letter (e.g. SEASON)");
     }
-    for (const required of ["label", "monthlyFee", "maxRooms", "maxResorts", "trialDays"] as const) {
+    for (const required of ["label", "price", "maxRooms", "maxResorts", "trialDays"] as const) {
       if (input[required] == null) throw badRequest(`${required} is required`);
     }
   }
@@ -135,23 +156,12 @@ function assertPlanFields(
   if (input.blurb != null && input.blurb.length > PLAN_BOUNDS.blurb) {
     throw badRequest(`Blurb must be ${PLAN_BOUNDS.blurb} characters or fewer`);
   }
-  if (input.monthlyFee != null) {
-    const fee = input.monthlyFee;
-    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.monthlyFee) {
-      throw badRequest(`Monthly fee must be between 0 and ${PLAN_BOUNDS.monthlyFee}`);
+  if (input.price != null) {
+    const fee = input.price;
+    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.price) {
+      throw badRequest(`Price must be between 0 and ${PLAN_BOUNDS.price}`);
     }
-    if (Math.round(fee * 100) !== fee * 100) throw badRequest("Monthly fee cannot be finer than a paisa");
-  }
-  /**
-   * The yearly price is optional — most plans start without one, and a blank
-   * box means "not sold by the year" rather than "free for a year".
-   */
-  if (input.yearlyFee != null) {
-    const fee = input.yearlyFee;
-    if (!Number.isFinite(fee) || fee < 0 || fee > PLAN_BOUNDS.monthlyFee) {
-      throw badRequest(`Yearly fee must be between 0 and ${PLAN_BOUNDS.monthlyFee}`);
-    }
-    if (Math.round(fee * 100) !== fee * 100) throw badRequest("Yearly fee cannot be finer than a paisa");
+    if (Math.round(fee * 100) !== fee * 100) throw badRequest("A price cannot be finer than a paisa");
   }
   if (input.features != null) {
     if (!Array.isArray(input.features)) throw badRequest("Features must be a list");
@@ -598,7 +608,7 @@ export class PlatformService {
        * How long this resort's trial runs, and whether it has one at all.
        *
        * The plan's length is the offer; `input.trialDays` is the owner giving
-       * one customer different terms, the way `monthlyFee` already could.
+       * one customer different terms, the way the plan's own price already could.
        *
        * Zero means no trial, and that has to mean ACTIVE from the start rather
        * than a TRIAL whose end date is already behind it. The money was right
@@ -686,10 +696,6 @@ export class PlatformService {
       data: {
         name: input.name,
         label: input.label,
-        monthlyFee: input.monthlyFee as never,
-        // zero and absent both mean "not sold by the year"; storing NULL keeps
-        // one answer to that question rather than two
-        yearlyFee: (input.yearlyFee ? input.yearlyFee : null) as never,
         maxRooms: input.maxRooms,
         maxResorts: input.maxResorts,
         maxStaff: input.maxStaff ?? 1,
@@ -703,72 +709,17 @@ export class PlatformService {
       },
     });
     if (input.highlight) await this.featureOnly(plan.name);
-    await this.ensureSchedules(plan);
-    await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
-    return plan;
-  }
-
-  /**
-   * A plan with no way to buy it is a plan nobody can be put on — `scheduleFor`
-   * refuses, and the billing sweep will not invoice a subscription with no
-   * schedule. So a plan that has none gets one built from the fees it was
-   * created with: a single rung, running forever, which is exactly what a plan
-   * with one price has always been.
-   *
-   * TRANSITIONAL, and it goes when `monthlyFee` and `yearlyFee` do. The real
-   * path is the ladder editor calling `setSchedules`; this is what keeps the
-   * plan form working in the meantime, and what stops a plan created through
-   * the API from being unsellable.
-   */
-  private async ensureSchedules(plan: {
-    id: bigint;
-    monthlyFee: unknown;
-    yearlyFee: unknown;
-  }): Promise<void> {
-    const existing = await this.prisma.planSchedule.findMany({
-      where: { planId: plan.id },
-      include: { phases: true },
-    });
-    if (existing.length > 0) {
-      /**
-       * The fee boxes and the ladder are two ways of saying the same thing
-       * while both exist, so editing one has to move the other — a plan whose
-       * price box says 7,777 and whose schedule still says 5,000 would bill
-       * the old number and show the new one.
-       *
-       * Only where the schedule is a single rung. Once somebody has built a
-       * real ladder under a plan, a number typed in a legacy box is not
-       * allowed to flatten it.
-       */
-      for (const sched of existing) {
-        if (sched.phases.length !== 1) continue;
-        const rung = sched.phases[0]!;
-        const fee = rung.unit === "YEAR" ? plan.yearlyFee : plan.monthlyFee;
-        if (fee == null || Number(fee) === Number(rung.price)) continue;
-        await this.prisma.planPhase.update({
-          where: { id: rung.id },
-          data: { price: fee as never },
-        });
-      }
-      return;
-    }
+    // the price the form asked for, in the only place a price lives
     const monthly = await this.prisma.planSchedule.create({
       data: { planId: plan.id, label: "Monthly", sortOrder: 0 },
     });
     await this.prisma.planPhase.create({
-      data: { scheduleId: monthly.id, seq: 1, count: 1, unit: "MONTH", price: plan.monthlyFee as never },
+      data: { scheduleId: monthly.id, seq: 1, count: 1, unit: "MONTH", price: input.price as never },
     });
-    // zero and null both mean "not sold by the year", which is the reading
-    // `soldYearly` always gave them
-    if (plan.yearlyFee != null && Number(plan.yearlyFee) > 0) {
-      const yearly = await this.prisma.planSchedule.create({
-        data: { planId: plan.id, label: "Yearly", sortOrder: 1 },
-      });
-      await this.prisma.planPhase.create({
-        data: { scheduleId: yearly.id, seq: 1, count: 1, unit: "YEAR", price: plan.yearlyFee as never },
-      });
-    }
+    await this.audit.log({ actorId: claims.userId, action: "platform.plan.create", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
+    return plan;
   }
+
 
   async updatePlan(claims: JwtClaims, name: string, input: PlanPatch) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
@@ -800,11 +751,6 @@ export class PlatformService {
     const plan = await this.prisma.platformPlan.update({
       where: { name },
       data: {
-        ...(input.monthlyFee != null ? { monthlyFee: input.monthlyFee as never } : {}),
-        // clearing the box takes the plan off the yearly shelf; accounts
-        // already on a year keep the price they were sold, which lives on
-        // their own subscription row
-        ...(input.yearlyFee !== undefined ? { yearlyFee: (input.yearlyFee ? input.yearlyFee : null) as never } : {}),
         ...(input.maxRooms != null ? { maxRooms: input.maxRooms } : {}),
         ...(input.maxResorts != null ? { maxResorts: input.maxResorts } : {}),
         ...(input.maxStaff != null ? { maxStaff: input.maxStaff } : {}),
@@ -819,7 +765,6 @@ export class PlatformService {
       },
     });
     if (input.highlight) await this.featureOnly(name);
-    await this.ensureSchedules(plan);
     await this.audit.log({ actorId: claims.userId, action: "platform.plan.update", entity: "platform_plan", entityId: Number(plan.id), diff: input as never });
     return plan;
   }
@@ -2237,13 +2182,29 @@ export class PlatformService {
     if (!o) throw badRequest("This offer code does not exist");
     const plan = await this.prisma.platformPlan.findUnique({
       where: { name: o.plan },
-      select: { name: true, label: true, monthlyFee: true, trialDays: true },
+      select: {
+        name: true, label: true, trialDays: true,
+        schedules: {
+          where: { active: true },
+          orderBy: { sortOrder: "asc" },
+          take: 1,
+          include: { phases: { orderBy: { seq: "asc" }, take: 1 } },
+        },
+      },
     });
     const expired = !!o.expiresAt && o.expiresAt.getTime() <= Date.now();
     return {
       code: o.code,
       audience: o.audience,
-      plan: plan ? { ...plan, monthlyFee: Number(plan.monthlyFee) } : null,
+      plan: plan
+        ? {
+            name: plan.name,
+            label: plan.label,
+            trialDays: plan.trialDays,
+            // what the first period costs on the shelf this plan leads with
+            openingFee: Number(plan.schedules[0]?.phases[0]?.price ?? 0),
+          }
+        : null,
       trialDays: o.trialDays ?? plan?.trialDays ?? 0,
       discountPct: o.discountPct,
       expiresAt: o.expiresAt,
@@ -2316,7 +2277,7 @@ export class PlatformService {
 
     const plan = await this.prisma.platformPlan.findFirst({
       where: { active: true, audience: "AGENCY" },
-      orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
+      orderBy: { sortOrder: "asc" },
     });
     if (!plan) throw badRequest("The platform has no agency plan on sale yet, so there is nothing to invite an agency to");
     const offer = await this.makeOffer(claims.userId, {

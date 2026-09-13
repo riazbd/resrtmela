@@ -6,8 +6,7 @@ import type { PrismaClient } from "../../src";
 import { at } from "./util";
 
 export async function seedPlatform(prisma: PrismaClient) {
-  await prisma.platformPlan.createMany({
-    data: [
+  const PLANS = [
       /**
        * The yearly prices are ten months' fee — "two months free", the shape
        * almost every subscription business states the annual discount in. One
@@ -16,26 +15,26 @@ export async function seedPlatform(prisma: PrismaClient) {
        * yearly option and the toggle skips it.
        */
       {
-        name: "STARTER", label: "Starter", monthlyFee: 2500, yearlyFee: 25000, maxRooms: 10, maxResorts: 1, maxStaff: 2,
+        name: "STARTER", label: "Starter", monthly: 2500, yearly: 25000, maxRooms: 10, maxResorts: 1, maxStaff: 2,
         trialDays: 14, audience: "RESORT", sortOrder: 1, active: true, highlight: false,
         blurb: "For small resorts getting off spreadsheets",
         features: ["discounts"],
       },
       {
-        name: "GROWTH", label: "Growth", monthlyFee: 5000, yearlyFee: 50000, maxRooms: 40, maxResorts: 2, maxStaff: 8,
+        name: "GROWTH", label: "Growth", monthly: 5000, yearly: 50000, maxRooms: 40, maxResorts: 2, maxStaff: 8,
         trialDays: 14, audience: "RESORT", sortOrder: 2, active: true, highlight: true,
         blurb: "For busy resorts with a restaurant and agents",
         features: ["restaurant", "agents", "discounts", "activities"],
       },
       {
-        name: "CHAIN", label: "Chain", monthlyFee: 12000, yearlyFee: 120000, maxRooms: 10000, maxResorts: 10, maxStaff: 60,
+        name: "CHAIN", label: "Chain", monthly: 12000, yearly: 120000, maxRooms: 10000, maxResorts: 10, maxStaff: 60,
         trialDays: 14, audience: "RESORT", sortOrder: 3, active: true, highlight: false,
         blurb: "For owners running more than one property",
         features: ["restaurant", "agents", "discounts", "activities", "bulk_email", "payroll", "imports"],
       },
       {
         // what a retired plan looks like: kept for the rows still on it, off the price list
-        name: "PRO", label: "Pro (retired)", monthlyFee: 8000, yearlyFee: null, maxRooms: 100, maxResorts: 4, maxStaff: 20,
+        name: "PRO", label: "Pro (retired)", monthly: 8000, yearly: null, maxRooms: 100, maxResorts: 4, maxStaff: 20,
         trialDays: 0, audience: "RESORT", sortOrder: 91, active: false, highlight: false,
         blurb: "Replaced by Chain in 2026",
         features: ["restaurant", "agents"],
@@ -43,18 +42,59 @@ export async function seedPlatform(prisma: PrismaClient) {
       {
         // the plan sold by the month only — a real state, and one the pricing
         // toggle and the plan picker both have to cope with
-        name: "AGENCY_BASIC", label: "Agency Basic", monthlyFee: 1200, yearlyFee: null, maxRooms: 0, maxResorts: 0, maxStaff: 3,
+        name: "AGENCY_BASIC", label: "Agency Basic", monthly: 1200, yearly: null, maxRooms: 0, maxResorts: 0, maxStaff: 3,
         trialDays: 14, audience: "AGENCY", sortOrder: 1, active: true, highlight: false,
         blurb: "For a travel agency selling resorts on the platform",
         features: [],
       },
       {
-        name: "AGENCY_PRO", label: "Agency Pro", monthlyFee: 3500, yearlyFee: 35000, maxRooms: 0, maxResorts: 0, maxStaff: 15,
+        name: "AGENCY_PRO", label: "Agency Pro", monthly: 3500, yearly: 35000, maxRooms: 0, maxResorts: 0, maxStaff: 15,
         trialDays: 30, audience: "AGENCY", sortOrder: 2, active: true, highlight: true,
         blurb: "Sub-agents, the agency's own client list and quotations",
         features: [],
       },
-    ] as never,
+  ];
+
+  /**
+   * A plan and the ways it is sold, written together.
+   *
+   * `createMany` no longer does: `monthlyFee` and `yearlyFee` are gone, and a
+   * plan with no schedule has no price at all — `scheduleFor` refuses to sell
+   * one and the billing sweep will not invoice it. The yearly prices are still
+   * ten months' fee, which is where "two months free" comes from, and one plan
+   * is still deliberately sold by the month alone because a shelf with nothing
+   * on it is a state the screens have to handle.
+   */
+  for (const { monthly, yearly, ...plan } of PLANS) {
+    const row = await prisma.platformPlan.create({ data: plan as never });
+    const shelf = async (label: string, sortOrder: number, count: number, unit: string, price: number) => {
+      const schedule = await prisma.planSchedule.create({
+        data: { planId: row.id, label, sortOrder },
+      });
+      await prisma.planPhase.create({
+        data: { scheduleId: schedule.id, seq: 1, count, unit, price: price as never, repeats: null },
+      });
+    };
+    await shelf("Monthly", 0, 1, "MONTH", monthly);
+    if (yearly != null) await shelf("Yearly", 1, 1, "YEAR", yearly);
+  }
+
+  /**
+   * And one plan sold on a ladder, because a promotion is now a thing the
+   * platform can actually express: a free fortnight, three months at half
+   * price, then the list price. The demo world should contain one, or nobody
+   * looking at it learns that it exists.
+   */
+  const starter = await prisma.platformPlan.findUniqueOrThrow({ where: { name: "STARTER" } });
+  const intro = await prisma.planSchedule.create({
+    data: { planId: starter.id, label: "Intro", sortOrder: 2 },
+  });
+  await prisma.planPhase.createMany({
+    data: [
+      { scheduleId: intro.id, seq: 1, count: 2, unit: "WEEK", price: 0 as never, repeats: 1 },
+      { scheduleId: intro.id, seq: 2, count: 1, unit: "MONTH", price: 1250 as never, repeats: 3 },
+      { scheduleId: intro.id, seq: 3, count: 1, unit: "MONTH", price: 2500 as never, repeats: null },
+    ],
   });
 
   const optionDefaults = {

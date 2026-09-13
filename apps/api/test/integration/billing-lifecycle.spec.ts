@@ -36,8 +36,8 @@ beforeEach(async () => {
   // real database; this pins the numbers this file's arithmetic depends on
   await prisma.platformPlan.upsert({
     where: { name: "STARTER" },
-    create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14 },
-    update: { monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14 },
+    create: { name: "STARTER", label: "Starter", maxRooms: 10, maxResorts: 1, trialDays: 14 },
+    update: { maxRooms: 10, maxResorts: 1, trialDays: 14 },
   });
 });
 

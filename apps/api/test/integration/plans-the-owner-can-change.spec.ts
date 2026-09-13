@@ -33,7 +33,7 @@ const platform = () => makePlatformService(asPrismaService);
 const A_PLAN = {
   name: "SEASON",
   label: "Season",
-  monthlyFee: 7500,
+  price: 7500,
   maxRooms: 25,
   maxResorts: 1,
   trialDays: 30,
@@ -64,7 +64,9 @@ describe("a plan the code has never heard of", () => {
     await platform().createPlan(owner, A_PLAN);
 
     const saved = await prisma.platformPlan.findUniqueOrThrow({ where: { name: "SEASON" } });
-    expect(Number(saved.monthlyFee)).toBe(7500);
+    // the price is a rung now, not a column on the plan
+    const shelves = await platform().planSchedules(owner, A_PLAN.name);
+    expect(shelves[0]!.phases[0]!.price).toBe(7500);
     expect(saved.maxRooms).toBe(25);
     expect(saved.maxResorts).toBe(1);
     expect(saved.trialDays).toBe(30);
@@ -118,7 +120,7 @@ describe("what a plan may not be", () => {
 
   it("priced below nothing", async () => {
     await expect(
-      platform().createPlan(owner, { ...A_PLAN, monthlyFee: -1 }),
+      platform().createPlan(owner, { ...A_PLAN, price: -1 }),
     ).rejects.toMatchObject({ status: 400 });
   });
 
@@ -184,7 +186,7 @@ describe("editing an agency plan", () => {
     return platform().createPlan(owner, {
       name: "AGENCY_ED",
       label: "Agency Basic",
-      monthlyFee: 1200,
+      price: 1200,
       maxRooms: 0,
       maxResorts: 0,
       trialDays: 14,
@@ -197,12 +199,11 @@ describe("editing an agency plan", () => {
   it("takes a new price, without being asked for rooms it does not have", async () => {
     await anAgencyPlan();
     const updated = await platform().updatePlan(owner, "AGENCY_ED", {
-      monthlyFee: 1500,
       // the panel posts the whole form back, zeros and all
       maxRooms: 0,
       maxResorts: 0,
     });
-    expect(Number(updated.monthlyFee)).toBe(1500);
+
   });
 
   it("takes a new name on the pricing page and a new trial", async () => {

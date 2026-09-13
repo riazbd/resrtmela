@@ -124,73 +124,62 @@ export async function resetDb(prisma: PrismaClient): Promise<void> {
  * These are the same rows as migration 20260909250000_one_plan_vocabulary.
  */
 export async function seedPlatformPlans(prisma: PrismaClient): Promise<void> {
-  await prisma.platformPlan.createMany({
-    data: [
-      // two of the three carry a yearly price at ten months' fee, and CHAIN
-      // deliberately does not: "sold by the month only" is a state the code
-      // has to keep working through
-      { name: "STARTER", label: "Starter", monthlyFee: 2500 as never, yearlyFee: 25000 as never, maxRooms: 10, maxResorts: 1, sortOrder: 1 },
-      { name: "GROWTH", label: "Growth", monthlyFee: 5000 as never, yearlyFee: 50000 as never, maxRooms: 40, maxResorts: 2, sortOrder: 2, highlight: true },
-      { name: "CHAIN", label: "Chain", monthlyFee: 12000 as never, maxRooms: 10000, maxResorts: 10, sortOrder: 3 },
-      // retired names existing tenants still carry, with the limits they had
-      { name: "FREE", label: "Free (legacy)", monthlyFee: 0 as never, maxRooms: 10, maxResorts: 1, active: false, sortOrder: 90 },
-      { name: "STANDARD", label: "Standard (legacy)", monthlyFee: 0 as never, maxRooms: 50, maxResorts: 3, active: false, sortOrder: 91 },
-      { name: "PRO", label: "Pro (legacy)", monthlyFee: 0 as never, maxRooms: 500, maxResorts: 10, active: false, sortOrder: 92 },
-    ],
-    skipDuplicates: true,
-  });
-  await seedPlanSchedules(prisma);
+  /**
+   * The plans, and the one way each is sold to begin with.
+   *
+   * `monthlyFee` and `yearlyFee` are gone — a price is a rung on a schedule
+   * now — so the fixture writes both halves together. The prices themselves
+   * are unchanged, because a hundred specs assert against them.
+   */
+  const PLANS = [
+    // two of the three carry a yearly price at ten months' fee, and CHAIN
+    // deliberately does not: "sold by the month only" is a state the code
+    // has to keep working through
+    { name: "STARTER", label: "Starter", maxRooms: 10, maxResorts: 1, sortOrder: 1, monthly: 2500, yearly: 25000 },
+    { name: "GROWTH", label: "Growth", maxRooms: 40, maxResorts: 2, sortOrder: 2, highlight: true, monthly: 5000, yearly: 50000 },
+    { name: "CHAIN", label: "Chain", maxRooms: 10000, maxResorts: 10, sortOrder: 3, monthly: 12000, yearly: null },
+    // retired names existing tenants still carry, with the limits they had
+    { name: "FREE", label: "Free (legacy)", maxRooms: 10, maxResorts: 1, active: false, sortOrder: 90, monthly: 0, yearly: null },
+    { name: "STANDARD", label: "Standard (legacy)", maxRooms: 50, maxResorts: 3, active: false, sortOrder: 91, monthly: 0, yearly: null },
+    { name: "PRO", label: "Pro (legacy)", maxRooms: 500, maxResorts: 10, active: false, sortOrder: 92, monthly: 0, yearly: null },
+  ];
+  for (const { monthly, yearly, ...plan } of PLANS) {
+    if (await prisma.platformPlan.findUnique({ where: { name: plan.name } })) continue;
+    const row = await prisma.platformPlan.create({ data: plan as never });
+    await addShelf(prisma, row.id, "Monthly", 0, 1, "MONTH", monthly);
+    if (yearly != null) await addShelf(prisma, row.id, "Yearly", 1, 1, "YEAR", yearly);
+  }
 }
 
-/**
- * The prices again, in the place prices actually live now.
- *
- * `monthlyFee` and `yearlyFee` are on their way out: a plan's prices are rows
- * under a schedule, so an owner can sell a week free and six months at half
- * price without a migration. What the fixture builds is what migration
- * 20260914090000_plans_carry_their_own_ladder built out of the existing
- * columns — one rung, running forever — because that is what a plan with a
- * single price has always been.
- *
- * A ladder with more than one rung is a thing individual specs construct for
- * themselves. Putting one here would make every unrelated billing test depend
- * on a promotion it never asked for.
- */
+/** One shelf with one rung, running forever — what a single price has always been. */
+async function addShelf(
+  prisma: PrismaClient,
+  planId: bigint,
+  label: string,
+  sortOrder: number,
+  count: number,
+  unit: string,
+  price: number,
+): Promise<void> {
+  const schedule = await prisma.planSchedule.create({ data: { planId, label, sortOrder } });
+  await prisma.planPhase.create({
+    data: { scheduleId: schedule.id, seq: 1, count, unit, price: price as never, repeats: null },
+  });
+}
+
 export async function seedPlanSchedules(prisma: PrismaClient): Promise<void> {
+  /**
+   * For plans a spec created itself.
+   *
+   * `seedPlatformPlans` gives the fixture's own plans their shelves as it
+   * writes them; this is for the ones a test invents, which would otherwise
+   * have no price and could not be sold at all. Idempotent, so calling it
+   * after every `platformPlan.create` is safe.
+   */
   const plans = await prisma.platformPlan.findMany();
   for (const plan of plans) {
-    const already = await prisma.planSchedule.count({ where: { planId: plan.id } });
-    if (already > 0) continue;
-    const monthly = await prisma.planSchedule.create({
-      data: { planId: plan.id, label: "Monthly", sortOrder: 0 },
-    });
-    await prisma.planPhase.create({
-      data: {
-        scheduleId: monthly.id,
-        seq: 1,
-        count: 1,
-        unit: "MONTH",
-        price: plan.monthlyFee,
-        repeats: null,
-      },
-    });
-    // only where the plan is genuinely on the yearly shelf — CHAIN is not, and
-    // "sold by the month only" is a state the code has to keep working through
-    if (plan.yearlyFee != null && Number(plan.yearlyFee) > 0) {
-      const yearly = await prisma.planSchedule.create({
-        data: { planId: plan.id, label: "Yearly", sortOrder: 1 },
-      });
-      await prisma.planPhase.create({
-        data: {
-          scheduleId: yearly.id,
-          seq: 1,
-          count: 1,
-          unit: "YEAR",
-          price: plan.yearlyFee,
-          repeats: null,
-        },
-      });
-    }
+    if (await prisma.planSchedule.count({ where: { planId: plan.id } })) continue;
+    await addShelf(prisma, plan.id, "Monthly", 0, 1, "MONTH", 1000);
   }
 }
 

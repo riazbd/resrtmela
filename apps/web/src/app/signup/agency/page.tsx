@@ -16,8 +16,7 @@ import { formatMoney, scheduleSentence, type Phase } from "@rh/shared";
 interface AgencyPlan {
   name: string;
   label: string;
-  monthlyFee: number;
-  /** null where this plan is sold by the month only. */
+  /** Every way this plan is sold — rows the owner wrote. */
   schedules: {
     id: number;
     label: string;

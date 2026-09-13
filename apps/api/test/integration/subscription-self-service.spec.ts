@@ -62,10 +62,10 @@ async function withPermissions(permissions: string[]): Promise<JwtClaims> {
 /** `resetDb` leaves the platform's own tables alone, so this upserts. */
 async function seedPlans() {
   const rows = [
-    { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 1, trialDays: 14, active: true, sortOrder: 1 },
-    { name: "GROWTH", label: "Growth", monthlyFee: 5000, maxRooms: 40, maxResorts: 2, trialDays: 14, active: true, sortOrder: 2 },
-    { name: "CHAIN", label: "Chain", monthlyFee: 12000, maxRooms: 10000, maxResorts: 10, trialDays: 14, active: true, sortOrder: 3 },
-    { name: "LEGACY", label: "Legacy", monthlyFee: 1, maxRooms: 5, maxResorts: 1, trialDays: 0, active: false, sortOrder: 9 },
+    { name: "STARTER", label: "Starter", maxRooms: 10, maxResorts: 1, trialDays: 14, active: true, sortOrder: 1 },
+    { name: "GROWTH", label: "Growth", maxRooms: 40, maxResorts: 2, trialDays: 14, active: true, sortOrder: 2 },
+    { name: "CHAIN", label: "Chain", maxRooms: 10000, maxResorts: 10, trialDays: 14, active: true, sortOrder: 3 },
+    { name: "LEGACY", label: "Legacy", maxRooms: 5, maxResorts: 1, trialDays: 0, active: false, sortOrder: 9 },
   ];
   for (const r of rows) {
     await prisma.platformPlan.upsert({ where: { name: r.name }, create: r as never, update: r as never });

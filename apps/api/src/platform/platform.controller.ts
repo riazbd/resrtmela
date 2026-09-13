@@ -34,9 +34,15 @@ class CommissionDto {
 class PlanDto {
   @IsString() @MaxLength(16) name!: string;
   @IsString() @MaxLength(40) label!: string;
-  @IsNumber() @Min(0) monthlyFee!: number;
-  /** What a year costs. Absent, or zero, means this plan is not sold by the year. */
-  @IsOptional() @IsNumber() @Min(0) yearlyFee?: number;
+  /**
+   * What one month of it costs to begin with.
+   *
+   * There were two boxes here, a monthly fee and a yearly one, because those
+   * were the only two ways anything could be sold. A plan is created with one
+   * price — it becomes the single rung of its Monthly schedule — and every
+   * other way of selling it is written afterwards in the ladder editor.
+   */
+  @IsNumber() @Min(0) price!: number;
   /**
    * Zero is allowed here and refused in the service for a resort plan.
    * Whether a zero cap is a mistake depends on which shelf the plan is sold
@@ -59,8 +65,6 @@ class PlanDto {
 class PlanPatchDto {
   @IsOptional() @IsString() @MaxLength(16) name?: string;
   @IsOptional() @IsString() @MaxLength(40) label?: string;
-  @IsOptional() @IsNumber() @Min(0) monthlyFee?: number;
-  @IsOptional() @IsNumber() @Min(0) yearlyFee?: number;
   // see PlanDto: the floor is the service's to apply, because it depends on the shelf
   @IsOptional() @IsInt() @Min(0) maxRooms?: number;
   @IsOptional() @IsInt() @Min(0) maxResorts?: number;

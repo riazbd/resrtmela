@@ -201,7 +201,7 @@ describe("what may be ticked", () => {
     await platform().createPlan(owner, {
       name: "SEASON",
       label: "Season",
-      monthlyFee: 7500,
+      price: 7500,
       maxRooms: 25,
       maxResorts: 1,
       trialDays: 14,

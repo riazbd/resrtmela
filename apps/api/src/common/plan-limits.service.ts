@@ -20,7 +20,7 @@
  *   3. neither, or a name nobody sells → the cheapest plan still on sale
  */
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { ALL_PLAN_FEATURES, planFeatureLabel } from "@rh/shared";
+import { ALL_PLAN_FEATURES, planFeatureLabel, isPeriodUnit, perMonthEquivalent } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { forbid } from "./rbac";
 
@@ -171,10 +171,54 @@ export class PlanLimitsService {
    * statement of intent than picking the smallest number.
    */
   private async cheapestOnSale(audience: "RESORT" | "AGENCY" = "RESORT"): Promise<PlanLimits> {
-    const plan = await this.prisma.platformPlan.findFirst({
+    /**
+     * Cheapest, out of a ladder rather than out of a column.
+     *
+     * This was `orderBy: monthlyFee`, which the database could do because a
+     * price was one number. A price is a list of rungs now, so the comparison
+     * happens here — per month, from the rung the customer settles on, so a
+     * plan sold only by the year is judged against a monthly one fairly and a
+     * plan running an introductory promotion does not become "the cheapest"
+     * for as long as the promotion lasts.
+     *
+     * The whole list is read because the platform sells a handful of plans and
+     * every one of them has to be compared; `sortOrder` breaks a tie, which is
+     * the owner's own opinion about which comes first.
+     */
+    const rows = await this.prisma.platformPlan.findMany({
       where: { active: true, audience },
-      orderBy: [{ monthlyFee: "asc" }, { sortOrder: "asc" }],
+      orderBy: { sortOrder: "asc" },
+      include: {
+        schedules: {
+          where: { active: true },
+          orderBy: { sortOrder: "asc" },
+          include: { phases: { orderBy: { seq: "asc" } } },
+        },
+      },
     });
+    const priced = rows
+      .map((r) => {
+        const rates = r.schedules
+          .filter((sch) => sch.phases.length > 0)
+          .map((sch) =>
+            perMonthEquivalent(
+              sch.phases.map((ph) => ({
+                seq: ph.seq,
+                count: ph.count,
+                unit: isPeriodUnit(ph.unit) ? ph.unit : ("MONTH" as const),
+                price: Number(ph.price),
+                repeats: ph.repeats,
+              })),
+            ),
+          );
+        return { plan: r, rate: rates.length ? Math.min(...rates) : null };
+      })
+      .filter((x): x is { plan: (typeof rows)[number]; rate: number } => x.rate != null);
+
+    const plan = priced.reduce<(typeof priced)[number] | null>(
+      (best, x) => (best == null || x.rate < best.rate ? x : best),
+      null,
+    )?.plan;
     if (!plan) {
       this.logger.warn("platform_plans is empty — seed it; falling back to the tightest limits");
       return NO_CATALOGUE;
@@ -192,9 +236,12 @@ export class PlanLimitsService {
   /** Every plan the platform is currently selling, cheapest first. */
   /** The plans on one shelf. A resort's screens ask for RESORT and never see an agency plan. */
   async onSale(audience: "RESORT" | "AGENCY" = "RESORT") {
+    // `sortOrder` alone: the secondary key used to be `monthlyFee`, a column
+    // that no longer holds a price, and the owner's own order is the better
+    // answer to "which plan comes first" anyway
     return this.prisma.platformPlan.findMany({
       where: { active: true, audience },
-      orderBy: [{ sortOrder: "asc" }, { monthlyFee: "asc" }],
+      orderBy: { sortOrder: "asc" },
     });
   }
 

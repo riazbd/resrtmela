@@ -54,18 +54,15 @@ describe("plan definitions", () => {
   });
 
   it("accepts a plan the code has never heard of", async () => {
-    await prisma.platformPlan.create({
-      data: {
-        name: "ENTERPRISE",
-        label: "Enterprise",
-        monthlyFee: 40000 as never,
-        maxRooms: 500,
-        maxResorts: 50,
-        trialDays: 30,
-      },
-    });
-    // a plan this spec made itself still needs somewhere to keep its price
-    await seedPlanSchedules(prisma as unknown as PrismaClient);
+    // through the panel, where a plan is created with its opening price
+    await platform().createPlan(superAdmin, {
+      name: "ENTERPRISE",
+      label: "Enterprise",
+      price: 40000,
+      maxRooms: 500,
+      maxResorts: 50,
+      trialDays: 30,
+    } as never);
 
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "ENTERPRISE" });
 
@@ -84,7 +81,6 @@ describe("plan definitions", () => {
       data: {
         name: "ENTERPRISE",
         label: "Enterprise",
-        monthlyFee: 40000 as never,
         maxRooms: 500,
         maxResorts: 50,
         trialDays: 30,
@@ -102,7 +98,9 @@ describe("plan definitions", () => {
   });
 
   it("prices the subscription from the plan when no fee is given", async () => {
-    await platform().updatePlan(superAdmin, "GROWTH", { monthlyFee: 7777 });
+    await platform().setSchedules(superAdmin, "GROWTH", [
+      { label: "Monthly", phases: [{ count: 1, unit: "MONTH", price: 7777, repeats: null }] },
+    ]);
 
     const sub = await platform().setSubscription(superAdmin, fx.resortId, { plan: "GROWTH" });
 

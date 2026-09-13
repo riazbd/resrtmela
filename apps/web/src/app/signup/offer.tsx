@@ -7,7 +7,8 @@ import { API_URL } from "@/lib/api";
 export interface PublicOffer {
   code: string;
   audience: "RESORT" | "AGENCY";
-  plan: { name: string; label: string; monthlyFee: number; trialDays: number } | null;
+  /** `openingFee` is what the first period costs on the shelf the plan leads with. */
+  plan: { name: string; label: string; openingFee: number; trialDays: number } | null;
   trialDays: number;
   discountPct: number | null;
   expiresAt: string | null;

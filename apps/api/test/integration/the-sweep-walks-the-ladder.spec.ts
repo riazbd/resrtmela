@@ -42,7 +42,7 @@ type Rung = { count: number; unit: string; price: number; repeats: number | null
 /** A plan of the caller's own making, with the ladder they asked for. */
 async function planWithLadder(name: string, rungs: Rung[]): Promise<number> {
   const plan = await prisma.platformPlan.create({
-    data: { name, label: name, monthlyFee: 0 as never, maxRooms: 10, sortOrder: 50 },
+    data: { name, label: name, maxRooms: 10, sortOrder: 50 },
   });
   const schedule = await prisma.planSchedule.create({
     data: { planId: plan.id, label: "Ladder", sortOrder: 0 },
@@ -229,7 +229,7 @@ describe("a subscription whose plan says nothing about prices", () => {
    */
   it("is left alone rather than billed a price nobody set", async () => {
     const plan = await prisma.platformPlan.create({
-      data: { name: "NOPRICE", label: "No price", monthlyFee: 0 as never, maxRooms: 10, sortOrder: 51 },
+      data: { name: "NOPRICE", label: "No price", maxRooms: 10, sortOrder: 51 },
     });
     await prisma.subscription.create({
       data: {

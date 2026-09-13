@@ -32,13 +32,13 @@ beforeEach(async () => {
   superAdmin = { userId: fx.managerId, role: ROLE.SUPER_ADMIN, resortIds: [] };
   await prisma.platformPlan.upsert({
     where: { name: "STARTER" },
-    create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 10, maxResorts: 2, trialDays: 14 },
-    update: { monthlyFee: 2500, maxRooms: 10, maxResorts: 2, trialDays: 14 },
+    create: { name: "STARTER", label: "Starter", maxRooms: 10, maxResorts: 2, trialDays: 14 },
+    update: { maxRooms: 10, maxResorts: 2, trialDays: 14 },
   });
   // an agency is sold from its own shelf (phase 3), so the agency here needs a plan from it
   await prisma.platformPlan.upsert({
     where: { name: "AGENCY_START" },
-    create: { name: "AGENCY_START", label: "Agency Start", monthlyFee: 1000, maxRooms: 0, maxResorts: 0, trialDays: 14, audience: "AGENCY" } as never,
+    create: { name: "AGENCY_START", label: "Agency Start", maxRooms: 0, maxResorts: 0, trialDays: 14, audience: "AGENCY" } as never,
     update: {},
   });
   // a plan this spec made itself still needs somewhere to keep its price

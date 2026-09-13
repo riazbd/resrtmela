@@ -123,18 +123,16 @@ describe("a second tenant, configured entirely through data", () => {
   });
 
   it("runs on a plan invented after the code was written", async () => {
-    await prisma.platformPlan.create({
-      data: {
-        name: "ISLAND",
-        label: "Island",
-        monthlyFee: 199 as never,
-        maxRooms: 40,
-        maxResorts: 3,
-        trialDays: 45,
-      },
+    const island = await prisma.platformPlan.create({
+      data: { name: "ISLAND", label: "Island", maxRooms: 40, maxResorts: 3, trialDays: 45 },
     });
-    // a plan this spec made itself still needs somewhere to keep its price
-    await seedPlanSchedules(prisma as unknown as PrismaClient);
+    // a plan with no schedule has no price, and cannot be sold at all
+    const shelf = await prisma.planSchedule.create({
+      data: { planId: island.id, label: "Monthly", sortOrder: 0 },
+    });
+    await prisma.planPhase.create({
+      data: { scheduleId: shelf.id, seq: 1, count: 1, unit: "MONTH", price: 199 as never },
+    });
     const platform = new PlatformService(
       asPrismaService,
       new AuditService(asPrismaService),

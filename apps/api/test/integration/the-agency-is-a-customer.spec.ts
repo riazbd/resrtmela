@@ -41,7 +41,7 @@ beforeEach(async () => {
   await prisma.user.update({ where: { id: fx.managerId }, data: { role: "RESORT_ADMIN" } });
   admin = { userId: fx.managerId, role: ROLE.RESORT_ADMIN, resortIds: [fx.resortId] };
   await prisma.platformPlan.create({
-    data: { name: "AGENCY_BASIC", label: "Agency Basic", monthlyFee: 1000, trialDays: 30, audience: "AGENCY", features: [] } as never,
+    data: { name: "AGENCY_BASIC", label: "Agency Basic", trialDays: 30, audience: "AGENCY", features: [] } as never,
   });
   // a plan this spec made itself still needs somewhere to keep its price
   await seedPlanSchedules(prisma as unknown as PrismaClient);

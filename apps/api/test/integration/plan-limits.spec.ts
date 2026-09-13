@@ -43,7 +43,7 @@ describe("plan limits", () => {
     await subscribe("STARTER");
     await prisma.platformPlan.upsert({
       where: { name: "STARTER" },
-      create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 3, maxResorts: 1 },
+      create: { name: "STARTER", label: "Starter", maxRooms: 3, maxResorts: 1 },
       update: { maxRooms: 3 },
     });
 
@@ -55,7 +55,7 @@ describe("plan limits", () => {
     await subscribe("STARTER");
     await prisma.platformPlan.upsert({
       where: { name: "STARTER" },
-      create: { name: "STARTER", label: "Starter", monthlyFee: 2500, maxRooms: 2, maxResorts: 1 },
+      create: { name: "STARTER", label: "Starter", maxRooms: 2, maxResorts: 1 },
       update: { maxRooms: 2 },
     });
 

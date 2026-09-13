@@ -165,36 +165,58 @@ export async function seedAccounts(
     startedAt: at(-380, 10), cancelledAt: at(-200, 10), note: "Replaced by the Chain plan",
   });
   /**
+   * Which shelf an account is buying on, by the label the platform seed wrote.
+   *
+   * `billingCycle: "YEARLY"` used to say this, back when a rhythm was a word in
+   * the code. It is a row now, so the seeded accounts point at one — and a
+   * subscription with no schedule has no price at all, which the billing sweep
+   * would refuse to invoice.
+   */
+  const shelf = async (plan: string, label: string) =>
+    (
+      await prisma.planSchedule.findFirstOrThrow({
+        where: { plan: { name: plan }, label },
+      })
+    ).id;
+
+  /**
    * The chain pays by the year — a customer on the annual rhythm, so every
    * screen that shows a fee has one of each to draw: ৳120,000 a year beside
    * ৳5,000 a month, an MRR that has to divide one of them by twelve, and a
    * renewal date a year out rather than a month.
    */
   const skySub = await sub({
-    accountId: skyEco.id, plan: "CHAIN", status: "ACTIVE", billingCycle: "YEARLY", fee: 120000,
+    accountId: skyEco.id, plan: "CHAIN", status: "ACTIVE", fee: 120000,
+    scheduleId: await shelf("CHAIN", "Yearly"), phaseStartedAt: at(165, 10),
     startedAt: at(-200, 10), renewsAt: at(165, 10), note: "Moved up from Growth when Hilltop opened, and took the year",
   });
   const coxSub = await sub({
     accountId: coxBay.id, plan: "GROWTH", status: "TRIAL", fee: 5000,
+    scheduleId: await shelf("GROWTH", "Monthly"), phaseStartedAt: at(51, 12),
     startedAt: at(-9, 12), trialEndsAt: at(51, 12), renewsAt: at(51, 12),
     pendingPlan: "STARTER", note: "Asked to move to Starter at renewal",
   });
   const greenSub = await sub({
     accountId: greenLeaf.id, plan: "STARTER", status: "PAST_DUE", fee: 2500,
+    scheduleId: await shelf("STARTER", "Monthly"), phaseStartedAt: at(-20, 10),
     startedAt: at(-300, 10), renewsAt: at(-20, 10),
   });
   /** An agency that has asked to come off the year and back onto months. */
   const seaSub = await sub({
-    accountId: seaBreeze.id, plan: "AGENCY_PRO", status: "ACTIVE", billingCycle: "YEARLY", fee: 35000,
+    accountId: seaBreeze.id, plan: "AGENCY_PRO", status: "ACTIVE", fee: 35000,
+    scheduleId: await shelf("AGENCY_PRO", "Yearly"), phaseStartedAt: at(245, 11),
     startedAt: at(-120, 11), renewsAt: at(245, 11),
-    pendingCycle: "MONTHLY", note: "Going back to monthly at renewal",
+    pendingScheduleId: await shelf("AGENCY_PRO", "Monthly"),
+    note: "Going back to monthly at renewal",
   });
   const hillSub = await sub({
     accountId: hillTrack.id, plan: "AGENCY_PRO", status: "TRIAL", fee: 3500,
+    scheduleId: await shelf("AGENCY_PRO", "Monthly"), phaseStartedAt: at(84, 16),
     startedAt: at(-6, 16), trialEndsAt: at(84, 16), renewsAt: at(84, 16), note: "90 days, from the Chattogram roadshow",
   });
   const padmaSub = await sub({
     accountId: padma.id, plan: "AGENCY_BASIC", status: "PAST_DUE", fee: 1200,
+    scheduleId: await shelf("AGENCY_BASIC", "Monthly"), phaseStartedAt: at(-25, 14),
     startedAt: at(-160, 14), renewsAt: at(-25, 14),
   });
 
