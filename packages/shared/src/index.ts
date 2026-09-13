@@ -11,6 +11,10 @@ export * from "./import-samples";
  * the console. The point of moving them is not tidiness — it is that a
  * permission rule with two implementations will eventually have two answers.
  */
+export * from "./placeholders";
+export * from "./contact";
+export * from "./brand";
+export * from "./api-url";
 export * from "./console-access";
 export * from "./agency-calendar";
 export * from "./calendar-month";
@@ -55,31 +59,6 @@ export const SOURCE_LABELS: Record<string, string> = {
 
 export const BOOKING_CODE_PREFIX = "BK";
 export const MONEY_DECIMALS = 2;
-
-// ───────────────────────── Placeholder contact values ─────────────────────────
-
-/**
- * The placeholders, defined once for every app that reads or writes them.
- *
- * Every account has both an email and a phone (the owner's ruling,
- * 2026-09-11); migration 20260911130000 gave every account missing one a
- * placeholder — `user-<id>@placeholder.invalid` for email,
- * `placeholder-<id>` for phone — so both columns could be required. SQL
- * cannot import this, so the migration spells the same two shapes out by
- * hand; everything else, in the API and in the console, asks here instead.
- * They are gaps wearing a value: `.invalid` never delivers, and
- * `placeholder-<id>` is not a phone number.
- */
-export const PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid";
-export const PLACEHOLDER_PHONE_PREFIX = "placeholder-";
-
-export function isPlaceholderEmail(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX);
-}
-
-export function isPlaceholderPhone(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().startsWith(PLACEHOLDER_PHONE_PREFIX);
-}
 
 export interface JwtClaims {
   userId: number;

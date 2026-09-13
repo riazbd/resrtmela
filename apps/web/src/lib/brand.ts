@@ -1,37 +1,13 @@
 /**
- * The platform's own brand, as the console wears it.
+ * Moved to `@rh/shared` so the mobile app wears the same brand.
  *
- * Name, icon and logo are CMS rows the owner sets in Platform → Website CMS,
- * so renaming the platform or changing its favicon is a save and a reload, not
- * a deploy. Nothing is set to begin with, and then the built-in mark shows.
+ * `apiBase` and the one-argument `fetchBrand` stayed behind, because both are
+ * about knowing the environment rather than about the brand. The shared
+ * `fetchBrand` requires an address; this wrapper supplies the console's.
  */
+import { fetchBrand as fetchBrandFrom, normalizeApiUrl, type Brand } from "@rh/shared";
 
-export interface Brand {
-  name: string;
-  /** a square image for the tile and the browser tab */
-  icon: string | null;
-  /** a wide image used instead of the whole lockup */
-  logo: string | null;
-}
-
-export const DEFAULT_BRAND: Brand = { name: "Resort Mela", icon: null, logo: null };
-
-/**
- * What `/cms/brand` sent, made safe to render.
- *
- * Only an inline image or an https link is kept. A `javascript:` or `blob:`
- * value is dropped rather than handed to an `<img>`, because this row is
- * written by a human in a form and read by every page.
- */
-export function brandFrom(raw: unknown): Brand {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-  const src = (v: unknown) => {
-    const s = text(v);
-    return s && (/^data:image\//i.test(s) || /^https?:\/\//i.test(s)) ? s : null;
-  };
-  return { name: text(r.name) ?? DEFAULT_BRAND.name, icon: src(r.icon), logo: src(r.logo) };
-}
+export { type Brand, DEFAULT_BRAND, brandFrom } from "@rh/shared";
 
 /**
  * Where the API is, read here rather than imported from `lib/api`.
@@ -42,16 +18,17 @@ export function brandFrom(raw: unknown): Brand {
  * back to the default.
  */
 export function apiBase(): string {
-  return process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
+  return normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL);
 }
 
-/** Reads the brand; falls back to the built-in one if the API cannot be reached. */
-export async function fetchBrand(apiUrl: string = apiBase()): Promise<Brand> {
-  try {
-    const res = await fetch(`${apiUrl}/cms/brand`, { cache: "no-store" });
-    if (!res.ok) return DEFAULT_BRAND;
-    return brandFrom(await res.json());
-  } catch {
-    return DEFAULT_BRAND;
-  }
+/**
+ * Reads the brand; falls back to the built-in one if the API cannot be reached.
+ *
+ * `cache: "no-store"` is passed here rather than inside the shared function
+ * because it is Next's word, not fetch's: it tells a server component not to
+ * serve a brand the owner changed after the last render. Node has no such
+ * option and React Native ignores it.
+ */
+export function fetchBrand(apiUrl: string = apiBase()): Promise<Brand> {
+  return fetchBrandFrom(apiUrl, { cache: "no-store" });
 }
