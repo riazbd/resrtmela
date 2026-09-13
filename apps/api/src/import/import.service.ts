@@ -65,6 +65,17 @@ export interface ImportReport {
    */
   roomTypeCreated: { name: string; assumed: boolean } | null;
   /**
+   * Bookings whose ID was already in the table but deleted, and which this
+   * import replaced.
+   *
+   * Counted rather than done quietly. A booking is soft-deleted, so a code an
+   * owner believes they got rid of still owns itself; re-importing it is them
+   * saying "that one was wrong, here is the right one", and the importer obeys.
+   * But rows somebody deleted being silently rewritten is its own surprise, so
+   * the screen gets to say how many.
+   */
+  replacedDeleted: number;
+  /**
    * Names in the "Advance received" column that matched no agent working with
    * this resort. Those bookings are imported without an agent, which is the
    * honest outcome — the alternative was what this used to do, and that is
@@ -91,6 +102,20 @@ export interface RoomTypeChoice {
 export const SUGGESTED_ROOM_TYPE = { name: "Standard", maxAdults: 2, maxChildren: 0 };
 
 const LIVE_STATES = new Set(["PENDING", "CONFIRMED", "CHECKED_IN"]);
+
+/**
+ * What the owner reads when a Booking ID in the sheet belongs to a booking
+ * that is still live.
+ *
+ * Written once so the dry run and the real import say the same sentence, and
+ * written for the person holding the spreadsheet. What used to reach this
+ * screen was a truncated Prisma error — "Invalid `tx.booking.create()`
+ * invocation…" — which does not name the booking, does not say what is wrong,
+ * and gives nobody anything to do next.
+ */
+function inUseMessage(code: string): string {
+  return `${code} already belongs to a booking in this resort. Change the Booking ID in the sheet, or delete that booking first.`;
+}
 
 @Injectable()
 export class ImportService {
@@ -188,10 +213,27 @@ export class ImportService {
       dryRun, totalRows: rows.length, imported: 0, skipped: 0,
       outOfService: 0, conflictNoHold: 0, roomsCreated: [], guestsCreated: 0,
       paymentsCreated: 0, roomTypeCreated: null, rows: [], unmatchedAgents: [],
+      replacedDeleted: 0,
     };
 
     // the resort's own channel list, so an import can name one it invented
     const sourceCodes = (await this.options.active(resortId, "BOOKING_SOURCE")).map((o) => o.code);
+
+    /**
+     * Which of the sheet's Booking IDs this resort already holds, and whether
+     * the booking holding one is deleted.
+     *
+     * Read once for the batch and consulted by both paths below, so a dry run
+     * cannot promise something the real import then refuses — the two
+     * disagreeing is exactly the kind of fault a dry run exists to rule out.
+     */
+    const claimed = new Map<string, { id: number; deleted: boolean }>();
+    for (const b of await this.prisma.booking.findMany({
+      where: { resortId, code: { in: rows.map((r) => r.code).filter(Boolean) } },
+      select: { id: true, code: true, deletedAt: true },
+    })) {
+      claimed.set(b.code, { id: b.id, deleted: b.deletedAt !== null });
+    }
 
     if (dryRun) {
       for (const row of rows) {
@@ -206,6 +248,16 @@ export class ImportService {
           report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "out_of_service" });
           continue;
         }
+        const held = claimed.get(row.code);
+        if (held && !held.deleted) {
+          report.skipped++;
+          report.rows.push({
+            rowNo: row.rowNo, code: row.code, outcome: "skipped",
+            detail: inUseMessage(row.code),
+          });
+          continue;
+        }
+        if (held) report.replacedDeleted++;
         report.imported++;
         report.rows.push({ rowNo: row.rowNo, code: row.code, outcome: "imported" });
       }
@@ -364,6 +416,37 @@ export class ImportService {
             }
           }
 
+          /**
+           * The Booking ID may already be taken, and by what decides everything.
+           *
+           * A live booking keeps its ID: two different stays cannot share one,
+           * and an importer that quietly overwrote a booking somebody is
+           * working from would be a far worse fault than the one this solves.
+           *
+           * A deleted booking does not. It is out of the books, and the owner
+           * re-importing its ID means "that one was wrong". It is removed
+           * outright rather than left alongside, because leaving it would hold
+           * the ID again the next time the owner tries this — which is the
+           * whole complaint. Its payments, items and nights go with it by the
+           * schema's own cascades.
+           *
+           * Re-read inside the transaction rather than trusted from the batch
+           * scan: minutes can pass on a long import, and the row could have
+           * changed underneath it.
+           */
+          let replacedDeleted = false;
+          const held = await tx.booking.findFirst({
+            where: { resortId, code: row.code },
+            select: { id: true, deletedAt: true },
+          });
+          if (held && held.deletedAt === null) {
+            throw Object.assign(new Error(inUseMessage(row.code)), { status: 409 });
+          }
+          if (held) {
+            await tx.booking.delete({ where: { id: held.id } });
+            replacedDeleted = true;
+          }
+
           const booking = await tx.booking.create({
             data: {
               code: row.code,
@@ -424,10 +507,11 @@ export class ImportService {
             });
           }
 
-          return { bookingId: booking.id, resortId, code: row.code, conflict, roomCreated, guestCreated: true };
+          return { bookingId: booking.id, resortId, code: row.code, conflict, roomCreated, guestCreated: true, replacedDeleted };
         });
 
         if (result.roomCreated) report.roomsCreated.push(row.roomName);
+        if (result.replacedDeleted) report.replacedDeleted++;
         report.imported++;
         report.paymentsCreated += row.advance > 0 ? 1 : 0;
         if (result.conflict) {

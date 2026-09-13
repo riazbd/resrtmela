@@ -374,6 +374,46 @@ export class PlatformService {
     }));
   }
 
+  /**
+   * Holding an account, or letting it back in.
+   *
+   * Suspension is the one thing that cannot be shared between the two
+   * customers: a resort owner is held by suspending its resorts, an agency by
+   * suspending its account row. `setResortStatus` below covers the first.
+   * Nothing covered the second — so the billing sweep could suspend an agency
+   * automatically while no human could do it for fraud, and, worse, no human
+   * could undo it. An agency suspended in error had one way out: pay a bill it
+   * might not owe.
+   *
+   * Reactivating clears the reason as well as the status, which is what makes
+   * this an override of a billing suspension rather than a second opinion
+   * sitting beside one.
+   */
+  async setAccountStatus(
+    claims: JwtClaims,
+    accountId: number,
+    status: "active" | "suspended",
+    reason?: string,
+  ) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    if (!["active", "suspended"].includes(status)) throw badRequest("status must be active|suspended");
+    const account = await this.prisma.tenant.update({
+      where: { id: accountId },
+      data:
+        status === "active"
+          ? { status, suspendedReason: null, suspendedAt: null }
+          : { status, suspendedReason: (reason ?? "manual").slice(0, 32), suspendedAt: new Date() },
+    });
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "platform.account.status",
+      entity: "tenant",
+      entityId: accountId,
+      diff: { status, reason: reason ?? null, name: account.name },
+    });
+    return account;
+  }
+
   async setResortStatus(claims: JwtClaims, resortId: number, status: string, reason?: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!["active", "suspended"].includes(status)) throw badRequest("status must be active|suspended");
@@ -851,10 +891,13 @@ export class PlatformService {
 
     const updated = await this.prisma.platformCharge.update({
       where: { id: charge.id },
+      // who confirmed it and how it came, as fields — and the note left as
+      // whoever wrote it left it. See payDue below for why.
       data: {
         status: "PAID",
         paidAt: new Date(),
-        note: method ? `paid via ${method}` : charge.note,
+        paidById: claims.userId,
+        paidMethod: method ? method.trim().toUpperCase() : null,
       },
     });
     await this.audit.log({
@@ -892,6 +935,113 @@ export class PlatformService {
     }));
   }
 
+  /**
+   * Everything the platform collected, from three tables and one question.
+   *
+   * Subscriptions, one-off charges and wallet top-ups are separate rows for
+   * good reasons — each points at something different, with a real foreign key
+   * — but "what came in, from which customer, and who here said so" is one
+   * question and deserves one answer.
+   *
+   * There is no gateway. Every one of these is a person here confirming money
+   * arrived, so this report *is* the platform's cash book.
+   *
+   * Rows from before the confirmer was recorded have none, and say so rather
+   * than naming somebody who may not have been there.
+   */
+  async moneyReceived(claims: JwtClaims, range: { from?: string; to?: string; take?: number }) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const within = (field: string) =>
+      range.from && range.to
+        ? { [field]: { gte: new Date(range.from), lt: new Date(range.to) } }
+        : {};
+    const take = Math.min(range.take ?? 200, 500);
+
+    const [dues, charges, topups] = await Promise.all([
+      this.prisma.subscriptionDue.findMany({
+        where: { status: "PAID", ...within("paidAt") },
+        include: { account: { select: { name: true } }, paidBy: { select: { name: true } } },
+        orderBy: { paidAt: "desc" },
+        take,
+      }),
+      this.prisma.platformCharge.findMany({
+        where: { status: "PAID", ...within("paidAt") },
+        include: { account: { select: { name: true } }, paidBy: { select: { name: true } } },
+        orderBy: { paidAt: "desc" },
+        take,
+      }),
+      this.prisma.walletTxn.findMany({
+        where: { kind: "TOPUP", ...within("createdAt") },
+        include: {
+          createdBy: { select: { name: true } },
+          wallet: { select: { user: { select: { name: true } } } },
+        },
+        orderBy: { createdAt: "desc" },
+        take,
+      }),
+    ]);
+
+    const recent = [
+      ...dues.map((d) => ({
+        kind: "SUBSCRIPTION" as const,
+        id: `due-${d.id}`,
+        at: d.paidAt,
+        amount: Number(d.amount),
+        method: d.paidMethod,
+        from: d.account.name,
+        // the period alone: the screen prefixes the kind, and "Subscription ·
+        // Subscription 2026-09-12 to ..." is what saying it twice reads like
+        what: `${d.periodStart.toISOString().slice(0, 10)} to ${d.periodEnd.toISOString().slice(0, 10)}`,
+        receivedBy: d.paidBy?.name ?? null,
+        note: d.note,
+      })),
+      ...charges.map((c) => ({
+        kind: "CHARGE" as const,
+        id: `charge-${c.id}`,
+        at: c.paidAt,
+        amount: Number(c.amount),
+        method: c.paidMethod,
+        from: c.account.name,
+        what: c.description,
+        receivedBy: c.paidBy?.name ?? null,
+        note: c.note,
+      })),
+      ...topups.map((t) => ({
+        kind: "WALLET_TOPUP" as const,
+        id: `wallet-${t.id}`,
+        at: t.createdAt,
+        amount: Number(t.amount),
+        method: t.method,
+        from: t.wallet.user.name,
+        what: "Wallet top-up",
+        receivedBy: t.createdBy?.name ?? null,
+        note: t.note,
+      })),
+    ]
+      .sort((a, b) => (b.at?.getTime() ?? 0) - (a.at?.getTime() ?? 0))
+      .slice(0, take);
+
+    /**
+     * Totalled over the three lists as loaded, and each is capped — so on a
+     * busy month this is the total *of what is shown*, which is why it is
+     * reported beside a range the caller chose rather than as "all time".
+     */
+    const byPerson = new Map<string, { name: string; count: number; total: number }>();
+    for (const r of recent) {
+      const key = r.receivedBy ?? "(not recorded)";
+      const at = byPerson.get(key) ?? { name: key, count: 0, total: 0 };
+      at.count += 1;
+      at.total = round2(at.total + r.amount);
+      byPerson.set(key, at);
+    }
+
+    return {
+      total: round2(recent.reduce((sum, r) => sum + r.amount, 0)),
+      rows: [...byPerson.values()].sort((a, b) => b.total - a.total),
+      recent,
+    };
+  }
+
   async payDue(claims: JwtClaims, dueId: number, method?: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     const due = await this.prisma.subscriptionDue.findUnique({ where: { id: BigInt(dueId) } });
@@ -900,7 +1050,26 @@ export class PlatformService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const d = await tx.subscriptionDue.update({
         where: { id: due.id },
-        data: { status: "PAID", paidAt: new Date(), note: method ? `paid via ${method}` : due.note },
+        /**
+         * Who confirmed it and how it came, as fields.
+         *
+         * The method used to be written into `note` as prose — "paid via
+         * bKash" — which overwrote whatever note was there (a discount that
+         * was agreed, a reference somebody needed) and made "how much came in
+         * by bKash" a string search. The note is somebody's note; it is left
+         * alone.
+         *
+         * `paidById` is the person at the platform who said the money had
+         * arrived. There is no gateway, so that confirmation is the only
+         * record there is — and it belonged in the audit log alone, which the
+         * customer whose money it was cannot read.
+         */
+        data: {
+          status: "PAID",
+          paidAt: new Date(),
+          paidById: claims.userId,
+          paidMethod: method ? method.trim().toUpperCase() : null,
+        },
       });
       const openCount = await tx.subscriptionDue.count({ where: { subscriptionId: due.subscriptionId, status: { in: ["DUE", "OVERDUE"] } } });
       if (openCount === 0) {
@@ -1455,7 +1624,16 @@ export class PlatformService {
    * `RESORT_ADMIN` used to be allowed, so a resort could fund and drain a float
    * the agency holds with the platform, and spend it on a rival's booking.
    */
-  async walletTxn(claims: JwtClaims, userId: number, kind: string, amount: number, note?: string, bookingId?: number) {
+  async walletTxn(
+    claims: JwtClaims,
+    userId: number,
+    kind: string,
+    amount: number,
+    note?: string,
+    bookingId?: number,
+    /** how the money came in for a top-up — the agent's own receipt names it */
+    method?: string,
+  ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!WALLET_KINDS.includes(kind as WalletKindName)) {
       throw badRequest(
@@ -1476,7 +1654,22 @@ export class PlatformService {
       if (next < 0) throw badRequest("insufficient wallet balance");
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance: next } });
       return tx.walletTxn.create({
-        data: { walletId: wallet.id, kind: moved, amount: signed, balanceAfter: next, note, bookingId },
+        /**
+         * `createdById` is the person here who moved it. An agent handing
+         * 50,000 to somebody at the platform could not see, on their own
+         * wallet, which person credited it — the actor was in the audit log,
+         * which is the platform's trail and not the agent's receipt.
+         */
+        data: {
+          walletId: wallet.id,
+          kind: moved,
+          amount: signed,
+          balanceAfter: next,
+          note,
+          bookingId,
+          createdById: claims.userId,
+          method: method ? method.trim().toUpperCase() : null,
+        },
       });
     });
     await this.audit.log({ actorId: claims.userId, action: `wallet.${moved.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });

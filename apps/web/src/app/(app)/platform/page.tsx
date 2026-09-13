@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, money, dmy, type CmsRow, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Tabs, Table } from "@/components/patterns";
+import { MoneyReceived } from "@/components/money-received";
 import { useAuth } from "@/lib/auth";
 import { PLAN_FEATURES } from "@rh/shared";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
@@ -156,7 +157,35 @@ interface CalCell {
   renewals: number;
 }
 
-const TABS = ["Overview", "Resorts", "Agents", "Plans", "Offers", "Subscriptions", "Dues", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
+const TABS = ["Overview", "Resorts", "Agents", "Plans", "Offers", "Subscriptions", "Dues", "Money received", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
+
+/**
+ * The platform's cash book: subscriptions, one-off charges and wallet top-ups
+ * in one list. Three tables answering one question — what came in, from which
+ * customer, and who here confirmed it. With no gateway, this is the only
+ * account of the money there is.
+ */
+const KIND_LABEL: Record<string, string> = {
+  SUBSCRIPTION: "Subscription",
+  CHARGE: "Charge",
+  WALLET_TOPUP: "Wallet top-up",
+};
+
+interface PlatformMoney {
+  total: number;
+  rows: { name: string; count: number; total: number }[];
+  recent: {
+    kind: "SUBSCRIPTION" | "CHARGE" | "WALLET_TOPUP";
+    id: string;
+    at: string | null;
+    amount: number;
+    method: string | null;
+    from: string;
+    what: string;
+    receivedBy: string | null;
+    note: string | null;
+  }[];
+}
 
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
@@ -196,6 +225,13 @@ export default function PlatformPage() {
    * their own tab, because "what does this tenant owe" is one question.
    */
   const chargesQ = useApi(keys.platform("charges"), () => api<ChargeRow[]>("/platform/charges"));
+  // only on its own tab: it reads three tables, and an overview should not
+  // wait on a report nobody opened
+  const moneyQ = useApi(
+    keys.platform("money-received"),
+    () => api<PlatformMoney>("/platform/money-received"),
+    { enabled: tab === "Money received" },
+  );
   const plansQ = useApi(keys.platform("plans"), () => api<PlanDef[]>("/platform/plans"));
   /**
    * Email credit packs waiting on a decision.
@@ -698,6 +734,40 @@ export default function PlatformPage() {
       )}
 
       {/* ── dues ── */}
+      {tab === "Money received" && (
+        moneyQ.isLoading && !moneyQ.data ? (
+          <div className="mt-5"><Spinner /></div>
+        ) : (
+          <div className="mt-5">
+            <MoneyReceived
+              title="What the platform received"
+              total={moneyQ.data?.total}
+              rows={moneyQ.data?.rows ?? []}
+              recent={(moneyQ.data?.recent ?? []).map((r) => ({
+                id: r.id,
+                at: r.at,
+                amount: r.amount,
+                method: r.method,
+                from: r.from,
+                /*
+                  The kind is worth saying — a subscription, a one-off charge
+                  and an agency topping up its float are three different things
+                  arriving in the same column — but not twice: a top-up's
+                  description is already its kind, and "Wallet top-up · Wallet
+                  top-up" is what naive concatenation reads like.
+                */
+                what: r.what.startsWith(KIND_LABEL[r.kind] ?? "")
+                  ? r.what
+                  : `${KIND_LABEL[r.kind]} · ${r.what}`,
+                receivedBy: r.receivedBy,
+                note: r.note,
+              }))}
+              emptyMsg="Nothing collected yet"
+            />
+          </div>
+        )
+      )}
+
       {tab === "Dues" && dues && (
         <Card className="mt-5 overflow-x-auto">
           <Table minWidth={0} tableClassName="text-sm">

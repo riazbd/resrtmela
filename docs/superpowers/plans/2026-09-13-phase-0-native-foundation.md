@@ -46,9 +46,34 @@ The one thing that is not portable between the console and the app is
 Twelve files, no state, no storage, no React. Moved, then re-exported from their
 old paths so no call site in `apps/web` changes.
 
-`console-access.ts` · `agency-calendar.ts` · `contact.ts` · `calendar-month.ts` ·
-`resort-dates.ts` · `calendar-bars.ts` · `brand.ts` · `resort-options.ts` ·
-`booking-handoff.ts` · `password-reset.ts` · `import-outcomes.ts` · `api-url.ts`
+Planned as twelve files. Reading them first cut it to ten, in two batches:
+
+**Batch 1, moved unchanged (7)** — `console-access.ts` · `agency-calendar.ts` ·
+`calendar-month.ts` · `calendar-bars.ts` · `booking-handoff.ts` ·
+`password-reset.ts` · `resort-dates.ts`
+
+**Batch 2, need a signature change (3)** — `contact.ts` (imports `@rh/shared`,
+which becomes relative) · `brand.ts` and `api-url.ts` (both read
+`process.env.NEXT_PUBLIC_API_URL`, which does not exist on a phone: the
+normalisation is shared, the value is passed in)
+
+**Two files the plan was wrong about, corrected on reading them:**
+
+- **`resort-options.ts` is not pure.** It imports `@/lib/api` and `@/lib/query`
+  — it is a React hook, not a rule. It moves in stage B, not here.
+- **`import-outcomes.ts` stays in `apps/web` this phase.** Its `style` values
+  are Tailwind class strings, which mean nothing in React Native. The labels
+  deserve to be shared and the classes do not, but the semantic vocabulary that
+  would replace them can only be chosen with the native import screen in front
+  of me — which is phase 2. Splitting it now is the same guess this project
+  refused to make for `MonthGrid`.
+
+**One name collision, found by moving them.** `calendar-month.ts` and
+`resort-dates.ts` both exported `monthOf`, and they are different functions: one
+truncates a date to its month, the other does arithmetic on one. A package with
+a single front door cannot export both, so `resort-dates`'s becomes
+`shiftMonth` in shared and the console's shim aliases it back. No call site in
+the console changed.
 
 **The net is already built.** These existing console specs cover the surface and
 must pass unchanged, before and after:
@@ -84,6 +109,38 @@ One commit each, in dependency order, console suite green between every one.
 `auth.tsx` also calls `window.location.href` in `exitImpersonation`. That is
 navigation, not storage: it becomes an injected `navigate(path)` callback, which
 the console fills with a location assignment and the app with a router push.
+
+### What stage B actually cost, recorded as it went
+
+Each of these was invisible until the module was moved.
+
+- **`ApiError` had to move too.** `offline-queue` asks whether a failure was a
+  5xx or a 403, and the class lived in `lib/api.ts` — a `"use client"` module.
+  Asking that question therefore meant importing the browser. It is now in
+  `@rh/shared`.
+- **`navigator.onLine` is not portable and was never right.** React Native has
+  no such property, and at a resort the wifi is routinely up while the uplink is
+  down. `isNetworkError` takes the answer from its caller now.
+- **`CacheStore` must be handed an *unguarded* store.** It has a better answer
+  to a full quota than `guardedStorage` does — drop the oldest half and retry —
+  and a guard would have silently retired it.
+- **`AuthProvider` must be handed a *guarded* one.** `isImpersonating` is read
+  during render, so it runs while Next prerenders on the server. The moved code
+  carried a `typeof window` check for exactly that.
+- **The retry rule was hiding in a lambda.** Extracted as `worthRetrying`: a 4xx
+  is never retried, and nothing could check that before.
+- **Two providers needed splitting, not moving.** `load-state`'s hook is
+  portable and its `<ErrorState>` renderer is not; `outbox`'s judgement is
+  portable and its three browser errands — connectivity, alerting, the call —
+  became props.
+- **jsdom is the test harness, not a permission.** `no-browser-in-here.spec.ts`
+  scans `src` for `window`, `document`, `localStorage`, `navigator` and
+  react-dom, with comments stripped, so the rule is checked rather than trusted.
+
+**A gap the suites cannot see.** vitest runs in jsdom, where `window` exists, so
+nothing in either suite exercises server prerendering. `pnpm -F @rh/web build`
+is the only proof that the guarded-storage decision above is right, and it is
+run before this phase is called done.
 
 **If a file will not move cleanly**, it stays in `apps/web` and is reimplemented
 in the app. That outcome is recorded in this plan and moved past — it is not a

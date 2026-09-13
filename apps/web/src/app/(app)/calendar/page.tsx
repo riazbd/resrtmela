@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { client, type CalendarBooking, type Room, money } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
+import { OCCUPIED, DUE_STRIPE, FREE_CELL, type OccupiedState } from "@/lib/calendar-colors";
 import { Button, Card } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { mergeRuns } from "@/lib/calendar-bars";
@@ -32,26 +33,12 @@ import { MonthAvailability } from "@/components/month-availability";
  * as a fifth colour fighting the first four.
  */
 
-/** The four states that actually hold a room. */
-const BAR: Record<string, { fill: string; text: string; label: string }> = {
-  PENDING: { fill: "bg-amber-400", text: "text-amber-950", label: "Pending" },
-  CONFIRMED: { fill: "bg-emerald-500", text: "text-white", label: "Confirmed" },
-  CHECKED_IN: { fill: "bg-sky-600", text: "text-white", label: "In house" },
-  CHECKED_OUT: { fill: "bg-slate-300", text: "text-slate-700", label: "Departed" },
-};
-
 /**
- * What is still owed, as a stripe under the bar.
- *
- * Payment used to be a *colour* — an orange block — which meant a partially
- * paid confirmed booking had to choose between showing its state and showing
- * its money. Two facts, two channels: the fill says where the stay is, the
- * stripe says what is outstanding.
+ * The states that hold a room, and what is still owed on them, both from
+ * `lib/calendar-colors` — one definition, so the two calendars cannot come to
+ * disagree about what a colour means. Green is a free night and nothing else;
+ * red is a night that is held, with the shade carrying the state.
  */
-const DUE_STRIPE: Record<string, string> = {
-  UNPAID: "bg-red-500",
-  PARTIAL: "bg-amber-500",
-};
 
 const SPANS = [7, 14, 30] as const;
 
@@ -244,14 +231,20 @@ export default function CalendarPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          {Object.entries(BAR).map(([state, look]) => (
+          {Object.entries(OCCUPIED).map(([state, look]) => (
             <span key={state} className="flex items-center gap-1.5 text-[11px] text-slate-500">
               <span className={`h-2.5 w-4 rounded-sm ${look.fill}`} />
               {look.label}
             </span>
           ))}
+          {/* free comes first: it is the commonest cell on the grid and the
+              one the whole colour rule is built around */}
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="h-2.5 w-4 rounded-sm bg-slate-200 ring-1 ring-inset ring-red-500" />
+            <span className={`h-2.5 w-4 rounded-sm ${FREE_CELL.idle}`} />
+            Free
+          </span>
+          <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <span className="h-2.5 w-4 rounded-sm bg-red-200 ring-1 ring-inset ring-slate-900" />
             Payment due
           </span>
         </div>
@@ -438,14 +431,14 @@ export default function CalendarPage() {
                                 <button
                                   onClick={() => bookRun(room.id, night, 1)}
                                   title={`${room.name} free on ${night} — click to book`}
-                                  className="h-9 w-full rounded bg-brand-50 ring-1 ring-inset ring-brand-100 transition hover:bg-brand-100 hover:ring-brand-400"
+                                  className={`h-9 w-full rounded transition ${FREE_CELL.idle} ${FREE_CELL.hover}`}
                                 />
                               </td>
                             );
                           });
                         }
                         const b = run.value;
-                        const look = BAR[b.state] ?? BAR.CONFIRMED!;
+                        const look = OCCUPIED[b.state as OccupiedState] ?? OCCUPIED.CONFIRMED;
                         const stripe = DUE_STRIPE[b.paymentState];
                         // a stay that started before this window, or runs past
                         // it, is squared off on that side so the bar reads as

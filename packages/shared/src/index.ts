@@ -2,6 +2,28 @@ export * from "./api-types";
 export * from "./client";
 export * from "./import-samples";
 
+/**
+ * The rules that decide behaviour, moved out of `apps/web/src/lib` so the
+ * phone can reach them too.
+ *
+ * These are pure: no React, no storage, no `window`. Anything needing one of
+ * those is in `@rh/app-core` instead, and anything needing a browser stays in
+ * the console. The point of moving them is not tidiness — it is that a
+ * permission rule with two implementations will eventually have two answers.
+ */
+export * from "./api-error";
+export * from "./placeholders";
+export * from "./contact";
+export * from "./brand";
+export * from "./api-url";
+export * from "./console-access";
+export * from "./agency-calendar";
+export * from "./calendar-month";
+export * from "./calendar-bars";
+export * from "./booking-handoff";
+export * from "./password-reset";
+export * from "./resort-dates";
+
 /** Cross-app constants shared by the API and the console. */
 
 export const ROLE = {
@@ -38,31 +60,6 @@ export const SOURCE_LABELS: Record<string, string> = {
 
 export const BOOKING_CODE_PREFIX = "BK";
 export const MONEY_DECIMALS = 2;
-
-// ───────────────────────── Placeholder contact values ─────────────────────────
-
-/**
- * The placeholders, defined once for every app that reads or writes them.
- *
- * Every account has both an email and a phone (the owner's ruling,
- * 2026-09-11); migration 20260911130000 gave every account missing one a
- * placeholder — `user-<id>@placeholder.invalid` for email,
- * `placeholder-<id>` for phone — so both columns could be required. SQL
- * cannot import this, so the migration spells the same two shapes out by
- * hand; everything else, in the API and in the console, asks here instead.
- * They are gaps wearing a value: `.invalid` never delivers, and
- * `placeholder-<id>` is not a phone number.
- */
-export const PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid";
-export const PLACEHOLDER_PHONE_PREFIX = "placeholder-";
-
-export function isPlaceholderEmail(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX);
-}
-
-export function isPlaceholderPhone(value: string | null | undefined): boolean {
-  return !!value && value.trim().toLowerCase().startsWith(PLACEHOLDER_PHONE_PREFIX);
-}
 
 export interface JwtClaims {
   userId: number;

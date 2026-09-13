@@ -391,9 +391,21 @@ export class ReportsService {
   async collectors(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "reports.view");
+    /**
+     * Every payment, not only the deposits.
+     *
+     * This filtered `paymentType: "ADVANCE"`, which quietly excluded two whole
+     * kinds of money: a settlement taken at check-out, and every restaurant
+     * bill charged to a room — `fb.service.ts` posts those as FINAL. So the
+     * one report an owner opens to ask where the cash went omitted most of it,
+     * and looked complete while doing so.
+     *
+     * Refunds stay in and are negative below, because a collector who took
+     * 3,000 and handed 1,000 back is holding 2,000, and a report that says
+     * 4,000 is worse than one that says nothing.
+     */
     const where = {
       booking: { resortId, deletedAt: null },
-      paymentType: "ADVANCE" as const,
       ...(from && to ? { receivedAt: { gte: dateOnly(from), lt: dateOnly(to) } } : {}),
     };
 
@@ -407,11 +419,30 @@ export class ReportsService {
      * groups it now, and the list underneath stays capped because a list of
      * recent receipts is meant to be recent.
      */
-    const grouped = await this.prisma.payment.groupBy({
-      by: ["receivedById"],
+    /**
+     * Grouped by person *and* by type, so a refund can be taken off rather
+     * than added on. `groupBy` sums what it is given; the sign is ours to
+     * apply, and applying it here keeps the total exact over every row rather
+     * than over the capped list below.
+     */
+    const byType = await this.prisma.payment.groupBy({
+      by: ["receivedById", "paymentType"],
       where,
       _sum: { amount: true },
       _count: { _all: true },
+    });
+    const grouped = [...new Set(byType.map((g) => g.receivedById))].map((receivedById) => {
+      const mine = byType.filter((g) => g.receivedById === receivedById);
+      const net = mine.reduce(
+        (sum, g) =>
+          sum + (g.paymentType === "REFUND" ? -1 : 1) * Number(g._sum.amount ?? 0),
+        0,
+      );
+      return {
+        receivedById,
+        _sum: { amount: net },
+        _count: { _all: mine.reduce((n, g) => n + g._count._all, 0) },
+      };
     });
     const names = await this.prisma.user.findMany({
       where: { id: { in: grouped.map((g) => g.receivedById).filter((id): id is number => id != null) } },
@@ -449,7 +480,7 @@ export class ReportsService {
         .map((g) => ({
           userId: g.receivedById,
           name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
-          advances: g._count._all,
+          count: g._count._all,
           total: round2(Number(g._sum.amount ?? 0)),
           recentCodes: codesOf.get(g.receivedById) ?? [],
         }))
@@ -461,6 +492,9 @@ export class ReportsService {
         method: p.method,
         bookingCode: p.booking.code,
         guest: p.booking.guest.fullName,
+        // a refund reads as money leaving, and a line that does not say so
+        // looks like a collection
+        type: p.paymentType,
         receivedBy: p.receivedBy?.name ?? null,
       })),
     };

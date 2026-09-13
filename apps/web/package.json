@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@rh/app-core": "workspace:*",
     "@rh/shared": "workspace:*",
     "@tanstack/react-query": "^5.102.8",
     "html2canvas": "^1.4.1",

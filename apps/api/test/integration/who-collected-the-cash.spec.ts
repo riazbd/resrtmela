@@ -78,7 +78,7 @@ describe("the advance-collectors report", () => {
 
     const { rows } = await reports().collectors(admin, fx.resortId);
 
-    expect(rows[0].advances).toBe(2);
+    expect(rows[0].count).toBe(2);
     expect(rows[0].total).toBe(4000);
   });
 
@@ -115,6 +115,6 @@ describe("the advance-collectors report", () => {
     const { rows } = await reports().collectors(admin, fx.resortId);
 
     expect(rows[0].recentCodes).toEqual(["BK-COLL-6"]);
-    expect(rows[0].advances).toBe(2);
+    expect(rows[0].count).toBe(2);
   });
 });

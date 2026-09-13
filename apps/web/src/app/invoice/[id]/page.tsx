@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, money, dmy } from "@/lib/api";
 import { Spinner } from "@/components/ui";
-import { Download } from "lucide-react";
+import { invoiceIntent } from "@/lib/invoice-intent";
+import { Download, Printer } from "lucide-react";
 
 interface InvoiceData {
   invoiceNo: string;
@@ -40,11 +41,28 @@ export default function InvoicePage() {
       .catch((e) => setErr((e as Error).message));
   }, [params.id]);
 
+  /**
+   * Do what the link asked for, once the invoice is actually on the page.
+   *
+   * The delay is for printing only: the browser's dialog snapshots the page as
+   * it stands, and firing it before the webfonts and the logo have settled
+   * prints a half-drawn invoice. A download has no such race — html2canvas
+   * reads the live DOM when it runs — so it starts immediately.
+   *
+   * `invoiceIntent` rather than `search.includes("print=1")`, which was also
+   * true of `?noprint=1`.
+   */
   useEffect(() => {
-    if (inv && typeof window !== "undefined" && window.location.search.includes("print=1")) {
+    if (!inv || typeof window === "undefined") return;
+    const intent = invoiceIntent(window.location.search);
+    if (intent === "print") {
       const t = setTimeout(() => window.print(), 600);
       return () => clearTimeout(t);
     }
+    if (intent === "download") void downloadPdf();
+    // downloadPdf is stable for a given invoice and re-running this on its
+    // identity would download the file again on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inv]);
 
   async function downloadPdf() {
@@ -244,11 +262,14 @@ export default function InvoicePage() {
           <Download className="h-4 w-4" />
           {downloading ? "Preparing…" : "Download PDF"}
         </button>
+        {/* "Print / Save PDF" while a Download button sits beside it read as
+            two names for one thing. Printing is printing. */}
         <button
           onClick={() => window.print()}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
         >
-          Print / Save PDF
+          <Printer className="h-4 w-4" />
+          Print
         </button>
       </div>
     </main>

@@ -21,6 +21,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { Table, Tabs } from "@/components/patterns";
+import { MoneyReceived } from "@/components/money-received";
 import { ErrorState } from "@/components/error-state";
 import { FileText, Plus, Printer, Send, Trash2 } from "lucide-react";
 import type { SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
@@ -37,7 +38,23 @@ import type { SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
  * sale from an unopened PDF.
  */
 
-const TABS = ["Quotations", "Invoices"] as const;
+const TABS = ["Quotations", "Invoices", "Money received"] as const;
+
+/** What the agency's own cash book returns. */
+interface AgencyMoney {
+  total: number;
+  rows: { userId: number | null; name: string; count: number; total: number }[];
+  recent: {
+    id: number;
+    at: string;
+    amount: number;
+    method: string;
+    from: string;
+    document: string;
+    receivedBy: string | null;
+    note: string | null;
+  }[];
+}
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
@@ -55,6 +72,18 @@ export default function SalesPage() {
   const [open, setOpen] = useState<number | "new" | null>(null);
 
   const kind = tab === "Quotations" ? "QUOTATION" : "INVOICE";
+  const onMoney = tab === "Money received";
+
+  /**
+   * The agency's own cash book. Only fetched on its tab: it is a different
+   * question from "what have we billed", and an owner opening Quotations
+   * should not pay for a report they did not ask for.
+   */
+  const moneyQ = useApi<AgencyMoney>(
+    keys.agentSales("money-received"),
+    () => api<AgencyMoney>("/agent/sales/money-received"),
+    { enabled: onMoney },
+  );
   const qc = useQueryClient();
   const { data, isLoading, error, stale } = useApi<SalesDocRow[]>(keys.agentSales(kind), () =>
     api<SalesDocRow[]>(`/agent/sales?kind=${kind}`),
@@ -74,13 +103,42 @@ export default function SalesPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Quotations &amp; invoices</h1>
           <p className="text-sm text-slate-500">What you have quoted, what you have billed, and what is still due.</p>
         </div>
-        <Button onClick={() => setOpen("new")}>
-          <Plus className="mr-1 h-4 w-4" /> New {kind === "QUOTATION" ? "quotation" : "invoice"}
-        </Button>
+        {!onMoney && (
+          <Button onClick={() => setOpen("new")}>
+            <Plus className="mr-1 h-4 w-4" /> New {kind === "QUOTATION" ? "quotation" : "invoice"}
+          </Button>
+        )}
       </div>
 
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
+      {onMoney && (
+        moneyQ.isLoading && !moneyQ.data ? (
+          <Spinner />
+        ) : moneyQ.error ? (
+          <ErrorState error={moneyQ.error} reset={() => moneyQ.refetch()} />
+        ) : (
+          <MoneyReceived
+            title="Money your agency received"
+            total={moneyQ.data?.total}
+            rows={moneyQ.data?.rows ?? []}
+            recent={(moneyQ.data?.recent ?? []).map((r) => ({
+              id: r.id,
+              at: r.at,
+              amount: r.amount,
+              method: r.method,
+              from: r.from,
+              what: r.document,
+              receivedBy: r.receivedBy,
+              note: r.note,
+            }))}
+            emptyMsg="No payments recorded yet"
+          />
+        )
+      )}
+
+      {!onMoney && (
+      <>
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label={tab} value={String(data?.length ?? 0)} />
         <Stat
@@ -141,6 +199,8 @@ export default function SalesPage() {
           </div>
         )}
       </Card>
+      </>
+      )}
 
       {open != null && (
         <DocEditor

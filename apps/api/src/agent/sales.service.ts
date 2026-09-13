@@ -150,6 +150,25 @@ export class SalesService {
         unitPrice: Number(i.unitPrice),
         amount: round2(Number(i.qty) * Number(i.unitPrice)),
       })),
+      /**
+       * Who took the money, shown to the agency because it is their receipt.
+       *
+       * The actor was already in the audit log, and an audit log is a
+       * different thing: it is the platform's trail, not the account holder's,
+       * and the person whose money it was cannot read it.
+       *
+       * Empty for an invoice part-paid before this ledger existed. Those keep
+       * their total and say nothing more — inventing lines would put a name and
+       * a method on money nobody recorded either for.
+       */
+      payments: doc.payments.map((p) => ({
+        id: Number(p.id),
+        amount: Number(p.amount),
+        method: p.method,
+        receivedAt: p.receivedAt,
+        receivedBy: p.receivedBy?.name ?? null,
+        note: p.note,
+      })),
       convertedFrom: doc.convertedFrom
         ? { id: doc.convertedFrom.id, number: doc.convertedFrom.number }
         : null,
@@ -164,6 +183,10 @@ export class SalesService {
       where: { id },
       include: {
         items: { orderBy: [{ sort: "asc" }, { id: "asc" }] },
+        payments: {
+          orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
+          include: { receivedBy: { select: { id: true, name: true } } },
+        },
         convertedFrom: { select: { id: true, number: true } },
         convertedTo: { select: { id: true, number: true } },
       },
@@ -468,10 +491,24 @@ export class SalesService {
 
   // ─────────────────────────── money against it ───────────────────────────
 
+  /**
+   * Money the agency actually took for one of its own invoices.
+   *
+   * This used to move a single running total and write nothing else. There is
+   * no payment gateway here — every taka is handed to a person who then tells
+   * the software it arrived — so an agency with four staff taking cash had no
+   * way to say which of them took 20,000, when, or how it came. A resort's
+   * bookings have recorded exactly that since the beginning; this is the same
+   * ledger for the other side of the platform.
+   *
+   * `amountPaid` stays as the cached total rather than being computed on every
+   * read, the way `Booking.paymentState` does, and is written in the same
+   * transaction as the line so the two cannot drift.
+   */
   async recordPayment(
     claims: JwtClaims,
     id: number,
-    input: { amount: number; note?: string; clientRef?: string },
+    input: { amount: number; method?: string; note?: string; clientRef?: string },
   ) {
     const ctx = await this.agency.require(claims, SALES);
     const doc = await this.own(ctx.agencyId, id);
@@ -487,12 +524,45 @@ export class SalesService {
 
     const paid = round2(Number(doc.amountPaid) + amount);
     const settled = paid >= totals.total;
-    await this.prisma.salesDoc.update({
-      where: { id },
-      data: {
-        amountPaid: paid as never,
-        ...(settled ? { status: "PAID" as never, paidAt: new Date() } : {}),
-      },
+    const method = (input.method ?? "CASH").trim().toUpperCase();
+
+    /**
+     * The line and the total move together or not at all.
+     *
+     * A replayed write — an agent on a bus whose first attempt arrived and
+     * whose answer did not — is caught by `(salesDocId, clientRef)`, and the
+     * whole transaction rolls back rather than adding the money a second time.
+     */
+    if (input.clientRef) {
+      const already = await this.prisma.salesPayment.findFirst({
+        where: { salesDocId: id, clientRef: input.clientRef },
+        select: { id: true },
+      });
+      // the first attempt arrived; this is its lost answer coming back, not a
+      // second payment
+      if (already) {
+        return { id, paid: Number(doc.amountPaid), due: totals.due, status: doc.status };
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.salesPayment.create({
+        data: {
+          salesDocId: id,
+          amount: amount as never,
+          method,
+          receivedById: claims.userId,
+          note: input.note,
+          clientRef: input.clientRef,
+        },
+      });
+      await tx.salesDoc.update({
+        where: { id },
+        data: {
+          amountPaid: paid as never,
+          ...(settled ? { status: "PAID" as never, paidAt: new Date() } : {}),
+        },
+      });
     });
     await this.audit.log({
       actorId: claims.userId,
@@ -502,6 +572,74 @@ export class SalesService {
       diff: { number: doc.number, amount, note: input.note },
     });
     return { id, paid, due: round2(totals.total - paid), status: settled ? "PAID" : doc.status };
+  }
+
+  /**
+   * What this agency took, and who took it.
+   *
+   * The same question the resort's collectors report answers, asked of the
+   * agency's own side. An owner with staff needs it for the reason there is no
+   * gateway: money arrives in somebody's hand, and the only record of whose is
+   * what that person entered.
+   *
+   * Totals are grouped in the database so they are exact over every row; the
+   * list underneath is capped, because a list of recent receipts is meant to
+   * be recent.
+   */
+  async moneyReceived(claims: JwtClaims, range: { from?: string; to?: string; take?: number }) {
+    const ctx = await this.agency.require(claims, SALES);
+    const where = {
+      salesDoc: { agencyId: ctx.agencyId },
+      ...(range.from && range.to
+        ? { receivedAt: { gte: new Date(range.from), lt: new Date(range.to) } }
+        : {}),
+    };
+
+    const grouped = await this.prisma.salesPayment.groupBy({
+      by: ["receivedById"],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+    const names = await this.prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.receivedById).filter((id): id is number => id != null) } },
+      select: { id: true, name: true },
+    });
+    const nameOf = new Map(names.map((u) => [u.id, u.name]));
+
+    const rows = await this.prisma.salesPayment.findMany({
+      where,
+      include: {
+        receivedBy: { select: { name: true } },
+        salesDoc: { select: { number: true, clientName: true, kind: true } },
+      },
+      orderBy: [{ receivedAt: "desc" }, { id: "desc" }],
+      take: Math.min(range.take ?? 200, 500),
+    });
+
+    return {
+      total: round2(grouped.reduce((sum, g) => sum + Number(g._sum.amount ?? 0), 0)),
+      rows: grouped
+        .map((g) => ({
+          userId: g.receivedById,
+          name: g.receivedById == null ? "Unassigned" : nameOf.get(g.receivedById) ?? "Unknown",
+          count: g._count._all,
+          total: round2(Number(g._sum.amount ?? 0)),
+        }))
+        .sort((a, b) => b.total - a.total),
+      recent: rows.map((p) => ({
+        id: Number(p.id),
+        at: p.receivedAt,
+        amount: Number(p.amount),
+        method: p.method,
+        /** whose money it was */
+        from: p.salesDoc.clientName,
+        /** what it was for */
+        document: p.salesDoc.number,
+        receivedBy: p.receivedBy?.name ?? null,
+        note: p.note,
+      })),
+    };
   }
 
   // ─────────────────────────── plumbing ───────────────────────────

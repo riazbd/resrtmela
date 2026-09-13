@@ -7,7 +7,11 @@
  * and returned a 500 for the whole front page. The address itself is nothing
  * but an environment variable, so it belongs somewhere either side can read.
  *
- * One definition: `lib/api.ts` re-exports this rather than repeating it.
+ * The *shape* of a valid address is shared — `normalizeApiUrl` — but reading
+ * `process.env.NEXT_PUBLIC_API_URL` cannot be: Next substitutes it at build
+ * time and a phone has no such thing. Knowing the environment is the host's
+ * job, which is why that half stayed here.
  */
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4000";
+import { normalizeApiUrl } from "@rh/shared";
+
+export const API_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL);
