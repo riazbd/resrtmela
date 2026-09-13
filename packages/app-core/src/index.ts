@@ -28,3 +28,9 @@ export {
   type QueuedWrite,
   type Sender,
 } from "./offline-queue";
+export {
+  OutboxProvider,
+  useOutbox,
+  type OutboxValue,
+  type OutboxProviderProps,
+} from "./outbox";

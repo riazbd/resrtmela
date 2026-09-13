@@ -9,7 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@rh/shared": "workspace:*"
+    "@rh/shared": "workspace:*",
+    "@tanstack/react-query": "^5.102.8"
   },
   "peerDependencies": {
     "react": ">=19"
