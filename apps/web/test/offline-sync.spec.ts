@@ -23,7 +23,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { OfflineQueue, isNetworkError, canWaitOffline } from "@/lib/offline-queue";
-import { CacheStore, MAX_CACHE_AGE_MS } from "@/lib/offline-cache";
+import { CacheStore, MAX_CACHE_AGE_MS, browserStorage } from "@/lib/offline-cache";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -46,10 +46,10 @@ describe("what may wait for a connection", () => {
 
 describe("keeping what was read", () => {
   it("gives back what it was given, after a reload", () => {
-    new CacheStore().save("guests", { rows: [{ id: 1, fullName: "Farhana" }] });
+    new CacheStore(browserStorage).save("guests", { rows: [{ id: 1, fullName: "Farhana" }] });
 
     // a new instance is what a page load looks like
-    const found = new CacheStore().load<{ rows: { id: number }[] }>("guests");
+    const found = new CacheStore(browserStorage).load<{ rows: { id: number }[] }>("guests");
 
     expect(found!.data.rows[0]!.id).toBe(1);
   });
@@ -57,10 +57,10 @@ describe("keeping what was read", () => {
   it("says how old what it kept is, so a screen can be honest about it", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-09T10:00:00Z"));
-    new CacheStore().save("guests", { rows: [] });
+    new CacheStore(browserStorage).save("guests", { rows: [] });
 
     vi.setSystemTime(new Date("2026-09-09T10:20:00Z"));
-    const found = new CacheStore().load("guests");
+    const found = new CacheStore(browserStorage).load("guests");
 
     expect(found!.age).toBe(20 * 60_000);
   });
@@ -68,21 +68,21 @@ describe("keeping what was read", () => {
   it("throws away what is too old to trust", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-01T10:00:00Z"));
-    new CacheStore().save("rooms", { rows: [] });
+    new CacheStore(browserStorage).save("rooms", { rows: [] });
 
     vi.setSystemTime(new Date("2026-09-01T10:00:00Z").getTime() + MAX_CACHE_AGE_MS + 1);
 
-    expect(new CacheStore().load("rooms")).toBeNull();
+    expect(new CacheStore(browserStorage).load("rooms")).toBeNull();
   });
 
   it("survives a corrupt entry rather than bringing the screen down with it", () => {
     window.localStorage.setItem("rh.cache.v1", "{ not json");
 
-    expect(new CacheStore().load("anything")).toBeNull();
+    expect(new CacheStore(browserStorage).load("anything")).toBeNull();
   });
 
   it("drops the oldest entries rather than filling the browser's storage", () => {
-    const store = new CacheStore(3);
+    const store = new CacheStore(browserStorage, 3);
 
     store.save("a", { n: 1 });
     store.save("b", { n: 2 });
@@ -95,7 +95,7 @@ describe("keeping what was read", () => {
   });
 
   it("forgets everything when someone signs out, because the next person is not them", () => {
-    const store = new CacheStore();
+    const store = new CacheStore(browserStorage);
     store.save("guests", { rows: [{ id: 1 }] });
 
     store.clear();

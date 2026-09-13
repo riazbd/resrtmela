@@ -12,3 +12,10 @@
 export { guardedStorage, memoryStorage, type Storage } from "./storage";
 export { useDebounced } from "./use-debounced";
 export { useLoadFailure, type LoadFailure } from "./use-load-failure";
+export {
+  CacheStore,
+  MAX_CACHE_AGE_MS,
+  cacheKeyOf,
+  describeAge,
+  type Cached,
+} from "./offline-cache";
