@@ -374,6 +374,46 @@ export class PlatformService {
     }));
   }
 
+  /**
+   * Holding an account, or letting it back in.
+   *
+   * Suspension is the one thing that cannot be shared between the two
+   * customers: a resort owner is held by suspending its resorts, an agency by
+   * suspending its account row. `setResortStatus` below covers the first.
+   * Nothing covered the second — so the billing sweep could suspend an agency
+   * automatically while no human could do it for fraud, and, worse, no human
+   * could undo it. An agency suspended in error had one way out: pay a bill it
+   * might not owe.
+   *
+   * Reactivating clears the reason as well as the status, which is what makes
+   * this an override of a billing suspension rather than a second opinion
+   * sitting beside one.
+   */
+  async setAccountStatus(
+    claims: JwtClaims,
+    accountId: number,
+    status: "active" | "suspended",
+    reason?: string,
+  ) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    if (!["active", "suspended"].includes(status)) throw badRequest("status must be active|suspended");
+    const account = await this.prisma.tenant.update({
+      where: { id: accountId },
+      data:
+        status === "active"
+          ? { status, suspendedReason: null, suspendedAt: null }
+          : { status, suspendedReason: (reason ?? "manual").slice(0, 32), suspendedAt: new Date() },
+    });
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "platform.account.status",
+      entity: "tenant",
+      entityId: accountId,
+      diff: { status, reason: reason ?? null, name: account.name },
+    });
+    return account;
+  }
+
   async setResortStatus(claims: JwtClaims, resortId: number, status: string, reason?: string) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!["active", "suspended"].includes(status)) throw badRequest("status must be active|suspended");

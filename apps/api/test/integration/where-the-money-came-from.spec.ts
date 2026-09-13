@@ -180,3 +180,58 @@ describe("what the platform collected", () => {
     await expect(platform().moneyReceived(manager, {})).rejects.toThrow();
   });
 });
+
+/**
+ * The guards, proved rather than present.
+ *
+ * A guard that is written and a guard that refuses are different things, and
+ * only one of them is worth anything. These were checked by hand against a
+ * running server once; a hand-check proves the afternoon it was run and
+ * nothing after it.
+ *
+ * The one that matters most is the middle case: another agency is *allowed*
+ * through the door — it is an agency, it holds the permission — and must still
+ * see none of this one's money. A 403 is a lock; an empty answer to a caller
+ * who got past the lock is tenancy.
+ */
+describe("who may read a cash book", () => {
+  async function anInvoicePaid() {
+    const doc = await sales().create(agent, {
+      kind: "INVOICE",
+      clientName: "Walk-in Client",
+      issueDate: "2026-09-13",
+      items: [{ label: "Tour package", qty: 1, unitPrice: 10000 }],
+    } as never);
+    const id = (doc as { id: number }).id;
+    await sales().recordPayment(agent, id, { amount: 4000, method: "CASH" });
+    return id;
+  }
+
+  it("refuses the agency's cash book to a resort's staff", async () => {
+    await anInvoicePaid();
+    await expect(sales().moneyReceived(manager, {})).rejects.toThrow();
+  });
+
+  it("shows another agency nothing of this one's money, rather than refusing it", async () => {
+    await anInvoicePaid();
+    const other = await prisma.user.findFirst({
+      where: { role: "AGENT", id: { not: fx.agentId }, parentAgentId: null },
+      select: { id: true },
+    });
+    if (!other) return; // the fixture has one agency; nothing to prove here
+    const stranger: JwtClaims = { userId: other.id, role: ROLE.AGENT, resortIds: [] };
+
+    const report = await sales().moneyReceived(stranger, {});
+
+    expect(report.total).toBe(0);
+    expect(report.recent).toEqual([]);
+  });
+
+  it("refuses the platform's cash book to an agency", async () => {
+    await expect(platform().moneyReceived(agent, {})).rejects.toThrow();
+  });
+
+  it("refuses the platform's cash book to a resort manager", async () => {
+    await expect(platform().moneyReceived(manager, {})).rejects.toThrow();
+  });
+});

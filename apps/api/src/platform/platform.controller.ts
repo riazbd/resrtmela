@@ -234,6 +234,21 @@ export class PlatformController {
   @Get("platform/agents") agents(@Req() req: AuthedRequest) {
     return this.platform.allAgents(req.user);
   }
+  /**
+   * Hold an account, or let it back in.
+   *
+   * An agency is its account row — there are no resorts to suspend — so this
+   * is the only way a human can hold one, or lift a hold the billing sweep
+   * applied in error.
+   */
+  @Patch("platform/accounts/:id/status") setAccountStatus(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: ResortStatusDto,
+  ) {
+    return this.platform.setAccountStatus(req.user, id, dto.status as "active" | "suspended", dto.reason);
+  }
+
   @Patch("platform/resorts/:id/status") setResortStatus(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ResortStatusDto) {
     return this.platform.setResortStatus(req.user, id, dto.status, dto.reason);
   }

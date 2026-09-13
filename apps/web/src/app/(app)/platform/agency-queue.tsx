@@ -42,6 +42,38 @@ export function AgencyQueue() {
     }
   }
 
+  /**
+   * Hold an agency, or let it back in.
+   *
+   * An agency *is* its account row — there are no resorts to suspend — so this
+   * was the only customer the platform could not hold by hand, while the
+   * billing sweep could hold it automatically. Which left the worse half: an
+   * agency suspended in error had one way out, paying a bill it might not owe.
+   *
+   * Suspending asks for a reason because "suspended" with no why is a support
+   * ticket nobody can answer.
+   */
+  async function setStatus(a: AgencyRow, status: "active" | "suspended") {
+    if (status === "suspended") {
+      const reason = window.prompt(`Suspend ${a.name}? Say why — it is shown to whoever asks later.`, "abuse");
+      if (reason === null) return;
+      try {
+        await api(`/platform/accounts/${a.id}/status`, { method: "PATCH", body: { status, reason: reason.slice(0, 32) } });
+        load();
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+      return;
+    }
+    if (!window.confirm(`Let ${a.name} back in?`)) return;
+    try {
+      await api(`/platform/accounts/${a.id}/status`, { method: "PATCH", body: { status } });
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
   const pending = (rows ?? []).filter((r) => r.status === "pending");
   const others = (rows ?? []).filter((r) => r.status !== "pending");
 
@@ -82,6 +114,22 @@ export function AgencyQueue() {
                     {a.suspendedReason === "billing" ? " (unpaid bill)" : ""}
                   </td>
                   <td className="py-2 text-right">
+                    {a.status !== "pending" && a.status !== "suspended" && (
+                      <button
+                        onClick={() => void setStatus(a, "suspended")}
+                        className="mr-1.5 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                      >
+                        Suspend
+                      </button>
+                    )}
+                    {a.status === "suspended" && (
+                      <button
+                        onClick={() => void setStatus(a, "active")}
+                        className="mr-1.5 rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Let back in
+                      </button>
+                    )}
                     {a.status === "pending" && (
                       <button
                         onClick={() => void verify(a.id)}
