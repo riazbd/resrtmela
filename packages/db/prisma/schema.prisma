@@ -289,6 +289,10 @@ model User {
   createdBookings Booking[]        @relation("BookingCreatedBy")
   agentBookings   Booking[]        @relation("BookingAgent")
   paymentsRecv    Payment[]        @relation("PaymentReceivedBy")
+  salesPaymentsRecv SalesPayment[] @relation("SalesPaymentReceivedBy")
+  duesPaid          SubscriptionDue[] @relation("DuePaidBy")
+  chargesPaid       PlatformCharge[]  @relation("ChargePaidBy")
+  walletTxnsMade    WalletTxn[]       @relation("WalletTxnBy")
   auditLogs       AuditLog[]       @relation("AuditActor")
   wallet          Wallet?
   notifications   Notification[]
@@ -1030,6 +1034,16 @@ model SubscriptionDue {
   dueDate        DateTime
   status         String       @default("DUE") @db.VarChar(16) // DUE | PAID | OVERDUE | WAIVED
   paidAt         DateTime?
+  /// Who at the platform said the money had arrived, and how it came.
+  ///
+  /// There is no gateway: a resort sends bKash or a bank transfer and a person
+  /// here confirms it. That person was only ever in the audit log, which the
+  /// account holder cannot read — and the method was written into `note` as
+  /// prose ("paid via bKash"), overwriting whatever note was there and making
+  /// "how much came by bKash" a string search.
+  paidById       Int?
+  paidBy         User?        @relation("DuePaidBy", fields: [paidById], references: [id])
+  paidMethod     String?      @db.VarChar(24)
   note           String?      @db.VarChar(255)
 
   /// the billing sweep is idempotent because of this line: a second run on the
@@ -1071,6 +1085,14 @@ model WalletTxn {
   balanceAfter Decimal    @db.Decimal(12, 2)
   bookingId    Int?
   note         String?    @db.VarChar(255)
+  /// Who moved it, and how the money came in for a top-up.
+  ///
+  /// An agent handing 50,000 to somebody at the platform could not see, on
+  /// their own wallet, which person credited it. The actor was in the audit
+  /// log, which is the platform's trail and not the agent's receipt.
+  createdById  Int?
+  createdBy    User?      @relation("WalletTxnBy", fields: [createdById], references: [id])
+  method       String?    @db.VarChar(24)
   createdAt    DateTime   @default(now())
 
   @@index([walletId])
@@ -1300,6 +1322,10 @@ model PlatformCharge {
   clientRef   String?   @db.VarChar(64)
   createdById Int?
   paidAt      DateTime?
+  /// as on SubscriptionDue: who confirmed the money, and how it came
+  paidById    Int?
+  paidBy      User?     @relation("ChargePaidBy", fields: [paidById], references: [id])
+  paidMethod  String?   @db.VarChar(24)
   note        String?   @db.VarChar(255)
   createdAt   DateTime  @default(now())
 
@@ -1480,6 +1506,8 @@ model SalesDoc {
   terms      String?   @db.Text
 
   /// the quotation this invoice was made from; one invoice per quotation
+  payments SalesPayment[]
+
   convertedFromId Int?      @unique
   convertedFrom   SalesDoc? @relation("Conversion", fields: [convertedFromId], references: [id], onDelete: SetNull)
   convertedTo     SalesDoc? @relation("Conversion")
@@ -1498,6 +1526,39 @@ model SalesDoc {
   @@index([agencyId, kind, status])
   @@index([agencyId, guestId])
   @@map("sales_docs")
+}
+
+/// Money an agency actually took for one of its own invoices.
+///
+/// There is no payment gateway on this platform: every taka is handed to a
+/// person, who then tells the software it arrived. A resort's bookings have
+/// always recorded that person — `Payment.receivedById` — and an agency's own
+/// invoices recorded nothing but a bigger number in `SalesDoc.amountPaid`. An
+/// agency with four staff taking cash could not say which of them took
+/// 20,000, when, or how it came.
+///
+/// Deliberately the same shape as `Payment`: one row per payment, who took it,
+/// how it arrived, when, and the device reference that stops a replayed write
+/// becoming a second receipt. Two ledgers for the same act should not need two
+/// vocabularies.
+model SalesPayment {
+  id           BigInt    @id @default(autoincrement())
+  salesDocId   Int
+  salesDoc     SalesDoc  @relation(fields: [salesDocId], references: [id], onDelete: Cascade)
+  amount       Decimal   @db.Decimal(10, 2)
+  /// a code from the agency's own method list — CASH, BKASH, BANK, ...
+  method       String    @default("CASH") @db.VarChar(24)
+  receivedById Int?
+  receivedBy   User?     @relation("SalesPaymentReceivedBy", fields: [receivedById], references: [id])
+  receivedAt   DateTime  @default(now())
+  note         String?   @db.VarChar(255)
+  /// client-generated id for a write that may be replayed (an agent on a bus)
+  clientRef    String?   @db.VarChar(64)
+
+  @@unique([salesDocId, clientRef])
+  @@index([salesDocId])
+  @@index([receivedAt])
+  @@map("sales_payments")
 }
 
 model SalesDocItem {

@@ -851,10 +851,13 @@ export class PlatformService {
 
     const updated = await this.prisma.platformCharge.update({
       where: { id: charge.id },
+      // who confirmed it and how it came, as fields — and the note left as
+      // whoever wrote it left it. See payDue below for why.
       data: {
         status: "PAID",
         paidAt: new Date(),
-        note: method ? `paid via ${method}` : charge.note,
+        paidById: claims.userId,
+        paidMethod: method ? method.trim().toUpperCase() : null,
       },
     });
     await this.audit.log({
@@ -900,7 +903,26 @@ export class PlatformService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const d = await tx.subscriptionDue.update({
         where: { id: due.id },
-        data: { status: "PAID", paidAt: new Date(), note: method ? `paid via ${method}` : due.note },
+        /**
+         * Who confirmed it and how it came, as fields.
+         *
+         * The method used to be written into `note` as prose — "paid via
+         * bKash" — which overwrote whatever note was there (a discount that
+         * was agreed, a reference somebody needed) and made "how much came in
+         * by bKash" a string search. The note is somebody's note; it is left
+         * alone.
+         *
+         * `paidById` is the person at the platform who said the money had
+         * arrived. There is no gateway, so that confirmation is the only
+         * record there is — and it belonged in the audit log alone, which the
+         * customer whose money it was cannot read.
+         */
+        data: {
+          status: "PAID",
+          paidAt: new Date(),
+          paidById: claims.userId,
+          paidMethod: method ? method.trim().toUpperCase() : null,
+        },
       });
       const openCount = await tx.subscriptionDue.count({ where: { subscriptionId: due.subscriptionId, status: { in: ["DUE", "OVERDUE"] } } });
       if (openCount === 0) {
@@ -1455,7 +1477,16 @@ export class PlatformService {
    * `RESORT_ADMIN` used to be allowed, so a resort could fund and drain a float
    * the agency holds with the platform, and spend it on a rival's booking.
    */
-  async walletTxn(claims: JwtClaims, userId: number, kind: string, amount: number, note?: string, bookingId?: number) {
+  async walletTxn(
+    claims: JwtClaims,
+    userId: number,
+    kind: string,
+    amount: number,
+    note?: string,
+    bookingId?: number,
+    /** how the money came in for a top-up — the agent's own receipt names it */
+    method?: string,
+  ) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
     if (!WALLET_KINDS.includes(kind as WalletKindName)) {
       throw badRequest(
@@ -1476,7 +1507,22 @@ export class PlatformService {
       if (next < 0) throw badRequest("insufficient wallet balance");
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance: next } });
       return tx.walletTxn.create({
-        data: { walletId: wallet.id, kind: moved, amount: signed, balanceAfter: next, note, bookingId },
+        /**
+         * `createdById` is the person here who moved it. An agent handing
+         * 50,000 to somebody at the platform could not see, on their own
+         * wallet, which person credited it — the actor was in the audit log,
+         * which is the platform's trail and not the agent's receipt.
+         */
+        data: {
+          walletId: wallet.id,
+          kind: moved,
+          amount: signed,
+          balanceAfter: next,
+          note,
+          bookingId,
+          createdById: claims.userId,
+          method: method ? method.trim().toUpperCase() : null,
+        },
       });
     });
     await this.audit.log({ actorId: claims.userId, action: `wallet.${moved.toLowerCase()}`, entity: "wallet", entityId: userId, diff: { amount: signed, note } });

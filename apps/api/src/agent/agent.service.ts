@@ -144,6 +144,7 @@ export class AgentService {
       where: { walletId: wallet.id },
       orderBy: { id: "desc" },
       take: 100,
+      include: { createdBy: { select: { name: true } } },
     });
     return {
       balance: Number(wallet.balance),
@@ -155,6 +156,18 @@ export class AgentService {
         balanceAfter: Number(t.balanceAfter),
         note: t.note,
         bookingId: t.bookingId,
+        /**
+         * Who at the platform moved it, and how the money came.
+         *
+         * There is no gateway: an agency hands over cash or sends bKash and a
+         * person here credits the wallet. That person was only in the audit
+         * log, which is the platform's trail — so the agency could see its
+         * balance go up and not who put it there. This is their receipt.
+         *
+         * Null on entries made before these were recorded.
+         */
+        method: t.method,
+        by: t.createdBy?.name ?? null,
         createdAt: t.createdAt,
       })),
     };
