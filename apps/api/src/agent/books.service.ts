@@ -24,6 +24,7 @@ import { dateOnly, round2 } from "../common/dates";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { AgencyContextService } from "./agency-context.service";
+import { monthRow, paidSoFar, paymentKind, settlementAmount } from "../payroll/month-of-payroll";
 import type { JwtClaims } from "@rh/shared";
 
 const EXPENSES = "agent.expenses.manage";
@@ -394,50 +395,52 @@ export class BooksService {
     const employees = await this.prisma.employee.findMany({
       where: { agencyId: ctx.agencyId, active: true },
       orderBy: { name: "asc" },
-      include: { payments: { where: { month } } },
+      include: { payments: { where: { month }, orderBy: { paidAt: "asc" } } },
     });
-    const rows = employees.map((e) => {
-      const pay = e.payments[0];
-      const salary = Number(e.salary);
-      return {
-        employeeId: e.id,
-        name: e.name,
-        designation: e.designation,
-        salary,
-        paid: !!pay,
-        amount: pay ? Number(pay.amount) : salary,
-        method: pay?.method ?? null,
-        note: pay?.note ?? null,
-        paidAt: pay?.paidAt ?? null,
-        paymentId: pay?.id ?? null,
-      };
-    });
+    // the same arithmetic the resort's sheet runs, from the same file: two
+    // copies of "is this month closed" is how the two come to disagree
+    const rows = employees.map((e) =>
+      monthRow(e.id, e.name, e.designation, Number(e.salary), e.payments),
+    );
     return {
       month,
       rows,
       totals: {
         expected: round2(rows.reduce((s, r) => s + r.salary, 0)),
-        paid: round2(rows.reduce((s, r) => s + (r.paid ? r.amount : 0), 0)),
+        paid: round2(rows.reduce((s, r) => s + r.paid, 0)),
+        advance: round2(rows.reduce((s, r) => s + r.advance, 0)),
+        remaining: round2(rows.reduce((s, r) => s + r.remaining, 0)),
         headcount: rows.length,
-        paidCount: rows.filter((r) => r.paid).length,
+        settledCount: rows.filter((r) => r.settled).length,
       },
     };
   }
 
+  /**
+   * An advance, or the settlement — the agency side of `PayrollService.pay`,
+   * and the same rules, because an agency's staff take advances for exactly
+   * the reasons a resort's do.
+   */
   async pay(
     claims: JwtClaims,
     employeeId: number,
-    input: { month: string; amount?: number; method?: string; note?: string },
+    input: { month: string; amount?: number; method?: string; note?: string; kind?: string },
   ) {
     const ctx = await this.agency.require(claims, PAYROLL);
     if (!MONTH_RE.test(input.month)) throw badRequest("The month must look like 2026-09");
+    const kind = paymentKind(input.kind);
     const emp = await this.ownEmployee(ctx.agencyId, employeeId);
-    const existing = await this.prisma.payrollPayment.findUnique({
-      where: { employeeId_month: { employeeId, month: input.month } },
-    });
-    if (existing) throw badRequest(`${emp.name} is already paid for ${input.month} — undo it first`);
-    const amount = Number(input.amount ?? emp.salary);
-    if (!(amount > 0)) throw badRequest("The amount must be more than zero");
+
+    let amount: number;
+    if (input.amount != null) {
+      if (!(input.amount > 0)) throw badRequest("The amount must be more than zero");
+      amount = round2(input.amount);
+    } else if (kind === "ADVANCE") {
+      throw badRequest("How much is the advance?");
+    } else {
+      const paid = await paidSoFar(this.prisma, employeeId, input.month);
+      amount = settlementAmount(Number(emp.salary), paid, emp.name, input.month);
+    }
 
     const row = await this.prisma.payrollPayment.create({
       data: {
@@ -445,6 +448,7 @@ export class BooksService {
         employeeId,
         month: input.month,
         amount: amount as never,
+        kind,
         method: (input.method as never) ?? "CASH",
         note: input.note,
         createdById: claims.userId,
@@ -452,12 +456,12 @@ export class BooksService {
     });
     await this.audit.log({
       actorId: claims.userId,
-      action: "agent.payroll.pay",
+      action: kind === "ADVANCE" ? "agent.payroll.advance" : "agent.payroll.pay",
       entity: "payroll_payment",
       entityId: row.id,
-      diff: { employee: emp.name, month: input.month, amount },
+      diff: { employee: emp.name, month: input.month, amount, kind },
     });
-    return { id: row.id, amount };
+    return { id: row.id, amount, kind };
   }
 
   async undoPay(claims: JwtClaims, paymentId: number) {

@@ -230,9 +230,26 @@ export async function setUpResort(prisma: PrismaClient, resortId: number, shape:
     });
     for (let m = 3; m >= 1; m--) {
       const when = at(-30 * m + 2, 17);
+      const month = when.toISOString().slice(0, 7);
+      /**
+       * One person takes an advance mid-month, because that is what happens
+       * and because a demo world where nobody ever does leaves the feature
+       * invisible to anyone reading the screen. The salary row is then the
+       * rest of the wage, which is the arithmetic worth showing.
+       */
+      const advance = i === 0 && m === 2 ? Math.round(e.salary * 0.3) : 0;
+      if (advance > 0) {
+        await prisma.payrollPayment.create({
+          data: {
+            resortId, employeeId: emp.id, month, amount: advance, kind: "ADVANCE",
+            method: "BKASH", paidAt: at(-30 * m - 10, 11),
+            note: "Advance against this month",
+          },
+        });
+      }
       await prisma.payrollPayment.create({
         data: {
-          resortId, employeeId: emp.id, month: when.toISOString().slice(0, 7), amount: e.salary,
+          resortId, employeeId: emp.id, month, amount: e.salary - advance, kind: "SALARY",
           method: pick(r, ["CASH", "BKASH", "BANK"]), paidAt: when,
           note: m === 1 ? "Paid with the Eid bonus" : null,
         },

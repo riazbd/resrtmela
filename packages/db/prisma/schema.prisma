@@ -403,12 +403,20 @@ model PayrollPayment {
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   month       String   @db.VarChar(7) // "2026-09"
   amount      Decimal  @db.Decimal(10, 2)
+  /// ADVANCE — handed over against a month not yet settled; SALARY — settling it.
+  /// SALARY by default because every row written before this column existed
+  /// was one, back when a month could hold exactly one payment.
+  kind        String   @default("SALARY") @db.VarChar(12)
   method      String?  @db.VarChar(24)
   note        String?  @db.VarChar(255)
   paidAt      DateTime @default(now())
   createdById Int?
 
-  @@unique([employeeId, month])
+  /// A month holds as many payments as it took. There was a unique index on
+  /// `(employeeId, month)` here, which is what made a second advance in a
+  /// month impossible — "already paid for 2026-09 — undo it first" was that
+  /// index speaking.
+  @@index([employeeId, month])
   @@index([resortId, month])
   @@index([agencyId, month])
   @@map("payroll_payments")

@@ -6,8 +6,9 @@ import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast, Th, Td } from "@/components/ui";
-import { Check, Undo2, Pencil, Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { Table } from "@/components/patterns";
+import { PayrollMonth } from "@/components/payroll-month";
 
 function monthOptions() {
   const out: string[] = [];
@@ -81,31 +82,6 @@ export default function PayrollPage() {
     }
   }
 
-  async function pay(employeeId: number) {
-    if (!rid) return;
-    // recording a salary is money leaving the resort; Undo beside it has always
-    // asked, and the action that takes the money did not
-    const emp = sheet?.rows.find((r) => r.employeeId === employeeId);
-    if (!window.confirm(`Record ${emp ? emp.name : "this employee"}'s salary for ${month}?`)) return;
-    try {
-      await api(`/resorts/${rid}/payroll/employees/${employeeId}/pay`, { method: "POST", body: { month } });
-      push(`Salary recorded for ${month}`);
-      load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
-  async function undo(paymentId: number) {
-    if (!window.confirm("Undo this salary payment?")) return;
-    try {
-      await api(`/payroll/payments/${paymentId}`, { method: "DELETE" });
-      load();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
   async function deactivate(emp: Employee) {
     if (!rid) return;
     if (!window.confirm(`Remove ${emp.name} from payroll? Their payment history is kept.`)) return;
@@ -132,58 +108,16 @@ export default function PayrollPage() {
         </Select>
       </div>
 
-      {sheet && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Staff" value={String(sheet.totals.headcount)} />
-          <Stat label="Paid" value={`${sheet.totals.paidCount}/${sheet.totals.headcount}`} />
-          <Stat label="Expected" value={money(sheet.totals.expected)} />
-          <Stat label="Disbursed" value={money(sheet.totals.paid)} />
-        </div>
-      )}
-
-      <Card title={`Salary sheet — ${month}`}>
-        {!sheet ? <Empty msg="Loading…" /> : (
-          <>
-            <Table minWidth={0} tableClassName="text-sm">
-              <thead>
-                <tr><Th>Staff</Th><Th>Designation</Th><Th>Salary</Th><Th>Status</Th><Th>Paid</Th><Th /></tr>
-              </thead>
-              <tbody>
-                {sheet.rows.map((r) => (
-                  <tr key={r.employeeId} className="border-t border-slate-100">
-                    <Td className="font-semibold text-slate-800">{r.name}</Td>
-                    <Td className="text-xs text-slate-500">{r.designation ?? "—"}</Td>
-                    <Td>{money(r.salary)}</Td>
-                    <Td>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${r.paid ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                        {r.paid ? "PAID" : "DUE"}
-                      </span>
-                    </Td>
-                    <Td className="text-xs text-slate-500">
-                      {r.paid ? `${money(r.amount)} · ${r.method ?? ""} · ${r.paidAt ? new Date(r.paidAt).toLocaleDateString("en-GB") : ""}` : "—"}
-                    </Td>
-                    <Td>
-                      <div className="flex flex-wrap justify-end gap-1.5">
-                        {canManage && !r.paid && (
-                          <button onClick={() => pay(r.employeeId)} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
-                            <Check className="inline h-3.5 w-3.5" /> Pay
-                          </button>
-                        )}
-                        {canManage && r.paid && r.paymentId && (
-                          <button onClick={() => undo(r.paymentId!)} className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                            <Undo2 className="inline h-3.5 w-3.5" /> Undo
-                          </button>
-                        )}
-                      </div>
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-            {sheet.rows.length === 0 && <Empty msg="No active staff yet — add them below" />}
-          </>
-        )}
-      </Card>
+      {/* the table, the totals and both buttons are `PayrollMonth`, drawn the
+          same way for the agency — see the note at the top of that file */}
+      <PayrollMonth
+        sheet={sheet}
+        month={month}
+        canManage={canManage}
+        payUrl={(employeeId) => `/resorts/${rid}/payroll/employees/${employeeId}/pay`}
+        undoUrl={(paymentId) => `/payroll/payments/${paymentId}`}
+        onDone={load}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={`Staff list (${employees?.filter((e) => e.active).length ?? 0} active)`}>
@@ -254,15 +188,6 @@ export default function PayrollPage() {
           </Card>
         )}
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <div className="text-[10px] font-medium text-slate-400">{label}</div>
-      <div className="text-sm font-bold text-slate-800">{value}</div>
     </div>
   );
 }

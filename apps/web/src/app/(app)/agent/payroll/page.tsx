@@ -4,18 +4,23 @@ import { useState } from "react";
 import { api, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
-import { Badge, Button, Card, Empty, Field, Input, Modal, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
+import { Badge, Button, Card, Empty, Field, Input, Modal, Spinner, Td, Th, useToast } from "@/components/ui";
 import { Table, Tabs } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { Plus, Trash2 } from "lucide-react";
 import type { AgencyEmployee, PayrollSheet } from "@rh/shared";
+import { PayrollMonth } from "@/components/payroll-month";
 
 /**
  * The agency's payroll.
  *
  * The same monthly sheet the resort side has, owned by an agency instead of a
- * resort. One person, one month, one payment — enforced in the database, not
- * by hoping nobody presses the button twice.
+ * resort — the same component, against the same arithmetic on the server.
+ *
+ * It said "one person, one month, one payment — enforced in the database" here
+ * until 2026-09-15, and the database did enforce it, which is exactly what had
+ * to go: somebody taking 2,000 on the 8th and 5,000 on the 20th is ordinary
+ * payroll, and the second one was refused with "already paid".
  */
 
 const TABS = ["This month", "People"] as const;
@@ -43,7 +48,6 @@ export default function AgencyPayrollPage() {
 
 function SheetTab() {
   const qc = useQueryClient();
-  const { push } = useToast();
   const [month, setMonth] = useState(thisMonth());
   const { data, isLoading, error, stale } = useApi<PayrollSheet>(keys.agentPayroll(month), () =>
     api<PayrollSheet>(`/agent/payroll?month=${month}`),
@@ -53,26 +57,6 @@ function SheetTab() {
 
   const reload = () => qc.invalidateQueries({ queryKey: ["agent"] });
 
-  async function pay(employeeId: number, amount: number, name: string) {
-    try {
-      await api(`/agent/payroll/${employeeId}`, { method: "POST", body: { month, amount } });
-      push(`${name} paid for ${month}`);
-      reload();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
-  async function undo(paymentId: number) {
-    if (!window.confirm("Undo this payment?")) return;
-    try {
-      await api(`/agent/payroll/payment/${paymentId}`, { method: "DELETE" });
-      reload();
-    } catch (ex) {
-      push((ex as Error).message, "err");
-    }
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -81,67 +65,24 @@ function SheetTab() {
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="On the payroll" value={String(data?.totals.headcount ?? 0)} />
-        <Stat label="Expected" value={money(data?.totals.expected ?? 0)} />
-        <Stat
-          label="Paid"
-          value={money(data?.totals.paid ?? 0)}
-          tone={data && data.totals.paid >= data.totals.expected && data.totals.expected > 0 ? "green" : undefined}
-        />
-        <Stat
-          label="Still to pay"
-          value={money(Math.max(0, (data?.totals.expected ?? 0) - (data?.totals.paid ?? 0)))}
-          tone={data && data.totals.paid < data.totals.expected ? "amber" : undefined}
-        />
-      </div>
+      {/* the same table the resort's payroll draws, from the same component,
+          against the same arithmetic on the server — an agency's staff take
+          advances for the reasons a resort's do */}
+      <PayrollMonth
+        sheet={isLoading && !data ? null : (data ?? null)}
+        month={month}
+        canManage
+        payUrl={(employeeId) => `/agent/payroll/${employeeId}`}
+        undoUrl={(paymentId) => `/agent/payroll/payment/${paymentId}`}
+        onDone={reload}
+      />
 
-      <Card className="!p-0" title={`Sheet for ${month}`}>
-        {isLoading && !data ? (
-          <Spinner />
-        ) : (data?.rows ?? []).length === 0 ? (
-          <Empty msg="Nobody on the payroll yet — add people on the People tab" />
-        ) : (
-          <Table minWidth={640}>
-            <thead className="border-b border-slate-100">
-              <tr>
-                <Th>Name</Th>
-                <Th>Role</Th>
-                <Th className="text-right">Salary</Th>
-                <Th>Status</Th>
-                <Th />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {(data?.rows ?? []).map((r) => (
-                <tr key={r.employeeId}>
-                  <Td className="font-medium">{r.name}</Td>
-                  <Td className="text-xs text-slate-500">{r.designation ?? "—"}</Td>
-                  <Td className="text-right font-medium">{money(r.salary)}</Td>
-                  <Td>{r.paid ? <Badge value="paid" /> : <Badge value="due" />}</Td>
-                  <Td className="text-right">
-                    {r.paid ? (
-                      <Button size="sm" variant="ghost" onClick={() => undo(r.paymentId!)}>
-                        Undo
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={() => pay(r.employeeId, r.salary, r.name)}>
-                        Pay {money(r.salary)}
-                      </Button>
-                    )}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-        {stale && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-            Showing what was saved on this device {stale} — you appear to be offline. Paying someone
-            needs a connection.
-          </div>
-        )}
-      </Card>
+      {stale && (
+        <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          Showing what was saved on this device {stale} — you appear to be offline. Paying someone
+          needs a connection.
+        </div>
+      )}
     </div>
   );
 }

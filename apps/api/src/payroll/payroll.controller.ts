@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
 import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { PAYROLL_PAYMENT_KINDS } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PayrollService } from "./payroll.service";
 
@@ -17,6 +18,11 @@ class PayrollPayDto {
   @IsOptional() @IsNumber() @Min(1) amount?: number;
   @IsOptional() @IsIn(["CASH", "BKASH", "NAGAD", "CARD", "BANK"]) method?: string;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+  /**
+   * Against the declared vocabulary, not a free string. Absent means SALARY,
+   * which is what every caller written before advances existed meant.
+   */
+  @IsOptional() @IsIn([...PAYROLL_PAYMENT_KINDS]) kind?: string;
 }
 
 @Controller()

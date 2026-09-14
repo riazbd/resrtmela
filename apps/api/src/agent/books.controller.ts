@@ -12,7 +12,8 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { PAYROLL_PAYMENT_KINDS } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BooksService } from "./books.service";
 
@@ -51,6 +52,8 @@ class PayDto {
   @IsOptional() @IsNumber() @Min(0) amount?: number;
   @IsOptional() @IsString() method?: string;
   @IsOptional() @IsString() @MaxLength(255) note?: string;
+  /** Against the declared vocabulary; absent means SALARY. */
+  @IsOptional() @IsIn([...PAYROLL_PAYMENT_KINDS]) kind?: string;
 }
 
 /** The agency's own books: what it spends, and who it pays. */

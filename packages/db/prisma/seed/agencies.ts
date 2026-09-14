@@ -112,10 +112,23 @@ export async function seedAgency(prisma: PrismaClient, ctx: AgencyCtx) {
     });
     for (let m = 2; m >= 1; m--) {
       const when = at(-30 * m + 3, 16);
+      const month = when.toISOString().slice(0, 7);
+      // an agency's staff take advances for the same reasons a resort's do
+      const advance = i === 0 && m === 1 ? Math.round(e.salary * 0.25) : 0;
+      if (advance > 0) {
+        await prisma.payrollPayment.create({
+          data: {
+            agencyId: ownerId, employeeId: emp.id, month, amount: advance, kind: "ADVANCE",
+            method: "BKASH", paidAt: at(-30 * m - 8, 12),
+            note: "Advance, taken mid-month", createdById: ownerId,
+          },
+        });
+      }
       await prisma.payrollPayment.create({
         data: {
-          agencyId: ownerId, employeeId: emp.id, month: when.toISOString().slice(0, 7),
-          amount: e.salary, method: pick(r, ["CASH", "BKASH", "BANK"]), paidAt: when,
+          agencyId: ownerId, employeeId: emp.id, month,
+          amount: e.salary - advance, kind: "SALARY",
+          method: pick(r, ["CASH", "BKASH", "BANK"]), paidAt: when,
           note: m === 1 ? "Includes the festival bonus" : null, createdById: ownerId,
         },
       });

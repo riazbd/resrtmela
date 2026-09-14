@@ -362,6 +362,24 @@ export interface Employee {
   payments: { id: number; month: string; amount: number; method: string | null }[];
 }
 
+/** One payment against a month — an advance, or the settlement. */
+export interface PayrollPaymentRow {
+  id: number;
+  kind: string;
+  amount: number;
+  method: string | null;
+  note: string | null;
+  paidAt: string;
+}
+
+/**
+ * A month of payroll.
+ *
+ * `paid` was a boolean and `amount` was the single payment, because a month
+ * held exactly one. It holds as many as it took now — a cook on 15,000 takes
+ * 2,000 on the 8th and 5,000 on the 20th — so the question the sheet answers
+ * stopped being "paid?" and became "how much of this is still owed".
+ */
 export interface PayrollSheet {
   month: string;
   rows: {
@@ -369,14 +387,24 @@ export interface PayrollSheet {
     name: string;
     designation: string | null;
     salary: number;
-    paid: boolean;
-    amount: number;
-    method: string | null;
-    note: string | null;
-    paidAt: string | null;
-    paymentId: number | null;
+    /** everything handed over for this month, advances included */
+    paid: number;
+    /** how much of `paid` was taken early */
+    advance: number;
+    /** salary − paid, floored at zero */
+    remaining: number;
+    /** the salary has been handed over in full, however many payments it took */
+    settled: boolean;
+    payments: PayrollPaymentRow[];
   }[];
-  totals: { expected: number; paid: number; headcount: number; paidCount: number };
+  totals: {
+    expected: number;
+    paid: number;
+    advance: number;
+    remaining: number;
+    headcount: number;
+    settledCount: number;
+  };
 }
 
 export interface FoodPackage {

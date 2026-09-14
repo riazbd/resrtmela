@@ -209,17 +209,43 @@ describe("the agency's payroll", () => {
 
     const sheet = await books().payrollSheet(agency, "2026-09");
 
-    expect(sheet.totals).toMatchObject({ expected: 40000, paid: 0, headcount: 2, paidCount: 0 });
+    // `settledCount`, and `remaining`, since 2026-09-15: a month holds as many
+    // payments as it took, so "paid?" stopped being a question with an answer
+    expect(sheet.totals).toMatchObject({
+      expected: 40000,
+      paid: 0,
+      advance: 0,
+      remaining: 40000,
+      headcount: 2,
+      settledCount: 0,
+    });
   });
 
-  it("pays someone once for a month, and says so if asked twice", async () => {
+  it("settles a month once, and will not settle it twice", async () => {
     const emp = await books().addEmployee(agency, { name: "Rakib", salary: 18000 });
 
     await books().pay(agency, emp.id, { month: "2026-09" });
 
-    await expect(books().pay(agency, emp.id, { month: "2026-09" })).rejects.toThrow(/already paid/i);
+    await expect(books().pay(agency, emp.id, { month: "2026-09" })).rejects.toThrow(/whole salary/i);
     const sheet = await books().payrollSheet(agency, "2026-09");
     expect(sheet.totals.paid).toBe(18000);
+    expect(sheet.totals.remaining).toBe(0);
+  });
+
+  /**
+   * An agency's staff take advances for the same reasons a resort's do, and
+   * through the same arithmetic — `month-of-payroll` is one file, called by
+   * both, so the two sheets cannot come to disagree about a closed month.
+   */
+  it("lets a staff member take an advance, and settles the rest", async () => {
+    const emp = await books().addEmployee(agency, { name: "Rakib", salary: 18000 });
+
+    await books().pay(agency, emp.id, { month: "2026-09", amount: 5000, kind: "ADVANCE" });
+    const settlement = await books().pay(agency, emp.id, { month: "2026-09", kind: "SALARY" });
+
+    expect(settlement.amount).toBe(13000);
+    const sheet = await books().payrollSheet(agency, "2026-09");
+    expect(sheet.totals).toMatchObject({ paid: 18000, advance: 5000, remaining: 0, settledCount: 1 });
   });
 
   it("undoes a payment made by mistake", async () => {
