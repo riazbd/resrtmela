@@ -14,7 +14,8 @@
  */
 import { randomBytes } from "node:crypto";
 import { Inject, Injectable, Logger, Optional, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
-import { signWebhook, type WebhookEvent } from "@rh/shared";
+import { type WebhookEvent } from "@rh/shared";
+import { signWebhook } from "./webhook-signature";
 import { PrismaService } from "../prisma/prisma.service";
 
 /**

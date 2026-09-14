@@ -11,7 +11,7 @@
  * exactly. The documentation shows this function's own three lines.
  */
 import { describe, expect, it } from "vitest";
-import { signWebhook, webhookSignatureMatches } from "../src/webhook";
+import { signWebhook, webhookSignatureMatches } from "../src/v1/webhook-signature";
 
 const BODY = JSON.stringify({ event: "booking.cancelled", code: "BK-00300" });
 

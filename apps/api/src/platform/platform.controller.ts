@@ -231,6 +231,8 @@ class DiscountPatchDto {
 
 class ApiKeyDto {
   @IsString() @MaxLength(120) name!: string;
+  /** `["read"]` or `["read","write"]`; the service refuses anything else. */
+  @IsOptional() @IsArray() scopes?: string[];
 }
 
 class EmailInvoiceDto {
@@ -507,7 +509,18 @@ export class PlatformController {
     return this.platform.listApiKeys(req.user, id);
   }
   @Post("resorts/:id/api-keys") createApiKey(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ApiKeyDto) {
-    return this.platform.createApiKey(req.user, id, dto.name);
+    return this.platform.createApiKey(req.user, id, dto.name, dto.scopes);
+  }
+  @Delete("resorts/:id/api-keys/:keyId") revokeResortKey(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Param("keyId", ParseIntPipe) keyId: number,
+  ) {
+    // the resort is in the path so the screen can be written without knowing
+    // that a key id happens to be unique platform-wide; the service checks the
+    // key's own resort either way
+    void id;
+    return this.platform.revokeApiKey(req.user, keyId);
   }
   @Delete("api-keys/:id") revokeKey(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.revokeApiKey(req.user, id);

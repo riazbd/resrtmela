@@ -18,7 +18,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { signWebhook, webhookSignatureMatches } from "@rh/shared";
+import { signWebhook, webhookSignatureMatches } from "../../src/v1/webhook-signature";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
 import { WebhookService, type Poster } from "../../src/v1/webhook.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
