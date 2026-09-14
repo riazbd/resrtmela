@@ -32,7 +32,7 @@ export async function seedAccounts(
   });
   const skyEcoResort = await prisma.resort.create({
     data: {
-      tenantId: skyEco.id, name: "Sky Eco Resort", location: "Srimangal, Sylhet",
+      tenantId: skyEco.id, name: "Sky Eco Resort", slug: "sky-eco-resort", location: "Srimangal, Sylhet",
       address: "Bhanugach Road, Srimangal 3210, Moulvibazar", website: "https://skyecoresort.example",
       contactPhone: "+8801711000101", binNumber: "004392817-0201",
       showRatesToAgents: true,
@@ -44,7 +44,7 @@ export async function seedAccounts(
   });
   const skyEcoHill = await prisma.resort.create({
     data: {
-      tenantId: skyEco.id, name: "Sky Eco Hilltop", location: "Sajek Valley, Rangamati",
+      tenantId: skyEco.id, name: "Sky Eco Hilltop", slug: "sky-eco-hilltop", location: "Sajek Valley, Rangamati",
       address: "Ruilui Para, Sajek, Rangamati", contactPhone: "+8801711000102",
       website: "https://skyecohilltop.example", binNumber: "004392817-0202",
       showRatesToAgents: false,
@@ -83,7 +83,7 @@ export async function seedAccounts(
   });
   const coxResort = await prisma.resort.create({
     data: {
-      tenantId: coxBay.id, name: "Cox Bay Beach Resort", location: "Inani Beach, Cox's Bazar",
+      tenantId: coxBay.id, name: "Cox Bay Beach Resort", slug: "cox-bay-beach-resort", location: "Inani Beach, Cox's Bazar",
       address: "Marine Drive, Inani, Ukhiya, Cox's Bazar", contactPhone: "+8801711000201",
       website: "https://coxbay.example", binNumber: "005511234-0101",
       showRatesToAgents: true,
@@ -108,7 +108,7 @@ export async function seedAccounts(
   });
   const greenResort = await prisma.resort.create({
     data: {
-      tenantId: greenLeaf.id, name: "Green Leaf Eco Cottages", location: "Bandarban Sadar, Bandarban",
+      tenantId: greenLeaf.id, name: "Green Leaf Eco Cottages", slug: "green-leaf-eco-cottages", location: "Bandarban Sadar, Bandarban",
       address: "Meghla Tourist Spot Road, Bandarban", contactPhone: "+8801711000301",
       taxRatePct: 15, agentCommissionKind: "PERCENT", agentCommissionRate: 6,
       invoicePrefix: "GLE", bookingPrefix: "GL", fbPrefix: "GFB",

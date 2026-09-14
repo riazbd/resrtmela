@@ -106,7 +106,7 @@ describe("an account with no resort", () => {
 
 describe("a chain owner's account", () => {
   it("holds one subscription that every one of its resorts is entitled by", async () => {
-    const second = await prisma.resort.create({ data: { tenantId: fx.tenantId, name: "Second Resort" } as never });
+    const second = await prisma.resort.create({ data: { tenantId: fx.tenantId, name: "Second Resort", slug: `second-${Date.now()}` } as never });
     await makePlatformService(asPrisma).setSubscription(superAdmin, fx.resortId, { plan: "STARTER" });
 
     const limits = makePlanLimits(asPrisma);

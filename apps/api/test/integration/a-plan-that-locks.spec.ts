@@ -283,10 +283,20 @@ describe("the shelf", () => {
     })(src);
     const code = files.map((f) => readFileSync(f, "utf8")).join("\n");
 
-    // `requireFeature(claims?, resortId, "key")` — the key is the last argument,
-    // so anchor on the call rather than on the string appearing anywhere
+    /**
+     * Two doors count, because there are two kinds.
+     *
+     * `requireFeature` throws a sentence naming the plan — right for somebody
+     * signed in, who needs to know what to buy. `hasFeature` answers yes or no
+     * and leaves the caller to decide what to say, which is the only safe door
+     * on a public page: telling a stranger which plan a resort is on is not a
+     * thing to do, however politely.
+     *
+     * The key is the last argument in both, so anchor on the call rather than
+     * on the string appearing somewhere in the file.
+     */
     const ungated = ALL_PLAN_FEATURES.filter(
-      (key) => !new RegExp(`requireFeature\\([^)]*"${key}"`).test(code),
+      (key) => !new RegExp(`(requireFeature|hasFeature)\\([^)]*"${key}"`).test(code),
     );
 
     expect(ungated).toEqual([]);

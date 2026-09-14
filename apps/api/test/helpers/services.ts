@@ -12,6 +12,7 @@ import { NotificationsService } from "../../src/notifications/notifications.serv
 import { EmailService } from "../../src/notifications/email.service";
 import { SmsService } from "../../src/notifications/sms.service";
 import { DiscountService } from "../../src/common/discount.service";
+import { PublishedSiteService } from "../../src/site/published-site.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
@@ -130,6 +131,10 @@ export function makePlatformService(prisma: PrismaService, email?: EmailService)
 /** Constructing this by hand in a spec is how helpers go stale; go through here. */
 export function makeAvailabilityService(prisma: PrismaService): AvailabilityService {
   return new AvailabilityService(prisma, makeCommissionService(prisma));
+}
+
+export function makePublishedSiteService(prisma: PrismaService): PublishedSiteService {
+  return new PublishedSiteService(prisma, new DiscountService(prisma), new PlanLimitsService(prisma));
 }
 
 export function makeCommissionService(prisma: PrismaService): CommissionService {

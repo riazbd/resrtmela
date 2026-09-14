@@ -227,6 +227,9 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
     data: {
       tenantId: tenant.id,
       name: "Test Resort",
+      // unique per fixture, the way the tenant's slug is: specs run against one
+      // database and two resorts cannot share an address
+      slug: `test-resort-${uniq}`,
       location: "Cox's Bazar",
       // commission is the resort's term, not the agent's: 10% here so the
       // specs that were written against the fixture agent's old 10% still

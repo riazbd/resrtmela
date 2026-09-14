@@ -190,7 +190,7 @@ describe("signing up", () => {
     const { user } = await auth().signup(owner());
     const resortId = user.resortIds[0]!;
 
-    const control = await prisma.resort.create({ data: { tenantId: fx.tenantId, name: "Control" } });
+    const control = await prisma.resort.create({ data: { tenantId: fx.tenantId, name: "Control", slug: `control-${Date.now()}` } });
     await ensureResortRoles(asPrisma, control.id);
     const names = (id: number) =>
       prisma.customRole.findMany({ where: { resortId: id }, select: { name: true, system: true }, orderBy: { name: "asc" } });

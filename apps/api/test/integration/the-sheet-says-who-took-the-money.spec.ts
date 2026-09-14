@@ -119,7 +119,7 @@ describe("the person the sheet named", () => {
   it("never credits a receipt to somebody from another resort", async () => {
     // a real person, at somebody else's resort, who has never seen this one
     const elsewhere = await prisma.resort.create({
-      data: { tenantId: fx.tenantId, name: "Another Resort", location: "Sylhet" },
+      data: { tenantId: fx.tenantId, name: "Another Resort", slug: `another-${Date.now()}`, location: "Sylhet" },
     });
     const stranger = await prisma.user.create({
       data: {

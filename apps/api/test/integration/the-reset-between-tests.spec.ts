@@ -46,7 +46,7 @@ it("empties the database faster than the tests that use it", async () => {
 it("still leaves an empty database behind", async () => {
   // cheap is worthless if it stops clearing things: write a row, reset, look
   const tenant = await prisma.tenant.create({ data: { name: "Leftover", slug: `leftover-${Date.now()}` } });
-  await prisma.resort.create({ data: { tenantId: tenant.id, name: "Leftover Resort", location: "Nowhere" } });
+  await prisma.resort.create({ data: { tenantId: tenant.id, name: "Leftover Resort", slug: `leftover-${Date.now()}`, location: "Nowhere" } });
 
   await resetDb(prisma as unknown as PrismaClient);
 

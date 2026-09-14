@@ -39,7 +39,7 @@ beforeEach(async () => {
 
   // a resort with nothing in it, which is what a real first import looks like
   const bare = await prisma.resort.create({
-    data: { tenantId: fx.tenantId, name: "Bare Resort", location: "Sajek" },
+    data: { tenantId: fx.tenantId, name: "Bare Resort", slug: `bare-${Date.now()}`, location: "Sajek" },
   });
   emptyResortId = bare.id;
   await prisma.userResort.create({ data: { userId: fx.managerId, resortId: bare.id } });

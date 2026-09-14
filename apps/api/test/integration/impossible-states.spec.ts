@@ -145,7 +145,7 @@ describe("a row belongs to a resort that exists", () => {
   it("takes the resort's messages with it when the resort goes", async () => {
     // a resort of its own, with nothing else attached to get in the way
     const doomed = await prisma.resort.create({
-      data: { tenantId: fx.tenantId, name: "Closing down", location: "nowhere" },
+      data: { tenantId: fx.tenantId, name: "Closing down", slug: `doomed-${Date.now()}`, location: "nowhere" },
     });
     await prisma.notificationJob.create({
       data: {

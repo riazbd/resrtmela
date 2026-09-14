@@ -6,6 +6,7 @@ import { requireSellingAccess } from "../common/selling-access";
 import { AuditService } from "../common/audit.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PermissionsService } from "../common/permissions";
+import { uniqueResortSlug } from "../common/resort-slug";
 
 @Injectable()
 export class TenancyService {
@@ -76,7 +77,11 @@ export class TenancyService {
         { status: 402 },
       );
     }
-    const resort = await this.prisma.resort.create({ data });
+    // the caller names the resort; the address is the platform's to mint, and
+    // never something an input may set
+    const resort = await this.prisma.resort.create({
+      data: { ...data, slug: await uniqueResortSlug(this.prisma, data.name) },
+    });
     await this.audit.log({
       actorId: claims.userId,
       action: "resort.create",

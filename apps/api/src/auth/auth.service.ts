@@ -7,6 +7,7 @@ import { ensureResortRoles } from "../common/permissions";
 import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
 import { openingSubscription, redeemOffer } from "../common/offers";
 import { agencyOf, sellableFor } from "../common/selling-access";
+import { uniqueResortSlug } from "../common/resort-slug";
 import { scheduleFor } from "../common/plan-schedules";
 import { ROLE, type Role } from "@rh/shared";
 
@@ -212,6 +213,9 @@ export class AuthService {
           tenantId: tenant.id,
           name: input.resortName,
           location: input.location,
+          // minted on `tx`, which is the only client that can see the rows this
+          // transaction has already written
+          slug: await uniqueResortSlug(tx, input.resortName),
           // timezone, currency and locale come from the schema's defaults;
           // repeating them here was a second place to change when a resort
           // outside Bangladesh signs up, and the one nobody would remember

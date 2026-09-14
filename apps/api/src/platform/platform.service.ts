@@ -20,6 +20,7 @@ import { assertBrandValue, BRAND_KEYS, isBrandKey, type BrandKey } from "../comm
 import { addPeriod, isPeriodUnit, perMonthEquivalent, phasesAreSane, settleMonths } from "@rh/shared";
 import { openingPosition, scheduleFor, schedulesFor, toPhases } from "../common/plan-schedules";
 import * as bcrypt from "bcryptjs";
+import { uniqueResortSlug } from "../common/resort-slug";
 
 /**
  * Starting plans for a brand-new platform. They are a seed, not a definition:
@@ -2367,7 +2368,14 @@ export class PlatformService {
     if (claims.role === ROLE.SUPER_ADMIN) {
       // super admin bypasses plan gates
       const resort = await this.prisma.resort.create({
-        data: { tenantId, name: input.name, location: input.location, timezone: "Asia/Dhaka", currency: "BDT" },
+        data: {
+          tenantId,
+          name: input.name,
+          location: input.location,
+          slug: await uniqueResortSlug(this.prisma, input.name),
+          timezone: "Asia/Dhaka",
+          currency: "BDT",
+        },
       });
       await ensureResortRoles(this.prisma, resort.id);
       await this.audit.log({ actorId: claims.userId, resortId: resort.id, action: "resort.create", entity: "resort", entityId: resort.id, diff: input });
@@ -2387,7 +2395,14 @@ export class PlatformService {
     if (capError) throw Object.assign(new Error(capError), { status: 402 });
     void tenant;
     const resort = await this.prisma.resort.create({
-      data: { tenantId, name: input.name, location: input.location, timezone: "Asia/Dhaka", currency: "BDT" },
+      data: {
+        tenantId,
+        name: input.name,
+        location: input.location,
+        slug: await uniqueResortSlug(this.prisma, input.name),
+        timezone: "Asia/Dhaka",
+        currency: "BDT",
+      },
     });
     await this.prisma.userResort.create({ data: { userId: claims.userId, resortId: resort.id } });
     await ensureResortRoles(this.prisma, resort.id);

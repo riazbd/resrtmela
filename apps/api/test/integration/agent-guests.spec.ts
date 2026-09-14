@@ -201,7 +201,7 @@ describe("finding a room by date", () => {
     // (2026-09-11 design, §8), so the junior sells it the moment it opens
     const junior = await hire("Junior4", ["agent.book"]);
     const second = await prisma.resort.create({
-      data: { tenantId: fx.tenantId, name: "Second Resort", location: "Sajek" },
+      data: { tenantId: fx.tenantId, name: "Second Resort", slug: `second-${Date.now()}`, location: "Sajek" },
     });
     const type = await prisma.roomType.create({
       data: { resortId: second.id, name: "Cottage", maxAdults: 2, maxChildren: 1 },

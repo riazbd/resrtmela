@@ -27,7 +27,6 @@ enum BookingKind {
   PACKAGE
 }
 
-
 enum BookingState {
   PENDING
   CONFIRMED
@@ -55,14 +54,12 @@ enum RoomStatus {
   OUT_OF_SERVICE
 }
 
-
 enum ItemKind {
   ROOM
   ACTIVITY
   FB
   EXTRA_PERSON
 }
-
 
 enum PaymentType {
   ADVANCE
@@ -80,19 +77,19 @@ enum NotifChannel {
 // ───────────────────────── Tenancy ─────────────────────────
 
 model Tenant {
-  id        Int      @id @default(autoincrement())
-  name      String   @db.VarChar(120)
-  slug      String   @unique @db.VarChar(80)
+  id              Int       @id @default(autoincrement())
+  name            String    @db.VarChar(120)
+  slug            String    @unique @db.VarChar(80)
   /// RESORT_OWNER | AGENCY — the two customers the platform sells to. Which one
   /// decides who is told about a bill and what a suspension does (a resort
   /// stops taking new entries; an agency stops selling).
-  kind      String   @default("RESORT_OWNER") @db.VarChar(16)
-  status    String   @default("active") @db.VarChar(16)
+  kind            String    @default("RESORT_OWNER") @db.VarChar(16)
+  status          String    @default("active") @db.VarChar(16)
   /// "billing" when the sweep suspended the account, so the sweep may lift it
   suspendedReason String?   @db.VarChar(32)
   suspendedAt     DateTime?
-  createdAt DateTime @default(now())
-  resorts   Resort[]
+  createdAt       DateTime  @default(now())
+  resorts         Resort[]
 
   /// The subscription belongs to the account. `Tenant.plan` used to be a second
   /// answer to "what plan is this customer on" and is gone.
@@ -169,25 +166,31 @@ model Offer {
 }
 
 model Resort {
-  id                Int       @id @default(autoincrement())
+  id                Int     @id @default(autoincrement())
   tenantId          Int
-  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name              String    @db.VarChar(160)
-  location          String?   @db.VarChar(255)
-  timezone          String    @default("Asia/Dhaka") @db.VarChar(64)
-  currency          String    @default("BDT") @db.VarChar(8)
-  locale            String    @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
-  showRatesToAgents Boolean   @default(false)
+  tenant            Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String  @db.VarChar(160)
+  /// The resort's own address, stable and readable — `/r/sky-eco-resort`.
+  ///
+  /// The tenant has had one; a resort has not, and the published site needs an
+  /// address that is not the primary key. Unique across the platform because a
+  /// resort's own domain (phase 2) resolves to exactly one of these.
+  slug              String  @unique @db.VarChar(80)
+  location          String? @db.VarChar(255)
+  timezone          String  @default("Asia/Dhaka") @db.VarChar(64)
+  currency          String  @default("BDT") @db.VarChar(8)
+  locale            String  @default("en-IN") @db.VarChar(16) // number/date formatting; en-IN groups in lakh, which ICU's en-BD does not
+  showRatesToAgents Boolean @default(false)
   // There is deliberately no switch beside this one for guest names. There was
   // — `showGuestNamesToAgents` — and it did not mean what an owner ticking it
   // would have thought: it named the clients of every *other* agency selling
   // this resort, not just the resort's own walk-in guests. Whose booking a
   // night belongs to is nobody else's to read. See 20260917100000.
   /// the fallback when a resort has defined no tax rules; see TaxRule
-  taxRatePct        Decimal   @default(0.00) @db.Decimal(5, 2)
+  taxRatePct        Decimal @default(0.00) @db.Decimal(5, 2)
   /// Business Identification Number — a VAT invoice in Bangladesh must show it
-  binNumber         String?   @db.VarChar(32)
-  agentPaymentHours Int       @default(48) // agent bookings must be fully paid this many hours before check-in
+  binNumber         String? @db.VarChar(32)
+  agentPaymentHours Int     @default(48) // agent bookings must be fully paid this many hours before check-in
 
   /// What this resort pays its agents — one term for all of them.
   ///
@@ -197,25 +200,29 @@ model Resort {
   /// resort: one number, set by hand, that everyone sells on. The old
   /// per-agent columns still hold what each agent used to be on; nothing
   /// reads them for pricing any more.
-  agentCommissionKind String  @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (per booking)
-  agentCommissionRate Decimal @default(5.00) @db.Decimal(10, 2)
-  invoicePrefix     String    @default("SER") @db.VarChar(12)
-  bookingPrefix     String    @default("BK") @db.VarChar(12)
-  fbPrefix          String    @default("RES") @db.VarChar(12)
-  fyStartMonthDay   String    @default("07-01") @db.VarChar(5) // financial year start MM-DD
-  checkInTime       String    @default("12:00 PM") @db.VarChar(16)
-  checkOutTime      String    @default("10:00 AM") @db.VarChar(16)
-  address           String?   @db.VarChar(255)
-  website           String?   @db.VarChar(160)
-  contactPhone      String?   @db.VarChar(32)
-  status            String    @default("active") @db.VarChar(16)
+  agentCommissionKind String    @default("PERCENT") @db.VarChar(8) // PERCENT (% of rent) | FLAT (per booking)
+  agentCommissionRate Decimal   @default(5.00) @db.Decimal(10, 2)
+  invoicePrefix       String    @default("SER") @db.VarChar(12)
+  bookingPrefix       String    @default("BK") @db.VarChar(12)
+  fbPrefix            String    @default("RES") @db.VarChar(12)
+  fyStartMonthDay     String    @default("07-01") @db.VarChar(5) // financial year start MM-DD
+  checkInTime         String    @default("12:00 PM") @db.VarChar(16)
+  checkOutTime        String    @default("10:00 AM") @db.VarChar(16)
+  address             String?   @db.VarChar(255)
+  website             String?   @db.VarChar(160)
+  contactPhone        String?   @db.VarChar(32)
+  status              String    @default("active") @db.VarChar(16)
   /// why the resort is not active: "billing" is the sweep's, anything else is a human's
-  suspendedReason   String?   @db.VarChar(32)
-  suspendedAt       DateTime?
-  createdAt         DateTime  @default(now())
+  suspendedReason     String?   @db.VarChar(32)
+  suspendedAt         DateTime?
+  createdAt           DateTime  @default(now())
 
   roomTypes        RoomType[]
   agencyTerms      ResortAgency[]
+  /// what this resort publishes about itself, and the pictures it publishes
+  site             ResortSite?
+  sitePhotos       ResortPhoto[]
+  uploads          Upload[]
   rooms            Room[]
   ratePlans        RatePlan[]
   guests           Guest[]
@@ -281,31 +288,32 @@ model User {
   account       Tenant?    @relation("AccountUsers", fields: [accountId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
 
-  resorts         UserResort[]
-  createdBookings Booking[]        @relation("BookingCreatedBy")
-  agentBookings   Booking[]        @relation("BookingAgent")
-  paymentsRecv    Payment[]        @relation("PaymentReceivedBy")
-  salesPaymentsRecv SalesPayment[] @relation("SalesPaymentReceivedBy")
-  duesPaid          SubscriptionDue[] @relation("DuePaidBy")
-  chargesPaid       PlatformCharge[]  @relation("ChargePaidBy")
-  walletTxnsMade    WalletTxn[]       @relation("WalletTxnBy")
-  auditLogs       AuditLog[]       @relation("AuditActor")
-  wallet          Wallet?
-  notifications   Notification[]
-  accessRequests  ResortAccess[]
-  emailCredits    EmailCredit?
-  creditOrders    EmailCreditOrder[]
-  campaigns       EmailCampaign[]
-  agentRoles      AgentRole[]      @relation("AgencyRoles")
-  agencyExpenses  Expense[]        @relation("AgencyExpenses")
-  agencyHeads     ExpenseHead[]    @relation("AgencyExpenseHeads")
-  agencyEmployees Employee[]       @relation("AgencyEmployees")
-  agencyPayroll   PayrollPayment[] @relation("AgencyPayroll")
-  agencyCounters  Counter[]        @relation("AgencyCounters")
-  tourCategories  TourCategory[]   @relation("AgencyTourCategories")
-  tourPackages    TourPackage[]    @relation("AgencyTourPackages")
-  salesDocs       SalesDoc[]       @relation("AgencySalesDocs")
-  passwordResets  PasswordReset[]
+  resorts           UserResort[]
+  createdBookings   Booking[]          @relation("BookingCreatedBy")
+  agentBookings     Booking[]          @relation("BookingAgent")
+  paymentsRecv      Payment[]          @relation("PaymentReceivedBy")
+  salesPaymentsRecv SalesPayment[]     @relation("SalesPaymentReceivedBy")
+  duesPaid          SubscriptionDue[]  @relation("DuePaidBy")
+  chargesPaid       PlatformCharge[]   @relation("ChargePaidBy")
+  walletTxnsMade    WalletTxn[]        @relation("WalletTxnBy")
+  auditLogs         AuditLog[]         @relation("AuditActor")
+  wallet            Wallet?
+  notifications     Notification[]
+  accessRequests    ResortAccess[]
+  uploads           Upload[]
+  emailCredits      EmailCredit?
+  creditOrders      EmailCreditOrder[]
+  campaigns         EmailCampaign[]
+  agentRoles        AgentRole[]        @relation("AgencyRoles")
+  agencyExpenses    Expense[]          @relation("AgencyExpenses")
+  agencyHeads       ExpenseHead[]      @relation("AgencyExpenseHeads")
+  agencyEmployees   Employee[]         @relation("AgencyEmployees")
+  agencyPayroll     PayrollPayment[]   @relation("AgencyPayroll")
+  agencyCounters    Counter[]          @relation("AgencyCounters")
+  tourCategories    TourCategory[]     @relation("AgencyTourCategories")
+  tourPackages      TourPackage[]      @relation("AgencyTourPackages")
+  salesDocs         SalesDoc[]         @relation("AgencySalesDocs")
+  passwordResets    PasswordReset[]
 
   @@index([accountId])
   @@map("users")
@@ -384,18 +392,18 @@ model Employee {
 }
 
 model PayrollPayment {
-  id          Int            @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   resortId    Int?
-  resort      Resort?        @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort      Resort?  @relation(fields: [resortId], references: [id], onDelete: Cascade)
   agencyId    Int?
-  agency      User?          @relation("AgencyPayroll", fields: [agencyId], references: [id], onDelete: Cascade)
+  agency      User?    @relation("AgencyPayroll", fields: [agencyId], references: [id], onDelete: Cascade)
   employeeId  Int
-  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  month       String         @db.VarChar(7) // "2026-09"
-  amount      Decimal        @db.Decimal(10, 2)
-  method      String?       @db.VarChar(24)
-  note        String?        @db.VarChar(255)
-  paidAt      DateTime       @default(now())
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month       String   @db.VarChar(7) // "2026-09"
+  amount      Decimal  @db.Decimal(10, 2)
+  method      String?  @db.VarChar(24)
+  note        String?  @db.VarChar(255)
+  paidAt      DateTime @default(now())
   createdById Int?
 
   @@unique([employeeId, month])
@@ -432,12 +440,12 @@ model CmsSetting {
 // ───────────────────────── Inventory ─────────────────────────
 
 model RoomType {
-  id                 Int     @id @default(autoincrement())
-  resortId           Int
-  resort             Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  name               String  @db.VarChar(120)
-  maxAdults          Int     @default(2)
-  maxChildren        Int     @default(0)
+  id          Int    @id @default(autoincrement())
+  resortId    Int
+  resort      Resort @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name        String @db.VarChar(120)
+  maxAdults   Int    @default(2)
+  maxChildren Int    @default(0)
 
   /// What a NEW room of this type starts with. The room is what a booking reads.
   ///
@@ -456,6 +464,7 @@ model RoomType {
   rooms          Room[]
   ratePlans      RatePlan[]
   discountOffers DiscountOffer[]
+  sitePhotos     ResortPhoto[]
 
   @@index([resortId])
   @@map("room_types")
@@ -489,7 +498,7 @@ model Room {
   /// invoices and reports. So it is retired: off the calendar, out of the plan
   /// cap, and its past intact. Distinct from `OUT_OF_SERVICE`, which means a
   /// room that is temporarily unsellable and still part of the inventory.
-  deletedAt  DateTime?
+  deletedAt DateTime?
 
   items          BookingItem[]
   nights         BookingNight[]
@@ -544,33 +553,33 @@ model Guest {
 // ───────────────────────── Bookings ─────────────────────────
 
 model Booking {
-  id           Int           @id @default(autoincrement())
-  code         String        @db.VarChar(12) // BK-00001, per-resort sequence
-  resortId     Int
-  resort       Resort        @relation(fields: [resortId], references: [id])
-  kind         BookingKind   @default(ROOM)
-  guestId      Int
-  guest        Guest         @relation(fields: [guestId], references: [id])
-  createdById  Int?
-  createdBy    User?         @relation("BookingCreatedBy", fields: [createdById], references: [id])
-  agentUserId  Int?
-  agentUser    User?         @relation("BookingAgent", fields: [agentUserId], references: [id])
+  id              Int          @id @default(autoincrement())
+  code            String       @db.VarChar(12) // BK-00001, per-resort sequence
+  resortId        Int
+  resort          Resort       @relation(fields: [resortId], references: [id])
+  kind            BookingKind  @default(ROOM)
+  guestId         Int
+  guest           Guest        @relation(fields: [guestId], references: [id])
+  createdById     Int?
+  createdBy       User?        @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  agentUserId     Int?
+  agentUser       User?        @relation("BookingAgent", fields: [agentUserId], references: [id])
   /// a code from this resort's BOOKING_SOURCE list; null means nobody recorded one
-  source       String?       @db.VarChar(32)
-  checkIn      DateTime?     @db.Date
-  checkOut     DateTime?     @db.Date
-  adults       Int           @default(2)
-  children     Int           @default(0)
-  extraPersons Int           @default(0) // extra guests beyond room capacity, charged at room type rate
-  discount     Decimal       @default(0.00) @db.Decimal(10, 2)
-  remarks      String?       @db.Text
-  state        BookingState  @default(PENDING)
-  cancelState  CancelState   @default(NONE) // agent cancel-request queue
-  paymentState PaymentState  @default(UNPAID)
-  groupTag     String?       @db.VarChar(24) // links N one-room bookings of a tour group
-  bookedAt     DateTime      @default(now())
-  invoiceNo    String?       @db.VarChar(20) // SER-00001, per-resort invoice counter
-  invoiceAt    DateTime?
+  source          String?      @db.VarChar(32)
+  checkIn         DateTime?    @db.Date
+  checkOut        DateTime?    @db.Date
+  adults          Int          @default(2)
+  children        Int          @default(0)
+  extraPersons    Int          @default(0) // extra guests beyond room capacity, charged at room type rate
+  discount        Decimal      @default(0.00) @db.Decimal(10, 2)
+  remarks         String?      @db.Text
+  state           BookingState @default(PENDING)
+  cancelState     CancelState  @default(NONE) // agent cancel-request queue
+  paymentState    PaymentState @default(UNPAID)
+  groupTag        String?      @db.VarChar(24) // links N one-room bookings of a tour group
+  bookedAt        DateTime     @default(now())
+  invoiceNo       String?      @db.VarChar(20) // SER-00001, per-resort invoice counter
+  invoiceAt       DateTime?
   /// The invoice exactly as it was issued: seller, guest, line items, nights,
   /// tax and total, frozen at that moment.
   ///
@@ -589,9 +598,9 @@ model Booking {
   /// rendering live — freezing today's values and calling them "as issued"
   /// would be a worse lie than the gap.
   invoiceSnapshot Json?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime? // soft delete; never hard-delete history
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime? // soft delete; never hard-delete history
 
   items    BookingItem[]
   payments Payment[]
@@ -648,19 +657,19 @@ model BookingNight {
 // ───────────────────────── Activities ─────────────────────────
 
 model ActivityCatalog {
-  id          Int              @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   resortId    Int
-  resort      Resort           @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  name        String           @db.VarChar(160)
+  resort      Resort  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name        String  @db.VarChar(160)
   /// a code from this resort's ACTIVITY_CATEGORY list
-  category    String?          @db.VarChar(32)
-  basePrice   Decimal          @db.Decimal(10, 2)
-  durationMin Int              @default(60)
-  minPerSlot  Int              @default(1)
-  maxPerSlot  Int              @default(10)
-  description String?          @db.Text
+  category    String? @db.VarChar(32)
+  basePrice   Decimal @db.Decimal(10, 2)
+  durationMin Int     @default(60)
+  minPerSlot  Int     @default(1)
+  maxPerSlot  Int     @default(10)
+  description String? @db.Text
   photos      Json?
-  active      Boolean          @default(true)
+  active      Boolean @default(true)
 
   slots             ActivitySlot[]
   activitySchedules ActivitySchedule[]
@@ -703,10 +712,10 @@ model ActivitySlot {
 // ───────────────────────── Money ─────────────────────────
 
 model Payment {
-  id           Int           @id @default(autoincrement())
+  id           Int         @id @default(autoincrement())
   bookingId    Int
-  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  amount       Decimal       @db.Decimal(10, 2)
+  booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount       Decimal     @db.Decimal(10, 2)
   /// A code from the resort's own PAYMENT_METHOD list, or null.
   ///
   /// Nullable since 2026-09-13. This was `@default("CASH")` and the importer
@@ -716,14 +725,14 @@ model Payment {
   /// thing, where a defaulted CASH was indistinguishable from cash somebody
   /// counted. The desk still requires one: `payments.create` puts every
   /// method through `assertAccepted`.
-  method       String?       @db.VarChar(24)
-  paymentType  PaymentType   @default(ADVANCE)
+  method       String?     @db.VarChar(24)
+  paymentType  PaymentType @default(ADVANCE)
   receivedById Int?
-  receivedBy   User?         @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
-  receivedAt   DateTime      @default(now())
-  note         String?       @db.VarChar(255)
+  receivedBy   User?       @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  receivedAt   DateTime    @default(now())
+  note         String?     @db.VarChar(255)
   /// client-generated id for a write that may be replayed (offline front desk)
-  clientRef    String?       @db.VarChar(64)
+  clientRef    String?     @db.VarChar(64)
 
   /// the guard against a replayed payment becoming a second receipt: scoped to
   /// the booking, so two devices cannot collide across different stays
@@ -763,7 +772,7 @@ model NotificationJob {
   payload      Json?
   /// whose message this is: the resort whose wording and name it goes out in
   resortId     Int?
-  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort       Resort?      @relation(fields: [resortId], references: [id], onDelete: Cascade)
   /// exactly what was sent, so "what did the guest actually receive" has an answer
   renderedText String?      @db.Text
   sendAfter    DateTime     @default(now())
@@ -827,24 +836,24 @@ model ExpenseHead {
 
 /// Restaurant / F&B bills (RES-##### sequence) — walk-in or charged to a stay
 model FbBill {
-  id         Int            @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   resortId   Int
-  resort     Resort         @relation(fields: [resortId], references: [id], onDelete: Cascade)
-  code       String         @db.VarChar(16) // RES-00001 per-resort sequence
-  billDate   DateTime       @db.Date
-  guestName  String?        @db.VarChar(160)
+  resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  code       String    @db.VarChar(16) // RES-00001 per-resort sequence
+  billDate   DateTime  @db.Date
+  guestName  String?   @db.VarChar(160)
   bookingId  Int? // charge to a stay (nullable)
-  booking    Booking?       @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   roomId     Int? // room (optional, charge-to-room)
-  room       Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  paidAmount Decimal        @default(0.00) @db.Decimal(10, 2)
+  room       Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  paidAmount Decimal   @default(0.00) @db.Decimal(10, 2)
   /// tax charged on this bill, recomputed from the resort's rules on every read
   /// and stored so a bill printed last year still says what it said
-  taxAmount  Decimal        @default(0.00) @db.Decimal(10, 2)
-  method     String?     @db.VarChar(24)
-  note       String?        @db.VarChar(255)
+  taxAmount  Decimal   @default(0.00) @db.Decimal(10, 2)
+  method     String?   @db.VarChar(24)
+  note       String?   @db.VarChar(255)
   createdBy  Int?
-  createdAt  DateTime       @default(now())
+  createdAt  DateTime  @default(now())
   deletedAt  DateTime?
 
   items        FbBillItem[]
@@ -869,18 +878,18 @@ model FbBillItem {
 
 /// Online payment checkout intents (bKash/Nagad-shaped, provider-agnostic)
 model PaymentIntent {
-  id          BigInt        @id @default(autoincrement())
+  id          BigInt    @id @default(autoincrement())
   resortId    Int
-  resort   Resort @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
   bookingId   Int
-  booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  provider    String        @db.VarChar(24) // mock | bkash | nagad
-  providerRef String        @unique @db.VarChar(64)
-  amount      Decimal       @db.Decimal(10, 2)
-  method      String      @db.VarChar(24)
-  status      String        @default("pending") @db.VarChar(16) // pending | paid | failed | cancelled
-  trxId       String?       @db.VarChar(64)
-  createdAt   DateTime      @default(now())
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  provider    String    @db.VarChar(24) // mock | bkash | nagad
+  providerRef String    @unique @db.VarChar(64)
+  amount      Decimal   @db.Decimal(10, 2)
+  method      String    @db.VarChar(24)
+  status      String    @default("pending") @db.VarChar(16) // pending | paid | failed | cancelled
+  trxId       String?   @db.VarChar(64)
+  createdAt   DateTime  @default(now())
   paidAt      DateTime?
 
   @@index([bookingId])
@@ -1031,13 +1040,13 @@ model PlanPhase {
 }
 
 model Subscription {
-  id          BigInt    @id @default(autoincrement())
+  id        BigInt @id @default(autoincrement())
   /// The customer — a resort owner or an agency — not one of its resorts.
-  accountId   Int
-  account     Tenant    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId Int
+  account   Tenant @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// PlatformPlan.name — a string, not an enum, so a new plan needs no migration
-  plan        String    @default("STARTER") @db.VarChar(16)
-  status      String    @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
+  plan      String @default("STARTER") @db.VarChar(16)
+  status    String @default("TRIAL") @db.VarChar(16) // TRIAL | ACTIVE | PAST_DUE | CANCELLED
 
   /// The way this account bought the plan — which `PlanSchedule` they picked,
   /// and therefore the ladder their price walks up.
@@ -1099,7 +1108,7 @@ model Subscription {
   /// paid for, so it waits: this holds the plan the owner asked for, and the
   /// billing sweep applies it at the next renewal — the same pass that raises
   /// the first bill at the new price. NULL is the normal state.
-  pendingPlan String?   @db.VarChar(16)
+  pendingPlan String? @db.VarChar(16)
 
   /// A move to a different schedule, waiting for the renewal — `pendingCycle`
   /// generalised to however many ways the owner sells this plan.
@@ -1245,7 +1254,7 @@ model Notification {
   userId    Int
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId  Int?
-  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort    Resort?   @relation(fields: [resortId], references: [id], onDelete: Cascade)
   title     String    @db.VarChar(160)
   body      String?   @db.VarChar(500)
   kind      String    @default("info") @db.VarChar(16) // info | booking | payment | alert | request
@@ -1290,7 +1299,7 @@ model EmailCampaign {
   userId     Int
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   resortId   Int?
-  resort   Resort? @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  resort     Resort?  @relation(fields: [resortId], references: [id], onDelete: Cascade)
   subject    String   @db.VarChar(200)
   body       String   @db.Text
   recipients Int      @default(0)
@@ -1321,22 +1330,22 @@ model PlatformPlan {
   /// These used to be a hardcoded map on the homepage keyed by plan name. A
   /// plan the owner created showed no features, and no line on any card locked
   /// anything.
-  features   Json    @default("[]")
+  features Json @default("[]")
 
   /// RESORT | AGENCY — which shelf this plan is sold from. A resort never sees
   /// an agency plan and an agency never sees a resort plan.
-  audience   String  @default("RESORT") @db.VarChar(16)
+  audience String @default("RESORT") @db.VarChar(16)
 
-  active     Boolean @default(true)
-  sortOrder  Int     @default(0)
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
 
   /// The one plan the pricing page recommends. At most one row is true, which
   /// the service enforces — "at most one" is not something a unique index can
   /// say without storing NULL for false.
-  highlight  Boolean @default(false)
+  highlight Boolean @default(false)
 
   /// Every way this plan can be bought. Empty until the owner writes one.
-  schedules  PlanSchedule[]
+  schedules PlanSchedule[]
 
   @@map("platform_plans")
 }
@@ -1423,7 +1432,7 @@ model PlatformCharge {
 }
 
 model PlatformSetting {
-  key       String   @id @db.VarChar(64)
+  key String @id @db.VarChar(64)
 
   /// Text, not VARCHAR(255).
   ///
@@ -1630,18 +1639,18 @@ model SalesDoc {
 /// becoming a second receipt. Two ledgers for the same act should not need two
 /// vocabularies.
 model SalesPayment {
-  id           BigInt    @id @default(autoincrement())
+  id           BigInt   @id @default(autoincrement())
   salesDocId   Int
-  salesDoc     SalesDoc  @relation(fields: [salesDocId], references: [id], onDelete: Cascade)
-  amount       Decimal   @db.Decimal(10, 2)
+  salesDoc     SalesDoc @relation(fields: [salesDocId], references: [id], onDelete: Cascade)
+  amount       Decimal  @db.Decimal(10, 2)
   /// a code from the agency's own method list — CASH, BKASH, BANK, ...
-  method       String    @default("CASH") @db.VarChar(24)
+  method       String   @default("CASH") @db.VarChar(24)
   receivedById Int?
-  receivedBy   User?     @relation("SalesPaymentReceivedBy", fields: [receivedById], references: [id])
-  receivedAt   DateTime  @default(now())
-  note         String?   @db.VarChar(255)
+  receivedBy   User?    @relation("SalesPaymentReceivedBy", fields: [receivedById], references: [id])
+  receivedAt   DateTime @default(now())
+  note         String?  @db.VarChar(255)
   /// client-generated id for a write that may be replayed (an agent on a bus)
-  clientRef    String?   @db.VarChar(64)
+  clientRef    String?  @db.VarChar(64)
 
   @@unique([salesDocId, clientRef])
   @@index([salesDocId])
@@ -1661,4 +1670,93 @@ model SalesDocItem {
 
   @@index([docId])
   @@map("sales_doc_items")
+}
+
+/// What a resort publishes about itself (2026-09-14 design, §5.1).
+///
+/// One row per resort, created the first time the owner opens the editor. It
+/// holds what the panel does not already know — the words, the pictures, the
+/// look — and never a price or a room count: those are read live from the
+/// resort's own records, which is the whole point of the published view.
+model ResortSite {
+  id          Int       @id @default(autoincrement())
+  resortId    Int       @unique
+  resort      Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// A key from the template registry in @rh/shared. Code-declared vocabulary,
+  /// like a plan feature: a name the code has never heard of renders nothing,
+  /// so it is not a value this column is allowed to hold.
+  template    String    @default("sanctuary") @db.VarChar(24)
+  /// Publishing is an act, and taking the site down is one click. A resort must
+  /// be able to close its own front door without asking the platform.
+  published   Boolean   @default(false)
+  headline    String?   @db.VarChar(160)
+  intro       String?   @db.Text
+  /// Free text the owner ticks or types — not the resort's room amenities,
+  /// which belong to a room type and are read from there.
+  amenities   Json?
+  themeColor  String?   @db.VarChar(16)
+  /// Where it is, for the map. Six decimal places is about 11cm, which is more
+  /// than a resort needs and less than a column that invites nonsense.
+  mapLat      Decimal?  @db.Decimal(9, 6)
+  mapLng      Decimal?  @db.Decimal(9, 6)
+  whatsapp    String?   @db.VarChar(32)
+  facebook    String?   @db.VarChar(191)
+  instagram   String?   @db.VarChar(191)
+  /// Written when the owner saves, read by the site's cache tag.
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("resort_sites")
+}
+
+/// A file the platform stores on disk, recorded so it can be found, served,
+/// counted against a limit, and deleted when nothing points at it.
+///
+/// Images used to live as base64 inside a settings row, which is workable for
+/// one logo and wrong for a gallery: the row becomes megabytes, every read
+/// carries them, and a database dump grows by the size of the pictures.
+model Upload {
+  id           BigInt   @id @default(autoincrement())
+  /// whose disk quota this counts against
+  resortId     Int
+  resort       Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// relative to the storage root, never absolute — the root is deployment
+  /// configuration and must not be baked into rows
+  path         String   @unique @db.VarChar(255)
+  mediaType    String   @db.VarChar(64)
+  bytes        Int
+  width        Int?
+  height       Int?
+  /// sha256 of the stored bytes: the same picture uploaded twice is one file
+  checksum     String   @db.VarChar(64)
+  uploadedById Int?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  photos ResortPhoto[]
+
+  @@index([resortId])
+  @@map("uploads")
+}
+
+/// A photograph on a resort's site, in the order the owner arranged it.
+///
+/// `roomTypeId` null means it belongs to the resort itself — the cover and the
+/// gallery; set, it belongs to that room type and is shown with it.
+model ResortPhoto {
+  id         Int       @id @default(autoincrement())
+  resortId   Int
+  resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  roomTypeId Int?
+  roomType   RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  uploadId   BigInt
+  upload     Upload    @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  /// what a screen reader says, and what Google reads
+  alt        String?   @db.VarChar(191)
+  sortOrder  Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([resortId, roomTypeId])
+  @@map("resort_photos")
 }

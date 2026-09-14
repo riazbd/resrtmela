@@ -26,6 +26,7 @@ export * from "./calendar-bars";
 export * from "./booking-handoff";
 export * from "./password-reset";
 export * from "./resort-dates";
+export * from "./site";
 
 /** Cross-app constants shared by the API and the console. */
 
@@ -217,6 +218,7 @@ export const PLAN_FEATURES = [
   // but a feature nothing implements does not belong on the shelf: the next
   // edit of any plan still listing it would fail `isPlanFeature` validation
   // for a reason nobody reading the panel could act on.
+  { key: "website", audience: "RESORT", label: "Your own website", blurb: "A site on your own domain, with your rooms and prices always right" },
   { key: "payroll", audience: "RESORT", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
   { key: "imports", audience: "RESORT", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
   // No agency features yet. The agency plan sells tools, not admission (§9);

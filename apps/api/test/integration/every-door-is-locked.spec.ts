@@ -63,6 +63,10 @@ const PUBLIC: RegExp[] = [
   // are reached by somebody who cannot sign in, which is the whole point
   /^POST \/auth\/password\/(forgot|reset)$/,
   /^GET \/auth\/offer\//,
+  // a resort's own shopfront: a stranger with a URL, which is the only kind of
+  // caller it ever has. What it may say is pinned in what-a-resort-publishes
+  /^GET \/site\/[^/]+$/,
+  /^GET \/site\/[^/]+\/vacancy$/,
 ];
 
 /** Path parameters get a value nothing can match, so a bad guard cannot hide behind a 404. */
