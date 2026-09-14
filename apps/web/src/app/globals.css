@@ -57,14 +57,29 @@ html { scroll-behavior: smooth; }
 }
 
 @media (max-width: 639px) {
-  .rm-table-wrap { overflow-x: visible; }
-  .rm-table,
-  .rm-table > tbody,
-  .rm-table > tbody > tr,
-  .rm-table > tbody > tr > td { display: block; width: 100%; }
-  .rm-table > thead { display: none; }
+  /* ---------------------------------------------------------------------
+     A grid keeps its columns.
 
-  .rm-table > tbody > tr {
+     `.rm-grid` is a matrix — a calendar's rooms down the side and its nights
+     across the top — where a cell away from its column header means nothing.
+     Carded, one room became thirty stacked lines reading "T15", "W16", "T17",
+     and a stay spanning three nights could not be seen at all. So the grid
+     opts out of everything below and scrolls sideways instead, which is what
+     the sticky room column in its markup was always built for.
+
+     It comes first so the card rules that follow can exclude it by name.
+     --------------------------------------------------------------------- */
+  .rm-table-wrap { overflow-x: visible; }
+  .rm-grid-wrap { overflow-x: auto; }
+  .rm-grid { min-width: var(--rm-grid-min, 0); }
+
+  .rm-table:not(.rm-grid),
+  .rm-table:not(.rm-grid) > tbody,
+  .rm-table:not(.rm-grid) > tbody > tr,
+  .rm-table:not(.rm-grid) > tbody > tr > td { display: block; width: 100%; }
+  .rm-table:not(.rm-grid) > thead { display: none; }
+
+  .rm-table:not(.rm-grid) > tbody > tr {
     margin-bottom: 0.625rem;
     border: 1px solid rgb(226 232 240);
     border-radius: 0.75rem;
@@ -72,7 +87,7 @@ html { scroll-behavior: smooth; }
     background: #fff;
   }
 
-  .rm-table > tbody > tr > td {
+  .rm-table:not(.rm-grid) > tbody > tr > td {
     display: flex;
     /* wrap: an actions cell holds four buttons, and a flex row that cannot
        wrap pushes them off the card and drags the page with them */
@@ -84,9 +99,9 @@ html { scroll-behavior: smooth; }
     padding: 0.5rem 0 !important;
     border-bottom: 1px solid rgb(241 245 249);
   }
-  .rm-table > tbody > tr > td:last-child { border-bottom: 0; }
+  .rm-table:not(.rm-grid) > tbody > tr > td:last-child { border-bottom: 0; }
 
-  .rm-table > tbody > tr > td[data-label]::before {
+  .rm-table:not(.rm-grid) > tbody > tr > td[data-label]::before {
     content: attr(data-label);
     flex: 0 0 auto;
     max-width: 45%;
@@ -99,9 +114,9 @@ html { scroll-behavior: smooth; }
   }
 
   /* the actions column, and anything else with no header of its own */
-  .rm-table > tbody > tr > td:not([data-label]) { justify-content: flex-start; text-align: left; }
+  .rm-table:not(.rm-grid) > tbody > tr > td:not([data-label]) { justify-content: flex-start; text-align: left; }
   /* an empty cell is a blank line in a card, and means nothing there */
-  .rm-table > tbody > tr > td:empty { display: none; }
+  .rm-table:not(.rm-grid) > tbody > tr > td:empty { display: none; }
 }
 
 /* ---------------------------------------------------------------------------

@@ -276,7 +276,7 @@ export default function CalendarPage() {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div>
             {/*
               Only the room column is given a width. In a fixed layout, space
               left over is shared out among the columns that ask for none — so
@@ -284,16 +284,16 @@ export default function CalendarPage() {
               four of them contains. Giving all of them a width instead shares
               the surplus in proportion, and the days drifted apart.
             */}
-            <Table minWidth={860} tableClassName="table-fixed border-collapse">
+            <Table grid minWidth={860} tableClassName="table-fixed border-collapse">
               <colgroup>
-                <col className="w-[150px]" />
+                <col className="w-[104px] sm:w-[150px]" />
                 {days.map((day) => (
                   <col key={day} />
                 ))}
               </colgroup>
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  <th className="sticky left-0 z-20 min-w-[104px] sm:min-w-[150px] border-b border-r border-slate-200 bg-white px-2 sm:px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                     Room
                   </th>
                   {days.map((day) => {

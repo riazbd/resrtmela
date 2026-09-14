@@ -72,6 +72,15 @@ export function Tabs<T extends string>({
  * data, wrapped in `<Td>`, and spread across fragments and conditionals.
  * Guessing a cell's column by walking rendered children is guesswork;
  * `cellIndex` is the browser's own answer.
+ *
+ * **`grid` is the one opt-out, and a calendar is why it exists.** Cards suit a
+ * table whose row is a record and whose cell is one of its fields. A calendar
+ * is a matrix: the row is a room, the cell is a night, and the cell means
+ * nothing away from the column above it. Carded, room 101 became thirty
+ * stacked lines reading "T15", "W16", "T17" — one screen per room per week,
+ * with no stay visible anywhere. A grid keeps its columns and scrolls
+ * sideways, because for a month of nights on a 390px screen there is no
+ * shape that fits, and the honest answer is the one that can still be read.
  */
 export function Table({
   children,
@@ -79,11 +88,14 @@ export function Table({
   className = "",
   /** Classes for the `<table>` itself — `table-fixed`, `text-sm`, and the like. */
   tableClassName = "",
+  /** A matrix, not a list of records: keep the columns on a phone and scroll. */
+  grid = false,
 }: {
   children: React.ReactNode;
   minWidth?: number;
   className?: string;
   tableClassName?: string;
+  grid?: boolean;
 }) {
   const host = useRef<HTMLTableElement>(null);
 
@@ -92,6 +104,14 @@ export function Table({
   useEffect(() => {
     const table = host.current;
     if (!table) return;
+    // a grid's cells are never carded, so a label on them is dead markup that
+    // would only make the wrong layout look deliberate if it ever arrived
+    if (grid) {
+      for (const cell of table.querySelectorAll<HTMLTableCellElement>("tbody td")) {
+        cell.removeAttribute("data-label");
+      }
+      return;
+    }
     const labels = [...table.querySelectorAll<HTMLTableCellElement>("thead th")].map((th) =>
       (th.textContent ?? "").trim(),
     );
@@ -105,11 +125,17 @@ export function Table({
   });
 
   return (
-    <div className={`rm-table-wrap ${className}`}>
+    <div className={`rm-table-wrap ${grid ? "rm-grid-wrap " : ""}${className}`}>
       <table
         ref={host}
-        className={`rm-table w-full ${tableClassName}`.trim()}
-        style={{ "--rm-min": `${minWidth}px` } as React.CSSProperties}
+        className={`rm-table ${grid ? "rm-grid " : ""}w-full ${tableClassName}`.trim()}
+        style={
+          {
+            "--rm-min": `${minWidth}px`,
+            // a grid holds its width at every size; a list only above `sm`
+            ...(grid ? { "--rm-grid-min": `${minWidth}px` } : {}),
+          } as React.CSSProperties
+        }
       >
         {children}
       </table>

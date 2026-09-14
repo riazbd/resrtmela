@@ -325,21 +325,21 @@ export default function AgencyCalendarPage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div>
               {/* `table-fixed` with a width only on the room column: the surplus
                   is then shared equally between the day columns, so a bar
                   spanning four of them cannot pull the body out of step with
                   its own header. */}
-              <Table minWidth={860} tableClassName="table-fixed border-collapse">
+              <Table grid minWidth={860} tableClassName="table-fixed border-collapse">
                 <colgroup>
-                  <col className="w-[150px]" />
+                  <col className="w-[104px] sm:w-[150px]" />
                   {days.map((day) => (
                     <col key={day} />
                   ))}
                 </colgroup>
                 <thead>
                   <tr>
-                    <th className="sticky left-0 z-20 min-w-[150px] border-b border-r border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    <th className="sticky left-0 z-20 min-w-[104px] sm:min-w-[150px] border-b border-r border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                       Room
                     </th>
                     {days.map((day) => {

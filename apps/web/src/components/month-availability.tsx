@@ -97,7 +97,11 @@ export function MonthAvailability({
             >
               <div className={`text-lg font-bold leading-none ${l.num}`}>{Number(day.slice(8, 10))}</div>
               <div className={`mt-1 text-[11px] font-medium leading-none ${l.note}`}>{l.label}</div>
-              {isWeekend(day) && <div className="mt-1 text-[9px] font-semibold uppercase text-amber-600">Weekend</div>}
+              {/* the word is wider than a 47px cell on a phone, where it spilled into
+                  Saturday; the amber column header already says which days these are */}
+              {isWeekend(day) && (
+                <div className="mt-1 hidden text-[9px] font-semibold uppercase text-amber-600 sm:block">Weekend</div>
+              )}
             </button>
           );
         })}
