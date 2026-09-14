@@ -65,6 +65,44 @@ export async function api<T = unknown>(
 }
 
 /**
+ * Send a file to the API as itself.
+ *
+ * `api()` writes JSON, and a photograph sent as JSON is base64 — a third
+ * larger, for a picture that may be several megabytes. The API gives `image/*`
+ * its own body parser precisely so the bytes can travel as bytes, and this is
+ * the client half of that. Headers rather than a query string for the extras,
+ * because a caption belongs in a header and not in a server log.
+ */
+export async function upload<T = unknown>(
+  path: string,
+  file: Blob,
+  extra: Record<string, string> = {},
+): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...extra,
+    },
+    body: file,
+  });
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    // empty body
+  }
+  if (!res.ok) {
+    const msg =
+      (payload as { message?: string })?.message ?? `Upload failed (${res.status})`;
+    throw new ApiError(res.status, String(msg), payload);
+  }
+  return payload as T;
+}
+
+/**
  * Download a file the API produced, with the session's token attached.
  *
  * A plain <a href> cannot carry the Authorization header, and putting the

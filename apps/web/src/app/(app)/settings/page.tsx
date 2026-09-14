@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
+import { WebsiteTab } from "./website-tab";
 import { changedContactFields, displayEmail, displayPhone, emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
 interface ResortDetail {
@@ -154,7 +155,7 @@ interface ApiKeyRow {
 // API went with the guest surface (2026-09-11 design, §4.3). The tab's code stays
 // so it can come back with the feature; a screen that mints a key opening nothing
 // is a lie told to a customer.
-const TABS = ["Resort info", "Subscription", "Users & Roles", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "Your data"] as const;
+const TABS = ["Resort info", "Subscription", "Website", "Users & Roles", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "Your data"] as const;
 
 export default function SettingsPage() {
   const { activeResort, isManagement, can } = useAuth();
@@ -310,6 +311,7 @@ export default function SettingsPage() {
       )}
 
       {tab === "Subscription" && rid && can("billing.view") && <SubscriptionTab rid={rid} />}
+      {tab === "Website" && rid && <WebsiteTab rid={rid} />}
       {tab === "Users & Roles" && rid && <UsersTab rid={rid} />}
       {tab === "Permissions" && rid && <RolesTab rid={rid} />}
       {tab === "Agent access" && rid && <AccessTab rid={rid} />}
