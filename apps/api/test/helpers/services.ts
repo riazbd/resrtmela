@@ -15,6 +15,7 @@ import { DiscountService } from "../../src/common/discount.service";
 import { PublishedSiteService } from "../../src/site/published-site.service";
 import { V1Service } from "../../src/v1/v1.service";
 import { ApiKeyService } from "../../src/v1/api-key.service";
+import { WebhookService } from "../../src/v1/webhook.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
@@ -63,6 +64,9 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     makeOptionsService(prisma),
     makeTaxService(prisma),
     makeCommissionService(prisma),
+    // queues rows and posts nothing: `deliverDue` is the sweep's, and no test
+    // of a booking should be reaching anybody's website
+    new WebhookService(prisma, async () => ({ status: 200 })),
   );
 }
 

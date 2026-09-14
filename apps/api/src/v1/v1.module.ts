@@ -5,6 +5,7 @@ import { BookingsModule } from "../bookings/bookings.module";
 import { ApiKeyService } from "./api-key.service";
 import { V1Service } from "./v1.service";
 import { V1Controller } from "./v1.controller";
+import { WebhookModule } from "./webhook.module";
 
 /**
  * The API a resort builds against (2026-09-15 design).
@@ -14,7 +15,7 @@ import { V1Controller } from "./v1.controller";
  * service the front desk uses. That is the whole design in two imports.
  */
 @Module({
-  imports: [CommonModule, SiteModule, BookingsModule],
+  imports: [CommonModule, SiteModule, BookingsModule, WebhookModule],
   providers: [ApiKeyService, V1Service],
   controllers: [V1Controller],
   exports: [ApiKeyService],

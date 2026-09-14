@@ -22,6 +22,7 @@ import { CommissionService } from "../common/commission.service";
 import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
+import { WebhookService } from "../v1/webhook.service";
 
 export interface CreateBookingInput {
   resortId: number;
@@ -126,6 +127,7 @@ export class BookingsService {
     @Inject(OptionsService) private readonly options: OptionsService,
     @Inject(TaxService) private readonly tax: TaxService,
     @Inject(CommissionService) private readonly commission: CommissionService,
+    @Inject(WebhookService) private readonly webhooks: WebhookService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -587,6 +589,20 @@ export class BookingsService {
     } catch {
       // never block booking creation on notifications
     }
+    /**
+     * And the resort's own website, if it asked to be told.
+     *
+     * A row, not a request — `emit` swallows its own failures for the same
+     * reason the notifications above are wrapped: a booking that is already in
+     * the database must not be lost to something downstream of it.
+     */
+    await this.webhooks.emit(input.resortId, "booking.created", {
+      code: booking.code,
+      checkIn,
+      checkOut,
+      adults: input.adults,
+      children: input.children,
+    });
     return this.detail(claims, booking.id);
   }
 
@@ -1132,6 +1148,13 @@ export class BookingsService {
         tx,
       );
     });
+    // cancelled and no-show free their nights, which is the fact a resort's own
+    // website most needs: it was showing that room as taken a second ago
+    await this.webhooks.emit(
+      b.resortId,
+      to === "CANCELLED" || to === "NO_SHOW" ? "booking.cancelled" : "booking.changed",
+      { code: b.code, state: to },
+    );
     return this.detail(claims, bookingId);
   }
 

@@ -222,6 +222,7 @@ model Resort {
   /// what this resort publishes about itself, and the pictures it publishes
   site             ResortSite?
   domains          ResortDomain[]
+  webhooks         WebhookEndpoint[]
   sitePhotos       ResortPhoto[]
   uploads          Upload[]
   rooms            Room[]
@@ -1815,4 +1816,47 @@ model ResortDomain {
 
   @@index([resortId])
   @@map("resort_domains")
+}
+
+/// Where a resort's own website wants to be told things (2026-09-15 design, §6).
+model WebhookEndpoint {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  url       String   @db.VarChar(500)
+  /// what every call to this endpoint is signed with; shown once, like a key
+  secret    String   @db.VarChar(64)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([resortId])
+  @@map("webhook_endpoints")
+}
+
+/// One call, and everything that has happened to it.
+///
+/// A row rather than a fire-and-forget request, because outbound HTTP with
+/// retries is a queue whether or not anybody calls it one — and because "did
+/// they get it" is a question the resort will ask, and a log line is not an
+/// answer anybody can read.
+model WebhookDelivery {
+  id            BigInt          @id @default(autoincrement())
+  endpointId    Int
+  endpoint      WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  event         String          @db.VarChar(40)
+  /// exactly what was sent, so it can be sent again unchanged
+  payload       Json
+  attempts      Int             @default(0)
+  /// when the sweep should try again; null once it has given up for good
+  nextAttemptAt DateTime?       @default(now())
+  lastStatus    Int?
+  lastError     String?         @db.VarChar(255)
+  deliveredAt   DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([nextAttemptAt, deliveredAt])
+  @@index([endpointId, createdAt])
+  @@map("webhook_deliveries")
 }
