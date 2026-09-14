@@ -102,7 +102,6 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // the onboarding question (2026-09-11 design, §8.4): asked, never defaulted
-  const [agentsOpen, setAgentsOpen] = useState<boolean | null>(null);
   const [liveAgencies, setLiveAgencies] = useState<number | null>(null);
   useEffect(() => {
     fetch(`${API_URL}/cms/agencies/count`)
@@ -151,7 +150,6 @@ export default function SignupPage() {
           // against the plan and falls back to monthly rather than refusing,
           // so a stale link cannot cost somebody their signup.
           scheduleId: shelf?.id,
-          agentsOpen: agentsOpen === true,
         },
       });
       // adoptToken loads /auth/me and activates the first resort — the same
@@ -308,8 +306,16 @@ export default function SignupPage() {
                   <span className="text-slate-400">Plan:</span> {entryLine || "—"}
                 </div>
               </div>
+              {/*
+                * This used to be a question, with the submit button dead until
+                * it was answered — the first opinion a new customer was asked
+                * for, about a part of the business they had not seen yet, and
+                * the answer that starts a resort closed for good. Whether
+                * agencies sell here follows from the plan now, so this says
+                * what is about to be true rather than asking.
+                */}
               <div className="rounded-xl p-4 ring-1 ring-slate-200">
-                <div className="text-sm font-semibold text-slate-900">Will travel agencies sell your rooms?</div>
+                <div className="text-sm font-semibold text-slate-900">Travel agencies can sell your rooms</div>
                 <p className="mt-1 text-xs leading-relaxed text-slate-500">
                   A travel agency books rooms for its own clients and earns a commission from you on each booking — a
                   percentage of the rent you set, paid only when it brings a guest. Every agency here is verified by the
@@ -319,30 +325,14 @@ export default function SignupPage() {
                       {" "}<b className="text-slate-700">{liveAgencies} verified {liveAgencies === 1 ? "agency is" : "agencies are"}</b> selling right now.
                     </>
                   )}{" "}
-                  You can block any one of them, or change your mind, in Settings.
+                  You can block any one of them in Settings, and set a different commission for any of them.
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setAgentsOpen(true)}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ring-1 ${agentsOpen === true ? "bg-brand-600 text-white ring-brand-600" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
-                  >
-                    Yes, open to agencies
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAgentsOpen(false)}
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ring-1 ${agentsOpen === false ? "bg-slate-700 text-white ring-slate-700" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
-                  >
-                    Not now
-                  </button>
-                </div>
               </div>
               {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
               <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(2)}>
                 ← Back
               </Button>
-              <Button type="submit" className="w-full" loading={busy} disabled={agentsOpen === null}>
+              <Button type="submit" className="w-full" loading={busy}>
                 Create workspace & sign in
               </Button>
               <p className="text-center text-[11px] text-slate-400">

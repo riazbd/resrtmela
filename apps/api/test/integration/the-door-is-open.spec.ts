@@ -5,12 +5,19 @@
  * ten agencies and fifty resorts is five hundred clicks, by someone who cannot
  * vet a travel agency by reading its name (2026-09-11 design, §8). Identity is
  * the platform's job and is done once, at verification. What is left to the
- * resort is commercial: is it open to agents, which agency does it refuse, and
- * did it strike a different commission with one of them.
+ * resort is commercial: which agency does it refuse, and did it strike a
+ * different commission with one of them.
  *
  *   selling access = agency verified and paid up
- *                  AND resort open to agents
+ *                  AND the resort's plan includes agents
  *                  AND this agency not blocked by this resort
+ *
+ * The middle line used to be `agentsOpen`, a switch on the resort that started
+ * off. Every resort therefore began closed and had to be opened one at a time,
+ * which is the five hundred clicks again wearing a different hat — and it made
+ * "Agents with wallets" a plan feature that gated one button rather than the
+ * thing it names. The switch is gone. What a resort buys is what it gets, and
+ * refusing one agency is still the resort's to do.
  *
  * The phase-5 gate (§10): selling access is computed, not stored — closing a
  * resort or blocking an agency takes effect on the next request, not the next
@@ -18,10 +25,11 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
+import { testPrisma, resetDb, scheduleOf, seedResort, type Fixture } from "../helpers/db";
 import { makeAvailabilityService, makeBookingsService, makeCommissionService, makePlatformService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import { EngageService } from "../../src/engage/engage.service";
+import { PlatformService } from "../../src/platform/platform.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
@@ -39,7 +47,6 @@ const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOStrin
 type Terms = { blocked?: boolean; commissionKind?: string | null; commissionRate?: number | null };
 const platform = () =>
   makePlatformService(asPrisma) as unknown as ReturnType<typeof makePlatformService> & {
-    setAgentsOpen(c: JwtClaims, resortId: number, open: boolean): Promise<unknown>;
     setAgencyTerms(c: JwtClaims, resortId: number, accountId: number, t: Terms): Promise<unknown>;
     resortAgencies(c: JwtClaims, resortId: number): Promise<{ accountId: number; name: string; blocked: boolean; commissionRate: number | null }[]>;
   };
@@ -78,13 +85,45 @@ describe("selling access is computed on every request", () => {
     await expect(book(agent, elsewhere.resortId, elsewhere.rooms[0]!.id)).resolves.toBeTruthy();
   });
 
-  it("stops at the next request once the resort closes to agents — same token", async () => {
+  /**
+   * Only a real subscription can take a feature away — a tenant held to no plan
+   * at all may use everything, which is what the fixture is and why every other
+   * test here sells without arranging anything.
+   */
+  const onPlan = async (name: string) =>
+    prisma.subscription.create({
+      data: {
+        accountId: fx.tenantId,
+        plan: name,
+        status: "ACTIVE",
+        fee: 2500 as never,
+        scheduleId: await scheduleOf(prisma as unknown as PrismaClient, name),
+        startedAt: new Date(),
+        renewsAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
+
+  it("stops at the next request once the plan stops including agents — same token", async () => {
     await expect(search()).resolves.toHaveLength(2);
 
-    await platform().setAgentsOpen(admin, fx.resortId, false);
+    // STARTER carries no features in the catalogue, so buying it is the resort
+    // deciding not to pay for agencies
+    await onPlan("STARTER");
 
     await expect(search()).rejects.toMatchObject({ status: 403 });
     await expect(book()).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("sells again the moment the platform puts agents in that plan", async () => {
+    await onPlan("STARTER");
+    await expect(search()).rejects.toMatchObject({ status: 403 });
+
+    await prisma.platformPlan.update({
+      where: { name: "STARTER" },
+      data: { features: ["agents"] as never },
+    });
+
+    await expect(search()).resolves.toHaveLength(2);
   });
 
   it("stops at the next request once the resort blocks the agency, and resumes when it lifts the block", async () => {
@@ -169,22 +208,49 @@ describe("the approval ceremony", () => {
       expect(m in EngageService.prototype).toBe(false);
     }
   });
+
+  /**
+   * And neither is there a switch to forget to flip. A resort that had to be
+   * opened by hand is the approval queue with one fewer participant.
+   */
+  it("left no switch behind on the platform service", () => {
+    expect("setAgentsOpen" in PlatformService.prototype).toBe(false);
+  });
 });
 
-describe("onboarding asks", () => {
-  it("keeps the new resort's answer, and starts closed when it gave none", async () => {
-    const signup = (n: number, agentsOpen?: boolean) =>
-      (new AuthService(asPrisma) as unknown as { signup(i: Record<string, unknown>): Promise<unknown> }).signup({
-        companyName: `Door Group ${n}`, resortName: `Door Resort ${n}`, name: "Owner",
-        email: `door${n}@example.com`, phone: `+8801766000${n}00`, password: "Password123!",
-        ...(agentsOpen === undefined ? {} : { agentsOpen }),
-      });
+describe("onboarding", () => {
+  /**
+   * The signup form used to make this a required question, with the submit
+   * button dead until it was answered — the very first thing a new customer was
+   * asked to have an opinion about, before they had seen a single screen.
+   *
+   * Nothing asks now, and nothing is stored. Whether the resort sells through
+   * agencies is a consequence of the plan it is on, which is a thing it can be
+   * sold rather than a switch it can leave off by accident.
+   */
+  it("does not ask, keeps no answer, and needs no switch thrown afterwards", async () => {
+    await (new AuthService(asPrisma) as unknown as { signup(i: Record<string, unknown>): Promise<unknown> }).signup({
+      companyName: "Door Group", resortName: "Door Resort", name: "Owner",
+      email: "door@example.com", phone: "+8801766000100", password: "Password123!",
+    });
 
-    await signup(1, true);
-    await signup(2);
+    const resort = await prisma.resort.findFirstOrThrow({ where: { name: "Door Resort" } });
+    expect("agentsOpen" in resort).toBe(false);
 
-    const open = await prisma.resort.findFirstOrThrow({ where: { name: "Door Resort 1" } });
-    const closed = await prisma.resort.findFirstOrThrow({ where: { name: "Door Resort 2" } });
-    expect([open.agentsOpen, closed.agentsOpen]).toEqual([true, false]);
+    // the entry plan a signup lands on carries no features in this catalogue,
+    // so the new resort does not sell through agencies — and that is the plan
+    // talking, not an unticked box
+    const sub = await prisma.subscription.findFirstOrThrow({
+      where: { account: { resorts: { some: { id: resort.id } } } },
+    });
+    await expect(search(agent, resort.id)).rejects.toMatchObject({ status: 403 });
+
+    await prisma.platformPlan.update({
+      where: { name: sub.plan },
+      data: { features: ["agents"] as never },
+    });
+
+    // no second step: the resort never had to be opened
+    await expect(search(agent, resort.id)).resolves.toBeTruthy();
   });
 });

@@ -233,9 +233,9 @@ export async function seedResort(prisma: PrismaClient): Promise<Fixture> {
       // describe the same resort
       agentCommissionKind: "PERCENT",
       agentCommissionRate: 10,
-      // open to agencies, so the fixture agent sells it the way every agent
-      // does now: by being verified, not by holding a row in user_resorts
-      agentsOpen: true,
+      // nothing here opens it to agencies: the fixture tenant buys no
+      // subscription, so it is held to no plan and may use every feature —
+      // which is what lets the fixture agent sell it
     },
   });
   const roomType = await prisma.roomType.create({

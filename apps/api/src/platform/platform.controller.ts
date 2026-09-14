@@ -154,10 +154,6 @@ class RolePatchDto {
   @IsOptional() @IsArray() permissions?: string[];
 }
 
-class AgentsOpenDto {
-  @IsBoolean() open!: boolean;
-}
-
 class AgencyTermsDto {
   @IsOptional() @IsBoolean() blocked?: boolean;
   @IsOptional() @IsIn(["PERCENT", "FLAT"]) commissionKind?: string;
@@ -454,9 +450,6 @@ export class PlatformController {
   }
 
   // owner — invite agent by email
-  @Post("resorts/:id/agents-open") setAgentsOpen(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: AgentsOpenDto) {
-    return this.platform.setAgentsOpen(req.user, id, dto.open);
-  }
   @Get("resorts/:id/agencies") resortAgencies(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.platform.resortAgencies(req.user, id);
   }

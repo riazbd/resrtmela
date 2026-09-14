@@ -1,0 +1,13 @@
+-- The switch that made every resort start closed.
+--
+-- `agentsOpen` defaulted to false, so a new resort sold through no agency until
+-- its owner found a toggle in Settings and turned it on. That is the per-resort
+-- approval the 2026-09-11 design set out to remove, rebuilt out of a checkbox —
+-- and it left "Agents with wallets", a feature the platform charges for, gating
+-- one button rather than the thing it names.
+--
+-- Selling access now reads the resort's plan instead (see selling-access.ts).
+-- No data is lost that the plan does not already say: a resort on a plan with
+-- `agents` sells through agencies, one without does not, and refusing a
+-- particular agency is still a row in `resort_agencies`.
+ALTER TABLE `resorts` DROP COLUMN `agentsOpen`;

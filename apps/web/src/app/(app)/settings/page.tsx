@@ -5,7 +5,7 @@ import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
-import { PERMISSIONS, RESORT_PERMISSION_GROUPS, scheduleSentence, type Phase } from "@rh/shared";
+import { PERMISSIONS, RESORT_PERMISSION_GROUPS, planFeatureLabel, scheduleSentence, type Phase } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
@@ -706,7 +706,10 @@ function AccessTab({ rid }: { rid: number }) {
   const { push } = useToast();
   // a failed load must not read as "no agencies"
   const fail = useLoadFailure();
-  const [open, setOpen] = useState<boolean | null>(null);
+  // whether agencies may sell here is the plan's answer, not a switch on this
+  // screen — the console already knows the plan's features
+  const { features } = useAuth();
+  const open = features.includes("agents");
   const [rows, setRows] = useState<AgencyTermsRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deal, setDeal] = useState<Record<number, string>>({});
@@ -714,7 +717,6 @@ function AccessTab({ rid }: { rid: number }) {
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
-    api<{ agentsOpen?: boolean }>(`/resorts/${rid}`).then((r) => setOpen(!!r.agentsOpen)).catch(() => setOpen(null));
     api<AgencyTermsRow[]>(`/resorts/${rid}/agencies`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
   }, [rid]);
   useEffect(() => load(), [load]);
@@ -731,12 +733,6 @@ function AccessTab({ rid }: { rid: number }) {
       setBusy(null);
     }
   }
-  const toggleDoor = () =>
-    run(
-      "door",
-      () => api(`/resorts/${rid}/agents-open`, { method: "POST", body: { open: !open } }),
-      open ? "Closed to agencies — they stop selling on their next click" : "Open to agencies — every verified agency can now sell your rooms",
-    );
   const toggleBlock = (a: AgencyTermsRow) =>
     run(
       `b${a.accountId}`,
@@ -773,17 +769,12 @@ function AccessTab({ rid }: { rid: number }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
       <div className="space-y-4">
-        <Card title="Open to travel agencies?">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="max-w-lg text-sm text-slate-600">
-              {open
-                ? "Open: every agency the platform has verified can find your resort and book for its clients, on your commission. Block any agency below — it takes effect on its next click."
-                : "Closed: no agency can sell your rooms. Open it to let every verified agency book for its clients; you can still block any one of them."}
-            </p>
-            <Button onClick={toggleDoor} loading={busy === "door"} disabled={open === null} variant={open ? "ghost" : undefined}>
-              {open ? "Close to agencies" : "Open to agencies"}
-            </Button>
-          </div>
+        <Card title="Travel agencies">
+          <p className="max-w-2xl text-sm text-slate-600">
+            {open
+              ? "Every agency the platform has verified can find your resort and book for its clients, on your commission. There is nothing to switch on. Block any agency below — it takes effect on its next click."
+              : `Your plan does not include ${planFeatureLabel("agents")}, so no agency can sell your rooms. Ask the platform to change the plan.`}
+          </p>
         </Card>
 
         <Card title={`Verified agencies (${rows.length})`}>

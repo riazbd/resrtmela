@@ -147,7 +147,6 @@ export class AuthService {
     /** MONTHLY or YEARLY, as picked on the pricing page. Monthly when unsaid. */
     scheduleId?: number;
     /** the onboarding question: open to travel agencies? Unanswered is closed. */
-    agentsOpen?: boolean;
   }) {
     // both, stored the way login reads them. Signup used to keep only the
     // phone, so the owner who signed up alone was the one person a password
@@ -213,7 +212,6 @@ export class AuthService {
           tenantId: tenant.id,
           name: input.resortName,
           location: input.location,
-          agentsOpen: input.agentsOpen === true,
           // timezone, currency and locale come from the schema's defaults;
           // repeating them here was a second place to change when a resort
           // outside Bangladesh signs up, and the one nobody would remember

@@ -2,19 +2,28 @@
  * Who may sell a resort (2026-09-11 design, §8).
  *
  *   selling access = agency verified and paid up
- *                  AND resort open to agents
+ *                  AND the resort's plan includes agents
  *                  AND this agency not blocked by this resort
  *
  * Computed here, on every request. It used to be a `user_resorts` row, turned
  * into the login token's `resortIds` — so closing the door on an agency did
  * nothing until its token expired a week later, and every agency sat in the
  * resort's team list because that table was the only place access could live.
+ *
+ * The middle line used to be `Resort.agentsOpen`, a switch the owner had to
+ * find and turn on, defaulting to off. So every resort started shut and was
+ * opened one at a time — the approval queue this design removed, rebuilt out of
+ * a checkbox — and "Agents with wallets", a feature the platform charges for,
+ * gated nothing but that checkbox. The plan is the door now: a resort sells
+ * through agencies because it bought a plan that does, and the only thing left
+ * to decide by hand is refusing one particular agency.
  */
 import type { PrismaService } from "../prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
+import { featuresForResorts } from "./plan-limits.service";
 import { canAccessResort, forbid } from "./rbac";
 
-type Db = Pick<PrismaService, "user" | "resort">;
+type Db = Pick<PrismaService, "user" | "resort" | "subscription" | "platformPlan" | "tenant">;
 
 export interface Agency {
   /** the agency's account; null only for an agent older than accounts */
@@ -57,19 +66,27 @@ export async function agencyOf(prisma: Db, userId: number): Promise<Agency> {
   };
 }
 
-/** The resorts open to this agency right now — `only` narrows to one. Oldest first. */
+/**
+ * The resorts open to this agency right now — `only` narrows to one. Oldest
+ * first.
+ *
+ * Two steps rather than one `where`, because "does this resort's plan include
+ * agents" is not a column: it is the newest live subscription's plan's feature
+ * list, with a resort held to no plan at all allowed everything. That rule is
+ * `featuresForResorts`, asked once for the whole list rather than per resort.
+ */
 export async function sellableFor(prisma: Db, accountId: number | null, only?: number): Promise<number[]> {
   const rows = await prisma.resort.findMany({
     where: {
       status: "active",
-      agentsOpen: true,
       ...(only != null ? { id: only } : {}),
       ...(accountId != null ? { agencyTerms: { none: { accountId, blocked: true } } } : {}),
     },
     select: { id: true },
     orderBy: { id: "asc" },
   });
-  return rows.map((r) => r.id);
+  const features = await featuresForResorts(prisma, rows.map((r) => r.id));
+  return rows.filter((r) => features.get(r.id)?.includes("agents")).map((r) => r.id);
 }
 
 /** The resorts this agent may sell right now, by the one rule. */
@@ -97,5 +114,8 @@ export async function requireSellingAccess(prisma: Db, claims: JwtClaims, resort
   const agency = await agencyOf(prisma, claims.userId);
   if (agency.refusal) throw forbid(agency.refusal);
   const [open] = await sellableFor(prisma, agency.accountId, resortId);
+  // deliberately says nothing about which of the two it is: an agency has no
+  // business reading a resort's plan, and being blocked is the resort's to
+  // explain if it wants to
   if (open == null) throw forbid("This resort is not open to your agency");
 }

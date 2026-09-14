@@ -33,7 +33,6 @@ const engage = () => makeEngageService(asPrismaService);
 beforeEach(async () => {
   await resetDb(prisma as unknown as PrismaClient);
   fx = await seedResort(prisma as unknown as PrismaClient);
-  await prisma.resort.update({ where: { id: fx.resortId }, data: { agentsOpen: true } });
 });
 
 afterAll(async () => {

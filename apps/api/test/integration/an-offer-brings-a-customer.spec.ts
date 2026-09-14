@@ -18,7 +18,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
-import { testPrisma, resetDb, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
+import { testPrisma, resetDb, scheduleOf, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
 import { makePlatformService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import { PlatformService } from "../../src/platform/platform.service";
@@ -212,10 +212,26 @@ describe("a resort inviting an agency", () => {
     expect((await accountOf("Offer Travels")).status).toBe("pending");
   });
 
-  it("will not invite an agency to a resort that is closed to agencies", async () => {
-    await prisma.resort.update({ where: { id: fx.resortId }, data: { agentsOpen: false } });
+  /**
+   * An invitation is a promise the resort has to be able to keep. A plan
+   * without agents means the invited agency signs up, is verified, and finds
+   * the resort that asked for it will not sell — so the refusal happens here,
+   * where somebody can read it.
+   */
+  it("will not invite an agency to a resort whose plan does not include agents", async () => {
+    await prisma.subscription.create({
+      data: {
+        accountId: fx.tenantId,
+        plan: "STARTER",
+        status: "ACTIVE",
+        fee: 2500 as never,
+        scheduleId: await scheduleOf(prisma as unknown as PrismaClient, "STARTER"),
+        startedAt: new Date(),
+        renewsAt: new Date(Date.now() + 30 * 86_400_000),
+      },
+    });
 
-    await expect(platform().inviteAgency(admin, fx.resortId, { email: "invitee@example.com" })).rejects.toMatchObject({ status: 400 });
+    await expect(platform().inviteAgency(admin, fx.resortId, { email: "invitee@example.com" })).rejects.toMatchObject({ status: 403 });
     expect(outbox).toHaveLength(0);
   });
 

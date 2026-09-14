@@ -9,7 +9,7 @@ import { EmailService } from "../notifications/email.service";
 import { PlatformSettingsService, parseCreditPacks, type CreditPack } from "../common/platform-settings.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { PLACEHOLDER_EMAIL_SUFFIX, reachableEmail, reachablePhone } from "../common/contact";
-import { agencyOf } from "../common/selling-access";
+import { agencyOf, sellableFor } from "../common/selling-access";
 
 @Injectable()
 export class EngageService {
@@ -83,12 +83,20 @@ export class EngageService {
      */
     if (claims.role !== ROLE.AGENT) throw forbid("Agents only");
     const agency = await agencyOf(this.prisma, claims.userId);
+    /**
+     * The same rule the booking doors run, rather than a second copy of it.
+     * This `where` used to spell the rule out itself, which is how the shop
+     * window came to list a resort a click later refused to sell.
+     *
+     * Asked without the refusal, deliberately: `sellableFor` answers "which
+     * resorts are selling through agencies and have not blocked this one",
+     * which is the window. Whether *this* agency may buy yet is the refusal,
+     * and it is what marks each row WAITING below — an unverified agency is
+     * meant to see what it is waiting for.
+     */
+    const sellable = await sellableFor(this.prisma, agency.accountId);
     const resorts = await this.prisma.resort.findMany({
-      where: {
-        status: "active",
-        agentsOpen: true,
-        ...(agency.accountId != null ? { agencyTerms: { none: { accountId: agency.accountId, blocked: true } } } : {}),
-      },
+      where: { id: { in: sellable } },
       select: { id: true, name: true, location: true, _count: { select: { rooms: true } } },
       orderBy: { id: "asc" },
     });
@@ -427,8 +435,7 @@ export class EngageService {
       // account has an email now, but an agent who had none was given a
       // `.invalid` placeholder, which never delivers — mailing it would spend
       // a credit on nobody
-      const resort = await this.prisma.resort.findUnique({ where: { id: input.resortId }, select: { agentsOpen: true } });
-      const agents = resort?.agentsOpen
+      const agents = (await this.planLimits.hasFeature(input.resortId, "agents"))
         ? await this.prisma.user.findMany({
             where: {
               role: "AGENT",

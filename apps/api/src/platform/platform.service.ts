@@ -1723,16 +1723,15 @@ export class PlatformService {
 
   // ─────────────────── the open door: a resort and the agencies ───────────────────
 
-  /** Open or close this resort to agencies — one switch, felt on the next request (§8.2). */
-  async setAgentsOpen(claims: JwtClaims, resortId: number, open: boolean) {
-    requireResortAccess(claims, resortId);
-    await this.perms.require(claims, resortId, "agents.manage");
-    // letting agents in is the act of using the feature; closing always works
-    if (open) await this.planLimits.requireFeature(resortId, "agents");
-    await this.prisma.resort.update({ where: { id: resortId }, data: { agentsOpen: open } });
-    await this.audit.log({ actorId: claims.userId, resortId, action: open ? "agents.open" : "agents.close", entity: "resort", entityId: resortId });
-    return { agentsOpen: open };
-  }
+  /**
+   * `setAgentsOpen` stood here: one switch per resort, off by default, which
+   * every owner had to find before a single agency could sell for them. It was
+   * the approval queue §8 removed, rebuilt out of a checkbox, and it made
+   * "Agents with wallets" a plan feature that unlocked a button rather than the
+   * thing it is named after. The plan is the door now — see `selling-access.ts`
+   * — and what is left below is the part that was always the resort's to
+   * decide: which agency it refuses, and on what commission.
+   */
 
   /**
    * Every verified agency, with this resort's terms beside it: blocked or not,
@@ -2260,9 +2259,10 @@ export class PlatformService {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "agents.manage");
     const to = contactEmail(input.email);
-    const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true, agentsOpen: true } });
-    // an invited agency could not sell a closed resort, so the invitation would be a promise the resort is not keeping
-    if (!resort.agentsOpen) throw badRequest("Open the resort to agencies first — an invited agency cannot sell it while it is closed.");
+    const resort = await this.prisma.resort.findUniqueOrThrow({ where: { id: resortId }, select: { name: true } });
+    // an invitation is a promise the resort has to be able to keep: a plan
+    // without agents means the invited agency arrives and cannot sell
+    await this.planLimits.requireFeature(resortId, "agents");
 
     const existing = await this.prisma.user.findFirst({ where: { email: to } });
     if (existing) {

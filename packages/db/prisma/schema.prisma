@@ -183,10 +183,6 @@ model Resort {
   // would have thought: it named the clients of every *other* agency selling
   // this resort, not just the resort's own walk-in guests. Whose booking a
   // night belongs to is nobody else's to read. See 20260917100000.
-  /// Open to agencies (2026-09-11 design, §8): every verified agency in good
-  /// standing may sell this resort, unless the resort has blocked it. Asked at
-  /// onboarding; starts closed.
-  agentsOpen        Boolean   @default(false)
   /// the fallback when a resort has defined no tax rules; see TaxRule
   taxRatePct        Decimal   @default(0.00) @db.Decimal(5, 2)
   /// Business Identification Number — a VAT invoice in Bangladesh must show it

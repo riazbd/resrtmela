@@ -369,7 +369,6 @@ export async function seedTrade(prisma: PrismaClient, ctx: TradeCtx) {
     ["discount.create", "discount_offer", { name: "Monsoon 10% off" }],
     ["expense.create", "expense", { category: "Food & kitchen", amount: 6400 }],
     ["fb.bill.create", "fb_bill", { code: `${prefixes.fb}-00004` }],
-    ["agents.open", "resort", { agentsOpen: true }],
   ];
   for (const [i, [action, entity, diff]] of actions.entries()) {
     await prisma.auditLog.create({

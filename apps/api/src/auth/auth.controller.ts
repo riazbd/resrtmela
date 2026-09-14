@@ -44,7 +44,6 @@ class SignupDto {
   /** MONTHLY or YEARLY, from the toggle on the pricing page. */
   /** Which `PlanSchedule` the pricing page was showing when they pressed the button. */
   @IsOptional() @IsInt() @Min(1) scheduleId?: number;
-  @IsOptional() @IsBoolean() agentsOpen?: boolean;
 }
 
 class SignupAgencyDto {
