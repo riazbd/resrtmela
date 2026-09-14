@@ -41,6 +41,7 @@ function mount(opts: {
   const storage = opts.storage ?? memoryStorage();
   const cache = opts.cache === undefined ? new CacheStore(memoryStorage()) : opts.cache;
   const calls: string[] = [];
+  const permCalls: (number | undefined)[] = [];
   const moneyFormats: unknown[] = [];
   const navigated: string[] = [];
 
@@ -59,17 +60,20 @@ function mount(opts: {
       storage={storage}
       cache={cache}
       api={api as never}
-      permissionsFor={async () => ({
-        permissions: opts.permissions ?? ["bookings.view"],
-        features: opts.features ?? [],
-      })}
+      permissionsFor={async (resortId) => {
+        permCalls.push(resortId);
+        return {
+          permissions: opts.permissions ?? ["bookings.view"],
+          features: opts.features ?? [],
+        };
+      }}
       onActiveResort={(r) => void moneyFormats.push(r)}
       navigate={(path) => void navigated.push(path)}
     >
       <Probe />
     </AuthProvider>,
   );
-  return { storage, cache, calls, moneyFormats, navigated, api };
+  return { storage, cache, calls, permCalls, moneyFormats, navigated, api };
 }
 
 describe("opening the app", () => {
@@ -182,6 +186,41 @@ describe("what they may do", () => {
     await waitFor(() => expect(auth.isStaff).toBe(true));
     expect(auth.isManagement).toBe(false);
     expect(auth.isAgent).toBe(false);
+  });
+
+  /**
+   * An agency is not inside a resort, and its staff still have a menu.
+   *
+   * Permissions were only ever fetched once a resort was active, so an agent —
+   * who has none, by design; `consoleGate` lets them in without one — carried
+   * an empty set for ever. Every agency link in the sidebar names a permission,
+   * so the whole menu vanished and a newly registered agency saw one screen.
+   * It looked like a server problem and was not: `/auth/permissions` answers an
+   * agent without being asked about any resort.
+   */
+  it("asks for an agent's own permissions, who has no resort to ask about", async () => {
+    const storage = memoryStorage();
+    storage.setItem("rh.token", "t");
+    const { permCalls } = mount({
+      storage,
+      me: meWith("AGENT", []),
+      permissions: ["agent.book", "agent.wallet.view", "agent.tours.manage"],
+    });
+    await waitFor(() => expect(auth.can("agent.tours.manage")).toBe(true));
+    expect(permCalls).toEqual([undefined]);
+    expect(auth.can("bookings.view")).toBe(false);
+  });
+
+  /**
+   * The plan belongs to a resort, so an agent has no features — and must not
+   * inherit the ones from whichever resort was last looked at.
+   */
+  it("gives an agent no plan features, because an agency is on no resort's plan", async () => {
+    const storage = memoryStorage();
+    storage.setItem("rh.token", "t");
+    mount({ storage, me: meWith("AGENT", []), features: ["restaurant"] });
+    await waitFor(() => expect(auth.isAgent).toBe(true));
+    expect(auth.features).toEqual([]);
   });
 
   it("reports the plan's features separately from the person's permissions", async () => {

@@ -25,7 +25,12 @@ export interface AuthPorts {
   storage: Storage;
   /** One authenticated call. Carries whatever token `storage` holds. */
   api: <T>(path: string, init?: { method?: string; body?: unknown }) => Promise<T>;
-  permissionsFor: (resortId: number) => Promise<{ permissions: string[]; features?: string[] }>;
+  /**
+   * Optional, because not everyone signed in is inside a resort: an agency
+   * works across all of them and the platform owner runs none. Asked without
+   * one, the server answers what the person themselves may do.
+   */
+  permissionsFor: (resortId?: number) => Promise<{ permissions: string[]; features?: string[] }>;
   /**
    * Told whenever the active resort changes, so the host can render money in
    * that resort's currency and locale. A callback rather than a direct call
@@ -125,19 +130,35 @@ export function AuthProvider({
     onActiveResort(activeResort);
   }, [activeResort, onActiveResort]);
 
-  // permission set for the active resort
+  /**
+   * What this person may do — asked about the active resort when there is one.
+   *
+   * There is not always one, and that is the whole point. An agency sells
+   * across resorts and belongs to none, so `consoleGate` lets an agent into the
+   * console without one; this effect used to read that as "nothing to ask
+   * about" and leave them holding an empty permission set for ever. Every
+   * agency link in the sidebar names a permission, so the menu emptied itself
+   * and a newly registered agency saw a single screen — while `/agent/*`
+   * answered every one of its calls, because the server was never the one
+   * refusing. An agency owner whose account also happened to be linked to a
+   * resort got the full menu, which is what made it look like a resort was
+   * somehow granting agency access.
+   *
+   * Plan features stay tied to the resort: a plan is a resort's, and an agency
+   * is on nobody's.
+   */
   useEffect(() => {
     let alive = true;
-    if (!me || !activeResort) {
+    if (!me) {
       setPerms([]);
       setFeatures([]);
       return;
     }
-    permissionsFor(activeResort.id)
+    permissionsFor(activeResort?.id)
       .then((r) => {
         if (!alive) return;
         setPerms(r.permissions);
-        setFeatures(r.features ?? []);
+        setFeatures(activeResort ? r.features ?? [] : []);
       })
       .catch(() => {
         if (alive) {
