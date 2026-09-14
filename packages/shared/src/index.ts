@@ -117,6 +117,14 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "auditlog.delete", label: "Delete activity log entries", group: "Admin" },
   { key: "discounts.manage", label: "Manage discount offers", group: "Admin" },
   { key: "users.manage", label: "Manage users", group: "Admin" },
+  /**
+   * Separate from `users.manage` on purpose. Setting somebody's password
+   * hands you their account — it is impersonation, not administration —
+   * and a duty manager who may add and edit staff should not thereby be
+   * able to become the owner. Administrator holds it by being everything;
+   * every other role has to be given it deliberately.
+   */
+  { key: "users.password", label: "Set a colleague's password", group: "Admin" },
   { key: "roles.manage", label: "Manage roles & permissions", group: "Admin" },
   { key: "settings.manage", label: "Resort settings", group: "Admin" },
   { key: "apikeys.manage", label: "API keys", group: "Admin" },
@@ -129,6 +137,7 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "agent.book", label: "Book for guests", group: "Agent portal" },
   { key: "agent.wallet.view", label: "See the agency wallet", group: "Agent portal" },
   { key: "agent.staff.manage", label: "Add & manage agency staff", group: "Agent portal" },
+  { key: "agent.staff.password", label: "Set a staff member's password", group: "Agent portal" },
   { key: "agent.auditlog.view", label: "See the agency activity log", group: "Agent portal" },
   { key: "agent.tours.manage", label: "Build tour packages", group: "Agent portal" },
   { key: "agent.expenses.manage", label: "Keep the agency's expenses", group: "Agent portal" },
@@ -149,6 +158,7 @@ export const AGENT_PERMISSIONS = [
   "agent.book",
   "agent.wallet.view",
   "agent.staff.manage",
+  "agent.staff.password",
   "agent.auditlog.view",
   "agent.tours.manage",
   "agent.expenses.manage",

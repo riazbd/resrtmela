@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Post, Put, Query, Req, UseGuards, Inject } from "@nestjs/common";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
 import { Type } from "class-transformer";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { PlatformService } from "./platform.service";
@@ -135,13 +135,16 @@ class CreateUserDto {
 class UpdateUserDto {
   @IsOptional() @IsIn(["MANAGER", "FRONT_DESK", "AGENT", "HOUSEKEEPING", "RESORT_ADMIN"]) role?: string;
   @IsOptional() @IsIn(["active", "pending", "suspended"]) status?: string;
-  @IsOptional() @IsString() @MaxLength(128) password?: string;
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsNumber() roleId?: number;
   // how the person signs in; the service refuses a blank one rather than
   // ignoring it, so a placeholder can be replaced but never emptied
   @IsOptional() @IsString() @MaxLength(191) email?: string;
   @IsOptional() @IsString() @MaxLength(32) phone?: string;
+}
+
+class SetUserPasswordDto {
+  @IsString() @MinLength(8) @MaxLength(128) password!: string;
 }
 
 class RoleDto {
@@ -398,6 +401,11 @@ export class PlatformController {
   @Post("resorts/:id/users") createUser(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: CreateUserDto) {
     return this.platform.createResortUser(req.user, id, dto);
   }
+  /** Its own route on its own permission: setting a password is not editing a user. */
+  @Post("resorts/:id/users/:userId/password") @HttpCode(200)
+  setUserPassword(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Param("userId", ParseIntPipe) userId: number, @Body() dto: SetUserPasswordDto) {
+    return this.platform.setResortUserPassword(req.user, id, userId, dto.password);
+  }
   @Patch("resorts/:id/users/:userId") updateUser(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Param("userId", ParseIntPipe) userId: number, @Body() dto: UpdateUserDto) {
     return this.platform.updateResortUser(req.user, id, userId, dto);
   }
@@ -473,6 +481,10 @@ export class PlatformController {
   }
   @Post("agent/staff") addAgentStaff(@Req() req: AuthedRequest, @Body() dto: AgentStaffDto) {
     return this.platform.createAgentStaff(req.user, dto);
+  }
+  @Post("agent/staff/:userId/password") @HttpCode(200)
+  setAgentStaffPassword(@Req() req: AuthedRequest, @Param("userId", ParseIntPipe) userId: number, @Body() dto: SetUserPasswordDto) {
+    return this.platform.setAgentStaffPassword(req.user, userId, dto.password);
   }
 
   // owner — add another resort (plan-gated)

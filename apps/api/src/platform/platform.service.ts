@@ -1424,7 +1424,16 @@ export class PlatformService {
     claims: JwtClaims,
     resortId: number,
     userId: number,
-    input: { role?: string; status?: string; password?: string; name?: string; roleId?: number; email?: string; phone?: string },
+    /**
+     * No `password` here, deliberately.
+     *
+     * It used to sit beside the name and the role, on `users.manage` — so
+     * `users.password` would have been a lock on the front door with the back
+     * one left open, and a duty manager could still have taken the owner's
+     * account by editing them. Setting a password is its own act, its own
+     * permission and its own method.
+     */
+    input: { role?: string; status?: string; name?: string; roleId?: number; email?: string; phone?: string },
   ) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "users.manage");
@@ -1457,7 +1466,7 @@ export class PlatformService {
      * actually change: they are how the person signs in and where their reset
      * link goes, so changing one is as good as changing the password.
      */
-    const account = input.role != null || input.status != null || input.password != null || emailChanged || phoneChanged;
+    const account = input.role != null || input.status != null || emailChanged || phoneChanged;
     if (account && claims.role !== ROLE.SUPER_ADMIN) {
       const elsewhere = await this.prisma.userResort.count({
         where: { userId, resortId: { not: resortId } },
@@ -1535,7 +1544,6 @@ export class PlatformService {
         }
       }
     }
-    if (input.password) data.passwordHash = await bcrypt.hash(input.password, 12);
 
     const user = await this.prisma.user.update({ where: { id: userId }, data });
     if (input.roleId != null) {
@@ -1549,6 +1557,70 @@ export class PlatformService {
     // is the change an account takeover would make
     await this.audit.log({ actorId: claims.userId, resortId, action: "user.update", entity: "user", entityId: userId, diff: { role: input.role, status: input.status, roleId: input.roleId, email, phone } });
     return { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, status: user.status };
+  }
+
+  /**
+   * Sets a colleague's password for them.
+   *
+   * There was no way to do this. A password could be chosen when the account
+   * was created and never again, except by the person who owns it, through a
+   * reset email — which is no help at all to a clerk who has forgotten theirs
+   * and is standing at the desk with the owner beside them.
+   *
+   * No current password is asked for, because the person doing this does not
+   * know it. That is precisely why it is its own permission rather than part
+   * of `users.manage`: what this does is hand somebody an account.
+   *
+   * **A session already signed in is not ended by this.** Tokens run for seven
+   * days and are trusted without a lookup, so changing a password locks out
+   * the next sign-in, not the current one. When the reason is a suspected
+   * takeover, suspend the account as well.
+   */
+  async setResortUserPassword(claims: JwtClaims, resortId: number, userId: number, password: string) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "users.password");
+    if (!password || password.length < 8) throw badRequest("A password must be at least 8 characters");
+    /**
+     * Not your own. This route asks for no current password because whoever
+     * uses it does not know the one they are replacing; turned on yourself it
+     * becomes a way to change your own without proving you know it, and an
+     * unlocked laptop is then an account somebody keeps.
+     */
+    if (userId === claims.userId) {
+      throw badRequest("Change your own password from Account — it asks for your current one.");
+    }
+    const linked = await this.prisma.userResort.findUnique({ where: { userId_resortId: { userId, resortId } } });
+    if (!linked) throw badRequest("user not in this resort");
+    const target = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+
+    /**
+     * The same line `updateResortUser` draws, for the same reason.
+     *
+     * Somebody who works at two resorts has one account between them. Setting
+     * their password here would hand this resort the keys to the other one,
+     * and the person doing it need never have been near that tenant.
+     */
+    if (claims.role !== ROLE.SUPER_ADMIN) {
+      const elsewhere = await this.prisma.userResort.count({ where: { userId, resortId: { not: resortId } } });
+      if (elsewhere > 0) {
+        throw forbid("This person also works at another resort — only the platform owner can set their password");
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await bcrypt.hash(password, 12) },
+    });
+    // whose password, and who set it — never the password itself
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId,
+      action: "user.password.set",
+      entity: "user",
+      entityId: userId,
+      diff: { name: target.name },
+    });
+    return { updated: true };
   }
 
   async activityLog(claims: JwtClaims, resortId: number, take = 100, q?: string) {
@@ -2353,6 +2425,13 @@ export class PlatformService {
 
   async createAgentStaff(claims: JwtClaims, input: { name: string; email: string; phone: string; password: string }) {
     if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
+    /**
+     * Being an agent was the whole check, so an agency's booking clerk could
+     * add themselves a colleague — and the `agent.staff.manage` key the agency
+     * owner was ticking on their roles decided nothing. Found while fitting
+     * the lock beside it on 2026-09-15.
+     */
+    await this.perms.require(claims, undefined, "agent.staff.manage");
     if (input.password.length < 8) throw badRequest("password must be at least 8 characters");
     // both, like every account — this used to take either one, which left an
     // agency's junior with a phone and no address for a reset link
@@ -2380,6 +2459,55 @@ export class PlatformService {
     });
     await this.audit.log({ actorId: claims.userId, action: "agent.staff.create", entity: "user", entityId: user.id, diff: { name: input.name } });
     return { id: user.id, name: user.name, email, phone, status: user.status };
+  }
+
+  /**
+   * Sets an agency staff member's password for them.
+   *
+   * The agency side of `setResortUserPassword`, and the same reasoning: the
+   * agency owner does not know the password, which is why this asks for no
+   * current one and why it is a permission of its own. An agency owner holds
+   * it by being the owner; a junior has to be given it on their role.
+   *
+   * Whose staff this is decides everything. `parentAgentId` is the only link
+   * that says so — two agencies selling the same resort share nothing else —
+   * and an agency reaching another agency's people is the fault this guards.
+   */
+  async setAgentStaffPassword(claims: JwtClaims, staffUserId: number, password: string) {
+    if (claims.role !== ROLE.AGENT && claims.role !== ROLE.SUPER_ADMIN) throw forbid("agents only");
+    await this.perms.require(claims, undefined, "agent.staff.password");
+    if (!password || password.length < 8) throw badRequest("A password must be at least 8 characters");
+
+    if (staffUserId === claims.userId) {
+      throw badRequest("Change your own password from Account — it asks for your current one.");
+    }
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffUserId },
+      select: { id: true, name: true, parentAgentId: true },
+    });
+    // an agency itself has no parent, and is nobody's staff to reset
+    if (!staff || staff.parentAgentId == null) throw forbid("Not your staff");
+    if (claims.role === ROLE.AGENT) {
+      const me = await this.prisma.user.findUniqueOrThrow({
+        where: { id: claims.userId },
+        select: { parentAgentId: true },
+      });
+      const agencyId = me.parentAgentId ?? claims.userId;
+      if (staff.parentAgentId !== agencyId) throw forbid("Not your staff");
+    }
+
+    await this.prisma.user.update({
+      where: { id: staffUserId },
+      data: { passwordHash: await bcrypt.hash(password, 12) },
+    });
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "agent.staff.password.set",
+      entity: "user",
+      entityId: staffUserId,
+      diff: { name: staff.name },
+    });
+    return { updated: true };
   }
 
   // ─────────────────── owner self-serve: add another resort (plan-gated) ───────────────────

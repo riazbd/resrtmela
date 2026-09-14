@@ -180,15 +180,26 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="border-t border-white/10 px-4 py-3">
           <div className="text-xs font-medium text-white">{me.name}</div>
           <div className="text-[10px] text-brand-200">{role.replace(/_/g, " ")}</div>
-          <button
-            onClick={() => {
-              logout();
-              router.replace("/login");
-            }}
-            className="mt-2 text-[11px] text-brand-200 underline-offset-2 hover:text-white hover:underline"
-          >
-            Sign out
-          </button>
+          {/* Account is not in NAV above: every entry there is filtered by role,
+              permission and plan, and this one belongs to whoever is signed in
+              — resort staff, an agency, the platform's own owner — whatever
+              they are. One line with Sign out, because the footer is the last
+              thing in a sidebar and two stacked links push it off a short one. */}
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-brand-200">
+            <Link href="/account" className="underline-offset-2 hover:text-white hover:underline">
+              Account
+            </Link>
+            <span aria-hidden className="text-brand-400">·</span>
+            <button
+              onClick={() => {
+                logout();
+                router.replace("/login");
+              }}
+              className="underline-offset-2 hover:text-white hover:underline"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </aside>
 

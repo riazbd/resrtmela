@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
 import { PERMISSIONS, RESORT_PERMISSION_GROUPS, planFeatureLabel, scheduleSentence, type Phase } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
+import { SetSomeonesPassword } from "@/components/set-password";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
 import { Users, ScrollText, Percent, KeyRound, Copy, Check, Ban, X, Download } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
@@ -947,6 +948,9 @@ function CommissionCard({ rid }: { rid: number }) {
 function UsersTab({ rid }: { rid: number }) {
   // a failed load used to render as "No team members yet", on a resort with staff
   const fail = useLoadFailure();
+  // `me`: your own password is changed from Account, which asks for the current
+  // one; this route does not ask, and so is never turned on yourself
+  const { can, me } = useAuth();
   const { push } = useToast();
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
@@ -1111,6 +1115,14 @@ function UsersTab({ rid }: { rid: number }) {
                         <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
                           <Ban className="inline h-3.5 w-3.5" /> Suspend
                         </button>
+                      )}
+                      {/* its own permission, not `users.manage`: setting a
+                          colleague's password hands you their account */}
+                      {can("users.password") && u.id !== me?.id && (
+                        <SetSomeonesPassword
+                          name={u.name}
+                          endpoint={`/resorts/${rid}/users/${u.id}/password`}
+                        />
                       )}
                     </div>
                   </Td>

@@ -57,6 +57,13 @@ export interface Me {
   id: number;
   name: string;
   phone: string;
+  /**
+   * `/auth/me` has always sent this; the type simply never said so, so the
+   * console could not show a person the address their reset link goes to.
+   * Optional because an account created before both were required may still
+   * carry a placeholder, which `displayEmail` renders as "not set".
+   */
+  email?: string | null;
   role: string;
   /**
    * The account this person signs in for — set for an agency's people. Its

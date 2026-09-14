@@ -186,8 +186,10 @@ describe("who a resort's own admin may change", () => {
     await prisma.userResort.create({ data: { userId: shared.id, resortId: ours.resortId } });
     await prisma.userResort.create({ data: { userId: shared.id, resortId: theirs.resortId } });
 
+    // the password moved off the edit form onto its own route and its own
+    // permission on 2026-09-15; the line this draws did not move with it
     await expect(
-      platform.updateResortUser(usManager, ours.resortId, shared.id, { password: "hunter2hunter2" }),
+      platform.setResortUserPassword(usManager, ours.resortId, shared.id, "hunter2hunter2"),
     ).rejects.toMatchObject({ status: 403 });
   });
 });

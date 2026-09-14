@@ -9,6 +9,7 @@ import { Table, Tabs } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { ShieldCheck, UserPlus } from "lucide-react";
 import { displayEmail, displayPhone, emailError, phoneError } from "@/lib/contact";
+import { SetSomeonesPassword } from "@/components/set-password";
 
 /**
  * An agency's own team.
@@ -52,7 +53,7 @@ const TABS = ["People", "Roles", "Activity"] as const;
 const labelFor = (key: string) => PERMISSIONS.find((p) => p.key === key)?.label ?? key;
 
 export default function AgentTeamPage() {
-  const { role } = useAuth();
+  const { role, can, me } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<(typeof TABS)[number]>("People");
   const [staff, setStaff] = useState<StaffRow[] | null>(null);
@@ -116,7 +117,7 @@ export default function AgentTeamPage() {
             ) : (
               <Table minWidth={640}>
                 <thead className="border-b border-slate-100">
-                  <tr><Th>Name</Th><Th>Contact</Th><Th>Role</Th><Th>Status</Th></tr>
+                  <tr><Th>Name</Th><Th>Contact</Th><Th>Role</Th><Th>Status</Th><Th /></tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {staff.map((s) => (
@@ -139,6 +140,13 @@ export default function AgentTeamPage() {
                         </Select>
                       </Td>
                       <Td><Badge value={s.status} /></Td>
+                      {/* the agency owner holds this by being the owner; a
+                          junior has to be given it on their role */}
+                      <Td>
+                        {can("agent.staff.password") && s.id !== me?.id && (
+                          <SetSomeonesPassword name={s.name} endpoint={`/agent/staff/${s.id}/password`} />
+                        )}
+                      </Td>
                     </tr>
                   ))}
                 </tbody>
@@ -146,6 +154,9 @@ export default function AgentTeamPage() {
             )}
           </Card>
 
+          {/* creating staff is `agent.staff.manage` on the server now; a form
+              a junior cannot submit is a menu leading to a wall */}
+          {can("agent.staff.manage") && (
           <Card title="Add someone">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
@@ -165,6 +176,7 @@ export default function AgentTeamPage() {
               </Button>
             </div>
           </Card>
+          )}
         </div>
       )}
 
