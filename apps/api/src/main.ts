@@ -56,6 +56,16 @@ async function bootstrap() {
    */
   app.useBodyParser("json", { limit: "1mb" });
   /**
+   * A photograph arrives as itself.
+   *
+   * The site editor posts the raw bytes with the picture's own content type
+   * rather than multipart or a `data:` URL: no parser to add, and none of the
+   * third-again that base64 costs. `MAX_UPLOAD_BYTES` in `upload.service.ts`
+   * is the real limit and refuses with a sentence; this only has to be larger,
+   * so the answer is ours rather than Express's 413.
+   */
+  app.useBodyParser("raw", { type: ["image/*"], limit: "16mb" });
+  /**
    * One hop of reverse proxy, so `req.ip` is the caller and not nginx.
    *
    * Without this every request behind the proxy shares one address, which
