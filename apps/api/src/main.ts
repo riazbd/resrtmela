@@ -66,6 +66,26 @@ async function bootstrap() {
    */
   app.useBodyParser("raw", { type: ["image/*"], limit: "16mb" });
   /**
+   * The pictures a resort uploaded.
+   *
+   * Served by nginx in production — a `location /uploads/` in front of this
+   * process, reading the same directory — so these bytes never travel through
+   * Node there. This registration is what makes development work without an
+   * nginx, and is the honest fallback if that location block is ever missing:
+   * slower, and correct.
+   *
+   * `immutable`, because a file's name is the hash of its contents: the bytes
+   * at a path can never change, so a browser that has one never needs to ask
+   * again.
+   */
+  app.useStaticAssets(process.env.UPLOAD_ROOT ?? "./var/uploads", {
+    prefix: "/uploads/",
+    immutable: true,
+    maxAge: 31_536_000_000,
+    index: false,
+    dotfiles: "deny",
+  });
+  /**
    * One hop of reverse proxy, so `req.ip` is the caller and not nginx.
    *
    * Without this every request behind the proxy shares one address, which

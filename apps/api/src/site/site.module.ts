@@ -6,6 +6,7 @@ import { SiteEditorService } from "./site-editor.service";
 import { SiteEditorController } from "./site-editor.controller";
 import { UploadService } from "./upload.service";
 import { DiskStore } from "./disk-store";
+import { SiteCacheService } from "./site-cache.service";
 
 /**
  * What a resort publishes about itself (2026-09-14 design).
@@ -25,6 +26,7 @@ import { DiskStore } from "./disk-store";
     PublishedSiteService,
     SiteEditorService,
     UploadService,
+    SiteCacheService,
     {
       provide: DiskStore,
       useFactory: () => new DiskStore(process.env.UPLOAD_ROOT ?? "./var/uploads"),

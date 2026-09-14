@@ -34,6 +34,18 @@ export const RESORT_UPLOAD_QUOTA = 200 * 1024 * 1024;
  */
 export const MAX_IMAGE_WIDTH = 2400;
 
+/**
+ * Where the pictures are reachable from, as a stranger's browser sees it.
+ *
+ * A resort's site is served from the resort's own domain and the files from the
+ * platform's, so a relative path would point at a directory the site's host
+ * knows nothing about. Configuration rather than a constant because the answer
+ * differs per deployment, and empty is correct for any arrangement where the
+ * two share a host.
+ */
+export const photoUrl = (path: string): string =>
+  `${(process.env.UPLOAD_PUBLIC_BASE ?? "").replace(/\/+$/, "")}/uploads/${path}`;
+
 /** What a caller may claim to be sending. The bytes still have to agree. */
 const ACCEPTED = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/gif"];
 

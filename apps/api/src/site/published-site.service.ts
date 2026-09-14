@@ -26,6 +26,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { DiscountService } from "../common/discount.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { LIVE_STATES } from "../bookings/booking-state";
+import { photoUrl } from "./upload.service";
 import { badRequest } from "../common/rbac";
 
 /**
@@ -230,7 +231,7 @@ export class PublishedSiteService {
       list.push({
         // a path, not an id: the storage root is deployment configuration and
         // has no business in a public response
-        url: `/uploads/${row.upload.path}`,
+        url: photoUrl(row.upload.path),
         alt: row.alt,
         width: row.upload.width,
         height: row.upload.height,

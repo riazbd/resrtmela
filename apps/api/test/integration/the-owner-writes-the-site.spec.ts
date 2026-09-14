@@ -30,6 +30,7 @@ import { makePublishedSiteService } from "../helpers/services";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
 import { AuditService } from "../../src/common/audit.service";
+import { SiteCacheService } from "../../src/site/site-cache.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 
 const prisma = testPrisma();
@@ -56,6 +57,7 @@ beforeEach(async () => {
     new PermissionsService(asPrisma),
     new PlanLimitsService(asPrisma),
     new AuditService(asPrisma),
+    new SiteCacheService(),
   );
 });
 

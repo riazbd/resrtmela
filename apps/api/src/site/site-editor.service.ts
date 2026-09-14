@@ -14,7 +14,8 @@ import { PermissionsService } from "../common/permissions";
 import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuditService } from "../common/audit.service";
 import { badRequest, requireResortAccess } from "../common/rbac";
-import { RESORT_UPLOAD_QUOTA, UploadService } from "./upload.service";
+import { photoUrl, RESORT_UPLOAD_QUOTA, UploadService } from "./upload.service";
+import { SiteCacheService } from "./site-cache.service";
 
 /** What the editor screen is given to draw itself with. */
 export interface SiteDraft {
@@ -64,7 +65,24 @@ export class SiteEditorService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(PlanLimitsService) private readonly planLimits: PlanLimitsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(SiteCacheService) private readonly cache: SiteCacheService,
   ) {}
+
+  /**
+   * The website is told, and is never allowed to hold anything up.
+   *
+   * Awaited rather than dropped so a failure is logged in order, but
+   * `SiteCacheService` swallows its own errors: the owner's change is already
+   * saved, and a briefly stale page is a better outcome than an error on a save
+   * that worked.
+   */
+  private async touched(resortId: number): Promise<void> {
+    const resort = await this.prisma.resort.findUnique({
+      where: { id: resortId },
+      select: { slug: true },
+    });
+    if (resort) await this.cache.changed(resort.slug);
+  }
 
   /** Changing what the world sees of this resort is changing the resort. */
   private async mine(claims: JwtClaims, resortId: number): Promise<void> {
@@ -118,7 +136,7 @@ export class SiteEditorService {
       instagram: site.instagram,
       photos: photos.map((p) => ({
         id: p.id,
-        url: `/uploads/${p.upload.path}`,
+        url: photoUrl(p.upload.path),
         roomTypeId: p.roomTypeId,
         alt: p.alt,
         sortOrder: p.sortOrder,
@@ -160,6 +178,7 @@ export class SiteEditorService {
         ...(edit.instagram !== undefined ? { instagram: trimOrNull(edit.instagram, 191) } : {}),
       },
     });
+    await this.touched(resortId);
     return this.get(claims, resortId);
   }
 
@@ -175,6 +194,10 @@ export class SiteEditorService {
   async setSlug(claims: JwtClaims, resortId: number, wanted: string): Promise<{ slug: string }> {
     await this.mine(claims, resortId);
     const slug = siteSlug(wanted);
+    const previous = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { slug: true },
+    });
     const taken = await this.prisma.resort.findUnique({ where: { slug }, select: { id: true } });
     if (taken && taken.id !== resortId) {
       throw Object.assign(new Error(`"${slug}" is already somebody else's address.`), { status: 409 });
@@ -188,6 +211,10 @@ export class SiteEditorService {
       entityId: resortId,
       diff: { slug },
     });
+    // both addresses: the old page should stop being served from cache as
+    // surely as the new one starts
+    await this.cache.changed(previous.slug);
+    await this.cache.changed(slug);
     return { slug };
   }
 
@@ -215,6 +242,7 @@ export class SiteEditorService {
       entity: "resort",
       entityId: resortId,
     });
+    await this.touched(resortId);
     return this.get(claims, resortId);
   }
 
@@ -252,7 +280,8 @@ export class SiteEditorService {
         sortOrder: (last._max.sortOrder ?? -1) + 1,
       },
     });
-    return { id: photo.id, url: `/uploads/${upload.path}` };
+    await this.touched(resortId);
+    return { id: photo.id, url: photoUrl(upload.path) };
   }
 
   /** Puts a picture at a position, and closes the gap it left behind. */
@@ -276,6 +305,7 @@ export class SiteEditorService {
         this.prisma.resortPhoto.update({ where: { id }, data: { sortOrder: i } }),
       ),
     );
+    await this.touched(resortId);
     return this.get(claims, resortId);
   }
 
@@ -295,6 +325,7 @@ export class SiteEditorService {
      */
     const stillUsed = await this.prisma.resortPhoto.count({ where: { uploadId: photo.uploadId } });
     if (stillUsed === 0) await this.uploads.remove(resortId, photo.uploadId);
+    await this.touched(resortId);
     return { removed: true };
   }
 }

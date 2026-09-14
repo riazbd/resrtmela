@@ -21,3 +21,6 @@ out/
 Thumbs.db
 .turbo/
 coverage/
+
+# pictures a resort uploaded — files, not source
+apps/api/var/
