@@ -249,10 +249,11 @@ describe("every door, walked over HTTP", () => {
       method: "DELETE",
       path: () => "/guest/bookings/999999/activities/999999",
     },
-    // public-api.controller.ts — @Controller("v1")
-    { name: "GET /v1/resort", method: "GET", path: () => "/v1/resort" },
-    { name: "GET /v1/availability", method: "GET", path: () => "/v1/availability" },
-    { name: "POST /v1/bookings", method: "POST", path: () => "/v1/bookings" },
+    // `/v1` is not on this list any more. It came back on 2026-09-15 for a
+    // resort's own website, and a guest still has no door there — see the
+    // describe below, which walks it and is refused at the threshold. The
+    // routes it used to carry (`/v1/availability`) are not the routes it
+    // carries now, which is why naming them here would have proved nothing.
     // intents.controller.ts — @Controller()
     { name: "POST /bookings/:bookingId/checkout", method: "POST", path: () => "/bookings/999999/checkout" },
     { name: "POST /payments/webhook/:provider", method: "POST", path: () => "/payments/webhook/mock" },
@@ -294,5 +295,54 @@ describe("every door, walked over HTTP", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
+  });
+
+  /**
+   * The one door that came back, and is still not a guest's.
+   *
+   * `/v1` returned on 2026-09-15 for the resort that has its own website. It is
+   * not a re-opening of guest booking: there is no account to make, no
+   * password, nothing a person can obtain by filling in a form. A resort buys a
+   * plan, mints a key, and its own server holds it.
+   *
+   * So the question is no longer "is it gone" — it is there — but "can somebody
+   * arrive at it with nothing". That is what the guest doors were closed to
+   * answer, and it has to keep answering no.
+   */
+  describe("the resort-website API, walked by a stranger", () => {
+    const v1 = [
+      { name: "GET /v1/resort", method: "GET", path: "/v1/resort" },
+      { name: "GET /v1/vacancy", method: "GET", path: "/v1/vacancy?from=2026-01-01&to=2026-01-02" },
+      { name: "POST /v1/bookings", method: "POST", path: "/v1/bookings" },
+      { name: "GET /v1/bookings/:code", method: "GET", path: "/v1/bookings/BK-00001" },
+      { name: "POST /v1/bookings/:code/cancel", method: "POST", path: "/v1/bookings/BK-00001/cancel" },
+    ];
+
+    for (const door of v1) {
+      it(`${door.name} refuses a caller with no key`, async () => {
+        const res = await fetch(`${baseUrl}${door.path}`, {
+          method: door.method,
+          headers: { "Content-Type": "application/json" },
+          body: door.method === "POST" ? "{}" : undefined,
+        });
+        expect(res.status).toBe(401);
+      });
+    }
+
+    it("refuses a key somebody invented", async () => {
+      const res = await fetch(`${baseUrl}/v1/resort`, {
+        headers: { Authorization: `Bearer rm_live_abcdef123456_${"0".repeat(32)}` },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("refuses anything that is not shaped like a key at all", async () => {
+      for (const bearer of ["", "hello", "rm_live_", "Basic abc"]) {
+        const res = await fetch(`${baseUrl}/v1/resort`, {
+          headers: { Authorization: `Bearer ${bearer}` },
+        });
+        expect(res.status).toBe(401);
+      }
+    });
   });
 });

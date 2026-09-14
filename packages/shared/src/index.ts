@@ -70,6 +70,16 @@ export interface JwtClaims {
   userId: number;
   role: RoleKey;
   resortIds: number[];
+  /**
+   * The API key behind this call, when a resort's own website made it
+   * (2026-09-15 design, §5).
+   *
+   * Not a person, and deliberately visible rather than smuggled in as a
+   * pseudo-user: a booking service that refuses `SYSTEM_ACTOR_ID` — because
+   * "online booking is off" — has to be told, in as many words, that this
+   * particular caller is a door the owner opened and pays for.
+   */
+  apiKeyId?: bigint;
 }
 
 // ───────────────────────── Permission matrix (Paradox-style) ─────────────────────────
@@ -213,13 +223,8 @@ export const PLAN_FEATURES = [
   { key: "activities", audience: "RESORT", label: "Activities & tours", blurb: "Sell trips and rides alongside the room" },
   { key: "discounts", audience: "RESORT", label: "Discount & offer engine", blurb: "Seasonal rates, offers and coupon rules" },
   { key: "bulk_email", audience: "RESORT", label: "Bulk guest email", blurb: "Write to your whole guest list at once" },
-  // `public_api` sold the resort-website `/v1` API, which this branch removed
-  // (see migration 20260911120000_a_feature_that_is_gone). The api_keys table
-  // and its management endpoints stayed for a possible future integration,
-  // but a feature nothing implements does not belong on the shelf: the next
-  // edit of any plan still listing it would fail `isPlanFeature` validation
-  // for a reason nobody reading the panel could act on.
   { key: "website", audience: "RESORT", label: "Your own website", blurb: "A site on your own domain, with your rooms and prices always right" },
+  { key: "public_api", audience: "RESORT", label: "API for your own site", blurb: "Your existing website reads your rooms and books into your calendar" },
   { key: "payroll", audience: "RESORT", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
   { key: "imports", audience: "RESORT", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
   // No agency features yet. The agency plan sells tools, not admission (§9);

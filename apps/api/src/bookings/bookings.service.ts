@@ -38,6 +38,14 @@ export interface CreateBookingInput {
   walkIn?: boolean;
   extraPersons?: number;
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
+  /**
+   * What the caller named this request, when it came through `/v1`.
+   *
+   * Written onto the booking, where a unique index per resort is what makes a
+   * retry safe: a `findFirst` before the insert races itself under exactly the
+   * conditions that produce a retry.
+   */
+  idempotencyKey?: string;
 }
 
 /** Everything the price depends on, and nothing about who the guest is. */
@@ -89,6 +97,10 @@ export interface RoomBookingTxParams {
   /** One entry per room taking extra persons, at that room's own rate. */
   extraPersonsPerRoom?: { roomId: number; persons: number; rate: number }[];
   rooms: { id: number; name: string; roomTypeId: number; baseRate: number }[];
+  /** the key behind this booking, when a resort's own website made it */
+  apiKeyId?: bigint | null;
+  /** what that caller named the request, so a retry cannot make a second one */
+  idempotencyKey?: string | null;
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
 
@@ -386,10 +398,26 @@ export class BookingsService {
     // role rules: agents create under their own name, no manual discount (doc §1)
     const isAgent = claims.role === ROLE.AGENT;
 
-    if (claims.userId === SYSTEM_ACTOR_ID) {
+    /**
+     * Nobody, unless it is the resort's own website (2026-09-15 design, §5).
+     *
+     * This refused every actor-less booking, because guest booking was removed
+     * and an "online booking" arriving from nowhere was exactly the door that
+     * had been closed. A resort's own site is a different caller: the resort
+     * runs it, is accountable for it, and pays for the plan feature that issues
+     * the key — and the key is on the claims rather than a pseudo-user so that
+     * this line has to be changed deliberately, which is what is happening
+     * here, rather than worked around quietly.
+     *
+     * The scope was checked before the call; there is no permission matrix
+     * behind a key, because a key is not a person.
+     */
+    if (claims.apiKeyId != null) {
+      // its own resort, and no other — the same sentence `/v1` enforces
+      if (!claims.resortIds.includes(input.resortId)) throw forbid("That key is for another resort");
+    } else if (claims.userId === SYSTEM_ACTOR_ID) {
       throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
-    }
-    if (isAgent) {
+    } else if (isAgent) {
       await this.perms.require(claims, input.resortId, "agent.book");
     } else {
       await this.perms.require(claims, input.resortId, "bookings.create");
@@ -501,6 +529,8 @@ export class BookingsService {
         guestId,
         actorUserId: claims.userId,
         agentUserId,
+        apiKeyId: claims.apiKeyId ?? null,
+        idempotencyKey: input.idempotencyKey ?? null,
         source,
         checkIn,
         checkOut,
@@ -629,6 +659,8 @@ export class BookingsService {
         // null for API-key/webhook requests: there is no user row to point at
         createdById: actorIdOrNull(p.actorUserId),
         agentUserId: p.agentUserId,
+        apiKeyId: p.apiKeyId ?? null,
+        idempotencyKey: p.idempotencyKey ?? null,
         source: p.source,
         checkIn: p.checkIn,
         checkOut: p.checkOut,
@@ -1063,11 +1095,19 @@ export class BookingsService {
      * through here. Ending a stay without revenue is the cancel permission's
      * business; moving a live stay along is the edit permission's.
      */
-    await this.perms.require(
-      claims,
-      b.resortId,
-      to === "CANCELLED" || to === "NO_SHOW" ? "bookings.cancel" : "bookings.edit",
-    );
+    /**
+     * A key is not a person and has no permission matrix behind it; what it may
+     * do was decided by its scopes before this call. The branch is written out
+     * rather than folded into the matrix so that granting a key the right to
+     * cancel stays a visible decision.
+     */
+    if (claims.apiKeyId == null) {
+      await this.perms.require(
+        claims,
+        b.resortId,
+        to === "CANCELLED" || to === "NO_SHOW" ? "bookings.cancel" : "bookings.edit",
+      );
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.booking.update({ where: { id: b.id }, data: { state: to } });

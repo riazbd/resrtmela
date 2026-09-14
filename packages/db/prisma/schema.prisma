@@ -565,6 +565,18 @@ model Booking {
   createdBy       User?        @relation("BookingCreatedBy", fields: [createdById], references: [id])
   agentUserId     Int?
   agentUser       User?        @relation("BookingAgent", fields: [agentUserId], references: [id])
+  /// The API key that made this booking, when a resort's own website did
+  /// (2026-09-15 design, §5).
+  ///
+  /// A direct link rather than a code from the resort's own BOOKING_SOURCE
+  /// list: "where did this come from" needs an answer that survives somebody
+  /// renaming their list, and revoking a key has to make every booking it made
+  /// findable.
+  apiKeyId        BigInt?
+  apiKey          ApiKey?      @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  /// What the caller called this request, so a retry cannot make a second
+  /// booking. Unique per resort; null for everything the panel writes.
+  idempotencyKey  String?      @db.VarChar(120)
   /// a code from this resort's BOOKING_SOURCE list; null means nobody recorded one
   source          String?      @db.VarChar(32)
   checkIn         DateTime?    @db.Date
@@ -612,6 +624,10 @@ model Booking {
   /// A VAT invoice with a duplicated serial is a problem with the VAT office,
   /// not a cosmetic one — and the resort's BIN is printed on it now.
   @@unique([resortId, invoiceNo])
+  /// What makes a retry safe rather than expensive: the second request with
+  /// the same name from the same resort cannot become a second booking, and
+  /// the constraint says so rather than a `findFirst` that races itself.
+  @@unique([resortId, idempotencyKey])
   @@index([resortId, checkIn, checkOut])
   @@index([guestId])
   @@index([agentUserId])
@@ -1216,9 +1232,18 @@ model ApiKey {
   name       String    @db.VarChar(120)
   prefix     String    @unique @db.VarChar(24) // shown as rm_live_xxxx
   keyHash    String    @db.VarChar(128)
+  /// `["read"]` or `["read","write"]` (2026-09-15 design, §2.1).
+  ///
+  /// Most integrations only read — a site that shows what is free and prints a
+  /// phone number. Handing that site a key that can also write means a
+  /// compromised plugin reaches the booking table, and the two scopes cost one
+  /// column to avoid the whole class.
+  scopes     Json?
   active     Boolean   @default(true)
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
+
+  bookings Booking[]
 
   @@index([resortId])
   @@map("api_keys")

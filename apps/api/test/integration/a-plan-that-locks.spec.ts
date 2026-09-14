@@ -174,19 +174,26 @@ describe("the doors those ticks open", () => {
     ).rejects.toMatchObject({ status: 403 });
   });
 
-  it("mints no key on any plan, because the resort-website API it would open is gone", async () => {
-    // Every feature ticked, including the ones that still have a door behind
-    // them — proof this refusal is not a plan question any more. `public_api`
-    // sold a key; the door it opened (the resort-website `/v1` API) was
-    // removed in an earlier task, so no plan, however generous, should mint
-    // one that opens nothing.
-    await onAPlanWith([...ALL_PLAN_FEATURES]);
+  /**
+   * This refused on every plan while `/v1` did not exist — a key that opens
+   * nothing is a lie told to a customer. `/v1` came back on 2026-09-15, so the
+   * refusal is the plan's to make again, which is the shape every other row on
+   * this shelf has.
+   */
+  it("mints no key on a plan without the API", async () => {
+    await onAPlanWith([]);
 
     await expect(
       platform().createApiKey(admin, fx.resortId, "My website"),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ status: 403 });
 
     expect(await prisma.apiKey.count({ where: { resortId: fx.resortId } })).toBe(0);
+  });
+
+  it("mints one on a plan with it", async () => {
+    await onAPlanWith(["public_api"]);
+
+    await expect(platform().createApiKey(admin, fx.resortId, "My website")).resolves.toBeTruthy();
   });
 });
 
@@ -261,8 +268,14 @@ describe("what the console is told", () => {
 });
 
 describe("the shelf", () => {
-  it("does not offer a feature nothing implements any more", () => {
-    expect(ALL_PLAN_FEATURES).not.toContain("public_api");
+  /**
+   * `public_api` was taken off this shelf when the API it sold was removed,
+   * and put back with it. The rule it is here to enforce has not changed —
+   * nothing is sold that nothing locks — and the test below is the one that
+   * actually checks it.
+   */
+  it("offers the resort-website API again, now that there is one", () => {
+    expect(ALL_PLAN_FEATURES).toContain("public_api");
   });
 
   /**

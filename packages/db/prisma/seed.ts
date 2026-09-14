@@ -279,6 +279,8 @@ async function main() {
     ],
   });
 
+  await countersPastTheBooks(prisma);
+
   const coverage = await reportCoverage(prisma);
   printCoverage(coverage);
 
@@ -296,6 +298,39 @@ Sign in with any of these — the password is Password123!
   tanvir@hilltrack.example    Hill Track Tours: signed up through an offer, waiting to be verified
   saiful@padmavoyages.example Padma Voyages: suspended for an unpaid bill
 `);
+}
+
+/**
+ * The counter is never behind the books.
+ *
+ * Seeded bookings are written with their codes chosen by hand — `BK-00001`,
+ * `BK-S003` — while the counter they would have come from is left wherever the
+ * file that wrote them left it. The first real booking in the demo world then
+ * asks the counter for a number somebody has already used, and the unique index
+ * on `(resortId, code)` refuses it. Every door hits this: the panel, an agency,
+ * `/v1`. It looks like a bug in whatever was being demonstrated.
+ *
+ * So the invariant is restored once, at the end, from what was actually
+ * written, rather than each file being trusted to remember. Only numeric codes
+ * count — `BK-S003` is the seed's own labelling and was never a counter value.
+ */
+async function countersPastTheBooks(prisma: PrismaClient): Promise<void> {
+  const resorts = await prisma.resort.findMany({ select: { id: true, bookingPrefix: true } });
+  for (const resort of resorts) {
+    const rows = await prisma.booking.findMany({
+      where: { resortId: resort.id },
+      select: { code: true },
+    });
+    const highest = rows.reduce((max, r) => {
+      const digits = /-(\d+)$/.exec(r.code)?.[1];
+      return digits ? Math.max(max, Number(digits)) : max;
+    }, 0);
+    if (highest === 0) continue;
+    await prisma.counter.updateMany({
+      where: { resortId: resort.id, kind: "BOOKING" },
+      data: { nextVal: highest + 1 },
+    });
+  }
 }
 
 main()

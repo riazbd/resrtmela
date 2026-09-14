@@ -82,7 +82,44 @@ export class PublishedSiteService {
   async resort(slug: string): Promise<PublishedResort | null> {
     const resort = await this.live(slug);
     if (!resort) return null;
-    const site = resort.site!;
+    return this.draw(resort);
+  }
+
+  /**
+   * The same answer for a resort's own API (2026-09-15 design, §4).
+   *
+   * One gate lifted and no others: publishing is about the brochure, and a
+   * resort with its own website may never want one of ours. Everything else —
+   * no room ids, no register, prices from the resort's own records — is exactly
+   * as it is for a stranger, because it is the same code.
+   */
+  async forApi(resortId: number): Promise<PublishedResort> {
+    const resort = await this.prisma.resort.findUnique({
+      where: { id: resortId },
+      include: { site: true },
+    });
+    if (!resort) throw Object.assign(new Error("No such resort"), { status: 404 });
+    return this.draw(resort);
+  }
+
+  /** What is free, for a resort's own API — the same rule, without the brochure. */
+  async vacancyFor(resortId: number, from: string, to: string): Promise<PublishedVacancy[]> {
+    const resort = await this.prisma.resort.findUnique({ where: { id: resortId } });
+    if (!resort) throw Object.assign(new Error("No such resort"), { status: 404 });
+    return this.countFree(resort.id, from, to);
+  }
+
+  private async draw(resort: { id: number; slug: string; name: string; location: string | null; address: string | null; contactPhone: string | null; currency: string; locale: string; checkInTime: string; checkOutTime: string; site: { whatsapp: string | null; headline: string | null; intro: string | null; amenities: unknown; template: string; themeColor: string | null; mapLat: unknown; mapLng: unknown; facebook: string | null; instagram: string | null } | null }): Promise<PublishedResort> {
+    /**
+     * A resort that has never opened the editor still has an API answer: the
+     * words are empty and the rooms and prices are all there, which is the
+     * whole of what a site integrating with us actually needs.
+     */
+    const site = resort.site ?? {
+      whatsapp: null, headline: null, intro: null, amenities: null,
+      template: SITE_TEMPLATES[0]!.key, themeColor: null, mapLat: null, mapLng: null,
+      facebook: null, instagram: null,
+    };
 
     const types = await this.prisma.roomType.findMany({
       where: { resortId: resort.id, active: true },
@@ -147,7 +184,11 @@ export class PublishedSiteService {
   async vacancy(slug: string, fromStr: string, toStr: string): Promise<PublishedVacancy[]> {
     const resort = await this.live(slug);
     if (!resort) throw Object.assign(new Error("No such site"), { status: 404 });
+    return this.countFree(resort.id, fromStr, toStr);
+  }
 
+  private async countFree(resortId: number, fromStr: string, toStr: string): Promise<PublishedVacancy[]> {
+    const resort = { id: resortId };
     const from = dateOnly(fromStr);
     const to = dateOnly(toStr);
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {

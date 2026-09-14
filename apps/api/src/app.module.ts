@@ -27,6 +27,7 @@ import { PlatformModule } from "./platform/platform.module";
 import { EngageModule } from "./engage/engage.module";
 import { PayrollModule } from "./payroll/payroll.module";
 import { SiteModule } from "./site/site.module";
+import { V1Module } from "./v1/v1.module";
 
 const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
 
@@ -53,6 +54,7 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     PlatformModule,
     EngageModule,
     SiteModule,
+    V1Module,
     PayrollModule,
   ],
   controllers: [HealthController],
@@ -72,6 +74,6 @@ export class AppModule implements NestModule {
      * that answers without one, and it serves the marketing homepage's copy
      * to every visitor.
      */
-    consumer.apply(RateLimitMiddleware).forRoutes("auth", "cms", "site");
+    consumer.apply(RateLimitMiddleware).forRoutes("auth", "cms", "site", "v1");
   }
 }

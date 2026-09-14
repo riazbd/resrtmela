@@ -13,6 +13,8 @@ import { EmailService } from "../../src/notifications/email.service";
 import { SmsService } from "../../src/notifications/sms.service";
 import { DiscountService } from "../../src/common/discount.service";
 import { PublishedSiteService } from "../../src/site/published-site.service";
+import { V1Service } from "../../src/v1/v1.service";
+import { ApiKeyService } from "../../src/v1/api-key.service";
 import { AuditService } from "../../src/common/audit.service";
 import { PermissionsService } from "../../src/common/permissions";
 import { PlanLimitsService } from "../../src/common/plan-limits.service";
@@ -135,6 +137,15 @@ export function makeAvailabilityService(prisma: PrismaService): AvailabilityServ
 
 export function makePublishedSiteService(prisma: PrismaService): PublishedSiteService {
   return new PublishedSiteService(prisma, new DiscountService(prisma), new PlanLimitsService(prisma));
+}
+
+export function makeV1Service(prisma: PrismaService): V1Service {
+  return new V1Service(
+    prisma,
+    makePublishedSiteService(prisma),
+    makeBookingsService(prisma),
+    new ApiKeyService(prisma),
+  );
 }
 
 export function makeCommissionService(prisma: PrismaService): CommissionService {

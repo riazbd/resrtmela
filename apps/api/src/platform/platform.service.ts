@@ -21,6 +21,7 @@ import { addPeriod, isPeriodUnit, perMonthEquivalent, phasesAreSane, settleMonth
 import { openingPosition, scheduleFor, schedulesFor, toPhases } from "../common/plan-schedules";
 import * as bcrypt from "bcryptjs";
 import { uniqueResortSlug } from "../common/resort-slug";
+import { ApiKeyService, askedScopes } from "../v1/api-key.service";
 
 /**
  * Starting plans for a brand-new platform. They are a seed, not a definition:
@@ -2002,27 +2003,46 @@ export class PlatformService {
     requireResortAccess(claims, resortId);
     return this.prisma.apiKey.findMany({
       where: { resortId },
-      select: { id: true, name: true, prefix: true, active: true, lastUsedAt: true, createdAt: true },
+      select: { id: true, name: true, prefix: true, scopes: true, active: true, lastUsedAt: true, createdAt: true },
       orderBy: { id: "desc" },
     });
   }
 
-  async createApiKey(claims: JwtClaims, resortId: number, name: string) {
+  /**
+   * A key for a resort's own website (2026-09-15 design, §3.1).
+   *
+   * This refused unconditionally while `/v1` did not exist — "a screen that
+   * mints a key opening nothing is a lie told to a customer". `/v1` exists
+   * again, so the refusal is the plan's to make, and the feature and its door
+   * ship together the way `website` did.
+   *
+   * The secret is returned here and nowhere else, ever. What is stored is its
+   * hash, so a database somebody reads is not a set of working keys.
+   */
+  async createApiKey(claims: JwtClaims, resortId: number, name: string, scopes?: unknown) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "apikeys.manage");
-    // A key is the whole of the public API, and the resort-website `/v1` API
-    // it unlocked is gone (the `public_api` plan feature was removed with it
-    // — see migration 20260911120000_a_feature_that_is_gone). The api_keys
-    // table and the rest of this method's siblings (listApiKeys,
-    // revokeApiKey) stay so existing rows remain visible and revocable, and
-    // so a future resort-website integration has a table to resume into. But
-    // minting a key today would open nothing: "a screen that mints a key
-    // opening nothing is a lie told to a customer." Refuse unconditionally,
-    // for every plan, rather than reinstating a plan-feature gate for a
-    // feature that no longer exists.
-    throw badRequest(
-      "API keys are not available: the resort-website API they unlocked has been removed. None will be issued until that integration returns.",
-    );
+    await this.planLimits.requireFeature(resortId, "public_api");
+
+    const label = String(name ?? "").trim();
+    if (!label) throw badRequest("Give the key a name, so you know what to revoke later.");
+    const held = askedScopes(scopes);
+
+    const { secret, prefix, keyHash } = ApiKeyService.mint();
+    const row = await this.prisma.apiKey.create({
+      data: { resortId, name: label.slice(0, 120), prefix, keyHash, scopes: held as never },
+    });
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId,
+      action: "apikey.create",
+      entity: "api_key",
+      entityId: Number(row.id),
+      // the name and what it may do; never the secret, which this is the last
+      // moment anybody could have written down
+      diff: { name: label, scopes: held },
+    });
+    return { id: String(row.id), prefix, scopes: held, secret };
   }
 
   async revokeApiKey(claims: JwtClaims, id: number) {
