@@ -59,3 +59,22 @@ export function plannedPlan<T extends { name: string }>(shelf: readonly T[] | nu
   const asked = wanted?.trim().toUpperCase();
   return (asked ? shelf.find((p) => p.name.toUpperCase() === asked) : null) ?? shelf[0];
 }
+
+/**
+ * The shelf a signup is standing on: the one asked for when this plan has it,
+ * otherwise the plan's first.
+ *
+ * The same rule `scheduleFor` applies on the server, said once more here so the
+ * summary line and the charge cannot disagree. It used to live inside the
+ * signup page's JSX, where its only input was a query string that could not
+ * change after load. The form lets the visitor change plan now, so a schedule
+ * id belonging to the plan they just left has to fall away — carrying it to the
+ * server would be a bill for a card nobody pressed.
+ */
+export function plannedShelf<T extends { id: number }>(
+  plan: { schedules: readonly T[] } | null | undefined,
+  wanted: number | null,
+): T | null {
+  if (!plan) return null;
+  return plan.schedules.find((s) => s.id === wanted) ?? plan.schedules[0] ?? null;
+}

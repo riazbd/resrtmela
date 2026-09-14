@@ -16,7 +16,7 @@
  * nothing can ask a question of.
  */
 import { describe, expect, it } from "vitest";
-import { signupHref, plannedPlan } from "../src/app/(public)/signup-href";
+import { signupHref, plannedPlan, plannedShelf } from "../src/app/(public)/signup-href";
 
 describe("the link under a plan card", () => {
   it("names the plan for a resort", () => {
@@ -90,5 +90,36 @@ describe("the plan the signup form works from", () => {
   it("has nothing to offer before the shelf has loaded", () => {
     expect(plannedPlan(null, "CHAIN")).toBeNull();
     expect(plannedPlan([], "CHAIN")).toBeNull();
+  });
+});
+
+/**
+ * Which way the plan is being bought, once the visitor can change their mind
+ * on the form rather than only on the way in.
+ *
+ * This rule lived inside the JSX, where the only input was a query string that
+ * could not change after the page loaded. A picker makes the plan change under
+ * it — and a schedule id belonging to the plan they just left would otherwise
+ * be carried to the server, which is a bill for something they did not press.
+ */
+describe("the shelf a signup is standing on", () => {
+  const GROWTH = { name: "GROWTH", schedules: [{ id: 7 }, { id: 8 }] };
+  const CHAIN = { name: "CHAIN", schedules: [{ id: 9 }] };
+
+  it("uses the shelf that was asked for, when this plan has it", () => {
+    expect(plannedShelf(GROWTH, 8)).toEqual({ id: 8 });
+  });
+
+  it("falls back to the plan's first shelf when the id belongs to another plan", () => {
+    expect(plannedShelf(CHAIN, 8)).toEqual({ id: 9 });
+  });
+
+  it("falls back to the first shelf when nothing was asked for", () => {
+    expect(plannedShelf(GROWTH, null)).toEqual({ id: 7 });
+  });
+
+  it("has nothing to stand on before the price list has loaded", () => {
+    expect(plannedShelf(null, 8)).toBeNull();
+    expect(plannedShelf<{ id: number }>({ schedules: [] }, null)).toBeNull();
   });
 });

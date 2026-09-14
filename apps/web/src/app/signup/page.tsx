@@ -9,7 +9,7 @@ import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
 import { emailError, phoneError } from "@/lib/contact";
 import { OfferBanner, offerLine, useOffer } from "./offer";
-import { plannedPlan } from "../(public)/signup-href";
+import { plannedPlan, plannedShelf } from "../(public)/signup-href";
 import { formatMoney, scheduleSentence, type Phase } from "@rh/shared";
 import { LogoMark } from "@/components/logo";
 
@@ -178,16 +178,8 @@ export default function SignupPage() {
   // the plan the pricing card named, or the first row of the price list — which
   // the API already orders and filters — when the visitor arrived without one
   const entry = plannedPlan(plans, picked);
-  /**
-   * The shelf they arrived on, or the plan's first.
-   *
-   * A schedule id from a stale link may belong to a plan they are no longer
-   * looking at, so it is only honoured when this plan actually has it — the
-   * same rule `scheduleFor` applies on the server, said once more here so the
-   * summary line and the charge cannot disagree.
-   */
-  const shelf =
-    entry?.schedules.find((x) => x.id === pickedSchedule) ?? entry?.schedules[0] ?? null;
+  // the shelf they arrived on, or picked below, or the plan's first
+  const shelf = plannedShelf(entry, pickedSchedule);
   /**
    * What they are agreeing to, in full — the ladder included.
    *
@@ -306,6 +298,73 @@ export default function SignupPage() {
                   <span className="text-slate-400">Plan:</span> {entryLine || "—"}
                 </div>
               </div>
+
+              {/*
+                * The plan, chosen here rather than assumed.
+                *
+                * Arriving without one used to mean the first row of the price
+                * list, silently — so what a workspace could do on its first day
+                * was decided by a `sortOrder` nobody on this screen could see.
+                * The list is the platform's own, live from `/cms/plans`, so
+                * adding a plan or reordering the shelf changes this form with
+                * no deploy. An offer names its own plan and the API enforces
+                * that, so there is nothing to choose while one is in hand.
+                */}
+              {!usingOffer && plans && plans.length > 1 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-slate-600">Choose your plan</div>
+                  <div className="grid gap-2">
+                    {plans.map((p) => {
+                      const on = entry?.name === p.name;
+                      const rate = plannedShelf(p, on ? pickedSchedule : null);
+                      return (
+                        <button
+                          key={p.name}
+                          type="button"
+                          onClick={() => {
+                            setPicked(p.name);
+                            // the shelf belongs to the plan being left; the
+                            // new plan's own first shelf takes over
+                            setPickedSchedule(null);
+                          }}
+                          className={`rounded-xl px-3 py-2 text-left ring-1 ${on ? "bg-brand-50 ring-brand-500" : "ring-slate-200 hover:bg-slate-50"}`}
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900">{p.label}</span>
+                            <span className="text-xs text-slate-500">
+                              {p.maxRooms >= 1000 ? "unlimited rooms" : `${p.maxRooms} rooms`}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-slate-500">
+                            {rate ? scheduleSentence(rate.phases, money) : "—"}
+                            {p.trialDays ? ` · ${p.trialDays} days free` : ""}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/*
+                    * And how to buy it, when the owner sells this plan more
+                    * than one way. One shelf is not a choice, so it is not
+                    * drawn as one.
+                    */}
+                  {entry && entry.schedules.length > 1 && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {entry.schedules.map((sch) => (
+                        <button
+                          key={sch.id}
+                          type="button"
+                          onClick={() => setPickedSchedule(sch.id)}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold ring-1 ${shelf?.id === sch.id ? "bg-brand-600 text-white ring-brand-600" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                        >
+                          {sch.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {/*
                 * This used to be a question, with the submit button dead until
                 * it was answered — the first opinion a new customer was asked
