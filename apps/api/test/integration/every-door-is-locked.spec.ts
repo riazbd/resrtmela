@@ -65,6 +65,10 @@ const PUBLIC: RegExp[] = [
   /^GET \/auth\/offer\//,
   // a resort's own shopfront: a stranger with a URL, which is the only kind of
   // caller it ever has. What it may say is pinned in what-a-resort-publishes
+  //
+  // the website's own middleware asking whose site to draw, before anybody has
+  // signed in to anything; it answers with a slug and nothing else
+  /^GET \/domains\/lookup$/,
   /^GET \/site\/[^/]+$/,
   /^GET \/site\/[^/]+\/vacancy$/,
 ];

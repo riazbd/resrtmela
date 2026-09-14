@@ -221,6 +221,7 @@ model Resort {
   agencyTerms      ResortAgency[]
   /// what this resort publishes about itself, and the pictures it publishes
   site             ResortSite?
+  domains          ResortDomain[]
   sitePhotos       ResortPhoto[]
   uploads          Upload[]
   rooms            Room[]
@@ -1759,4 +1760,34 @@ model ResortPhoto {
 
   @@index([resortId, roomTypeId])
   @@map("resort_photos")
+}
+
+/// A domain a resort brought with it (2026-09-15 design).
+///
+/// Claimed by proving control of the domain's DNS, and only then provisioned —
+/// provisioning asks a certificate authority for a certificate in this name, so
+/// a row nobody proved is a certificate issued to whoever typed fastest.
+model ResortDomain {
+  id            Int       @id @default(autoincrement())
+  resortId      Int
+  resort        Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// lower-cased, without a port; unique across the platform, because two
+  /// resorts answering at one name is not a state with a correct resolution
+  host          String    @unique @db.VarChar(253)
+  /// what the owner must put in their DNS. Generated when the row is made and
+  /// of no use to anybody afterwards.
+  token         String    @db.VarChar(64)
+  /// null until the TXT record was seen. Nothing is provisioned and nothing
+  /// resolves before this.
+  verifiedAt    DateTime?
+  /// written by the operator script, so the panel can say "waiting for us"
+  /// rather than leaving the owner wondering whether they did it wrong
+  provisionedAt DateTime?
+  /// One per resort. The others redirect to it, so one page is not indexed
+  /// twice under two names.
+  canonical     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@index([resortId])
+  @@map("resort_domains")
 }

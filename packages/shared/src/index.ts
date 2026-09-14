@@ -27,6 +27,7 @@ export * from "./booking-handoff";
 export * from "./password-reset";
 export * from "./resort-dates";
 export * from "./site";
+export * from "./domain";
 
 /** Cross-app constants shared by the API and the console. */
 

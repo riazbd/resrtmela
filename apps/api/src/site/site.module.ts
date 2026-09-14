@@ -7,6 +7,8 @@ import { SiteEditorController } from "./site-editor.controller";
 import { UploadService } from "./upload.service";
 import { DiskStore } from "./disk-store";
 import { SiteCacheService } from "./site-cache.service";
+import { ResortDomainService } from "./resort-domain.service";
+import { ResortDomainController, DomainLookupController } from "./resort-domain.controller";
 
 /**
  * What a resort publishes about itself (2026-09-14 design).
@@ -27,12 +29,13 @@ import { SiteCacheService } from "./site-cache.service";
     SiteEditorService,
     UploadService,
     SiteCacheService,
+    ResortDomainService,
     {
       provide: DiskStore,
       useFactory: () => new DiskStore(process.env.UPLOAD_ROOT ?? "./var/uploads"),
     },
   ],
-  controllers: [PublishedSiteController, SiteEditorController],
-  exports: [PublishedSiteService],
+  controllers: [PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController],
+  exports: [PublishedSiteService, ResortDomainService],
 })
 export class SiteModule {}
