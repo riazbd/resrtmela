@@ -77,3 +77,35 @@ export class DomainLookupController {
     return found;
   }
 }
+
+/** An agency's own domains (2026-09-17). The resort's flow, owned by the agency's account. */
+@UseGuards(AuthGuard)
+@Controller("agent/domains")
+export class AgencyDomainController {
+  constructor(@Inject(ResortDomainService) private readonly domains: ResortDomainService) {}
+
+  @Get()
+  list(@Req() req: AuthedRequest) {
+    return this.domains.listForAgency(req.user);
+  }
+
+  @Post()
+  claim(@Req() req: AuthedRequest, @Body() dto: ClaimDto) {
+    return this.domains.claimForAgency(req.user, dto.host);
+  }
+
+  @Post(":domainId/verify")
+  verify(@Req() req: AuthedRequest, @Param("domainId", ParseIntPipe) domainId: number) {
+    return this.domains.verifyForAgency(req.user, domainId);
+  }
+
+  @Post(":domainId/canonical")
+  canonical(@Req() req: AuthedRequest, @Param("domainId", ParseIntPipe) domainId: number) {
+    return this.domains.setCanonicalForAgency(req.user, domainId);
+  }
+
+  @Delete(":domainId")
+  remove(@Req() req: AuthedRequest, @Param("domainId", ParseIntPipe) domainId: number) {
+    return this.domains.removeForAgency(req.user, domainId);
+  }
+}

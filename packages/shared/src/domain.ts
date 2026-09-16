@@ -105,3 +105,21 @@ export function dnsRecordFor(host: string, token: string): DnsRecord {
     value: token,
   };
 }
+
+/** Whose page a verified domain draws, as the lookup answers (2026-09-17). */
+export interface DomainSite {
+  kind: "resort" | "agency";
+  slug: string;
+}
+
+/**
+ * The page a request at somebody's own domain is rewritten to.
+ *
+ * A resort's pages live under `/r/<slug>`, an agency's under `/a/<slug>`. An
+ * answer without a known kind is read as a resort's, which is what every
+ * lookup said before agencies could bring a domain.
+ */
+export function sitePathFor(site: { kind?: unknown; slug: string }, pathname: string): string {
+  const base = site.kind === "agency" ? `/a/${site.slug}` : `/r/${site.slug}`;
+  return pathname === "/" || pathname === "" ? base : `${base}${pathname}`;
+}

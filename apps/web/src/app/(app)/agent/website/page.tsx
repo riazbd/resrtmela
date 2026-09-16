@@ -6,6 +6,7 @@ import { api, upload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, useToast } from "@/components/ui";
+import { OwnDomains } from "@/components/own-domains";
 
 /**
  * An agency's own page (2026-09-17 design, §1).
@@ -316,6 +317,17 @@ export default function AgencyWebsitePage() {
             </Button>
             <p className="mt-2 text-xs text-slate-500">Anyone with the old address stops finding you, so change it before you share it.</p>
           </Card>
+
+          <OwnDomains
+            base="/agent/domains"
+            example="youragency.com"
+            blurb={
+              <>
+                Point your own address at your page — <b>youragency.com</b> instead of ours. The address above keeps
+                working too.
+              </>
+            }
+          />
         </div>
       </div>
     </div>

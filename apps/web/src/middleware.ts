@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isOwnHost, normaliseHost } from "@rh/shared";
+import { isOwnHost, normaliseHost, sitePathFor, type DomainSite } from "@rh/shared";
 import { API_URL } from "@/lib/api-url";
 
 /**
@@ -33,14 +33,15 @@ const OWN_HOSTS = (process.env.NEXT_PUBLIC_OWN_HOSTS ?? "")
  * the API pulls the tag when a domain is verified, removed, or its resort
  * renamed, so a real change is not waiting on a timer.
  */
-async function siteAt(host: string): Promise<string | null> {
+async function siteAt(host: string): Promise<DomainSite | null> {
   try {
     const res = await fetch(`${API_URL}/domains/lookup?host=${encodeURIComponent(host)}`, {
       next: { revalidate: 300, tags: [`domain:${host}`] },
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { slug?: unknown };
-    return typeof body.slug === "string" ? body.slug : null;
+    const body = (await res.json()) as { slug?: unknown; kind?: unknown };
+    if (typeof body.slug !== "string") return null;
+    return { kind: body.kind === "agency" ? "agency" : "resort", slug: body.slug };
   } catch {
     // the API being briefly quiet must not take the marketing site down too
     return null;
@@ -53,13 +54,14 @@ export async function middleware(req: NextRequest) {
   // never a customer's
   if (!host || isOwnHost(host, [...OWN_HOSTS, req.nextUrl.hostname])) return NextResponse.next();
 
-  const slug = await siteAt(host);
+  const site = await siteAt(host);
   // a stray DNS record pointed at us is not an error: the marketing site
   // answers, which is what happens today
-  if (!slug) return NextResponse.next();
+  if (!site) return NextResponse.next();
 
   const url = req.nextUrl.clone();
-  url.pathname = req.nextUrl.pathname === "/" ? `/r/${slug}` : `/r/${slug}${req.nextUrl.pathname}`;
+  // a resort's page or an agency's, by what the lookup said (2026-09-17)
+  url.pathname = sitePathFor(site, req.nextUrl.pathname);
   return NextResponse.rewrite(url);
 }
 

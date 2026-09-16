@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Trash2, Upload as Up
 import { api, upload } from "@/lib/api";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
+import { OwnDomains } from "@/components/own-domains";
 
 /**
  * The owner's own website, written from the panel (2026-09-14 design, §5.3).
@@ -38,29 +39,6 @@ interface RoomType {
   name: string;
 }
 
-interface Domain {
-  id: number;
-  host: string;
-  state: "WAITING_FOR_DNS" | "WAITING_FOR_US" | "LIVE";
-  canonical: boolean;
-  record: { type: string; name: string; shortName: string; value: string };
-}
-
-/** What each state means, said to the person who has to act on it. */
-const DOMAIN_STATE: Record<Domain["state"], { label: string; tone: string; what: string }> = {
-  WAITING_FOR_DNS: {
-    label: "waiting for your DNS",
-    tone: "bg-amber-50 text-amber-800",
-    what: "Add the record below at your registrar, then press Check.",
-  },
-  WAITING_FOR_US: {
-    label: "waiting for us",
-    tone: "bg-sky-50 text-sky-800",
-    what: "Proved. We are setting up the certificate — usually within the hour.",
-  },
-  LIVE: { label: "live", tone: "bg-emerald-50 text-emerald-800", what: "Your site answers at this address." },
-};
-
 /** A size in the unit a person would say it in — "38KB", not "0.0MB". */
 const size = (bytes: number): string =>
   bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))}KB` : `${(bytes / 1024 / 1024).toFixed(1)}MB`;
@@ -69,8 +47,6 @@ export function WebsiteTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const fail = useLoadFailure();
   const [site, setSite] = useState<SiteDraft | null>(null);
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [newDomain, setNewDomain] = useState("");
   const [types, setTypes] = useState<RoomType[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -100,9 +76,6 @@ export function WebsiteTab({ rid }: { rid: number }) {
     api<RoomType[]>(`/resorts/${rid}/room-types`)
       .then(setTypes)
       .catch(() => setTypes([]));
-    api<Domain[]>(`/resorts/${rid}/domains`)
-      .then(setDomains)
-      .catch(() => setDomains([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -173,17 +146,6 @@ export function WebsiteTab({ rid }: { rid: number }) {
 
   const remove = (id: number) =>
     run(`d${id}`, () => api(`/resorts/${rid}/site/photos/${id}`, { method: "DELETE" }), "Picture removed");
-
-  const claimDomain = () =>
-    run("claim", () => api(`/resorts/${rid}/domains`, { method: "POST", body: { host: newDomain } }), "Domain added — now add the record").then(
-      () => setNewDomain(""),
-    );
-  const checkDomain = (id: number) =>
-    run(`v${id}`, () => api(`/resorts/${rid}/domains/${id}/verify`, { method: "POST" }), "Proved — we will set it up shortly");
-  const dropDomain = (id: number) =>
-    run(`x${id}`, () => api(`/resorts/${rid}/domains/${id}`, { method: "DELETE" }), "Domain removed");
-  const makeCanonical = (id: number) =>
-    run(`c${id}`, () => api(`/resorts/${rid}/domains/${id}/canonical`, { method: "POST" }), "That is the main address now");
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -399,71 +361,16 @@ export function WebsiteTab({ rid }: { rid: number }) {
           </p>
         </Card>
 
-        <Card title="Your own domain">
-          <p className="text-sm text-slate-600">
-            Point your own address at your site — <b>skyecoresort.com</b> instead of ours. You keep
-            the address above as well; both work.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <Input
-              value={newDomain}
-              placeholder="skyecoresort.com"
-              onChange={(e) => setNewDomain(e.target.value)}
-            />
-            <Button onClick={claimDomain} loading={busy === "claim"} disabled={!newDomain.trim()}>
-              Add
-            </Button>
-          </div>
-
-          {domains.length > 0 && (
-            <ul className="mt-4 space-y-3">
-              {domains.map((d) => {
-                const state = DOMAIN_STATE[d.state];
-                return (
-                  <li key={d.id} className="rounded-xl p-3 ring-1 ring-slate-200">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-semibold text-slate-900">
-                        {d.host}
-                        {d.canonical && <span className="ml-2 text-xs font-normal text-slate-400">main</span>}
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${state.tone}`}>
-                        {state.label}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">{state.what}</p>
-
-                    {d.state === "WAITING_FOR_DNS" && (
-                      <div className="mt-2 space-y-1 rounded-lg bg-slate-50 p-2 font-mono text-[11px] text-slate-700">
-                        <div>Type: {d.record.type}</div>
-                        <div className="break-all">Name: {d.record.name}</div>
-                        <div className="break-all text-slate-400">
-                          or just: {d.record.shortName}
-                        </div>
-                        <div className="break-all">Value: {d.record.value}</div>
-                      </div>
-                    )}
-
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {d.state === "WAITING_FOR_DNS" && (
-                        <Button size="sm" onClick={() => checkDomain(d.id)} loading={busy === `v${d.id}`}>
-                          Check
-                        </Button>
-                      )}
-                      {d.state !== "WAITING_FOR_DNS" && !d.canonical && (
-                        <Button size="sm" variant="ghost" onClick={() => makeCanonical(d.id)} loading={busy === `c${d.id}`}>
-                          Make it the main one
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => dropDomain(d.id)} loading={busy === `x${d.id}`}>
-                        Remove
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+        <OwnDomains
+          base={`/resorts/${rid}/domains`}
+          example="skyecoresort.com"
+          blurb={
+            <>
+              Point your own address at your site — <b>skyecoresort.com</b> instead of ours. You keep the address
+              above as well; both work.
+            </>
+          }
+        />
 
         <Card title="How guests reach you">
           <div className="space-y-3">

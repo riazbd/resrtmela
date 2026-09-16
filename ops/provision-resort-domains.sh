@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Give a resort's own domain a certificate and a vhost (2026-09-15 design, §5).
+# Give a resort's or an agency's own domain a certificate and a vhost
+# (2026-09-15 design, §5; agencies since 2026-09-17 — the rows are the same table).
 #
 # Run by a person or a timer, on the server, as root. The application never runs
 # this and never does any of it: a bug in a request handler must not be able to
@@ -32,6 +33,9 @@ WEB_PORT="${WEB_PORT:-3000}"
 # listening on a wildcard, and copying that is what keeps us consistent with it
 LISTEN_IP="${LISTEN_IP:-194.163.191.50}"
 CERT_EMAIL="${CERT_EMAIL:-}"
+# where the API keeps pictures: the same UPLOAD_ROOT the API reads, not a path
+# inside the checkout (the old default here pointed at a folder nothing writes)
+UPLOAD_ROOT="${UPLOAD_ROOT:-/var/lib/resortmela/uploads}"
 
 say() { printf '%s\n' "$*"; }
 run() { if (( DRY_RUN )); then say "  would: $*"; else "$@"; fi; }
@@ -129,7 +133,7 @@ server {
     # the pictures, straight off the disk: these never need to travel through
     # Node, and their names are content hashes so they can be cached for ever
     location /uploads/ {
-        alias ${APP_DIR}/apps/api/var/uploads/;
+        alias ${UPLOAD_ROOT}/;
         access_log off;
         expires max;
         add_header Cache-Control "public, immutable";

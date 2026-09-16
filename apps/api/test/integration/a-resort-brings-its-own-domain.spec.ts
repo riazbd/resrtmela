@@ -179,7 +179,7 @@ describe("what answers at a host", () => {
     await domains.verify(owner, fx.resortId, claimed.id);
 
     const resort = await prisma.resort.findUniqueOrThrow({ where: { id: fx.resortId } });
-    expect(await domains.byHost("SkyEcoResort.com:443")).toEqual({ slug: resort.slug });
+    expect(await domains.byHost("SkyEcoResort.com:443")).toEqual({ kind: "resort", slug: resort.slug });
   });
 
   it("is nothing for a host nobody claimed", async () => {

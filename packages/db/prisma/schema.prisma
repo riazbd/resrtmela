@@ -116,6 +116,7 @@ model Tenant {
   /// the keys an agency's own website holds, and where it is told things
   apiKeys  ApiKey[]          @relation("AccountApiKeys")
   webhooks WebhookEndpoint[] @relation("AccountWebhooks")
+  domains  ResortDomain[]    @relation("AccountDomains")
 
   /// an agency's own page, its pictures and the files behind them
   agencySite   AgencySite?
@@ -1837,8 +1838,11 @@ model ResortPhoto {
 /// a row nobody proved is a certificate issued to whoever typed fastest.
 model ResortDomain {
   id            Int       @id @default(autoincrement())
-  resortId      Int
-  resort        Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// a resort's domain or an agency's (2026-09-17) — exactly one of the two
+  resortId      Int?
+  resort        Resort?   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  accountId     Int?
+  account       Tenant?   @relation("AccountDomains", fields: [accountId], references: [id], onDelete: Cascade)
   /// lower-cased, without a port; unique across the platform, because two
   /// resorts answering at one name is not a state with a correct resolution
   host          String    @unique @db.VarChar(253)
@@ -1857,6 +1861,7 @@ model ResortDomain {
   createdAt     DateTime  @default(now())
 
   @@index([resortId])
+  @@index([accountId])
   @@map("resort_domains")
 }
 

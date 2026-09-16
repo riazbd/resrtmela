@@ -12,7 +12,7 @@ import { UploadService } from "./upload.service";
 import { DiskStore } from "./disk-store";
 import { SiteCacheService } from "./site-cache.service";
 import { ResortDomainService } from "./resort-domain.service";
-import { ResortDomainController, DomainLookupController } from "./resort-domain.controller";
+import { ResortDomainController, DomainLookupController, AgencyDomainController } from "./resort-domain.controller";
 
 /**
  * What a resort publishes about itself (2026-09-14 design).
@@ -43,7 +43,7 @@ import { ResortDomainController, DomainLookupController } from "./resort-domain.
     },
   ],
   // the agency's public controller first: `site/agency/x` must not be read as a resort called "agency"
-  controllers: [AgencyPublicSiteController, AgencySiteEditorController, PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController],
+  controllers: [AgencyPublicSiteController, AgencySiteEditorController, PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController, AgencyDomainController],
   exports: [PublishedSiteService, AgencyPublishedService, ResortDomainService],
 })
 export class SiteModule {}
