@@ -99,6 +99,10 @@ class UpdateBookingDto {
   @IsOptional() @IsString() remarks?: string;
 }
 
+class ExtraPersonsDto {
+  @IsInt() @Min(0) @Type(() => Number) persons!: number;
+}
+
 class TransitionDto {
   @IsEnum(["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"])
   to!: "PENDING" | "CONFIRMED" | "CHECKED_IN" | "CHECKED_OUT" | "CANCELLED" | "NO_SHOW";
@@ -248,6 +252,13 @@ export class BookingsController {
   @Patch("bookings/:id")
   update(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: UpdateBookingDto) {
     return this.bookings.update(req.user, id, dto);
+  }
+
+  /** More (or fewer) people than were booked — set at the desk, before or after check-in. */
+  @Post("bookings/:id/extra-persons")
+  @HttpCode(200)
+  extraPersons(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ExtraPersonsDto) {
+    return this.bookings.setExtraPersons(req.user, id, dto.persons);
   }
 
   @Post("bookings/:id/transition")

@@ -1176,7 +1176,95 @@ export class BookingsService {
         tx,
       );
       void updated;
+      // new nights or new rooms: the extra persons are charged for the stay as it now is
+      if ((datesChanged || roomsChanged) && b.extraPersons > 0) {
+        await this.rewriteExtraPersons(tx, b.id, b.extraPersons);
+      }
       await this.refreshDiscount(tx, b.id);
+    });
+
+    return this.detail(claims, bookingId);
+  }
+
+  /**
+   * How many extra persons this stay has, set on a live booking.
+   *
+   * A booking for two arrives as four, and the count could only be typed on
+   * the booking form — so the desk charged nothing, or cancelled the stay and
+   * booked it again and lost the advance off its ledger.
+   *
+   * The count replaces the old one rather than adding to it: the desk is
+   * saying how many came, not how many more. The persons go into the
+   * booking's rooms by the same rule the form uses, for every night of the
+   * stay, and a percentage discount is worked out again on the new total.
+   */
+  /**
+   * The booking's extra-person lines, written again from its rooms, its
+   * nights and a count.
+   *
+   * One copy, because the lines carry `persons × nights` in their quantity: a
+   * stay that got a night longer and kept its old lines charged the extra
+   * persons for the nights they no longer matched.
+   */
+  private async rewriteExtraPersons(tx: Prisma.TransactionClient, bookingId: number, count: number): Promise<void> {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { items: true } });
+    const roomIds = b.items.filter((i) => i.itemKind === "ROOM" && i.roomId != null).map((i) => i.roomId!);
+    const found = await tx.room.findMany({ where: { id: { in: roomIds } } });
+    // in the order the rooms were booked, which is the order the form filled them
+    const rooms = roomIds.map((id) => found.find((r) => r.id === id)).filter((r) => r != null);
+    const spread = this.spreadExtraPersons(rooms, count);
+    const nights = b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 1;
+
+    await tx.bookingItem.deleteMany({ where: { bookingId, itemKind: "EXTRA_PERSON" } });
+    for (const extra of spread) {
+      if (extra.persons <= 0 || extra.rate <= 0) continue;
+      await tx.bookingItem.create({
+        data: {
+          bookingId,
+          roomId: extra.roomId,
+          itemKind: "EXTRA_PERSON",
+          qty: extra.persons * nights,
+          unitPrice: extra.rate as never,
+        },
+      });
+    }
+    if (b.extraPersons !== count) {
+      await tx.booking.update({ where: { id: bookingId }, data: { extraPersons: count } });
+    }
+  }
+
+  async setExtraPersons(claims: JwtClaims, bookingId: number, persons: number) {
+    const count = Math.floor(persons);
+    if (!Number.isFinite(count) || count < 0) throw badRequest("Extra persons must be zero or more");
+
+    const b = await this.prisma.booking.findUnique({ where: { id: bookingId }, include: { items: true } });
+    if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
+    await this.requireOwnBooking(claims, b);
+    await this.perms.require(claims, b.resortId, "bookings.edit");
+
+    const open = claims.role === ROLE.AGENT ? ["PENDING", "CONFIRMED"] : ["PENDING", "CONFIRMED", "CHECKED_IN"];
+    if (!open.includes(b.state)) {
+      const why = { CHECKED_OUT: "checked out", CANCELLED: "cancelled", NO_SHOW: "a no-show" }[b.state as string];
+      throw Object.assign(
+        new Error(why ? `This stay is ${why}; its guests can no longer change` : "This stay can no longer change"),
+        { status: 409 },
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.rewriteExtraPersons(tx, b.id, count);
+      await this.refreshDiscount(tx, b.id);
+      await this.audit.log(
+        {
+          actorId: claims.userId,
+          resortId: b.resortId,
+          action: "booking.extra_persons",
+          entity: "booking",
+          entityId: b.id,
+          diff: { from: b.extraPersons, to: count, state: b.state },
+        },
+        tx,
+      );
     });
 
     return this.detail(claims, bookingId);
