@@ -138,7 +138,12 @@ export default function AgencyWebsitePage() {
                   </a>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  {site.published ? "Live. Anyone with the address can see it." : "Not live yet. Publish it when it says what you want."}
+                  {site.published
+                    ? "Live. Anyone with the address can see it."
+                    : "Not live yet — the address opens for everyone once you publish."}{" "}
+                  <a href="/preview/agency" target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline underline-offset-2">
+                    Preview it
+                  </a>
                 </p>
                 {/* every button on the page is a way to reach the agency; with none, the page ends nowhere */}
                 {!site.whatsapp && !site.phone && (

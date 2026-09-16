@@ -4,6 +4,7 @@ import { AuthGuard, type AuthedRequest } from "../common/auth.guard";
 import { badRequest } from "../common/rbac";
 import { AgencySiteEditorService } from "./agency-site-editor.service";
 import { AgencyPublicSiteService } from "./agency-public-site.service";
+import { SitePreviewService } from "./site-preview.service";
 
 class AgencySiteEditDto {
   @IsOptional() @IsString() @MaxLength(160) headline?: string | null;
@@ -105,5 +106,22 @@ export class AgencyPublicSiteController {
     @Query("to") to: string,
   ) {
     return this.site.vacancy(slug, resort, from, to);
+  }
+}
+
+/** The owner's look at a page before publishing — a resort's or an agency's. */
+@UseGuards(AuthGuard)
+@Controller()
+export class SitePreviewController {
+  constructor(@Inject(SitePreviewService) private readonly preview: SitePreviewService) {}
+
+  @Get("resorts/:id/site/preview")
+  resort(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.preview.resort(req.user, id);
+  }
+
+  @Get("agent/site/preview")
+  agency(@Req() req: AuthedRequest) {
+    return this.preview.agency(req.user);
   }
 }

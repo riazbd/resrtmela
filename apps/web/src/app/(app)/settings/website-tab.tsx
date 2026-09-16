@@ -178,9 +178,14 @@ export function WebsiteTab({ rid }: { rid: number }) {
                 </a>
               </div>
               <p className="mt-1 text-xs text-slate-500">
+                {/* the public address is 404 until published, for the owner too;
+                    the preview is the owner's own look before that */}
                 {site.published
                   ? "Live. Anyone with the address can see it."
-                  : "Not live yet — only you can see it, at the address above."}
+                  : "Not live yet — the address opens for everyone once you publish."}{" "}
+                <a href={`/preview/resort/${rid}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 underline underline-offset-2">
+                  Preview it
+                </a>
               </p>
             </div>
             <Button onClick={togglePublished} loading={busy === "publish"} variant={site.published ? "ghost" : undefined}>

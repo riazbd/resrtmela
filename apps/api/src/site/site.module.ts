@@ -4,7 +4,8 @@ import { PublishedSiteService } from "./published-site.service";
 import { AgencyPublishedService } from "./agency-published.service";
 import { AgencySiteEditorService } from "./agency-site-editor.service";
 import { AgencyPublicSiteService } from "./agency-public-site.service";
-import { AgencySiteEditorController, AgencyPublicSiteController } from "./agency-site.controller";
+import { AgencySiteEditorController, AgencyPublicSiteController, SitePreviewController } from "./agency-site.controller";
+import { SitePreviewService } from "./site-preview.service";
 import { PublishedSiteController } from "./published-site.controller";
 import { SiteEditorService } from "./site-editor.service";
 import { SiteEditorController } from "./site-editor.controller";
@@ -33,6 +34,7 @@ import { ResortDomainController, DomainLookupController, AgencyDomainController 
     AgencyPublishedService,
     AgencySiteEditorService,
     AgencyPublicSiteService,
+    SitePreviewService,
     SiteEditorService,
     UploadService,
     SiteCacheService,
@@ -43,7 +45,7 @@ import { ResortDomainController, DomainLookupController, AgencyDomainController 
     },
   ],
   // the agency's public controller first: `site/agency/x` must not be read as a resort called "agency"
-  controllers: [AgencyPublicSiteController, AgencySiteEditorController, PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController, AgencyDomainController],
+  controllers: [SitePreviewController, AgencyPublicSiteController, AgencySiteEditorController, PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController, AgencyDomainController],
   exports: [PublishedSiteService, AgencyPublishedService, ResortDomainService],
 })
 export class SiteModule {}
