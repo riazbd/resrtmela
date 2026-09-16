@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { siteTag } from "@/app/r/[slug]/site-data";
+import { agencyTag } from "@/app/a/[slug]/agency-data";
 
 /**
  * "This resort's page is out of date."
@@ -26,6 +27,12 @@ export async function POST(req: Request) {
 
   const body: unknown = await req.json().catch(() => null);
   const slug = (body as { slug?: unknown } | null)?.slug;
+  // an agency's page is the same route with its own key (2026-09-17)
+  const agency = (body as { agency?: unknown } | null)?.agency;
+  if (typeof agency === "string" && agency !== "") {
+    revalidateTag(agencyTag(agency));
+    return NextResponse.json({ revalidated: true });
+  }
   if (typeof slug !== "string" || slug === "") {
     return NextResponse.json({ revalidated: false }, { status: 400 });
   }

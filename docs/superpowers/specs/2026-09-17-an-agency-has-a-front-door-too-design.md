@@ -81,7 +81,7 @@ Scopes, hashing, show-once and revoke are the resort key's, unchanged.
   `a<accountId>/`.
 - `api_keys.resortId` nullable, `api_keys.accountId` added.
 
-## 5. Its own domain
+## 5. Its own domain (not built yet)
 
 `resort_domains` gains `accountId` (resortId nullable), the lookup answers
 `{ kind, slug }`, and the middleware rewrites to `/a/<slug>` for an agency.

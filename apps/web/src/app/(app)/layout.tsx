@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
-  UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe,
+  UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe, KeyRound,
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -38,6 +38,9 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   { href: "/agent/payroll", label: "Payroll", icon: Banknote, roles: ["AGENT"], perm: "agent.payroll.manage" },
   { href: "/agent/wallet", label: "Wallet", icon: Wallet, roles: ["AGENT"], perm: "agent.wallet.view" },
   { href: "/agent/team", label: "My team", icon: Users, roles: ["AGENT"], perm: "agent.staff.manage" },
+  // sold on the agency's own plan (2026-09-17): hidden when the plan leaves them out
+  { href: "/agent/website", label: "Website", icon: Globe, roles: ["AGENT"], perm: "agent.website.manage", feature: "agency_website" },
+  { href: "/agent/api", label: "API", icon: KeyRound, roles: ["AGENT"], perm: "agent.apikeys.manage", feature: "agency_api" },
   { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send", feature: "bulk_email" },
   { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"], perm: "bookings.view" },
   { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"], perm: "bookings.view" },
@@ -64,12 +67,12 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
  * recorded stays readable — a resort's own books are not the platform's to
  * withhold — so this explains rather than blocks.
  */
-function NotInPlan({ feature }: { feature: string | null }) {
+function NotInPlan({ feature, agency = false }: { feature: string | null; agency?: boolean }) {
   if (!feature) return null;
   const label = planFeatureLabel(feature);
   return (
     <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-      <div className="text-sm font-semibold text-amber-900">{label} is not in this resort&apos;s plan</div>
+      <div className="text-sm font-semibold text-amber-900">{label} is not in {agency ? "your agency" : "this resort"}&apos;s plan</div>
       {/* the label is printed as written: lower-casing it turned "Restaurant POS
           & room tabs" into "restaurant pos & room tabs" */}
       <p className="mt-0.5 text-xs text-amber-800">
@@ -278,7 +281,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                   : "Your agency's account is suspended, so you cannot make new bookings. Bookings you have already made are unaffected."}
             </div>
           )}
-          <NotInPlan feature={missingFeature(pathname, NAV, features)} />
+          <NotInPlan feature={missingFeature(pathname, NAV, features)} agency={role === "AGENT"} />
           {children}
         </main>
       </div>

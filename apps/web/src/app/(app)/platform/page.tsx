@@ -1108,7 +1108,7 @@ function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onTog
       <div className="text-[11px] font-semibold text-slate-500">What this plan includes</div>
       {shelf.length === 0 && (
         <div className="rounded-lg bg-slate-50 px-2 py-1.5 text-[11px] text-slate-500">
-          No agency features yet — an agency plan sells selling itself for now; tools arrive with their own locks.
+          Nothing on this shelf yet — each tool arrives with its own lock.
         </div>
       )}
       {shelf.map((f) => (
