@@ -59,12 +59,24 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
       {...(numeric
         ? {
             onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
-              const box = e.currentTarget;
-              // after the browser has placed the cursor, or it undoes the selection
-              requestAnimationFrame(() => {
-                try { box.select(); } catch { /* not every browser selects a number box */ }
-              });
+              // at once, not a frame later: a frame later swallowed whatever
+              // was typed in between
+              try { e.currentTarget.select(); } catch { /* not every browser selects a number box */ }
+              e.currentTarget.dataset.justFocused = "1";
               props.onFocus?.(e);
+            },
+            onMouseUp: (e: React.MouseEvent<HTMLInputElement>) => {
+              // the mouse-up of the click that focused the box would put the
+              // cursor back after the 0; only that one is cancelled
+              if (e.currentTarget.dataset.justFocused) {
+                delete e.currentTarget.dataset.justFocused;
+                e.preventDefault();
+              }
+              props.onMouseUp?.(e);
+            },
+            onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+              delete e.currentTarget.dataset.justFocused;
+              props.onKeyDown?.(e);
             },
             onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
               const box = e.currentTarget;
