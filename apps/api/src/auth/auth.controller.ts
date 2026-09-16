@@ -7,6 +7,8 @@ import { PlanLimitsService } from "../common/plan-limits.service";
 import { AuthService } from "./auth.service";
 import { PasswordResetService } from "./password-reset.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { agencyOf } from "../common/selling-access";
+import { ROLE } from "@rh/shared";
 
 export class LoginDto {
   /** phone number OR email — one identifier is enough */
@@ -144,6 +146,15 @@ export class AuthedAuthController {
   @Get("permissions")
   async permissions(@Req() req: AuthedRequest, @Query("resortId") resortIdRaw?: string) {
     const resortId = resortIdRaw ? Number(resortIdRaw) : undefined;
+    // an agent's screens are the agency's, so its features are the agency's
+    // plan and never a resort's (2026-09-17 design, §2)
+    if (req.user.role === ROLE.AGENT) {
+      const { accountId } = await agencyOf(this.prisma, req.user.userId);
+      return {
+        permissions: await this.perms.resolve(req.user, resortId),
+        features: accountId ? await this.planLimits.featuresForAccount(accountId) : [],
+      };
+    }
     return {
       permissions: await this.perms.resolve(req.user, resortId),
       features: resortId ? await this.planLimits.featuresFor(resortId) : [],

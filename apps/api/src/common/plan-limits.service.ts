@@ -320,6 +320,31 @@ export class PlanLimitsService {
     );
   }
 
+  /**
+   * What an account — in practice an agency — may use (2026-09-17 design, §2).
+   *
+   * The resort's rule through the same `effective()`: an agency is held to its
+   * subscribed plan, and one nobody has sold a plan to is not a downgraded
+   * customer.
+   */
+  async featuresForAccount(accountId: number): Promise<string[]> {
+    return effective(await this.forTenant(accountId));
+  }
+
+  /** Yes or no, for a public page that must not name the plan. */
+  async hasAccountFeature(accountId: number, key: string): Promise<boolean> {
+    return (await this.featuresForAccount(accountId)).includes(key);
+  }
+
+  /** Throws 403 naming the feature and the plan, as `requireFeature` does for a resort. */
+  async requireAccountFeature(accountId: number, key: string): Promise<void> {
+    const limits = await this.forTenant(accountId);
+    if (effective(limits).includes(key)) return;
+    throw forbid(
+      `Your ${limits.label} plan does not include ${planFeatureLabel(key)}. Change the plan to switch it on.`,
+    );
+  }
+
   /** Every plan the platform is currently selling, cheapest first. */
   /** The plans on one shelf. A resort's screens ask for RESORT and never see an agency plan. */
   async onSale(audience: "RESORT" | "AGENCY" = "RESORT") {

@@ -155,3 +155,57 @@ export interface PublishedVacancy {
   /** the lowest nightly rate among the rooms that are actually free */
   priceFrom: number | null;
 }
+
+// ─────────────────────────── an agency's front door ───────────────────────────
+
+/**
+ * A resort, as an agency that sells it may show it (2026-09-17 design, §1).
+ *
+ * The resort's own published view, with two differences: a price appears only
+ * where the resort shares its rates with agents, and `bookableUntil` says how far
+ * ahead the resort lets agencies book.
+ */
+export interface AgencyResort {
+  slug: string;
+  name: string;
+  location: string | null;
+  currency: string;
+  locale: string;
+  checkInTime: string;
+  checkOutTime: string;
+  photos: PublishedPhoto[];
+  roomTypes: PublishedRoomType[];
+  /** the last check-out date (YYYY-MM-DD) an agency may book; null is no limit */
+  bookableUntil: string | null;
+}
+
+/** A tour package, as a stranger may see it: no cost lines, one price. */
+export interface AgencyTour {
+  id: number;
+  name: string;
+  summary: string | null;
+  days: number;
+  nights: number;
+  /** how many people the price covers */
+  pax: number;
+  price: number;
+}
+
+/** Everything an agency's page, or its API, is allowed to say. */
+export interface AgencyPublished {
+  agency: {
+    slug: string;
+    name: string;
+    headline: string | null;
+    intro: string | null;
+    phone: string | null;
+    email: string | null;
+    whatsapp: string | null;
+    address: string | null;
+    themeColor: string | null;
+    social: { facebook: string | null; instagram: string | null };
+    photos: PublishedPhoto[];
+  };
+  resorts: AgencyResort[];
+  tours: AgencyTour[];
+}

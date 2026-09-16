@@ -113,6 +113,14 @@ model Tenant {
   /// an agency's terms with the resorts that set any
   resortTerms ResortAgency[]
 
+  /// the keys an agency's own website holds
+  apiKeys ApiKey[] @relation("AccountApiKeys")
+
+  /// an agency's own page, its pictures and the files behind them
+  agencySite   AgencySite?
+  agencyPhotos AgencyPhoto[]
+  uploads      Upload[]      @relation("AccountUploads")
+
   @@index([offerId])
   @@map("tenants")
 }
@@ -1250,8 +1258,13 @@ model WalletTxn {
 /// API keys so a resort's own website can talk to the platform.
 model ApiKey {
   id         BigInt    @id @default(autoincrement())
-  resortId   Int
-  resort     Resort    @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// A resort's key or an agency's (2026-09-17 design, §3) — exactly one of
+  /// `resortId` and `accountId` is set. They open different doors: `/v1` and
+  /// `/v1/agency`.
+  resortId   Int?
+  resort     Resort?   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  accountId  Int?
+  account    Tenant?   @relation("AccountApiKeys", fields: [accountId], references: [id], onDelete: Cascade)
   name       String    @db.VarChar(120)
   prefix     String    @unique @db.VarChar(24) // shown as rm_live_xxxx
   keyHash    String    @db.VarChar(128)
@@ -1269,6 +1282,7 @@ model ApiKey {
   bookings Booking[]
 
   @@index([resortId])
+  @@index([accountId])
   @@map("api_keys")
 }
 
@@ -1767,9 +1781,12 @@ model ResortSite {
 /// carries them, and a database dump grows by the size of the pictures.
 model Upload {
   id           BigInt   @id @default(autoincrement())
-  /// whose disk quota this counts against
-  resortId     Int
-  resort       Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// whose disk quota this counts against: a resort's, or an account's (an
+  /// agency's) — exactly one of the two (2026-09-17 design, §4)
+  resortId     Int?
+  resort       Resort?  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  accountId    Int?
+  account      Tenant?  @relation("AccountUploads", fields: [accountId], references: [id], onDelete: Cascade)
   /// relative to the storage root, never absolute — the root is deployment
   /// configuration and must not be baked into rows
   path         String   @unique @db.VarChar(255)
@@ -1783,9 +1800,11 @@ model Upload {
   uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
 
-  photos ResortPhoto[]
+  photos       ResortPhoto[]
+  agencyPhotos AgencyPhoto[]
 
   @@index([resortId])
+  @@index([accountId])
   @@map("uploads")
 }
 
@@ -1881,4 +1900,46 @@ model WebhookDelivery {
   @@index([nextAttemptAt, deliveredAt])
   @@index([endpointId, createdAt])
   @@map("webhook_deliveries")
+}
+
+/// An agency's own page (2026-09-17 design, §1). The agency writes the words
+/// and the pictures; the resorts and tours on it are read from the records.
+model AgencySite {
+  id              Int       @id @default(autoincrement())
+  accountId       Int       @unique
+  account         Tenant    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// an act, and undone in one click without asking the platform
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  headline        String?   @db.VarChar(160)
+  intro           String?   @db.Text
+  themeColor      String?   @db.VarChar(16)
+  phone           String?   @db.VarChar(32)
+  email           String?   @db.VarChar(191)
+  whatsapp        String?   @db.VarChar(32)
+  address         String?   @db.VarChar(255)
+  facebook        String?   @db.VarChar(191)
+  instagram       String?   @db.VarChar(191)
+  /// resorts the agency sells but does not want on its page; ids outside what
+  /// it sells are dropped when saved
+  hiddenResortIds Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("agency_sites")
+}
+
+/// A picture on an agency's page. The first is the cover.
+model AgencyPhoto {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  account   Tenant   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  uploadId  BigInt
+  upload    Upload   @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  alt       String?  @db.VarChar(191)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([accountId])
+  @@map("agency_photos")
 }

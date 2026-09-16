@@ -115,6 +115,22 @@ describe("the links in the sidebar", () => {
   });
 });
 
+describe("an agency screen its plan sells (2026-09-17 design, §2)", () => {
+  const website = { roles: ["AGENT"], perm: "agent.website.manage", feature: "agency_website" };
+
+  it("shows when the agency's plan includes it", () => {
+    expect(navVisible(website, { role: "AGENT", can: () => true, features: ["agency_website"] })).toBe(true);
+  });
+
+  it("is hidden when the agency's plan leaves it out, whatever the permission", () => {
+    expect(navVisible(website, { role: "AGENT", can: () => true, features: ["agency_api"] })).toBe(false);
+  });
+
+  it("still needs the permission", () => {
+    expect(navVisible(website, { role: "AGENT", can: () => false, features: ["agency_website"] })).toBe(false);
+  });
+});
+
 describe("a link shared between a resort and its agents", () => {
   /** Bulk Email is the only one. Its agent copy is the agency's own list. */
   const mailbox = { roles: ["MGMT", "AGENT"], perm: "marketing.send", feature: "bulk_email" };

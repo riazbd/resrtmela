@@ -17,7 +17,16 @@ import { Injectable, Logger } from "@nestjs/common";
 export class SiteCacheService {
   private readonly logger = new Logger(SiteCacheService.name);
 
+  /** An agency's page changed (2026-09-17). Same route, a different tag. */
+  async changedAgency(slug: string): Promise<void> {
+    return this.post({ agency: slug }, `agency "${slug}"`);
+  }
+
   async changed(slug: string): Promise<void> {
+    return this.post({ slug }, `"${slug}"`);
+  }
+
+  private async post(body: Record<string, string>, what: string): Promise<void> {
     const base = process.env.WEB_URL;
     const secret = process.env.REVALIDATE_SECRET;
     // not configured is a normal state in development and in tests, and is not
@@ -28,12 +37,12 @@ export class SiteCacheService {
       const res = await fetch(`${base.replace(/\/+$/, "")}/api/site/revalidate`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-revalidate-secret": secret },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(3000),
       });
-      if (!res.ok) this.logger.warn(`site cache for "${slug}": the website answered ${res.status}`);
+      if (!res.ok) this.logger.warn(`site cache for ${what}: the website answered ${res.status}`);
     } catch (e) {
-      this.logger.warn(`site cache for "${slug}": ${(e as Error).message}`);
+      this.logger.warn(`site cache for ${what}: ${(e as Error).message}`);
     }
   }
 }

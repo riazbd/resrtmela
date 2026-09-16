@@ -78,7 +78,13 @@ export function navVisible(
   // agent-only links are gated by the agency's own permission set, so a junior
   // who may only book does not see the wallet or the team screen
   if (entry.roles.length === 1 && entry.roles[0] === "AGENT") {
-    return who.role === "AGENT" && (entry.perm ? who.can(entry.perm) : true);
+    // and by the agency's own plan, for the screens a plan sells (2026-09-17);
+    // `features` is the agency's here, never a resort's
+    return (
+      who.role === "AGENT" &&
+      (entry.perm ? who.can(entry.perm) : true) &&
+      (entry.feature ? who.features.includes(entry.feature) : true)
+    );
   }
   if (entry.roles.includes("AGENT") && !entry.perm) return who.role === "AGENT";
   if (entry.perm && !who.can(entry.perm)) return false;

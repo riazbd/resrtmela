@@ -387,7 +387,7 @@ export class BookingsService {
     const checkOut = dateOnly(input.checkOut);
     const nights = nightsBetween(checkIn, checkOut);
     if (nights <= 0) throw badRequest("checkOut must be after checkIn");
-    if (isAgent && claims.apiKeyId == null) await assertWithinAgentWindow(this.prisma, input.resortId, checkOut);
+    if (isAgent) await assertWithinAgentWindow(this.prisma, input.resortId, checkOut);
     if (input.roomIds.length === 0) throw badRequest("At least one room required");
 
     const roomRows = await this.prisma.room.findMany({
@@ -497,8 +497,10 @@ export class BookingsService {
      * The scope was checked before the call; there is no permission matrix
      * behind a key, because a key is not a person.
      */
-    if (claims.apiKeyId != null) {
-      // its own resort, and no other — the same sentence `/v1` enforces
+    if (claims.apiKeyId != null && !isAgent) {
+      // its own resort, and no other — the same sentence `/v1` enforces.
+      // An agency's key is not this: it books as the agency, through the
+      // agent's path below, with every check an agent's booking gets.
       if (!claims.resortIds.includes(input.resortId)) throw forbid("That key is for another resort");
     } else if (claims.userId === SYSTEM_ACTOR_ID) {
       throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");

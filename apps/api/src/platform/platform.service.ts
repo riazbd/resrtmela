@@ -2119,7 +2119,8 @@ export class PlatformService {
 
   async revokeApiKey(claims: JwtClaims, id: number) {
     const row = await this.prisma.apiKey.findUnique({ where: { id: BigInt(id) } });
-    if (!row) throw badRequest("not found");
+    // an agency's key is revoked from the agency's own screen
+    if (!row || row.resortId == null) throw badRequest("not found");
     requireResortAccess(claims, row.resortId);
     await this.perms.require(claims, row.resortId, "apikeys.manage");
     await this.prisma.apiKey.update({ where: { id: BigInt(id) }, data: { active: false } });

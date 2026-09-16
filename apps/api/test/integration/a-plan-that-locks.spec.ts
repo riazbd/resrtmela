@@ -309,7 +309,8 @@ describe("the shelf", () => {
      * on the string appearing somewhere in the file.
      */
     const ungated = ALL_PLAN_FEATURES.filter(
-      (key) => !new RegExp(`(requireFeature|hasFeature)\\([^)]*"${key}"`).test(code),
+      // an agency's doors are the same two, asked of an account (2026-09-17)
+      (key) => !new RegExp(`(requireFeature|hasFeature|requireAccountFeature|hasAccountFeature)\\([^)]*"${key}"`).test(code),
     );
 
     expect(ungated).toEqual([]);

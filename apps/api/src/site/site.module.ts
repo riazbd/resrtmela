@@ -1,6 +1,10 @@
 import { Module } from "@nestjs/common";
 import { CommonModule } from "../common/common.module";
 import { PublishedSiteService } from "./published-site.service";
+import { AgencyPublishedService } from "./agency-published.service";
+import { AgencySiteEditorService } from "./agency-site-editor.service";
+import { AgencyPublicSiteService } from "./agency-public-site.service";
+import { AgencySiteEditorController, AgencyPublicSiteController } from "./agency-site.controller";
 import { PublishedSiteController } from "./published-site.controller";
 import { SiteEditorService } from "./site-editor.service";
 import { SiteEditorController } from "./site-editor.controller";
@@ -26,6 +30,9 @@ import { ResortDomainController, DomainLookupController } from "./resort-domain.
   imports: [CommonModule],
   providers: [
     PublishedSiteService,
+    AgencyPublishedService,
+    AgencySiteEditorService,
+    AgencyPublicSiteService,
     SiteEditorService,
     UploadService,
     SiteCacheService,
@@ -35,7 +42,8 @@ import { ResortDomainController, DomainLookupController } from "./resort-domain.
       useFactory: () => new DiskStore(process.env.UPLOAD_ROOT ?? "./var/uploads"),
     },
   ],
-  controllers: [PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController],
-  exports: [PublishedSiteService, ResortDomainService],
+  // the agency's public controller first: `site/agency/x` must not be read as a resort called "agency"
+  controllers: [AgencyPublicSiteController, AgencySiteEditorController, PublishedSiteController, SiteEditorController, ResortDomainController, DomainLookupController],
+  exports: [PublishedSiteService, AgencyPublishedService, ResortDomainService],
 })
 export class SiteModule {}

@@ -25,6 +25,24 @@ export const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 export const RESORT_UPLOAD_QUOTA = 200 * 1024 * 1024;
 
 /**
+ * What one agency may keep. Less than a resort: an agency's page carries its
+ * own few pictures, and every resort on it brings its own from the resort.
+ */
+export const AGENCY_UPLOAD_QUOTA = 100 * 1024 * 1024;
+
+/**
+ * Whose picture it is: a resort's or an account's (2026-09-17 design, §4).
+ * Every rule below is the same for both; only the quota and the folder differ.
+ */
+export type UploadOwner = { resortId: number } | { accountId: number };
+
+const ownerWhere = (owner: UploadOwner) =>
+  "resortId" in owner ? { resortId: owner.resortId } : { accountId: owner.accountId };
+const quotaOf = (owner: UploadOwner) => ("resortId" in owner ? RESORT_UPLOAD_QUOTA : AGENCY_UPLOAD_QUOTA);
+/** a resort's folder is its id, as it always was; an agency's is prefixed so the two can never meet */
+const folderOf = (owner: UploadOwner) => ("resortId" in owner ? `${owner.resortId}` : `a${owner.accountId}`);
+
+/**
  * Wider than any page draws it, and no wider.
  *
  * A phone photograph is four thousand pixels across and a cover image is shown
@@ -70,6 +88,25 @@ export class UploadService {
     bytes: Buffer,
     claimedType: string,
   ): Promise<{ id: bigint; path: string; mediaType: string; bytes: number; width: number | null; height: number | null }> {
+    return this.putFor({ resortId }, userId, bytes, claimedType);
+  }
+
+  /** The same, for an agency's page. */
+  async putForAccount(
+    accountId: number,
+    userId: number | null,
+    bytes: Buffer,
+    claimedType: string,
+  ): Promise<{ id: bigint; path: string; mediaType: string; bytes: number; width: number | null; height: number | null }> {
+    return this.putFor({ accountId }, userId, bytes, claimedType);
+  }
+
+  private async putFor(
+    owner: UploadOwner,
+    userId: number | null,
+    bytes: Buffer,
+    claimedType: string,
+  ): Promise<{ id: bigint; path: string; mediaType: string; bytes: number; width: number | null; height: number | null }> {
     if (bytes.byteLength === 0) throw badRequest("That file is empty.");
     if (bytes.byteLength > MAX_UPLOAD_BYTES) {
       throw badRequest(`That file is too large — the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB.`);
@@ -104,23 +141,24 @@ export class UploadService {
      * gallery and to a room type pays for it once.
      */
     const checksum = createHash("sha256").update(out.data).digest("hex");
-    const existing = await this.prisma.upload.findFirst({ where: { resortId, checksum } });
+    const existing = await this.prisma.upload.findFirst({ where: { ...ownerWhere(owner), checksum } });
     if (existing) return existing;
 
-    const used = await this.used(resortId);
-    if (used + out.data.byteLength > RESORT_UPLOAD_QUOTA) {
+    const quota = quotaOf(owner);
+    const used = await this.usedBy(owner);
+    if (used + out.data.byteLength > quota) {
       throw badRequest(
-        `There is no space left for more pictures — the limit is ${Math.round(RESORT_UPLOAD_QUOTA / 1024 / 1024)}MB. Remove some first.`,
+        `There is no space left for more pictures — the limit is ${Math.round(quota / 1024 / 1024)}MB. Remove some first.`,
       );
     }
 
-    // the caller never names anything: the resort's id and the content hash do
-    const path = `${resortId}/${checksum}.webp`;
+    // the caller never names anything: the owner's id and the content hash do
+    const path = `${folderOf(owner)}/${checksum}.webp`;
     await this.store.put(path, out.data);
 
     return this.prisma.upload.create({
       data: {
-        resortId,
+        ...ownerWhere(owner),
         path,
         mediaType: "image/webp",
         bytes: out.data.byteLength,
@@ -134,7 +172,11 @@ export class UploadService {
 
   /** What this resort is keeping, in bytes. */
   async used(resortId: number): Promise<number> {
-    const sum = await this.prisma.upload.aggregate({ where: { resortId }, _sum: { bytes: true } });
+    return this.usedBy({ resortId });
+  }
+
+  async usedBy(owner: UploadOwner): Promise<number> {
+    const sum = await this.prisma.upload.aggregate({ where: ownerWhere(owner), _sum: { bytes: true } });
     return sum._sum.bytes ?? 0;
   }
 
@@ -145,7 +187,11 @@ export class UploadService {
    * is litter, and a row with no file is a broken image somebody can see.
    */
   async remove(resortId: number, id: bigint): Promise<void> {
-    const row = await this.prisma.upload.findFirst({ where: { id, resortId } });
+    return this.removeFor({ resortId }, id);
+  }
+
+  async removeFor(owner: UploadOwner, id: bigint): Promise<void> {
+    const row = await this.prisma.upload.findFirst({ where: { id, ...ownerWhere(owner) } });
     if (!row) return;
     await this.store.remove(row.path);
     await this.prisma.upload.delete({ where: { id: row.id } });

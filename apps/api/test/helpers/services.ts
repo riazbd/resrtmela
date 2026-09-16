@@ -3,6 +3,9 @@
  * plain classes with constructor injection, so Nest is not needed to build
  * them — which keeps these tests exercising production wiring, not a mock of it.
  */
+import { AgencyPublishedService } from "../../src/site/agency-published.service";
+import { AgencyApiService } from "../../src/v1/agency-api.service";
+import { AgencyKeysService } from "../../src/v1/agency-keys.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { BookingsService } from "../../src/bookings/bookings.service";
 import { AvailabilityService } from "../../src/bookings/availability.service";
@@ -150,6 +153,25 @@ export function makeV1Service(prisma: PrismaService): V1Service {
     makeBookingsService(prisma),
     new ApiKeyService(prisma),
   );
+}
+
+export function makeAgencyPublishedService(prisma: PrismaService): AgencyPublishedService {
+  return new AgencyPublishedService(prisma, makePublishedSiteService(prisma));
+}
+
+export function makeAgencyApiService(prisma: PrismaService): AgencyApiService {
+  return new AgencyApiService(
+    prisma,
+    makeAgencyPublishedService(prisma),
+    makeBookingsService(prisma),
+    new PlanLimitsService(prisma),
+    new ApiKeyService(prisma),
+    makeV1Service(prisma),
+  );
+}
+
+export function makeAgencyKeysService(prisma: PrismaService): AgencyKeysService {
+  return new AgencyKeysService(prisma, new PermissionsService(prisma), new PlanLimitsService(prisma), new AuditService(prisma));
 }
 
 export function makeCommissionService(prisma: PrismaService): CommissionService {

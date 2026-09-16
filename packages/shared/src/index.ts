@@ -148,6 +148,8 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "agent.payroll.manage", label: "Run the agency's payroll", group: "Agent portal" },
   { key: "agent.sales.manage", label: "Quotations & invoices", group: "Agent portal" },
   { key: "agent.guests.view", label: "See every guest the agency has served", group: "Agent portal" },
+  { key: "agent.website.manage", label: "Edit and publish the agency's website", group: "Agent portal" },
+  { key: "agent.apikeys.manage", label: "Create and revoke the agency's API keys", group: "Agent portal" },
 ];
 
 /**
@@ -169,6 +171,8 @@ export const AGENT_PERMISSIONS = [
   "agent.payroll.manage",
   "agent.sales.manage",
   "agent.guests.view",
+  "agent.website.manage",
+  "agent.apikeys.manage",
   "marketing.send",
 ] as const;
 
@@ -242,8 +246,10 @@ export const PLAN_FEATURES = [
   { key: "public_api", audience: "RESORT", label: "API for your own site", blurb: "Your existing website reads your rooms and books into your calendar" },
   { key: "payroll", audience: "RESORT", label: "Staff & payroll", blurb: "Employees, salaries and payslips" },
   { key: "imports", audience: "RESORT", label: "Spreadsheet import", blurb: "Bring old bookings and books in from Excel" },
-  // No agency features yet. The agency plan sells tools, not admission (§9);
-  // each tool arrives with its gate, the way the resort ones did.
+  // The agency plan sells tools, not admission (§9); each tool arrives with its
+  // gate, the way the resort ones did (2026-09-17 design, §2).
+  { key: "agency_website", audience: "AGENCY", label: "Your agency's own website", blurb: "A page with the resorts you sell and your tours, ending in a message to you" },
+  { key: "agency_api", audience: "AGENCY", label: "API for your agency's site", blurb: "Your existing website shows your resorts and tours, and books into them" },
 ] as const;
 
 /** The feature keys that belong on one shelf. */

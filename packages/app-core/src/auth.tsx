@@ -144,8 +144,9 @@ export function AuthProvider({
    * resort got the full menu, which is what made it look like a resort was
    * somehow granting agency access.
    *
-   * Plan features stay tied to the resort: a plan is a resort's, and an agency
-   * is on nobody's.
+   * Plan features are whoever the API says they belong to: the active
+   * resort's plan for resort staff, the agency's own plan for an agent
+   * (2026-09-17). The API answers for the right one, so this takes the answer.
    */
   useEffect(() => {
     let alive = true;
@@ -158,7 +159,7 @@ export function AuthProvider({
       .then((r) => {
         if (!alive) return;
         setPerms(r.permissions);
-        setFeatures(activeResort ? r.features ?? [] : []);
+        setFeatures(r.features ?? []);
       })
       .catch(() => {
         if (alive) {

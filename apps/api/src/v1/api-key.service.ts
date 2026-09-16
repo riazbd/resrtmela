@@ -13,10 +13,17 @@ import { PrismaService } from "../prisma/prisma.service";
 export const API_SCOPES = ["read", "write"] as const;
 export type ApiScope = (typeof API_SCOPES)[number];
 
-/** Who is calling, once a secret has been believed. */
+/**
+ * Who is calling, once a secret has been believed.
+ *
+ * A resort's key or an agency's — exactly one of `resortId` and `accountId` is
+ * set (2026-09-17 design, §3). Each API asks for its own kind and refuses the
+ * other, so a key never opens a door it was not made for.
+ */
 export interface ApiCaller {
   keyId: bigint;
-  resortId: number;
+  resortId: number | null;
+  accountId: number | null;
   scopes: ApiScope[];
 }
 
@@ -79,7 +86,7 @@ export class ApiKeyService {
       await this.prisma.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date() } });
     }
 
-    return { keyId: row.id, resortId: row.resortId, scopes: scopesOf(row.scopes) };
+    return { keyId: row.id, resortId: row.resortId, accountId: row.accountId, scopes: scopesOf(row.scopes) };
   }
 
   /** Whether this caller holds a scope. */
