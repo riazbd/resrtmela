@@ -464,6 +464,7 @@ export default function ReportsPage() {
               <PLRow label="Room revenue" value={pl.resort.roomRevenue} />
               <PLRow label="Extra person" value={pl.resort.extraPersonRevenue} />
               <PLRow label="Activities & other" value={pl.resort.otherRevenue} />
+              <PLRow label="Services, damage & fines" value={pl.resort.chargesRevenue} />
               <PLRow label="Discounts" value={-pl.resort.discounts} tone="red" />
               <PLRow label="Billed" value={pl.resort.billed} bold />
               <PLRow label="Still due — not income" value={pl.resort.stillDue} muted />

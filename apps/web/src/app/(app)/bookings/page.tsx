@@ -22,8 +22,9 @@ import { usePaymentMethods } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
 import { EditBookingModal } from "./edit-booking";
+import { ArrivalModal, DepartureModal, chargeLines } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
-import type { DiscountKind } from "@rh/shared";
+import { STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
@@ -379,6 +380,8 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [arrival, setArrival] = useState<"checkin" | "adjust" | null>(null);
+  const [departure, setDeparture] = useState<"checkout" | "charges" | null>(null);
   const qc = useQueryClient();
   const { submit } = useOutbox();
 
@@ -619,12 +622,39 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       <div>
         <div className="mb-1 text-xs font-medium text-slate-500">Rooms</div>
         <div className="flex flex-wrap gap-1.5">
-          {b.items.map((i) => (
+          {b.items.filter((i) => i.kind === "ROOM").map((i) => (
             <span key={i.id} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
               {i.room?.name ?? i.kind} · {money(i.unitPrice)}/night
             </span>
           ))}
         </div>
+        {/*
+          Everything else on the bill, each said for what it is. These used to
+          be chips beside the rooms reading "EXTRA_PERSON · ৳800/night", which
+          was neither the name nor the price.
+        */}
+        {b.items.some((i) => i.kind !== "ROOM") && (
+          <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
+            {b.items.filter((i) => i.kind === "EXTRA_PERSON").map((i) => (
+              <li key={i.id} className="flex justify-between gap-2">
+                <span>Extra person{b.nights > 0 && i.qty / b.nights !== 1 ? "s" : ""} — {i.room?.name ?? "room"} <span className="text-slate-400">({b.nights > 0 ? i.qty / b.nights : i.qty} × {b.nights} night(s))</span></span>
+                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
+              </li>
+            ))}
+            {chargeLines(b).map((i) => (
+              <li key={i.id} className="flex justify-between gap-2">
+                <span>{isStayChargeKind(i.chargeKind) ? STAY_CHARGE_LABELS[i.chargeKind] : "Charge"} — {i.label}{i.qty > 1 ? ` × ${i.qty}` : ""}</span>
+                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
+              </li>
+            ))}
+            {b.items.filter((i) => i.kind === "FB" || i.kind === "ACTIVITY").map((i) => (
+              <li key={i.id} className="flex justify-between gap-2">
+                <span>{i.kind === "FB" ? "Restaurant" : (i.slot?.name ?? "Activity")}</span>
+                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div>
@@ -677,10 +707,29 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
         {isStaff &&
           (NEXT_ACTIONS[b.state] ?? []).map((a) => (
-            <Button key={a.to} size="sm" onClick={() => transition(a.to)} loading={busy}>
+            <Button
+              key={a.to}
+              size="sm"
+              loading={busy}
+              onClick={() =>
+                // arriving and leaving each ask the one question the desk can
+                // only answer then: who came, and what else is owed
+                a.to === "CHECKED_IN" && can("bookings.edit")
+                  ? setArrival("checkin")
+                  : a.to === "CHECKED_OUT" && can("bookings.edit")
+                    ? setDeparture("checkout")
+                    : transition(a.to)
+              }
+            >
               {a.label}
             </Button>
           ))}
+        {isStaff && can("bookings.edit") && b.state === "CHECKED_IN" && (
+          <Button size="sm" variant="ghost" onClick={() => setArrival("adjust")}>Guests</Button>
+        )}
+        {isStaff && can("bookings.edit") && (b.state === "CHECKED_IN" || (b.state === "CHECKED_OUT" && !b.invoiceNo)) && (
+          <Button size="sm" variant="ghost" onClick={() => setDeparture("charges")}>Charges</Button>
+        )}
         {isStaff && !b.invoiceNo && !["CANCELLED", "NO_SHOW"].includes(b.state) && (
           <Button
             size="sm"
@@ -782,6 +831,22 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         open={editing}
         onClose={() => setEditing(false)}
         onSaved={async () => { await load(); onChanged(); }}
+      />
+      <ArrivalModal
+        booking={b}
+        open={arrival != null}
+        mode={arrival ?? "adjust"}
+        onClose={() => setArrival(null)}
+        onChanged={async () => { await load(); onChanged(); }}
+        onCheckIn={() => transition("CHECKED_IN")}
+      />
+      <DepartureModal
+        booking={b}
+        open={departure != null}
+        mode={departure ?? "charges"}
+        onClose={() => setDeparture(null)}
+        onChanged={async () => { await load(); onChanged(); }}
+        onCheckOut={() => transition("CHECKED_OUT")}
       />
     </div>
   );

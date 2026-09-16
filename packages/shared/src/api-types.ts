@@ -156,6 +156,9 @@ export interface BookingDetail extends BookingRow {
   agentPricing?: AgentPricing | null;
   invoiceNo?: string;
   remarks: string | null;
+  /** the invoice total: after discount, with tax */
+  total: number;
+  refunded: number;
   extraPersons: number;
   /** FLAT | PERCENT — how the discount was given; `discount` is what it came to */
   discountKind: string;
@@ -167,7 +170,7 @@ export interface BookingDetail extends BookingRow {
     id: number;
     kind: string;
     room: { id: number; name: string; type: string } | null;
-    slot: { id: number; startsAt: string; endsAt: string } | null;
+    slot: { id: number; name?: string; startsAt: string; endsAt: string } | null;
     qty: number;
     unitPrice: number | null;
     nights: number;
