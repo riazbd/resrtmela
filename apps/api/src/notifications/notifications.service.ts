@@ -57,6 +57,9 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     /** whose message this is — the resort whose wording and name it goes out in */
     resortId?: number | null;
   }): Promise<{ queued: boolean }> {
+    // nobody to send it to: a walk-in with no number. Queued, it failed three
+    // times, counted as stuck and held /health at "degraded" indefinitely.
+    if (!input.to?.trim()) return { queued: false };
     const key = input.dedupeKey ?? dedupeKeyFor(input.template, input.to);
     try {
       await this.prisma.notificationJob.create({
