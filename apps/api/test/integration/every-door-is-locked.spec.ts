@@ -71,6 +71,10 @@ const PUBLIC: RegExp[] = [
   /^GET \/domains\/lookup$/,
   /^GET \/site\/[^/]+$/,
   /^GET \/site\/[^/]+\/vacancy$/,
+  // an agency's shopfront, the same kind of caller (2026-09-17); pinned in
+  // an-agency-has-a-front-door
+  /^GET \/site\/agency\/[^/]+$/,
+  /^GET \/site\/agency\/[^/]+\/resorts\/[^/]+\/vacancy$/,
 ];
 
 /** Path parameters get a value nothing can match, so a bad guard cannot hide behind a 404. */
