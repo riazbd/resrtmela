@@ -139,6 +139,8 @@ export function AgencyPage({ page }: { page: AgencyPublished }) {
           </section>
         )}
 
+        {/* only when there is a way to reach them: an empty "plan your trip" box is a door with no handle */}
+        {(chat || call || agency.email || agency.address) && (
         <footer className="rounded-2xl bg-slate-50 p-6">
           <div className="text-lg font-semibold">Plan your trip with {agency.name}</div>
           <div className="mt-4 flex flex-wrap gap-3">
@@ -174,6 +176,7 @@ export function AgencyPage({ page }: { page: AgencyPublished }) {
             </div>
           )}
         </footer>
+        )}
       </div>
     </main>
   );

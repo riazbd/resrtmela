@@ -139,6 +139,12 @@ export default function AgencyWebsitePage() {
                 <p className="mt-1 text-xs text-slate-500">
                   {site.published ? "Live. Anyone with the address can see it." : "Not live yet. Publish it when it says what you want."}
                 </p>
+                {/* every button on the page is a way to reach the agency; with none, the page ends nowhere */}
+                {!site.whatsapp && !site.phone && (
+                  <p className="mt-1 text-xs font-medium text-amber-700">
+                    Add a WhatsApp number or a phone below — that is how visitors reach you.
+                  </p>
+                )}
               </div>
               <Button
                 onClick={() =>
