@@ -113,8 +113,9 @@ model Tenant {
   /// an agency's terms with the resorts that set any
   resortTerms ResortAgency[]
 
-  /// the keys an agency's own website holds
-  apiKeys ApiKey[] @relation("AccountApiKeys")
+  /// the keys an agency's own website holds, and where it is told things
+  apiKeys  ApiKey[]          @relation("AccountApiKeys")
+  webhooks WebhookEndpoint[] @relation("AccountWebhooks")
 
   /// an agency's own page, its pictures and the files behind them
   agencySite   AgencySite?
@@ -1862,8 +1863,11 @@ model ResortDomain {
 /// Where a resort's own website wants to be told things (2026-09-15 design, §6).
 model WebhookEndpoint {
   id        Int      @id @default(autoincrement())
-  resortId  Int
-  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// a resort's endpoint or an agency's (2026-09-17) — exactly one of the two
+  resortId  Int?
+  resort    Resort?  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  accountId Int?
+  account   Tenant?  @relation("AccountWebhooks", fields: [accountId], references: [id], onDelete: Cascade)
   url       String   @db.VarChar(500)
   /// what every call to this endpoint is signed with; shown once, like a key
   secret    String   @db.VarChar(64)
@@ -1873,6 +1877,7 @@ model WebhookEndpoint {
   deliveries WebhookDelivery[]
 
   @@index([resortId])
+  @@index([accountId])
   @@map("webhook_endpoints")
 }
 

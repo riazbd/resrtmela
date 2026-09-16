@@ -8,7 +8,8 @@ import { V1Controller } from "./v1.controller";
 import { WebhookModule } from "./webhook.module";
 import { AgencyApiService } from "./agency-api.service";
 import { AgencyKeysService } from "./agency-keys.service";
-import { AgencyV1Controller, AgencyKeysController } from "./agency-v1.controller";
+import { AgencyV1Controller, AgencyKeysController, AgencyWebhooksController } from "./agency-v1.controller";
+import { AgencyWebhooksService } from "./agency-webhooks.service";
 
 /**
  * The API a resort builds against (2026-09-15 design).
@@ -19,8 +20,8 @@ import { AgencyV1Controller, AgencyKeysController } from "./agency-v1.controller
  */
 @Module({
   imports: [CommonModule, SiteModule, BookingsModule, WebhookModule],
-  providers: [ApiKeyService, V1Service, AgencyApiService, AgencyKeysService],
-  controllers: [AgencyV1Controller, AgencyKeysController, V1Controller],
+  providers: [ApiKeyService, V1Service, AgencyApiService, AgencyKeysService, AgencyWebhooksService],
+  controllers: [AgencyV1Controller, AgencyKeysController, AgencyWebhooksController, V1Controller],
   exports: [ApiKeyService],
 })
 export class V1Module {}

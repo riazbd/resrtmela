@@ -113,20 +113,41 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
    * and a resort with no endpoints — which is nearly all of them — pays one
    * indexed query for it.
    */
-  async emit(resortId: number, event: WebhookEvent, data: unknown): Promise<void> {
+  async emit(resortId: number, event: WebhookEvent, data: Record<string, unknown>, agentUserId?: number | null): Promise<void> {
     try {
+      const at = new Date().toISOString();
       const endpoints = await this.prisma.webhookEndpoint.findMany({
         where: { resortId, active: true },
         select: { id: true },
       });
-      if (endpoints.length === 0) return;
-      await this.prisma.webhookDelivery.createMany({
-        data: endpoints.map((e) => ({
-          endpointId: e.id,
-          event,
-          payload: { event, at: new Date().toISOString(), data } as never,
-        })),
-      });
+      const rows = endpoints.map((e) => ({ endpointId: e.id, event, payload: { event, at, data } as never }));
+
+      /**
+       * And the agency that made the booking, when one did (2026-09-17). Only
+       * its own bookings, and with the resort named — an agency sells several,
+       * and a code alone does not say where.
+       */
+      if (agentUserId != null) {
+        const agent = await this.prisma.user.findUnique({
+          where: { id: agentUserId },
+          select: { accountId: true, parentAgent: { select: { accountId: true } } },
+        });
+        const accountId = agent?.accountId ?? agent?.parentAgent?.accountId ?? null;
+        if (accountId != null) {
+          const theirs = await this.prisma.webhookEndpoint.findMany({
+            where: { accountId, active: true },
+            select: { id: true },
+          });
+          if (theirs.length > 0) {
+            const resort = await this.prisma.resort.findUnique({ where: { id: resortId }, select: { slug: true } });
+            for (const e of theirs) {
+              rows.push({ endpointId: e.id, event, payload: { event, at, data: { ...data, resort: resort?.slug ?? null } } as never });
+            }
+          }
+        }
+      }
+      if (rows.length === 0) return;
+      await this.prisma.webhookDelivery.createMany({ data: rows });
     } catch (e) {
       // a webhook that cannot be queued must not lose the booking it is about
       this.logger.warn(`could not queue ${event} for resort ${resortId}: ${(e as Error).message}`);
@@ -219,8 +240,13 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
 
   /** Sends one again, by hand, once their site is fixed. */
   async retry(resortId: number, id: bigint): Promise<{ queued: true }> {
+    return this.retryFor({ resortId }, id);
+  }
+
+  /** The same, for whoever owns the endpoint — a resort or an agency. */
+  async retryFor(owner: { resortId: number } | { accountId: number }, id: bigint): Promise<{ queued: true }> {
     const row = await this.prisma.webhookDelivery.findFirst({
-      where: { id, endpoint: { resortId } },
+      where: { id, endpoint: owner },
       select: { id: true },
     });
     if (!row) throw Object.assign(new Error("No such delivery"), { status: 404 });

@@ -5,6 +5,7 @@ import { AuthGuard, type AuthedRequest } from "../common/auth.guard";
 import { ApiKeyGuard, type KeyedRequest } from "./api-key.guard";
 import { AgencyApiService } from "./agency-api.service";
 import { AgencyKeysService } from "./agency-keys.service";
+import { AgencyWebhooksService } from "./agency-webhooks.service";
 
 class GuestDto {
   @IsString() @MaxLength(160) fullName!: string;
@@ -24,6 +25,10 @@ class OrderDto {
 
 class CancelDto {
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
+
+class EndpointDto {
+  @IsString() @MaxLength(500) url!: string;
 }
 
 class KeyDto {
@@ -96,5 +101,39 @@ export class AgencyKeysController {
   @Delete(":id")
   revoke(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.keys.revoke(req.user, id);
+  }
+}
+
+/** Where the agency's own website is told about its bookings, and what was sent. */
+@UseGuards(AuthGuard)
+@Controller("agent/webhooks")
+export class AgencyWebhooksController {
+  constructor(@Inject(AgencyWebhooksService) private readonly hooks: AgencyWebhooksService) {}
+
+  @Get()
+  list(@Req() req: AuthedRequest) {
+    return this.hooks.list(req.user);
+  }
+
+  @Post()
+  add(@Req() req: AuthedRequest, @Body() dto: EndpointDto) {
+    return this.hooks.add(req.user, dto.url);
+  }
+
+  @Get("deliveries")
+  deliveries(@Req() req: AuthedRequest) {
+    return this.hooks.deliveries(req.user);
+  }
+
+  @Post("deliveries/:deliveryId/retry")
+  @HttpCode(200)
+  retry(@Req() req: AuthedRequest, @Param("deliveryId") deliveryId: string) {
+    if (!/^\d+$/.test(deliveryId)) throw Object.assign(new Error("No such delivery"), { status: 404 });
+    return this.hooks.retry(req.user, BigInt(deliveryId));
+  }
+
+  @Delete(":id")
+  remove(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
+    return this.hooks.remove(req.user, id);
   }
 }

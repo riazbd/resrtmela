@@ -6,6 +6,7 @@ import { api, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
+import { AgencyWebhooks } from "./agency-webhooks";
 
 /**
  * The API an agency's own website builds against (2026-09-17 design, §3).
@@ -93,7 +94,7 @@ export default function AgencyApiPage() {
 
       {minted && (
         <Card title="Copy this now — you will not see it again">
-          <p className="text-sm text-slate-600">Key for {minted.name}</p>
+          <p className="text-sm text-slate-600">{minted.name.startsWith("Signing secret") ? minted.name : `Key for ${minted.name}`}</p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 overflow-x-auto rounded-lg bg-slate-900 px-3 py-2 font-mono text-xs text-emerald-300">{minted.secret}</code>
             <Button
@@ -157,6 +158,8 @@ export default function AgencyApiPage() {
         )}
       </Card>
 
+      <AgencyWebhooks onSecret={(what, secret) => setMinted({ name: what, secret })} />
+
       <Card title="For whoever builds your site">
         <p className="text-sm text-slate-600">
           Send the key as <code className="font-mono text-xs">Authorization: Bearer …</code>. A resort is named by its
@@ -186,6 +189,15 @@ curl -X POST ${API_URL}/v1/agency/resorts/sky-eco-resort/bookings \\
           agencies book (<code className="font-mono text-xs">bookableUntil</code>). Send the same Idempotency-Key again and
           you get the same booking back, not a second one.
         </p>
+        <p className="mt-3 text-sm text-slate-600">
+          To check a webhook came from us, compute the HMAC over the raw body and compare it with{" "}
+          <code className="font-mono text-xs">X-Resort-Signature</code>:
+        </p>
+        <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-relaxed text-slate-100">
+{`const expected =
+  "sha256=" + crypto.createHmac("sha256", SECRET).update(rawBody, "utf8").digest("hex");
+if (expected !== req.headers["x-resort-signature"]) return res.sendStatus(401);`}
+        </pre>
       </Card>
     </div>
   );

@@ -688,13 +688,12 @@ export class BookingsService {
      * reason the notifications above are wrapped: a booking that is already in
      * the database must not be lost to something downstream of it.
      */
-    await this.webhooks.emit(input.resortId, "booking.created", {
-      code: booking.code,
-      checkIn,
-      checkOut,
-      adults: input.adults,
-      children: input.children,
-    });
+    await this.webhooks.emit(
+      input.resortId,
+      "booking.created",
+      { code: booking.code, checkIn, checkOut, adults: input.adults, children: input.children },
+      agentUserId,
+    );
     return this.detail(claims, booking.id);
   }
 
@@ -1467,6 +1466,7 @@ export class BookingsService {
       b.resortId,
       to === "CANCELLED" || to === "NO_SHOW" ? "booking.cancelled" : "booking.changed",
       { code: b.code, state: to },
+      b.agentUserId,
     );
     return this.detail(claims, bookingId);
   }
@@ -1512,6 +1512,8 @@ export class BookingsService {
     if (!approve) {
       await this.prisma.booking.update({ where: { id: b.id }, data: { cancelState: "REJECTED" } });
       await this.audit.log({ actorId: claims.userId, resortId: b.resortId, action: "booking.cancelRejected", entity: "booking", entityId: b.id });
+      // the agency asked, so the agency is told the answer
+      await this.webhooks.emit(b.resortId, "booking.changed", { code: b.code, state: b.state, cancelRequest: "REJECTED" }, b.agentUserId);
       return { approved: false };
     }
     await this.prisma.$transaction(async (tx) => {
@@ -1520,6 +1522,8 @@ export class BookingsService {
       await this.activities.releaseBookingActivities(tx, b.id);
       await this.audit.log({ actorId: claims.userId, resortId: b.resortId, action: "booking.cancelApproved", entity: "booking", entityId: b.id }, tx);
     });
+    // its nights are free again: the resort's site needs that as much as the agency's
+    await this.webhooks.emit(b.resortId, "booking.cancelled", { code: b.code, state: "CANCELLED", cancelRequest: "APPROVED" }, b.agentUserId);
     return { approved: true };
   }
 
