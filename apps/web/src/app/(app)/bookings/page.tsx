@@ -22,6 +22,7 @@ import { usePaymentMethods } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
 import { EditBookingModal } from "./edit-booking";
+import { whatTheBookingNeeds, BOOKING_GAP_MESSAGES } from "@/lib/booking-form";
 import { ArrivalModal, DepartureModal, chargeLines } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
 import { STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind } from "@rh/shared";
@@ -76,6 +77,9 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const [advMethod, setAdvMethod] = useState("CASH");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** set by pressing Create with something missing; marks the empty fields */
+  const [tried, setTried] = useState(false);
+  const gaps = whatTheBookingNeeds({ rooms: picked.length, guestName: fullName });
 
   useEffect(() => {
     if (!open || !preset) return;
@@ -170,6 +174,11 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
 
   async function submit() {
     if (!activeResort) return;
+    if (gaps.length > 0) {
+      setTried(true);
+      setErr(gaps.map((g) => BOOKING_GAP_MESSAGES[g]).join(" "));
+      return;
+    }
     setErr(null);
     setBusy(true);
     try {
@@ -225,6 +234,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           advancePayment: advAmount > 0 ? { amount: advAmount, method: advMethod } : undefined,
         },
       });
+      setTried(false);
       push(`Booking ${created.code} created`);
       onCreated(created.code);
       onClose();
@@ -247,6 +257,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
         <div>
           <div className="mb-1 text-xs font-medium text-slate-600">
             Rooms {loadingGrid && <span className="text-slate-400">· checking availability…</span>}
+            {tried && gaps.includes("rooms") && <span className="text-red-600"> · pick at least one</span>}
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {grid.map((r) => (
@@ -278,7 +289,15 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="Guest name"><Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder={walkIn ? "local" : "Full name"} /></Field>
+            <Field label="Guest name">
+              <Input
+                value={fullName}
+                onChange={(e) => { setFullName(e.target.value); if (err && tried) setErr(null); }}
+                placeholder={walkIn ? "local" : "Full name"}
+                aria-invalid={tried && gaps.includes("guestName")}
+                className={tried && gaps.includes("guestName") ? "!border-red-400 !ring-2 !ring-red-100" : ""}
+              />
+            </Field>
             <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={walkIn ? "optional" : "01XXX-XXXXXX"} /></Field>
             <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="optional — invoices & OTP" /></Field>
             {!walkIn && <Field label="NID / Passport"><Input value={nid} onChange={(e) => setNid(e.target.value)} placeholder="optional" /></Field>}
@@ -330,7 +349,8 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
           <Button
             loading={busy}
-            disabled={!picked.length || !fullName}
+            // never silently greyed out: pressing it with something missing
+            // says what, where a disabled button said nothing at all
             onClick={submit}
           >
             Create booking {picked.length ? `(${picked.length} room${picked.length > 1 ? "s" : ""})` : ""}

@@ -41,10 +41,39 @@ export function Button({
   );
 }
 
+/**
+ * A text box — and, for `type="number"`, one that a 0 does not get in the way of.
+ *
+ * Every number on the console starts at 0 and the cursor landed after it, so
+ * typing 5000 into Advance showed "05000": the state was 5000, and React
+ * leaves a number input's text alone when the numbers agree. Entering the box
+ * selects what is in it, so typing replaces the 0, and a leading zero typed
+ * anyway is dropped before anyone reads the value. Here once, because there
+ * are sixty of these boxes.
+ */
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const numeric = props.type === "number";
   return (
     <input
       {...props}
+      {...(numeric
+        ? {
+            onFocus: (e: React.FocusEvent<HTMLInputElement>) => {
+              const box = e.currentTarget;
+              // after the browser has placed the cursor, or it undoes the selection
+              requestAnimationFrame(() => {
+                try { box.select(); } catch { /* not every browser selects a number box */ }
+              });
+              props.onFocus?.(e);
+            },
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+              const box = e.currentTarget;
+              const clean = box.value.replace(/^(-?)0+(?=\d)/, "$1");
+              if (clean !== box.value) box.value = clean;
+              props.onChange?.(e);
+            },
+          }
+        : {})}
       className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 ${props.className ?? ""}`}
     />
   );
