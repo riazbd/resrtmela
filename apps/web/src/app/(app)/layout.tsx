@@ -154,7 +154,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       )}
       <div className="flex min-h-screen flex-1">
       {/* mobile backdrop */}
-      {navOpen && <div className="fixed inset-0 z-30 bg-slate-900/50 lg:hidden" onClick={() => setNavOpen(false)} />}
+      {navOpen && <div className="fixed inset-0 z-[35] bg-slate-900/50 lg:hidden" onClick={() => setNavOpen(false)} />}
       {/* sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-brand-900 text-white transition-transform duration-200 lg:translate-x-0 ${navOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="px-4 py-4">
@@ -208,7 +208,17 @@ function Shell({ children }: { children: React.ReactNode }) {
           so one wide toolbar stretched this whole column — and the header with
           it, which is why the language button sat 170px off a 390px screen. */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:ml-60">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur sm:px-6">
+        {/*
+          z-30, above anything a page draws. At z-20 it tied with the sticky
+          room column and "Sold" row of the calendars, and because a sticky
+          header is its own stacking context, the notifications panel inside
+          it could never rise above z-20 either — so on a phone the calendar's
+          ROOM and SOLD cells were painted across the notifications. The
+          mobile menu's backdrop sits at 35, above this, and the drawer at 40.
+          The z-index and the stickiness live on the wrapper below.
+        */}
+        <div className="sticky top-0 z-30">
+        <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur sm:px-6">
           <div className="flex min-w-0 items-center gap-2">
             <button
               onClick={() => setNavOpen(true)}
@@ -253,7 +263,10 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        {/* inside the sticky block, under the header: sticky on its own at
+            top-0 it covered the menu button and the bell whenever it showed */}
         <OutboxBar />
+        </div>
         <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
           {/* an agency's standing with the platform: it can look around, but not sell */}
           {me?.account && me.account.status !== "active" && (
@@ -343,7 +356,9 @@ function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        // pinned to the screen's edges on a phone: anchored to the bell, a
+        // 320px panel ran off the left side of a 390px screen
+        <div className="fixed inset-x-3 top-16 z-50 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-80">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
             <div className="text-sm font-bold text-slate-800">Notifications</div>
             <button onClick={() => setOpen(false)} className="text-xs text-slate-400 hover:text-slate-700">Close</button>

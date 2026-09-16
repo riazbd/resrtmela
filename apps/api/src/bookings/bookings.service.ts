@@ -115,9 +115,25 @@ export interface RoomBookingTxParams {
   advancePayment?: { amount: number; method: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK" };
 }
 
+/**
+ * A stay's date, as a day: "15 Sep 2026".
+ *
+ * Stay dates are stored as midnight UTC and mean a calendar day. Put into a
+ * string as a `Date` they printed the server's clock and zone — "Tue Sep 15
+ * 2026 02:00:00 GMT+0200 (Central European Summer Time)" — and formatted
+ * without `timeZone: "UTC"` they are a day early on any server west of UTC.
+ */
+function stayDay(d: Date | string | null, withYear = true): string {
+  if (!d) return "?";
+  // assembled from parts: en-GB's short September is "Sept" in current ICU
+  const parts = new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })
+    .formatToParts(new Date(d));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return [part("day"), part("month"), withYear ? part("year") : ""].filter(Boolean).join(" ");
+}
+
 function stayDates(inv: { booking: { checkIn: Date | string | null; checkOut: Date | string | null } }): string {
-  const fmt = (d: Date | string | null) =>
-    d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "?";
+  const fmt = (d: Date | string | null) => stayDay(d, false);
   return `${fmt(inv.booking.checkIn)} → ${fmt(inv.booking.checkOut)}`;
 }
 
@@ -654,7 +670,7 @@ export class BookingsService {
             userId: s.userId,
             resortId: input.resortId,
             title: `New booking ${booking.code}`,
-            body: `${guestName?.fullName ?? "Guest"} · ${roomRows.map((r) => r.name).join(", ")} · ${checkIn} → ${checkOut}`,
+            body: `${guestName?.fullName ?? "Guest"} · ${roomRows.map((r) => r.name).join(", ")} · ${stayDay(checkIn)} → ${stayDay(checkOut)}`,
             kind: "booking",
             link: `/bookings?id=${booking.id}`,
           })),
