@@ -5,7 +5,7 @@ import { ROLE, type Role, type JwtClaims, sheetReceiptName } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { agencyOf } from "../common/selling-access";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
-import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange } from "../common/money";
+import { bookingTotals, fbBillTotals, perNightRevenue, agentCommission, monthsInRange, payrollShareOfRange, splitReceipt, type TaxRule } from "../common/money";
 import { PermissionsService } from "../common/permissions";
 import { TaxService } from "../common/tax.service";
 import { CommissionService } from "../common/commission.service";
@@ -68,6 +68,71 @@ export class ReportsService {
     });
   }
 
+  /**
+   * The money that actually came in between two dates — the only thing income
+   * and profit are made of.
+   *
+   * Both reports used to call a stay's whole bill "income" the day it was
+   * booked, so the balance nobody had paid was reported as profit. This reads
+   * the receipts instead, by the day they were received:
+   *
+   * - every payment on a booking that still exists, whatever state it is in —
+   *   an advance a cancelled guest did not get back is the resort's money;
+   * - a refund, on the day it was paid back, takes its share back out;
+   * - each receipt is split by `splitReceipt`: the tax inside it goes to
+   *   `tax`, and the rest pays the room and restaurant parts of that stay's
+   *   bill in proportion;
+   * - a restaurant bill with no stay behind it counts by what was paid on it.
+   *   One charged to a room does not, because the counter's payment is already
+   *   mirrored onto the booking and would be counted twice.
+   */
+  private async received(resortId: number, from: Date | null, to: Date | null, taxRules: TaxRule[]) {
+    const window = from && to ? { gte: from, lt: to } : undefined;
+    const payments = await this.prisma.payment.findMany({
+      where: { booking: { resortId, deletedAt: null }, ...(window ? { receivedAt: window } : {}) },
+      select: {
+        amount: true,
+        paymentType: true,
+        booking: { select: { id: true, discount: true, checkIn: true, checkOut: true, items: true } },
+      },
+    });
+    let resort = 0;
+    let restaurant = 0;
+    let tax = 0;
+    for (const p of payments) {
+      const signed = p.paymentType === "REFUND" ? -Number(p.amount) : Number(p.amount);
+      const split = splitReceipt({ ...p.booking, payments: [], taxRules }, signed);
+      tax += split.tax;
+      for (const [kind, amount] of split.byKind) {
+        if (kind === "FB") restaurant += amount;
+        else resort += amount;
+      }
+    }
+
+    const walkIns = await this.prisma.fbBill.findMany({
+      where: { resortId, deletedAt: null, bookingId: null, ...(window ? { billDate: window } : {}) },
+      include: { items: true },
+    });
+    let restaurantTax = 0;
+    for (const bill of walkIns) {
+      const t = fbBillTotals(bill, taxRules);
+      const paid = Number(bill.paidAmount);
+      const share = t.total > 0 ? t.tax / t.total : 0;
+      restaurant += paid * (1 - share);
+      restaurantTax += paid * share;
+    }
+    return {
+      resort: round2(resort),
+      restaurant: round2(restaurant),
+      tax: round2(tax),
+      restaurantTax: round2(restaurantTax),
+      /** what the walk-in bills in the window still owe; a room's bills are in its booking's due */
+      restaurantDue: round2(
+        walkIns.reduce((s, b) => s + Math.max(0, fbBillTotals(b, taxRules).total - Number(b.paidAmount)), 0),
+      ),
+    };
+  }
+
   /** Management dashboard metrics (sheet tab 12): resort + F&B + expenses = net. */
   async metrics(claims: JwtClaims, resortId: number, from?: string, to?: string) {
     requireResortAccess(claims, resortId);
@@ -105,13 +170,26 @@ export class ReportsService {
     });
     const expenseTotal = round2(Number(expenses._sum.amount ?? 0));
     const netRoom = round2(gross - discount);
-    const grossIncome = round2(netRoom + fbRevenue);
+    // what came in, not what was billed: see `received`
+    const came = await this.received(
+      resortId,
+      from && to ? dateOnly(from) : null,
+      from && to ? dateOnly(to) : null,
+      taxRules,
+    );
+    const grossIncome = round2(came.resort + came.restaurant);
+    const stillDue = round2(bookings.reduce((s, b) => s + Math.max(0, b.due), 0) + came.restaurantDue);
     return {
       resortRevenue: gross,
       discount,
+      /** billed for the stays in the period, after discount — not income */
       netRoomRevenue: netRoom,
       restaurantRevenue: fbRevenue,
+      /** received in the period, net of refunds and of the tax inside it */
       grossIncome,
+      /** what the period's stays and bills have not paid yet — shown, never profit */
+      stillDue,
+      taxCollected: round2(came.tax + came.restaurantTax),
       expenses: expenseTotal,
       netProfit: round2(grossIncome - expenseTotal),
       bookings: bookings.length,
@@ -166,7 +244,7 @@ export class ReportsService {
     // resort revenue: ROOM + EXTRA_PERSON items on counted bookings
     const bookings = await this.prisma.booking.findMany({
       where: { resortId, deletedAt: null, state: { in: COUNTED_STATES }, checkIn: { gte: from, lt: to } },
-      include: { items: true },
+      include: { items: true, payments: true },
     });
     let roomRevenue = 0;
     let extraPersonRevenue = 0;
@@ -234,9 +312,18 @@ export class ReportsService {
       payroll.reduce((s, p) => s + Number(p.amount) * payrollShareOfRange(p.month, fromStr, toStr), 0),
     );
 
-    const resortIncome = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
+    const resortBilled = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
+    /**
+     * Billed is what the period's stays are worth; income is what came in.
+     * Only the second is profit — see `received`.
+     */
+    const came = await this.received(resortId, from, to, taxRules);
+    const resortIncome = came.resort;
+    const resortDue = round2(
+      bookings.reduce((s, b) => s + Math.max(0, bookingTotals({ ...b, taxRules }).due), 0),
+    );
     const resortNet = round2(resortIncome - resortExpenses - payrollTotal);
-    const restaurantNet = round2(restaurantRevenue - restaurantExpenses);
+    const restaurantNet = round2(came.restaurant - restaurantExpenses);
     return {
       from: fromStr,
       to: toStr,
@@ -245,7 +332,10 @@ export class ReportsService {
         extraPersonRevenue,
         otherRevenue,
         discounts: round2(discounts),
+        billed: resortBilled,
         income: resortIncome,
+        taxCollected: came.tax,
+        stillDue: resortDue,
         expenses: resortExpenses,
         payroll: payrollTotal,
         net: resortNet,
@@ -253,12 +343,17 @@ export class ReportsService {
       },
       restaurant: {
         revenue: restaurantRevenue,
+        income: came.restaurant,
+        taxCollected: came.restaurantTax,
+        stillDue: came.restaurantDue,
         expenses: restaurantExpenses,
         net: restaurantNet,
         expenseCategories: [...restByCat.entries()].map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
       },
       combined: {
-        income: round2(resortIncome + restaurantRevenue),
+        billed: round2(resortBilled + restaurantRevenue),
+        income: round2(resortIncome + came.restaurant),
+        stillDue: round2(resortDue + came.restaurantDue),
         expenses: round2(resortExpenses + restaurantExpenses + payrollTotal),
         net: round2(resortNet + restaurantNet),
       },

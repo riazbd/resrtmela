@@ -82,6 +82,7 @@ describe("the Discount column", () => {
 
     expect(pl.resort.roomRevenue).toBe(10000);
     expect(pl.resort.discounts).toBe(1500);
-    expect(pl.resort.income).toBe(8500);
+    // the discount comes off what was billed; income is what was received
+    expect(pl.resort.billed).toBe(8500);
   });
 });

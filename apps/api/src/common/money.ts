@@ -262,6 +262,45 @@ export function bookingTotals(input: BookingMoneyInput): BookingTotals {
   };
 }
 
+/** What one receipt against a stay pays for: the resort's net, per part, and the tax inside it. */
+export interface ReceiptSplit {
+  /** net of tax, divided across the parts of the bill in proportion to their gross */
+  byKind: Map<MoneyItemKind, number>;
+  net: number;
+  tax: number;
+}
+
+/**
+ * What a payment against a stay is income *for*.
+ *
+ * A payment is one figure against a bill that may be part room, part
+ * restaurant, part tax. The tax inside it was collected for the government and
+ * is not the resort's income; the rest pays each part of the bill in
+ * proportion — which is the only split that needs no further explanation and
+ * the one that makes a bill paid in full split exactly as the bill does.
+ *
+ * `amount` is signed: a refund comes in negative and takes back its share.
+ */
+export function splitReceipt(input: BookingMoneyInput, amount: number): ReceiptSplit {
+  const t = bookingTotals({ ...input, payments: [] });
+  const taxShare = t.total > 0 ? t.tax / t.total : 0;
+  const tax = amount * taxShare;
+  const net = amount - tax;
+
+  const grossByKind = new Map<MoneyItemKind, number>();
+  for (const item of input.items) {
+    const gross = num(item.unitPrice) * item.qty * itemNights(item.itemKind, t.nights);
+    grossByKind.set(item.itemKind, (grossByKind.get(item.itemKind) ?? 0) + gross);
+  }
+  const byKind = new Map<MoneyItemKind, number>();
+  if (t.rent > 0) {
+    for (const [kind, gross] of grossByKind) byKind.set(kind, (net * gross) / t.rent);
+  } else {
+    // nothing left on the bill to weigh it by — a stay whose items are gone
+    byKind.set("ROOM", net);
+  }
+  return { byKind, net, tax };
+}
 
 /** One line of a restaurant bill, as every caller already shapes it. */
 export interface FbLine {

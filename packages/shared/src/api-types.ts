@@ -423,19 +423,30 @@ export interface PLReport {
     extraPersonRevenue: number;
     otherRevenue: number;
     discounts: number;
+    /** what the period's stays are worth after discount — not income */
+    billed: number;
+    /** money received in the period, net of refunds and tax: what profit is made of */
     income: number;
+    /** the tax inside what was received, collected for the government */
+    taxCollected: number;
+    /** what the period's stays have not paid yet */
+    stillDue: number;
     expenses: number;
     payroll: number;
     net: number;
     expenseCategories: { category: string; amount: number }[];
   };
   restaurant: {
+    /** sales billed in the period, net of tax */
     revenue: number;
+    income: number;
+    taxCollected: number;
+    stillDue: number;
     expenses: number;
     net: number;
     expenseCategories: { category: string; amount: number }[];
   };
-  combined: { income: number; expenses: number; net: number };
+  combined: { billed: number; income: number; stillDue: number; expenses: number; net: number };
 }
 
 export interface ExpenseRow {

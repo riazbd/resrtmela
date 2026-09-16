@@ -52,6 +52,8 @@ interface FiscalYear { label: string; from: string; to: string }
 interface Metrics {
   resortRevenue: number; discount: number; netRoomRevenue: number;
   restaurantRevenue: number; grossIncome: number; expenses: number; netProfit: number;
+  /** what the period's stays and bills have not paid — never part of profit */
+  stillDue: number; taxCollected: number;
   bookings: number;
 }
 interface DailyRow { date: string; roomRevenue: number; fbRevenue: number; expenses: number; net: number }
@@ -104,8 +106,8 @@ export default function ReportsPage() {
   /**
    * The money tab keeps its own dates.
    *
-   * The card above is labelled "Check-in from/to" and the rest of this page
-   * means it — but this report filters on when the money *arrived*, and a stay
+   * The period card above mostly means check-in dates — but this report
+   * filters on when the money *arrived*, and a stay
    * in September and a payment in September are not the same set. An owner
    * counting a drawer means the second, so it asks its own question in its own
    * words rather than borrowing one that is wrong for it.
@@ -217,8 +219,8 @@ export default function ReportsPage() {
             ))}
           </Select>
         </Field>
-        <Field label="Check-in from"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-          <Field label="Check-in to"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
       </Card>
       )}
@@ -420,21 +422,41 @@ export default function ReportsPage() {
       */}
       {tab === "Summary" && metrics && (
         <Card title="P&L summary (management metrics)">
+          {/*
+            Two rows because they answer two questions. The first is what the
+            stays were worth; the second is what the resort actually has. A
+            balance nobody has paid was counted as income and profit here, so
+            an owner read money he did not have.
+          */}
+          <div className="mb-1.5 text-xs font-semibold text-slate-500">Billed for stays in this period</div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <MiniBox label="Resort revenue" value={money(metrics.resortRevenue)} />
+            <MiniBox label="Room rent" value={money(metrics.resortRevenue)} />
             <MiniBox label="Discount" value={money(metrics.discount)} />
-            <MiniBox label="Net room revenue" value={money(metrics.netRoomRevenue)} />
-            <MiniBox label="Restaurant revenue" value={money(metrics.restaurantRevenue)} />
-            <MiniBox label="Gross income" value={money(metrics.grossIncome)} tone="green" />
+            <MiniBox label="Rooms, after discount" value={money(metrics.netRoomRevenue)} />
+            <MiniBox label="Restaurant sales" value={money(metrics.restaurantRevenue)} />
+          </div>
+          <div className="mb-1.5 mt-4 text-xs font-semibold text-slate-500">Money that came in</div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <MiniBox label="Income received" value={money(metrics.grossIncome)} tone="green" />
             <MiniBox label="Expenses" value={money(metrics.expenses)} tone="red" />
             <MiniBox label="NET PROFIT" value={money(metrics.netProfit)} tone={metrics.netProfit >= 0 ? "green" : "red"} />
+            <MiniBox label="Still due — not income" value={money(metrics.stillDue)} tone="red" />
           </div>
+          <p className="mt-3 text-[11px] leading-snug text-slate-400">
+            Income is what was received in this period, less refunds and less the
+            {" "}{money(metrics.taxCollected)} of tax inside it. Money still owed becomes
+            income on the day it is paid.
+          </p>
         </Card>
       )}
 
       {tab === "Profit & loss" && !pl && <Card title="Profit & Loss statement"><Empty msg="Loading…" /></Card>}
       {tab === "Profit & loss" && pl && (
         <Card title={`Profit & Loss statement (${pl.from} → ${pl.to})`}>
+          <p className="mb-3 text-xs text-slate-500">
+            Billed counts the stays that check in between these dates. Income counts the money
+            received between them — profit is made only from that.
+          </p>
           <div className="grid gap-4 lg:grid-cols-3">
             {/* resort column */}
             <div className="rounded-xl border border-slate-200 p-4">
@@ -443,7 +465,13 @@ export default function ReportsPage() {
               <PLRow label="Extra person" value={pl.resort.extraPersonRevenue} />
               <PLRow label="Activities & other" value={pl.resort.otherRevenue} />
               <PLRow label="Discounts" value={-pl.resort.discounts} tone="red" />
-              <PLRow label="Income" value={pl.resort.income} bold />
+              <PLRow label="Billed" value={pl.resort.billed} bold />
+              <PLRow label="Still due — not income" value={pl.resort.stillDue} muted />
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <PLRow label="Income received" value={pl.resort.income} bold tone="green" />
+              {pl.resort.taxCollected !== 0 && (
+                <PLRow label="Tax collected — not income" value={pl.resort.taxCollected} muted />
+              )}
               <div className="my-2 border-t border-dashed border-slate-200" />
               <PLRow label="Operating expenses" value={-pl.resort.expenses} tone="red" />
               {pl.resort.expenseCategories.slice(0, 4).map((c) => (
@@ -457,8 +485,13 @@ export default function ReportsPage() {
             {/* restaurant column */}
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="mb-2 text-sm font-bold text-slate-800">Restaurant</div>
-              <PLRow label="F&B sales" value={pl.restaurant.revenue} />
-              <PLRow label="Income" value={pl.restaurant.revenue} bold />
+              <PLRow label="F&B sales billed" value={pl.restaurant.revenue} bold />
+              <PLRow label="Still due — not income" value={pl.restaurant.stillDue} muted />
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <PLRow label="Income received" value={pl.restaurant.income} bold tone="green" />
+              {pl.restaurant.taxCollected !== 0 && (
+                <PLRow label="Tax collected — not income" value={pl.restaurant.taxCollected} muted />
+              )}
               <div className="my-2 border-t border-dashed border-slate-200" />
               <PLRow label="Restaurant expenses" value={-pl.restaurant.expenses} tone="red" />
               {pl.restaurant.expenseCategories.slice(0, 4).map((c) => (
@@ -471,7 +504,10 @@ export default function ReportsPage() {
             {/* combined column */}
             <div className="rounded-xl border-2 border-brand-200 bg-brand-50/40 p-4">
               <div className="mb-2 text-sm font-bold text-slate-800">Combined</div>
-              <PLRow label="Total income" value={pl.combined.income} bold />
+              <PLRow label="Billed" value={pl.combined.billed} />
+              <PLRow label="Still due — not income" value={pl.combined.stillDue} muted />
+              <div className="my-2 border-t border-dashed border-slate-200" />
+              <PLRow label="Income received" value={pl.combined.income} bold tone="green" />
               <PLRow label="Total expenses (incl. payroll)" value={-pl.combined.expenses} tone="red" />
               <div className="my-2 border-t border-slate-300" />
               <PLRow label="NET PROFIT" value={pl.combined.net} bold tone={pl.combined.net >= 0 ? "green" : "red"} />
@@ -535,6 +571,10 @@ export default function ReportsPage() {
       )}
       {tab === "Daily" && daily && daily.length > 0 && (
         <Card title="Daily revenue" className="!p-0">
+          <p className="px-4 pt-3 text-[11px] text-slate-400">
+            What each night of stay is worth, paid or not. For money that actually came in, see
+            Money and Profit &amp; loss.
+          </p>
           <div className="max-h-64 overflow-auto">
             <Table minWidth={520}>
               <thead className="sticky top-0 border-b border-slate-100 bg-white">
