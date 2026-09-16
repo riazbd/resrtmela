@@ -157,8 +157,11 @@ export default function AgencyCalendarPage() {
 
   if (role !== "AGENT") return <Empty msg="Agents only" />;
 
-  const taken = cells.size;
-  const capacity = sellable.length * days.length;
+  // what an agency can still sell here: a night past the resort's window is
+  // free, but not to them, so it is not counted as free
+  const openDays = lastOpenNight ? days.filter((d) => d <= lastOpenNight) : days;
+  const taken = [...cells.keys()].filter((k) => openDays.includes(k.slice(k.indexOf("|") + 1))).length;
+  const capacity = sellable.length * openDays.length;
   const mine = [...cells.values()].filter((c) => c.mine).length;
 
   return (

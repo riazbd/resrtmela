@@ -904,7 +904,8 @@ export class BookingsService {
         checkOut: b.checkOut,
         guest: b.guest,
         agent: b.agentUser?.name ?? null,
-        rooms: b.items.map((i) => i.room?.name).filter(Boolean),
+        // room lines only: an extra person's line names the room they sleep in
+        rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => i.room?.name).filter(Boolean),
         adults: b.adults,
         children: b.children,
         ...BookingsService.computeTotals(b, taxRules),
@@ -1068,7 +1069,8 @@ export class BookingsService {
 
     const newCheckIn = patch.checkIn ? dateOnly(patch.checkIn) : b.checkIn;
     const newCheckOut = patch.checkOut ? dateOnly(patch.checkOut) : b.checkOut;
-    const newRoomIds = patch.roomIds ?? b.items.map((i) => i.roomId!).filter(Boolean);
+    const roomLines = b.items.filter((i) => i.itemKind === "ROOM");
+    const newRoomIds = patch.roomIds ?? roomLines.map((i) => i.roomId!).filter(Boolean);
     const nights = newCheckIn && newCheckOut ? nightsBetween(newCheckIn, newCheckOut) : 0;
     if (nights <= 0) throw badRequest("Invalid date range");
 
@@ -1098,7 +1100,7 @@ export class BookingsService {
 
     const roomsChanged =
       JSON.stringify([...newRoomIds].sort()) !==
-      JSON.stringify([...b.items.map((i) => i.roomId!).filter(Boolean)].sort());
+      JSON.stringify([...roomLines.map((i) => i.roomId!).filter(Boolean)].sort());
     const newKind: DiscountKind =
       patch.discountKind !== undefined
         ? this.assertDiscount(patch.discountKind, patch.discount)
@@ -1619,7 +1621,7 @@ export class BookingsService {
         agentName: b.agentUser?.name ?? null,
         checkIn: b.checkIn,
         checkOut: b.checkOut,
-        rooms: b.items.map((i) => ({ id: i.roomId, name: i.room?.name ?? "?" })),
+        rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => ({ id: i.roomId, name: i.room?.name ?? "?" })),
       })),
     };
   }
@@ -2197,7 +2199,7 @@ export class BookingsService {
       departing: b.checkOut?.getTime() === t.getTime(),
       guest: b.guest,
       agent: b.agentUser?.name,
-      rooms: b.items.map((i) => i.room?.name),
+      rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => i.room?.name),
       state: b.state,
       ...BookingsService.computeTotals(b, taxRules),
     }));

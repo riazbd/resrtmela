@@ -13,7 +13,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeBookingsService } from "../helpers/services";
+import { makeBookingsService, makePaymentsService } from "../helpers/services";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
 
@@ -110,6 +110,29 @@ describe("adding the people who came", () => {
       where: { action: "booking.extra_persons", entityId: b.id },
     });
     expect(log).toBeTruthy();
+  });
+});
+
+/**
+ * An extra person's line names the room they sleep in — which made every
+ * screen that listed "the booking's rooms" from all its lines list that room
+ * twice: "102, 102" in the bookings list, a second bar on the calendar, two
+ * rooms on the dues screen.
+ */
+describe("the rooms a booking lists", () => {
+  it("are its rooms, once each, however many extra persons are in them", async () => {
+    const b = await bookForTwo();
+    await bookings().setExtraPersons(desk, b.id, 2);
+
+    const list = await bookings().list(desk, { resortId: fx.resortId });
+    const row = list.rows.find((r) => r.id === b.id)!;
+    expect(row.rooms).toEqual([fx.rooms[0]!.name]);
+
+    const cal = await bookings().calendar(desk, fx.resortId, STAY.checkIn, STAY.checkOut);
+    expect(cal.bookings.find((x) => x.id === b.id)!.rooms).toHaveLength(1);
+
+    const dues = await makePaymentsService(asPrisma).dues(desk, fx.resortId);
+    expect((dues.rows ?? dues).find((x: { id: number }) => x.id === b.id)!.rooms).toBe(1);
   });
 });
 

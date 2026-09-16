@@ -196,7 +196,7 @@ export class PaymentsService {
         guest: b.guest,
         checkIn: b.checkIn,
         checkOut: b.checkOut,
-        rooms: b.items.map((i) => i.roomId).length,
+        rooms: b.items.filter((i) => i.itemKind === "ROOM").length,
         /**
          * Null for a booking the resort took itself — a walk-in, a phone call,
          * its own website. That null is the whole distinction the screen draws.
