@@ -21,7 +21,9 @@ export async function fetchPublishedResort(
   fetchImpl: typeof fetch = fetch,
 ): Promise<PublishedResort | null> {
   try {
-    const r = await fetchImpl(`${apiUrl}/site/${encodeURIComponent(slug)}`, {
+    // the renderer's door: always 200, `page: null` when not live. Next caches
+    // only a 200, so a 404 here left a taken-down page served from cache for good
+    const r = await fetchImpl(`${apiUrl}/site/render/${encodeURIComponent(slug)}`, {
       /**
        * Tagged, and two minutes as a floor under it.
        *
@@ -36,7 +38,7 @@ export async function fetchPublishedResort(
       next: { revalidate: 120, tags: [siteTag(slug)] },
     } as RequestInit);
     if (!r.ok) return null;
-    return drawable(await r.json());
+    return drawable(((await r.json()) as { page?: unknown } | null)?.page);
   } catch {
     return null;
   }

@@ -19,7 +19,7 @@ const GOOD = {
 };
 
 const replying = (body: unknown, ok = true) =>
-  vi.fn(async () => ({ ok, json: async () => body }) as unknown as Response);
+  vi.fn(async () => ({ ok, json: async () => (ok ? { page: body } : body) }) as unknown as Response);
 
 describe("an agency page that can be drawn", () => {
   it("comes back whole", async () => {
@@ -29,7 +29,7 @@ describe("an agency page that can be drawn", () => {
   it("asks for the slug it was given, encoded", async () => {
     const fetchImpl = replying(GOOD);
     await fetchAgencyPage("http://api", "a b", fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledWith("http://api/site/agency/a%20b", expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith("http://api/site/agency/render/a%20b", expect.anything());
   });
 });
 
@@ -48,5 +48,11 @@ describe("an agency page that cannot", () => {
   it("is nothing when a tour has no price to print", async () => {
     const bad = { ...GOOD, tours: [{ id: 1, name: "Tea trail" }] };
     expect(await fetchAgencyPage("http://api", "x", replying(bad))).toBeNull();
+  });
+});
+
+describe("an agency page that was taken down", () => {
+  it("is nothing when the renderer's door says page: null", async () => {
+    expect(await fetchAgencyPage("http://api", "x", replying(null))).toBeNull();
   });
 });

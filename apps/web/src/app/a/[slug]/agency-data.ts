@@ -17,7 +17,8 @@ export async function fetchAgencyPage(
   fetchImpl: typeof fetch = fetch,
 ): Promise<AgencyPublished | null> {
   try {
-    const r = await fetchImpl(`${apiUrl}/site/agency/${encodeURIComponent(slug)}`, {
+    // always 200, `page: null` when not live — see `r/[slug]/site-data.ts`
+    const r = await fetchImpl(`${apiUrl}/site/agency/render/${encodeURIComponent(slug)}`, {
       /**
        * Tagged, so the agency's own edits show on the next visit; two minutes
        * as a floor, because the resorts and prices on the page change in the
@@ -26,7 +27,7 @@ export async function fetchAgencyPage(
       next: { revalidate: 120, tags: [agencyTag(slug)] },
     } as RequestInit);
     if (!r.ok) return null;
-    return drawable(await r.json());
+    return drawable(((await r.json()) as { page?: unknown } | null)?.page);
   } catch {
     return null;
   }

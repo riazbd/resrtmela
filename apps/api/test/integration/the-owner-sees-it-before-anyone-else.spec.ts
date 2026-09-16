@@ -82,3 +82,34 @@ describe("an agency's preview", () => {
     await expect(preview().agency(desk)).rejects.toThrow();
   });
 });
+
+/**
+ * What the website's own renderer asks (2026-09-17).
+ *
+ * Next caches only a 200. A page that went away answered 404 on the public
+ * door, so the cache kept the old copy — for ever, once a restart had lost the
+ * in-memory note that it was stale: an unpublished site stayed up. The
+ * renderer's door answers 200 with `page: null` instead, which the cache does
+ * store, so taking a page down reaches the website within its revalidate time
+ * whatever happened in between.
+ */
+describe("the renderer's door", () => {
+  it("answers a page that is not live with null, not an error", async () => {
+    const { PublishedSiteController } = await import("../../src/site/published-site.controller");
+    const { AgencyPublicSiteController } = await import("../../src/site/agency-site.controller");
+    const { AgencyPublicSiteService } = await import("../../src/site/agency-public-site.service");
+    const { PlanLimitsService } = await import("../../src/common/plan-limits.service");
+    const resorts = new PublishedSiteController(makePublishedSiteService(asPrisma));
+    const agencies = new AgencyPublicSiteController(
+      new AgencyPublicSiteService(asPrisma, makeAgencyPublishedService(asPrisma), new PlanLimitsService(asPrisma)),
+    );
+    const slug = (await prisma.resort.findUniqueOrThrow({ where: { id: fx.resortId } })).slug;
+    const agencySlug = (await prisma.tenant.findUniqueOrThrow({ where: { id: fx.agencyId } })).slug;
+
+    expect(await resorts.render(slug)).toEqual({ page: null });
+    expect(await agencies.render(agencySlug)).toEqual({ page: null });
+
+    await prisma.resortSite.create({ data: { resortId: fx.resortId, published: true } });
+    expect((await resorts.render(slug)).page).toMatchObject({ slug });
+  });
+});

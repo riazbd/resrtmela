@@ -61,7 +61,8 @@ export const SLUG_MAX = 80;
  * (`/site/agency/<slug>`); a resort by that name would make
  * `/site/agency/vacancy` mean two different pages.
  */
-export const RESERVED_RESORT_SLUGS: readonly string[] = ["agency"];
+// "render" is the website renderer's own door, `/site/render/<slug>`
+export const RESERVED_RESORT_SLUGS: readonly string[] = ["agency", "render"];
 
 export function siteSlug(name: string): string {
   const slug = name

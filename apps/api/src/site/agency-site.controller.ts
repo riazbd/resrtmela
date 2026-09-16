@@ -91,6 +91,12 @@ export class AgencySiteEditorController {
 export class AgencyPublicSiteController {
   constructor(@Inject(AgencyPublicSiteService) private readonly site: AgencyPublicSiteService) {}
 
+  /** For the website's renderer: always 200, `page: null` when not live — see `PublishedSiteController.render`. */
+  @Get("render/:slug")
+  async render(@Param("slug") slug: string) {
+    return { page: await this.site.page(slug) };
+  }
+
   @Get(":slug")
   async page(@Param("slug") slug: string) {
     const page = await this.site.page(slug);

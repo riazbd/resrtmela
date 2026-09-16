@@ -18,6 +18,20 @@ export class PublishedSiteController {
   constructor(@Inject(PublishedSiteService) private readonly site: PublishedSiteService) {}
 
   /**
+   * The same page, for the website's own renderer: always 200, `page: null`
+   * when there is nothing to draw.
+   *
+   * Next's data cache stores only a 200, so a page that went away and answered
+   * 404 was never replaced: the old copy stayed up, for good once a restart had
+   * forgotten it was stale. Declared before `:slug` so "render" is not read as
+   * a resort's address (it is reserved for that reason too).
+   */
+  @Get("render/:slug")
+  async render(@Param("slug") slug: string) {
+    return { page: await this.site.resort(slug) };
+  }
+
+  /**
    * Everything a page needs to draw itself.
    *
    * 404 for every reason there is nothing to draw — no such address, not

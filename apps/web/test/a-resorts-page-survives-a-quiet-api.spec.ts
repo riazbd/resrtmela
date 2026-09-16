@@ -23,7 +23,8 @@ const GOOD = {
 };
 
 const replying = (body: unknown, ok = true) =>
-  vi.fn(async () => ({ ok, json: async () => body }) as unknown as Response);
+  // the renderer's door wraps the page, so an absent page is a 200 the cache can hold
+  vi.fn(async () => ({ ok, json: async () => (ok ? { page: body } : body) }) as unknown as Response);
 
 describe("a page that can be drawn", () => {
   it("comes back whole", async () => {
@@ -34,7 +35,7 @@ describe("a page that can be drawn", () => {
   it("asks the API for the slug it was given, encoded", async () => {
     const fetchImpl = replying(GOOD);
     await fetchPublishedResort("http://api", "a b", fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledWith("http://api/site/a%20b", expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith("http://api/site/render/a%20b", expect.anything());
   });
 
   it("keeps rendering when the template was retired since the row was written", async () => {
@@ -72,5 +73,11 @@ describe("a page that cannot", () => {
 
   it("is nothing when the photographs are not a list", async () => {
     expect(await fetchPublishedResort("http://api", "x", replying({ ...GOOD, photos: null }))).toBeNull();
+  });
+});
+
+describe("a page that was taken down", () => {
+  it("is nothing when the renderer's door says page: null", async () => {
+    expect(await fetchPublishedResort("http://api", "x", replying(null))).toBeNull();
   });
 });
