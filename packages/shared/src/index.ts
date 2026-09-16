@@ -19,6 +19,7 @@ export * from "./plan-schedule";
 export * from "./payroll";
 export * from "./discount";
 export * from "./stay-charges";
+export * from "./agent-window";
 export * from "./contact";
 export * from "./brand";
 export * from "./api-url";

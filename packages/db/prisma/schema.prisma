@@ -193,6 +193,9 @@ model Resort {
   /// Business Identification Number — a VAT invoice in Bangladesh must show it
   binNumber         String? @db.VarChar(32)
   agentPaymentHours Int     @default(48) // agent bookings must be fully paid this many hours before check-in
+  /// how many days ahead an agency may book: every night of the stay within it.
+  /// Null is no limit. The resort's own desk is never held to it.
+  agentBookingWindowDays Int?
 
   /// What this resort pays its agents — one term for all of them.
   ///

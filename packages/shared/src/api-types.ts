@@ -675,6 +675,8 @@ export interface AgencyStay {
 /** One resort's month: the rooms it has, and the nights already taken. */
 export interface AgencyResortMonth {
   resort: { id: number; name: string; location: string | null };
+  /** the last check-out (YYYY-MM-DD) agencies may book here; null is no limit */
+  bookableUntil: string | null;
   rooms: {
     id: number;
     name: string;

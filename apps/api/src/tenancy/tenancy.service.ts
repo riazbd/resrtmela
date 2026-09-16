@@ -113,6 +113,7 @@ export class TenancyService {
       contactPhone: string;
       fyStartMonthDay: string;
       agentPaymentHours: number;
+      agentBookingWindowDays: number | null;
     }>,
   ) {
     if (claims.role !== ROLE.SUPER_ADMIN) {

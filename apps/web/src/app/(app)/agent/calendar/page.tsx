@@ -51,6 +51,9 @@ import type { AgencyCalendar } from "@rh/shared";
 
 const SPANS = [7, 14, 30] as const;
 
+/** A night the resort has not opened to agencies: hatched, like a room out of service, but lighter. */
+const CLOSED_CELL = "bg-[repeating-linear-gradient(45deg,#fffbeb,#fffbeb_5px,#fde68a_5px,#fde68a_7px)]";
+
 const dayNumber = (day: string) => Number(day.slice(8, 10));
 const monthLabel = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
@@ -128,8 +131,15 @@ export default function AgencyCalendarPage() {
    * else has, starts again from there rather than offering a booking the engine
    * would refuse after it had been quoted.
    */
+  /**
+   * The last night an agency may sell here, when the resort set a window.
+   * A stay checks out by `bookableUntil`, so its last night is the day before.
+   */
+  const lastOpenNight = chosen?.bookableUntil ? addDaysIso(chosen.bookableUntil, -1) : null;
+
   function pickNight(roomId: number, night: string) {
     if (!chosen) return;
+    if (lastOpenNight && night > lastOpenNight) return;
     if (!anchor || anchor.roomId !== roomId) {
       setAnchor({ roomId, night });
       return;
@@ -277,6 +287,12 @@ export default function AgencyCalendarPage() {
             <span className="h-2.5 w-4 rounded-sm bg-slate-300" />
             Sold by someone else
           </span>
+          {lastOpenNight && (
+            <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span className={`h-2.5 w-4 rounded-sm ${CLOSED_CELL}`} />
+              Not open to agents yet
+            </span>
+          )}
         </div>
       </div>
 
@@ -299,6 +315,11 @@ export default function AgencyCalendarPage() {
               )}
             </div>
             <p className="text-xs text-slate-500">
+              {lastOpenNight && (
+                <span className="mr-2 rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200">
+                  Open to agents until {dayNumber(lastOpenNight)} {monthLabel(lastOpenNight)}
+                </span>
+              )}
               <b>{capacity - taken}</b> free room-night{capacity - taken === 1 ? "" : "s"} here
               {mine > 0 && (
                 <>
@@ -472,6 +493,7 @@ export default function AgencyCalendarPage() {
                               nights={run.nights}
                               anchor={anchor}
                               cells={cells}
+                              lastOpenNight={lastOpenNight}
                               onPick={pickNight}
                             />
                           ),
@@ -568,6 +590,7 @@ function FreeNights({
   nights,
   anchor,
   cells,
+  lastOpenNight,
   onPick,
 }: {
   room: { id: number; name: string };
@@ -575,12 +598,29 @@ function FreeNights({
   nights: number;
   anchor: { roomId: number; night: string } | null;
   cells: Map<string, CalendarCell>;
+  /** past this night the resort has not opened its calendar to agencies */
+  lastOpenNight: string | null;
   onPick: (roomId: number, night: string) => void;
 }) {
   return (
     <>
       {Array.from({ length: nights }, (_, i) => {
         const night = addDaysIso(from, i);
+        /**
+         * Free, but not for sale to an agency yet. Drawn closed and not a
+         * button, so the agent is told before picking it rather than refused
+         * after the guest's details are typed.
+         */
+        if (lastOpenNight && night > lastOpenNight) {
+          return (
+            <td key={night} className={`border-b border-slate-100 p-0.5 ${weekEdge(night)}`}>
+              <div
+                title={`${room.name} on ${night}: the resort has not opened these dates to agents yet`}
+                className={`h-9 rounded ${CLOSED_CELL}`}
+              />
+            </td>
+          );
+        }
         const isAnchor = anchor?.roomId === room.id && anchor.night === night;
         const reachable =
           !isAnchor &&

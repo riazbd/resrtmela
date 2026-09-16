@@ -28,6 +28,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AgencyContextService } from "./agency-context.service";
 import { badRequest } from "../common/rbac";
 import { agencyOf, sellableFor } from "../common/selling-access";
+import { bookableUntil } from "../common/agent-window";
 import type { JwtClaims } from "@rh/shared";
 
 /** A span of nights one room is not free, from the agency's side of the desk. */
@@ -57,6 +58,12 @@ export interface AgencyStay {
 
 export interface AgencyResortMonth {
   resort: { id: number; name: string; location: string | null };
+  /**
+   * The last check-out date (YYYY-MM-DD) this resort lets agencies book, or
+   * null for no limit. Nights on or after it are drawn closed, so an agency
+   * is told before it picks them rather than refused after.
+   */
+  bookableUntil: string | null;
   rooms: {
     id: number;
     name: string;
@@ -118,6 +125,8 @@ export class AgencyCalendarService {
           name: true,
           location: true,
           showRatesToAgents: true,
+          timezone: true,
+          agentBookingWindowDays: true,
         },
         orderBy: { id: "asc" },
       })
@@ -195,6 +204,7 @@ export class AgencyCalendarService {
         }
         return {
           resort: { id: link.resort.id, name: link.resort.name, location: link.resort.location },
+          bookableUntil: bookableUntil(link.resort)?.toISOString().slice(0, 10) ?? null,
           rooms: rooms
             .filter((r) => r.resortId === link.resortId)
             .map((r) => ({

@@ -23,6 +23,7 @@ import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
 import { WebhookService } from "../v1/webhook.service";
+import { assertWithinAgentWindow } from "../common/agent-window";
 
 export interface CreateBookingInput {
   resortId: number;
@@ -370,6 +371,7 @@ export class BookingsService {
     const checkOut = dateOnly(input.checkOut);
     const nights = nightsBetween(checkIn, checkOut);
     if (nights <= 0) throw badRequest("checkOut must be after checkIn");
+    if (isAgent && claims.apiKeyId == null) await assertWithinAgentWindow(this.prisma, input.resortId, checkOut);
     if (input.roomIds.length === 0) throw badRequest("At least one room required");
 
     const roomRows = await this.prisma.room.findMany({
@@ -486,6 +488,8 @@ export class BookingsService {
       throw forbid("Online booking is off. This resort takes bookings at its desk or through its agents.");
     } else if (isAgent) {
       await this.perms.require(claims, input.resortId, "agent.book");
+      // the resort decides how far ahead its agencies sell; its desk is not fenced
+      await assertWithinAgentWindow(this.prisma, input.resortId, checkOut);
     } else {
       await this.perms.require(claims, input.resortId, "bookings.create");
     }
@@ -1091,6 +1095,7 @@ export class BookingsService {
     const datesChanged =
       (newCheckIn?.getTime() ?? 0) !== (b.checkIn?.getTime() ?? 0) ||
       (newCheckOut?.getTime() ?? 0) !== (b.checkOut?.getTime() ?? 0);
+
     const roomsChanged =
       JSON.stringify([...newRoomIds].sort()) !==
       JSON.stringify([...b.items.map((i) => i.roomId!).filter(Boolean)].sort());

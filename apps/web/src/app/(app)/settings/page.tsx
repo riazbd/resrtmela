@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AGENT_BOOKING_WINDOW_PRESETS, AGENT_BOOKING_WINDOW_MAX_DAYS } from "@rh/shared";
 import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
@@ -33,6 +34,8 @@ interface ResortDetail {
   contactPhone: string | null;
   fyStartMonthDay: string;
   agentPaymentHours?: number;
+  /** null is no limit */
+  agentBookingWindowDays?: number | null;
   _count?: { bookings: number; guests: number };
 }
 
@@ -215,6 +218,8 @@ export default function SettingsPage() {
           contactPhone: d.contactPhone ?? undefined,
           fyStartMonthDay: d.fyStartMonthDay || undefined,
           agentPaymentHours: (d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? undefined,
+          // null is sent on purpose: it is how "no limit" is chosen
+          agentBookingWindowDays: (d as ResortDetail & { agentBookingWindowDays?: number | null }).agentBookingWindowDays ?? null,
         },
       });
       push("Settings saved");
@@ -274,6 +279,10 @@ export default function SettingsPage() {
               onChange={(e) => setD({ ...d, agentPaymentHours: Math.max(1, Number(e.target.value) || 1) } as ResortDetail)}
             />
           </Field>
+          <AgentWindowField
+            value={(d as ResortDetail & { agentBookingWindowDays?: number | null }).agentBookingWindowDays ?? null}
+            onChange={(days) => setD({ ...d, agentBookingWindowDays: days } as ResortDetail)}
+          />
               <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
                 <input type="checkbox" checked={d.showRatesToAgents} onChange={(e) => setD({ ...d, showRatesToAgents: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
                 Show room rates to agents
@@ -2083,6 +2092,53 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="text-[10px] font-medium text-slate-400">{label}</div>
       <div className="text-sm font-bold text-slate-800">{value}</div>
       {sub && <div className="text-[10px] text-slate-400">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * How far ahead agencies may book.
+ *
+ * The three presets are one tap each; the box takes any other number, because
+ * 45 days is a perfectly good answer and a resort should not have to pick the
+ * nearest of three it did not choose. Empty is no limit.
+ */
+function AgentWindowField({ value, onChange }: { value: number | null; onChange: (days: number | null) => void }) {
+  const choice = (active: boolean) =>
+    `rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+      active ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+    }`;
+  return (
+    <div className="space-y-1">
+      <span className="block text-xs font-medium text-slate-600">Agents can book how far ahead</span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" className={choice(value == null)} onClick={() => onChange(null)}>
+          No limit
+        </button>
+        {AGENT_BOOKING_WINDOW_PRESETS.map((n) => (
+          <button key={n} type="button" className={choice(value === n)} onClick={() => onChange(n)}>
+            {n} days
+          </button>
+        ))}
+        <Input
+          type="number"
+          min={1}
+          max={AGENT_BOOKING_WINDOW_MAX_DAYS}
+          aria-label="Days ahead agents can book"
+          placeholder="days"
+          className="!w-24"
+          value={value ?? ""}
+          onChange={(e) => {
+            const n = Math.floor(Number(e.target.value));
+            onChange(e.target.value === "" || !(n > 0) ? null : Math.min(n, AGENT_BOOKING_WINDOW_MAX_DAYS));
+          }}
+        />
+      </div>
+      <p className="text-xs text-slate-400">
+        {value == null
+          ? "Agencies can book any date you have open."
+          : `Agencies can book stays checking out within ${value} days from today. Your own desk is not limited.`}
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, MaxLength } from "class-validator";
+import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { AGENT_BOOKING_WINDOW_MAX_DAYS } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { TenancyService } from "./tenancy.service";
 
@@ -38,6 +39,8 @@ class UpdateResortDto {
   @IsOptional() @IsString() @MaxLength(32) contactPhone?: string;
   @IsOptional() @IsString() @MaxLength(5) fyStartMonthDay?: string;
   @IsOptional() @IsInt() agentPaymentHours?: number;
+  /** null clears it: no limit */
+  @IsOptional() @IsInt() @Min(1) @Max(AGENT_BOOKING_WINDOW_MAX_DAYS) agentBookingWindowDays?: number | null;
 }
 
 @Controller()

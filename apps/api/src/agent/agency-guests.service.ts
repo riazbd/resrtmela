@@ -10,6 +10,7 @@
  * this landed.
  */
 import { Inject, Injectable } from "@nestjs/common";
+import { bookableUntil } from "../common/agent-window";
 import { PrismaService } from "../prisma/prisma.service";
 import { badRequest } from "../common/rbac";
 import { dateOnly, round2 } from "../common/dates";
@@ -164,6 +165,7 @@ export class AgencyGuestsService {
       where: { id: { in: ids } },
       select: {
         id: true, name: true, location: true, showRatesToAgents: true,
+        timezone: true, agentBookingWindowDays: true,
         // the resort's commission, unless it struck another with this agency
         ...COMMISSION_SELECT,
       },
@@ -193,6 +195,9 @@ export class AgencyGuestsService {
 
     const out = [];
     for (const link of links) {
+      // a resort that has not opened these dates to agencies has nothing to offer for them
+      const until = bookableUntil(link.resort);
+      if (until && dateOnly(query.to).getTime() > until.getTime()) continue;
       const grid = await this.availability.roomsGrid(asAgency, link.resortId, query.from, query.to);
       const free = grid
         .filter((r) => r.busyNights.length === 0 && r.status !== "OUT_OF_SERVICE")
