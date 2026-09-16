@@ -8,7 +8,7 @@
  * a sentence.
  */
 import { Inject, Injectable } from "@nestjs/common";
-import { isSiteTemplate, siteSlug, SITE_TEMPLATES, type JwtClaims } from "@rh/shared";
+import { isSiteTemplate, RESERVED_RESORT_SLUGS, siteSlug, SITE_TEMPLATES, type JwtClaims } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { PermissionsService } from "../common/permissions";
 import { PlanLimitsService } from "../common/plan-limits.service";
@@ -194,6 +194,9 @@ export class SiteEditorService {
   async setSlug(claims: JwtClaims, resortId: number, wanted: string): Promise<{ slug: string }> {
     await this.mine(claims, resortId);
     const slug = siteSlug(wanted);
+    if (RESERVED_RESORT_SLUGS.includes(slug)) {
+      throw badRequest(`"${slug}" is reserved — it is where agencies' pages live. Pick another address.`);
+    }
     const previous = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       select: { slug: true },

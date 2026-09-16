@@ -56,6 +56,13 @@ export const SLUG_MAX = 80;
  * transliteration would put a spelling nobody chose on the front of somebody's
  * business.
  */
+/**
+ * Addresses a resort may not have. `agency` is where agencies' pages live
+ * (`/site/agency/<slug>`); a resort by that name would make
+ * `/site/agency/vacancy` mean two different pages.
+ */
+export const RESERVED_RESORT_SLUGS: readonly string[] = ["agency"];
+
 export function siteSlug(name: string): string {
   const slug = name
     .toLowerCase()

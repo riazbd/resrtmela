@@ -7,7 +7,7 @@
  * minted — three creation paths would otherwise each have their own idea of
  * what to do about "Hill Resort" existing twice.
  */
-import { siteSlug, SLUG_MAX } from "@rh/shared";
+import { RESERVED_RESORT_SLUGS, siteSlug, SLUG_MAX } from "@rh/shared";
 import type { PrismaService } from "../prisma/prisma.service";
 
 type Db = Pick<PrismaService, "resort">;
@@ -32,6 +32,7 @@ export async function uniqueResortSlug(prisma: Db, name: string): Promise<string
     // slug however high the number goes
     const suffix = n === 1 ? "" : `-${n}`;
     const slug = `${base.slice(0, SLUG_MAX - suffix.length)}${suffix}`;
+    if (RESERVED_RESORT_SLUGS.includes(slug)) continue;
     if (!(await prisma.resort.findUnique({ where: { slug }, select: { id: true } }))) return slug;
   }
   // a thousand resorts of one name is not a state to paper over
