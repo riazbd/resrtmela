@@ -171,6 +171,9 @@ export interface BookingDetail extends BookingRow {
     qty: number;
     unitPrice: number | null;
     nights: number;
+    /** CHARGE lines: SERVICE | DAMAGE | FINE, and what it was for */
+    chargeKind: string | null;
+    label: string | null;
   }[];
   payments: {
     id: number;
@@ -427,6 +430,8 @@ export interface PLReport {
     roomRevenue: number;
     extraPersonRevenue: number;
     otherRevenue: number;
+    /** services, damage and fines added to stays */
+    chargesRevenue: number;
     discounts: number;
     /** what the period's stays are worth after discount — not income */
     billed: number;

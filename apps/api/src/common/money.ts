@@ -7,13 +7,14 @@
  *   ROOM          unitPrice × qty × nights   (a rate is per night)
  *   EXTRA_PERSON  unitPrice × qty            (qty already carries the nights)
  *   ACTIVITY / FB unitPrice × qty            (charged once, not per night)
+ *   CHARGE        unitPrice × qty            (a service, damage or a fine)
  *   taxable       rent − discount, floored at zero
  *   total         taxable + tax (exclusive, at the resort's rate)
  *   due           total − paid              (refunds excluded from paid)
  */
 import { nightsBetween, round2 } from "./dates";
 
-export type MoneyItemKind = "ROOM" | "ACTIVITY" | "FB" | "EXTRA_PERSON";
+export type MoneyItemKind = "ROOM" | "ACTIVITY" | "FB" | "EXTRA_PERSON" | "CHARGE";
 
 /** Decimal columns arrive as Prisma.Decimal; Number() handles those and strings. */
 export type Money = number | string | { toString(): string };

@@ -4,7 +4,7 @@ import {
   IsArray, IsBoolean, IsDateString, IsInt, IsNumber, IsObject, IsOptional,
   IsString, Max, MaxLength, Min, ArrayMinSize, ValidateNested, IsEnum, IsIn,
 } from "class-validator";
-import { DISCOUNT_KINDS, type DiscountKind } from "@rh/shared";
+import { DISCOUNT_KINDS, type DiscountKind, STAY_CHARGE_KINDS, type StayChargeKind } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BookingsService, CreateBookingInput } from "./bookings.service";
 import { AvailabilityService } from "./availability.service";
@@ -97,6 +97,13 @@ class UpdateBookingDto {
   @IsOptional() @IsNumber() @Min(0) discount?: number;
   @IsOptional() @IsIn([...DISCOUNT_KINDS]) discountKind?: DiscountKind;
   @IsOptional() @IsString() remarks?: string;
+}
+
+class StayChargeDto {
+  @IsIn([...STAY_CHARGE_KINDS]) kind!: StayChargeKind;
+  @IsString() @MaxLength(160) label!: string;
+  @IsNumber() @Min(0) amount!: number;
+  @IsOptional() @IsInt() @Min(1) qty?: number;
 }
 
 class ExtraPersonsDto {
@@ -259,6 +266,21 @@ export class BookingsController {
   @HttpCode(200)
   extraPersons(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ExtraPersonsDto) {
     return this.bookings.setExtraPersons(req.user, id, dto.persons);
+  }
+
+  /** A service, damage or a fine, on a stay that is in or has just left. */
+  @Post("bookings/:id/charges")
+  addCharge(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: StayChargeDto) {
+    return this.bookings.addCharge(req.user, id, dto);
+  }
+
+  @Delete("bookings/:id/charges/:itemId")
+  removeCharge(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Param("itemId", ParseIntPipe) itemId: number,
+  ) {
+    return this.bookings.removeCharge(req.user, id, itemId);
   }
 
   @Post("bookings/:id/transition")

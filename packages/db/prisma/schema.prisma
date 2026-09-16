@@ -59,6 +59,8 @@ enum ItemKind {
   ACTIVITY
   FB
   EXTRA_PERSON
+  /// a service, damage or a fine added to the stay (STAY_CHARGE_KINDS)
+  CHARGE
 }
 
 enum PaymentType {
@@ -663,6 +665,10 @@ model BookingItem {
   fbBill         FbBill?       @relation(fields: [fbBillId], references: [id], onDelete: SetNull)
   qty            Int           @default(1)
   unitPrice      Decimal       @db.Decimal(10, 2)
+  /// CHARGE lines only: SERVICE | DAMAGE | FINE (STAY_CHARGE_KINDS in @rh/shared)
+  chargeKind     String?       @db.VarChar(12)
+  /// CHARGE lines only: what it was for, as the desk wrote it
+  label          String?       @db.VarChar(160)
 
   nights BookingNight[]
 

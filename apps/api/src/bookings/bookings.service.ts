@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind, STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
 import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
@@ -1002,6 +1002,8 @@ export class BookingsService {
         qty: i.qty,
         unitPrice: isAgent && !resort.showRatesToAgents ? null : Number(i.unitPrice),
         nights: i.nights.length,
+        chargeKind: i.chargeKind,
+        label: i.label,
       })),
       payments: b.payments.map((p) => ({
         id: p.id,
@@ -1267,6 +1269,105 @@ export class BookingsService {
       );
     });
 
+    return this.detail(claims, bookingId);
+  }
+
+  /**
+   * A booking the desk may still add charges to, or a sentence saying why not.
+   *
+   * While the guests are in, and after they have left until the invoice is
+   * issued. Before check-in there is nothing to charge for; after the invoice
+   * the document is frozen, and a line that appeared later would make the
+   * paper in the guest's hand and the screen disagree.
+   */
+  private async chargeableBooking(claims: JwtClaims, bookingId: number) {
+    const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
+    // the resort's own desk: an agency sold the room, not the minibar
+    if (claims.role === ROLE.AGENT) throw forbid("Only the resort can add charges to a stay");
+    requireResortAccess(claims, b.resortId);
+    await this.perms.require(claims, b.resortId, "bookings.edit");
+    if (b.state !== "CHECKED_IN" && b.state !== "CHECKED_OUT") {
+      throw Object.assign(new Error("Charges are added once the guests have checked in"), { status: 409 });
+    }
+    if (b.invoiceNo) {
+      throw Object.assign(
+        new Error(`Invoice ${b.invoiceNo} is already issued; a charge added now would not be on it`),
+        { status: 409 },
+      );
+    }
+    return b;
+  }
+
+  /**
+   * A service, damage or a fine, as a line on the stay.
+   *
+   * A line rather than a separate ledger because it is part of what the guest
+   * owes: it has to be in the total, in what is due, on the invoice, and in
+   * the month's takings, and every one of those already reads the items.
+   * Not discounted — a percentage off the stay is of the rooms, see
+   * `discountBase`.
+   */
+  async addCharge(
+    claims: JwtClaims,
+    bookingId: number,
+    input: { kind: StayChargeKind; label: string; amount: number; qty?: number },
+  ) {
+    if (!isStayChargeKind(input.kind)) {
+      throw badRequest(`A charge is one of ${STAY_CHARGE_KINDS.join(", ")}`);
+    }
+    const label = (input.label ?? "").trim();
+    if (!label) throw badRequest("Say what the charge is for");
+    if (!(Number(input.amount) > 0)) throw badRequest("A charge must be more than zero");
+    const qty = Math.max(1, Math.floor(input.qty ?? 1));
+
+    const b = await this.chargeableBooking(claims, bookingId);
+    await this.prisma.$transaction(async (tx) => {
+      const item = await tx.bookingItem.create({
+        data: {
+          bookingId: b.id,
+          itemKind: "CHARGE",
+          chargeKind: input.kind,
+          label: label.slice(0, 160),
+          qty,
+          unitPrice: round2(Number(input.amount)) as never,
+        },
+      });
+      await this.audit.log(
+        {
+          actorId: claims.userId,
+          resortId: b.resortId,
+          action: "booking.charge.add",
+          entity: "booking",
+          entityId: b.id,
+          diff: { itemId: item.id, kind: input.kind, label, qty, amount: Number(input.amount) },
+        },
+        tx,
+      );
+    });
+    return this.detail(claims, bookingId);
+  }
+
+  /** Takes a charge back off, until the invoice is issued. Never a room. */
+  async removeCharge(claims: JwtClaims, bookingId: number, itemId: number) {
+    const b = await this.chargeableBooking(claims, bookingId);
+    const item = await this.prisma.bookingItem.findFirst({ where: { id: itemId, bookingId: b.id } });
+    if (!item) throw Object.assign(new Error("Charge not found"), { status: 404 });
+    if (item.itemKind !== "CHARGE") throw badRequest("That line is not a charge");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.bookingItem.delete({ where: { id: item.id } });
+      await this.audit.log(
+        {
+          actorId: claims.userId,
+          resortId: b.resortId,
+          action: "booking.charge.remove",
+          entity: "booking",
+          entityId: b.id,
+          diff: { itemId: item.id, kind: item.chargeKind, label: item.label, qty: item.qty, amount: Number(item.unitPrice) },
+        },
+        tx,
+      );
+    });
     return this.detail(claims, bookingId);
   }
 
@@ -2030,10 +2131,21 @@ export class BookingsService {
       },
       guest: { fullName: b.guest.fullName, phone: b.guest.phone, nidPassportNo: b.guest.nidPassportNo, email: b.guest.email },
       items: b.items.map((i) => ({
+        /**
+         * Every kind named for what it is. Anything that was not a room used
+         * to print as "Activity × qty" — an extra person and a restaurant bill
+         * charged to the room included.
+         */
         description:
           i.itemKind === "ROOM"
             ? `${i.room?.name ?? "Room"} (${i.room?.roomType.name ?? ""})`
-            : `${i.activitySlot?.catalog.name ?? "Activity"} × ${i.qty}`,
+            : i.itemKind === "EXTRA_PERSON"
+              ? `Extra person — ${i.room?.name ?? "room"}`
+              : i.itemKind === "FB"
+                ? "Restaurant"
+                : i.itemKind === "CHARGE"
+                  ? `${isStayChargeKind(i.chargeKind) ? STAY_CHARGE_LABELS[i.chargeKind] : "Charge"} — ${i.label ?? ""}`
+                  : `${i.activitySlot?.catalog.name ?? "Activity"} × ${i.qty}`,
         nights: i.itemKind === "ROOM" ? totals.nights : null,
         qty: i.qty,
         unitPrice: Number(i.unitPrice),

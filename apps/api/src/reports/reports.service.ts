@@ -249,6 +249,7 @@ export class ReportsService {
     let roomRevenue = 0;
     let extraPersonRevenue = 0;
     let otherRevenue = 0; // activities etc.
+    let chargesRevenue = 0; // services, damage and fines added to a stay
     let discounts = 0;
     for (const b of bookings) {
       const nights = b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 1;
@@ -256,12 +257,14 @@ export class ReportsService {
         if (i.itemKind === "ROOM") roomRevenue += Number(i.unitPrice) * i.qty * nights;
         else if (i.itemKind === "EXTRA_PERSON") extraPersonRevenue += Number(i.unitPrice) * i.qty;
         else if (i.itemKind === "ACTIVITY") otherRevenue += Number(i.unitPrice) * i.qty;
+        else if (i.itemKind === "CHARGE") chargesRevenue += Number(i.unitPrice) * i.qty;
       }
       discounts += Number(b.discount);
     }
     roomRevenue = round2(roomRevenue);
     extraPersonRevenue = round2(extraPersonRevenue);
     otherRevenue = round2(otherRevenue);
+    chargesRevenue = round2(chargesRevenue);
 
     // restaurant revenue: all F&B bills in range (charged-to-room stay in restaurant P&L;
     // the matching FB booking item is excluded from resort revenue above)
@@ -312,7 +315,7 @@ export class ReportsService {
       payroll.reduce((s, p) => s + Number(p.amount) * payrollShareOfRange(p.month, fromStr, toStr), 0),
     );
 
-    const resortBilled = round2(roomRevenue + extraPersonRevenue + otherRevenue - discounts);
+    const resortBilled = round2(roomRevenue + extraPersonRevenue + otherRevenue + chargesRevenue - discounts);
     /**
      * Billed is what the period's stays are worth; income is what came in.
      * Only the second is profit — see `received`.
@@ -331,6 +334,7 @@ export class ReportsService {
         roomRevenue,
         extraPersonRevenue,
         otherRevenue,
+        chargesRevenue,
         discounts: round2(discounts),
         billed: resortBilled,
         income: resortIncome,
