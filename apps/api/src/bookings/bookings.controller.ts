@@ -2,8 +2,9 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, Patch, Po
 import { Type } from "class-transformer";
 import {
   IsArray, IsBoolean, IsDateString, IsInt, IsNumber, IsObject, IsOptional,
-  IsString, Max, MaxLength, Min, ArrayMinSize, ValidateNested, IsEnum,
+  IsString, Max, MaxLength, Min, ArrayMinSize, ValidateNested, IsEnum, IsIn,
 } from "class-validator";
+import { DISCOUNT_KINDS, type DiscountKind } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BookingsService, CreateBookingInput } from "./bookings.service";
 import { AvailabilityService } from "./availability.service";
@@ -26,6 +27,7 @@ class CreateGroupDto {
   @IsInt() @Min(1) adults!: number;
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsNumber() @Min(0) discountPerRoom?: number;
+  @IsOptional() @IsIn([...DISCOUNT_KINDS]) discountKind?: DiscountKind;
   @IsOptional() @IsNumber() @Min(0) advancePerRoom?: number;
   @IsOptional() @IsEnum(["CASH", "BKASH", "NAGAD", "CARD", "BANK"]) advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
   @IsOptional() @IsString() remarks?: string;
@@ -46,6 +48,7 @@ class CreateBookingDto {
   @IsInt() @Min(1) adults!: number;
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsNumber() @Min(0) discount?: number;
+  @IsOptional() @IsIn([...DISCOUNT_KINDS]) discountKind?: DiscountKind;
   @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsString() @MaxLength(32) source?: string;
   @IsOptional() @IsBoolean() walkIn?: boolean;
@@ -69,6 +72,7 @@ class QuoteBookingDto {
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsInt() @Min(0) @Type(() => Number) extraPersons?: number;
   @IsOptional() @IsNumber() @Min(0) discount?: number;
+  @IsOptional() @IsIn([...DISCOUNT_KINDS]) discountKind?: DiscountKind;
 }
 
 class ListBookingsQuery {
@@ -91,6 +95,7 @@ class UpdateBookingDto {
   @IsOptional() @IsInt() @Min(1) adults?: number;
   @IsOptional() @IsInt() @Min(0) children?: number;
   @IsOptional() @IsNumber() @Min(0) discount?: number;
+  @IsOptional() @IsIn([...DISCOUNT_KINDS]) discountKind?: DiscountKind;
   @IsOptional() @IsString() remarks?: string;
 }
 
@@ -187,6 +192,7 @@ export class BookingsController {
       adults: dto.adults,
       children: dto.children ?? 0,
       discount: dto.discount,
+      discountKind: dto.discountKind,
       remarks: dto.remarks,
       source: dto.source,
       walkIn: dto.walkIn,
@@ -213,6 +219,7 @@ export class BookingsController {
       children: dto.children ?? 0,
       extraPersons: dto.extraPersons,
       discount: dto.discount,
+      discountKind: dto.discountKind,
     });
   }
 

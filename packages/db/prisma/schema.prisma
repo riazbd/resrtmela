@@ -593,7 +593,12 @@ model Booking {
   adults          Int          @default(2)
   children        Int          @default(0)
   extraPersons    Int          @default(0) // extra guests beyond room capacity, charged at room type rate
+  /// what the discount comes to, in money — the figure every money rule reads
   discount        Decimal      @default(0.00) @db.Decimal(10, 2)
+  /// FLAT | PERCENT (DISCOUNT_KINDS in @rh/shared): how it was given
+  discountKind    String       @default("FLAT") @db.VarChar(8)
+  /// what was typed: taka for FLAT, a percentage of the stay for PERCENT
+  discountValue   Decimal      @default(0.00) @db.Decimal(10, 2)
   remarks         String?      @db.Text
   state           BookingState @default(PENDING)
   cancelState     CancelState  @default(NONE) // agent cancel-request queue

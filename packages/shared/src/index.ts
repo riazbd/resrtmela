@@ -17,6 +17,7 @@ export * from "./payment-method";
 export * from "./imported-receipt";
 export * from "./plan-schedule";
 export * from "./payroll";
+export * from "./discount";
 export * from "./contact";
 export * from "./brand";
 export * from "./api-url";

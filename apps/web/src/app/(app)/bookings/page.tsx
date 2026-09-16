@@ -21,6 +21,9 @@ import {
 import { usePaymentMethods } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
+import { EditBookingModal } from "./edit-booking";
+import { DiscountInput } from "@/components/discount-input";
+import type { DiscountKind } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
@@ -66,6 +69,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const [children, setChildren] = useState(0);
   const [extraPersons, setExtraPersons] = useState(0);
   const [discount, setDiscount] = useState(0);
+  const [discountKind, setDiscountKind] = useState<DiscountKind>("FLAT");
   const [remarks, setRemarks] = useState("");
   const [advAmount, setAdvAmount] = useState(0);
   const [advMethod, setAdvMethod] = useState("CASH");
@@ -133,7 +137,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
    * is picked.
    */
   const quoteQ = useApi(
-    ["booking-quote", activeResort?.id, picked.join(","), checkIn, checkOut, extraPersons, isStaff ? discount : null],
+    ["booking-quote", activeResort?.id, picked.join(","), checkIn, checkOut, extraPersons, isStaff ? `${discount}${discountKind}` : null],
     () =>
       api<BookingQuote>("/bookings/quote", {
         method: "POST",
@@ -146,6 +150,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           children,
           extraPersons: extraPersons > 0 ? extraPersons : undefined,
           discount: isStaff ? discount : undefined,
+          discountKind: isStaff ? discountKind : undefined,
         },
       }),
     {
@@ -186,6 +191,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
                 nidPassportNo: nid || undefined,
               },
               discountPerRoom: isStaff ? discount : undefined,
+              discountKind: isStaff ? discountKind : undefined,
               advancePerRoom: advAmount > 0 ? advAmount : undefined,
               advanceMethod: advAmount > 0 ? advMethod : undefined,
               remarks: remarks || undefined,
@@ -195,7 +201,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
         push(`Group ${res.groupTag}: ${res.count} bookings (${res.bookings.map((b) => b.code).join(", ")})`);
         onCreated(res.groupTag);
         onClose();
-        setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setAdvAmount(0); setRemarks(""); setIsGroup(false); setWalkIn(false);
+        setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setIsGroup(false); setWalkIn(false);
         return;
       }
       const created = await api<BookingDetail>("/bookings", {
@@ -213,6 +219,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
             ? { fullName: fullName || "local", phone: phone || undefined, email: email || undefined }
             : { fullName, phone, email: email || undefined, nidPassportNo: nid || undefined },
           discount: isStaff ? discount : undefined,
+          discountKind: isStaff ? discountKind : undefined,
           remarks: remarks || undefined,
           advancePayment: advAmount > 0 ? { amount: advAmount, method: advMethod } : undefined,
         },
@@ -220,7 +227,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
       push(`Booking ${created.code} created`);
       onCreated(created.code);
       onClose();
-      setPicked([]); setFullName(""); setPhone(""); setEmail(""); setNid(""); setDiscount(0); setAdvAmount(0); setRemarks(""); setWalkIn(false); setExtraPersons(0);
+      setPicked([]); setFullName(""); setPhone(""); setEmail(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setWalkIn(false); setExtraPersons(0);
     } catch (ex) {
       setErr((ex as Error).message);
     } finally {
@@ -295,7 +302,12 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
             </Field>
           )}
           {isStaff && (
-            <Field label={`Discount (${cur()})`}><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></Field>
+            <DiscountInput
+              label={isGroup ? "Discount per room" : "Discount"}
+              kind={discountKind}
+              value={discount}
+              onChange={(d) => { setDiscountKind(d.kind); setDiscount(d.value); }}
+            />
           )}
         </div>
 
@@ -366,6 +378,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   const { isStaff, isAgent, isManagement, activeResort, can } = useAuth();
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const qc = useQueryClient();
   const { submit } = useOutbox();
 
@@ -568,7 +581,10 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
           <div className="text-[11px] font-medium text-slate-400">MONEY</div>
           <div className="grid grid-cols-2 gap-x-3 text-xs">
             <span className="text-slate-500">Rent</span><span className="font-medium">{money(b.rent)}</span>
-            <span className="text-slate-500">Discount</span><span>{money(b.discount)}</span>
+            <span className="text-slate-500">
+              Discount{b.discountKind === "PERCENT" ? ` (${b.discountValue}%)` : ""}
+            </span>
+            <span>{money(b.discount)}</span>
             <span className="text-slate-500">Paid</span><span className="text-green-700">{money(b.paid)}</span>
             <span className="text-slate-500">Due</span><span className="font-bold text-red-700">{money(b.due)}</span>
           </div>
@@ -737,6 +753,9 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             </Button>
           </>
         )}
+        {isStaff && can("bookings.edit") && ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state) && (
+          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
+        )}
         {isStaff && ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state) && (
           <Button size="sm" variant="danger" onClick={cancelStaff} loading={busy}>Cancel booking</Button>
         )}
@@ -758,6 +777,12 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
           </Button>
         )}
       </div>
+      <EditBookingModal
+        booking={b}
+        open={editing}
+        onClose={() => setEditing(false)}
+        onSaved={async () => { await load(); onChanged(); }}
+      />
     </div>
   );
 }

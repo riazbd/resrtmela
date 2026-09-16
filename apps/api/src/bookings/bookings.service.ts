@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
 import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
@@ -34,6 +34,8 @@ export interface CreateBookingInput {
   adults: number;
   children: number;
   discount?: number;
+  /** how `discount` was given; absent means FLAT */
+  discountKind?: DiscountKind;
   remarks?: string;
   source?: string;
   walkIn?: boolean;
@@ -60,6 +62,7 @@ export interface QuoteBookingInput {
   extraPersons?: number;
   /** absent means "use the resort's standing offers", which is not the same as 0 */
   discount?: number;
+  discountKind?: DiscountKind;
 }
 
 /** One printable line of the bill: what it is, and what it comes to. */
@@ -91,6 +94,12 @@ export interface RoomBookingTxParams {
   adults: number;
   children: number;
   discount: number;
+  /**
+   * What was typed, when it was a percentage. The amount is worked out from
+   * the items once they are priced, inside the transaction that prices them.
+   */
+  discountKind?: DiscountKind;
+  discountValue?: number;
   remarks?: string;
   state: "PENDING" | "CONFIRMED";
   groupTag?: string;
@@ -264,6 +273,58 @@ export class BookingsService {
   }
 
   /**
+   * A discount kind the platform declared, and a percentage that is one.
+   *
+   * Asked before anything is priced, so a bad request is refused with a
+   * sentence rather than written down as a bill nobody can explain.
+   */
+  private assertDiscount(kind: unknown, value: number | undefined): DiscountKind {
+    if (kind == null) return "FLAT";
+    if (!isDiscountKind(kind)) {
+      throw badRequest(`Discount kind must be one of ${DISCOUNT_KINDS.join(", ")}`);
+    }
+    if (kind === "PERCENT" && value != null && (value < 0 || value > 100)) {
+      throw badRequest("A percentage discount must be between 0 and 100");
+    }
+    return kind;
+  }
+
+  /**
+   * What a percentage is a share of: the stay itself, its rooms and extra
+   * persons. Not a restaurant bill charged to the room, an activity, or a
+   * charge for damage added at checkout; nobody giving 10% off the stay meant
+   * 10% off a broken lamp.
+   */
+  static discountBase(
+    items: { itemKind: string; unitPrice: Money; qty: number }[],
+    nights: number,
+  ): number {
+    let base = 0;
+    for (const i of items) {
+      if (i.itemKind === "ROOM") base += Number(i.unitPrice) * i.qty * (nights || 1);
+      else if (i.itemKind === "EXTRA_PERSON") base += Number(i.unitPrice) * i.qty;
+    }
+    return round2(base);
+  }
+
+  /**
+   * Works a percentage out again from the booking's current items.
+   *
+   * Called after anything that changes what the stay is worth (dates, rooms,
+   * extra persons) so that 10% off stays 10% of the stay it is on. An amount
+   * is left alone: it was a number, and it still is.
+   */
+  async refreshDiscount(tx: Prisma.TransactionClient, bookingId: number): Promise<void> {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { items: true } });
+    if (b.discountKind !== "PERCENT") return;
+    const nights = b.checkIn && b.checkOut ? nightsBetween(b.checkIn, b.checkOut) : 0;
+    const amount = discountAmount("PERCENT", Number(b.discountValue), BookingsService.discountBase(b.items, nights));
+    if (amount !== Number(b.discount)) {
+      await tx.booking.update({ where: { id: bookingId }, data: { discount: amount as never } });
+    }
+  }
+
+  /**
    * What one room costs a night for these dates.
    *
    * A room's base rate is the fallback, not the answer: a rate plan covering
@@ -360,14 +421,18 @@ export class BookingsService {
       });
     }
 
-    const discount = await this.resolveDiscount(
-      input.resortId,
-      roomRows.map((r) => ({ id: r.id, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) })),
-      nights,
-      checkIn,
-      input.discount,
-      isAgent,
-    );
+    const discountKind = this.assertDiscount(input.discountKind, input.discount);
+    const discount =
+      discountKind === "PERCENT" && input.discount != null && !isAgent
+        ? discountAmount("PERCENT", input.discount, BookingsService.discountBase(items, nights))
+        : await this.resolveDiscount(
+            input.resortId,
+            roomRows.map((r) => ({ id: r.id, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) })),
+            nights,
+            checkIn,
+            input.discount,
+            isAgent,
+          );
 
     const totals = bookingTotals({
       items,
@@ -455,6 +520,7 @@ export class BookingsService {
 
     // the same answer the form was given by `quote` — one copy, so the bill
     // the clerk read is the bill the guest gets
+    const discountKind = this.assertDiscount(input.discountKind, input.discount);
     const discount = await this.resolveDiscount(
       input.resortId,
       roomRows.map((r) => ({ id: r.id, roomTypeId: r.roomTypeId, baseRate: Number(r.baseRate) })),
@@ -539,6 +605,10 @@ export class BookingsService {
         adults: input.adults,
         children: input.children,
         discount,
+        // an agent gives no discount of either kind (doc §1)
+        ...(discountKind === "PERCENT" && !isAgent && input.discount != null
+          ? { discountKind, discountValue: input.discount }
+          : {}),
         remarks: input.remarks,
         state: isAgent ? "PENDING" : "CONFIRMED",
         extraPersons,
@@ -684,6 +754,8 @@ export class BookingsService {
         children: p.children,
         extraPersons: p.extraPersons ?? 0,
         discount: p.discount as never,
+        discountKind: p.discountKind ?? "FLAT",
+        discountValue: (p.discountKind === "PERCENT" ? (p.discountValue ?? 0) : p.discount) as never,
         remarks: p.remarks,
         ...(p.groupTag ? { groupTag: p.groupTag } : {}),
         state: p.state,
@@ -726,6 +798,9 @@ export class BookingsService {
         },
       });
     }
+
+    // a percentage is of the priced stay, so it can only be worked out now
+    await this.refreshDiscount(tx, created.id);
 
     if (p.advancePayment && p.advancePayment.amount > 0) {
       await tx.payment.create({
@@ -911,6 +986,9 @@ export class BookingsService {
       checkOut: b.checkOut,
       adults: b.adults,
       children: b.children,
+      extraPersons: b.extraPersons,
+      discountKind: b.discountKind,
+      discountValue: Number(b.discountValue),
       remarks: b.remarks,
       guest: maskedGuest,
       agentPricing,
@@ -949,6 +1027,7 @@ export class BookingsService {
       adults?: number;
       children?: number;
       discount?: number;
+      discountKind?: DiscountKind;
       remarks?: string;
     },
   ) {
@@ -972,7 +1051,9 @@ export class BookingsService {
       if (!["PENDING", "CONFIRMED"].includes(b.state)) {
         throw Object.assign(new Error("Editable only before check-in"), { status: 409 });
       }
-      if (patch.discount !== undefined) throw forbid("Agents cannot change discount");
+      if (patch.discount !== undefined || patch.discountKind !== undefined) {
+        throw forbid("Agents cannot change discount");
+      }
     } else if (role === ROLE.FRONT_DESK) {
       if (!["PENDING", "CONFIRMED"].includes(b.state)) {
         throw Object.assign(new Error("Front desk can edit only Pending/Confirmed"), { status: 409 });
@@ -1011,7 +1092,17 @@ export class BookingsService {
     const roomsChanged =
       JSON.stringify([...newRoomIds].sort()) !==
       JSON.stringify([...b.items.map((i) => i.roomId!).filter(Boolean)].sort());
-    const rateChanged = patch.discount !== undefined && Number(b.discount) !== patch.discount;
+    const newKind: DiscountKind =
+      patch.discountKind !== undefined
+        ? this.assertDiscount(patch.discountKind, patch.discount)
+        : (b.discountKind as DiscountKind);
+    if (patch.discountKind === undefined) this.assertDiscount(newKind, patch.discount);
+    const kindChanged = newKind !== b.discountKind;
+    if (kindChanged && patch.discount === undefined) {
+      throw badRequest("Say what the discount is when changing how it is given");
+    }
+    const rateChanged =
+      kindChanged || (patch.discount !== undefined && Number(b.discountValue) !== patch.discount);
 
     await this.prisma.$transaction(async (tx) => {
       if (datesChanged || roomsChanged) {
@@ -1062,7 +1153,14 @@ export class BookingsService {
           ...(datesChanged ? { checkIn: newCheckIn!, checkOut: newCheckOut! } : {}),
           ...(patch.adults !== undefined ? { adults: patch.adults } : {}),
           ...(patch.children !== undefined ? { children: patch.children } : {}),
-          ...(rateChanged ? { discount: patch.discount as never } : {}),
+          ...(rateChanged
+            ? {
+                discountKind: newKind,
+                discountValue: patch.discount as never,
+                // a percentage's amount is worked out below, from the items
+                ...(newKind === "FLAT" ? { discount: patch.discount as never } : {}),
+              }
+            : {}),
           ...(patch.remarks !== undefined ? { remarks: patch.remarks } : {}),
         },
       });
@@ -1078,6 +1176,7 @@ export class BookingsService {
         tx,
       );
       void updated;
+      await this.refreshDiscount(tx, b.id);
     });
 
     return this.detail(claims, bookingId);
@@ -1521,6 +1620,8 @@ export class BookingsService {
       adults: number;
       children?: number;
       discountPerRoom?: number;
+      /** how `discountPerRoom` was given: a percentage is of each room's own stay */
+      discountKind?: DiscountKind;
       advancePerRoom?: number;
       advanceMethod?: "CASH" | "BKASH" | "NAGAD" | "CARD" | "BANK";
       remarks?: string;
@@ -1529,6 +1630,7 @@ export class BookingsService {
   ) {
     requireResortAccess(claims, input.resortId);
     await this.perms.require(claims, input.resortId, "bookings.create");
+    const groupDiscountKind = this.assertDiscount(input.discountKind, input.discountPerRoom);
     const checkIn = dateOnly(input.checkIn);
     const checkOut = dateOnly(input.checkOut);
     if (nightsBetween(checkIn, checkOut) <= 0) throw badRequest("checkOut must be after checkIn");
@@ -1606,7 +1708,9 @@ export class BookingsService {
           checkOut,
           adults: input.adults,
           children: input.children ?? 0,
-          discount: input.discountPerRoom ?? 0,
+          discount: groupDiscountKind === "PERCENT" ? 0 : (input.discountPerRoom ?? 0),
+          discountKind: groupDiscountKind,
+          discountValue: input.discountPerRoom ?? 0,
           remarks: input.remarks,
           state: "CONFIRMED",
           groupTag,
