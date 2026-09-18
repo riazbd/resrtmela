@@ -4,7 +4,8 @@
 
 > Status audit of what the platform needs to be 100% production-ready.
 > Everything below was identified in the 2026-09-07 production audit of the live VPS
-> (`194.163.191.50` — API `backresort.rootcodebd.com`, web `resortmela.rootcodebd.com`).
+> (`194.163.191.50` — web `resortmela.com`, API `api.resortmela.com` since 2026-09-19;
+> the old `resortmela.rootcodebd.com` / `backresort.rootcodebd.com` still answer).
 
 ---
 
@@ -126,8 +127,29 @@ Two tables stay tables on purpose: `/invoice/[id]` and the stay bill. A bill is 
 ### 9. Terms of Service & Privacy Policy pages
 Public signup exists (`/signup`) — legally the SaaS should ship both pages. Add `apps/web/src/app/(public)/legal/...` and link from the footer + signup form.
 
-### 10. Custom domain
-Currently on `resortmela.rootcodebd.com` / `backresort.rootcodebd.com`. When ready: point DNS → VPS IP `194.163.191.50`, add Nginx server blocks (copy the existing domain configs — note Nginx binds the specific IP, and the Hestia symlinks were removed on purpose), re-run certbot for the new domain, update `CORS_ORIGIN` + `NEXT_PUBLIC_API_URL` in `.env`, rebuild web.
+### 10. Custom domain — done 2026-09-19
+Live at **`resortmela.com`** (console and marketing), **`api.resortmela.com`** (API), with
+`www` redirecting to the apex. One Let's Encrypt certificate covers all three;
+`ops/move-to-resortmela-com.sh` is what did it and can be read for the shape.
+
+The old hostnames keep **serving**, deliberately — no redirect. An app already on a
+phone knows only `resortmela.rootcodebd.com`, and an API key an agency has deployed
+names `backresort.rootcodebd.com`. They carry `X-Robots-Tag: noindex` so only the new
+address is indexed.
+
+Two things that bite when moving, both fixed rather than worked around:
+
+* Every mailed link came from one of three environment variables, each falling back to
+  a hostname in the source. `apps/api/src/common/web-url.ts` is the one answer now, and
+  a test walks `src` and fails on the next hostname written into it.
+* `pm2 restart --update-env` re-reads the **shell's** environment, not `.env`, and the
+  values pm2 stored at first start win over dotenv. The restart has to be
+  `set -a; . /opt/resortmela/.env; set +a; pm2 restart api web --update-env`.
+
+Still on the owner: **`platform@resortmela.com` receives no mail.** The MX records are
+Namecheap's forwarding service but no forwarder exists for that mailbox, so a password
+reset for the platform account bounces with `550 Relay access denied`. Add forwarders
+for `platform@` and `support@` in Namecheap → Domain → Redirect Email.
 
 ---
 
