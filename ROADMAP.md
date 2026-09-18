@@ -146,10 +146,40 @@ Two things that bite when moving, both fixed rather than worked around:
   values pm2 stored at first start win over dotenv. The restart has to be
   `set -a; . /opt/resortmela/.env; set +a; pm2 restart api web --update-env`.
 
-Still on the owner: **`platform@resortmela.com` receives no mail.** The MX records are
-Namecheap's forwarding service but no forwarder exists for that mailbox, so a password
-reset for the platform account bounces with `550 Relay access denied`. Add forwarders
-for `platform@` and `support@` in Namecheap → Domain → Redirect Email.
+### 10b. The platform's own mail — done 2026-09-19
+Mail for `resortmela.com` now lives on this server, sending and receiving.
+
+* **Sending.** The app was posting as `no-reply@rootcodebd.com` — a different company's
+  domain in every password-reset mail. It is `no-reply@resortmela.com` now, a Hestia mail
+  domain on the same box, with its own DKIM key. Exim signs from the **From header's**
+  domain (`DKIM_DOMAIN = ${lc:${domain:$h_from:}}`), so the key only had to exist at
+  `/etc/exim4/domains/resortmela.com/dkim.pem` for signing to start.
+* **Receiving.** MX moved off Namecheap's forwarding service to `mail.resortmela.com`.
+  `no-reply@`, `platform@`, `support@` and `dmarc@` are real mailboxes; `platform@` and
+  `support@` also forward to the owner, keeping a local copy.
+* **Webmail** at `https://mail.resortmela.com`, on its own Let's Encrypt certificate that
+  Exim, Dovecot and nginx all serve.
+* **DNS at Namecheap:** SPF `v=spf1 a mx ip4:194.163.191.50 ~all`, DKIM at
+  `mail._domainkey`, DMARC at `_dmarc`, MX → `mail.resortmela.com`, A for `mail`.
+
+Verified rather than assumed: the signature was captured off the wire (an isolated Exim
+run against a throwaway config copy — the live config was byte-identical afterwards) and
+checked against the key **fetched from DNS**: body hash and RSA signature both verify.
+MxToolBox independently reported SPF ok, DKIM ok, no blacklists.
+
+Two traps worth remembering:
+
+* Hestia's forced-SSL redirect was `return 301 https://$server_name...`, and
+  `$server_name` is the *first* name on the vhost (`webmail.`, which had no A record).
+  Let's Encrypt followed that redirect into nothing, so renewal would have failed
+  silently at day 90. It is `$host` now, and `certbot renew --dry-run` passes for all
+  three certificates.
+* `certbot` renewing is not the same as anything *using* the renewal.
+  `/etc/letsencrypt/renewal-hooks/deploy/resortmela.sh` reloads nginx and reinstalls the
+  mail certificate into Hestia's own copy.
+
+Still open: `_dmarc` is `p=none`, which MxToolBox flags. Once the owner is happy, move to
+`p=quarantine`.
 
 ---
 
