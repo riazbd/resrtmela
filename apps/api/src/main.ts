@@ -4,8 +4,10 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { ConfigModule } from "@nestjs/config";
 import { AppModule } from "./app.module";
-import { corsOrigins } from "./common/cors";
+import type { NextFunction, Request, Response } from "express";
+import { corsOrigins, readableFromAnywhere } from "./common/cors";
 import { eventLogLine } from "./common/observability";
+import { isWebUrlConfigured } from "./common/web-url";
 
 async function bootstrap() {
   // BigInt ids (subscription/api-key rows) must survive JSON serialization
@@ -98,6 +100,28 @@ async function bootstrap() {
 
   // the allow-list, and the reason it is a function, are in common/cors.ts
   app.enableCors({ origin: corsOrigins(), credentials: true });
+  /**
+   * Registered after the allow-list so it has the last word, and only when the
+   * allow-list had nothing to say: a customer's own domain can never be on a
+   * list written in advance, and the published-site reads it makes are public.
+   * Never `*` on top of an allowed origin — that origin gets credentials, and a
+   * browser refuses `*` together with those.
+   */
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method === "GET" && !res.getHeader("access-control-allow-origin") && readableFromAnywhere(req.path)) {
+      res.setHeader("access-control-allow-origin", "*");
+      res.setHeader("vary", "Origin");
+    }
+    next();
+  });
+  /**
+   * Every link this API mails out is built from this. Unset in production means
+   * password-reset mails pointing at localhost, which nobody would report as a
+   * bug because the mail looks fine until it is clicked.
+   */
+  if (process.env.NODE_ENV === "production" && !isWebUrlConfigured()) {
+    console.error(eventLogLine("error", "webUrlUnset", { detail: "PUBLIC_WEB_URL is not set; mailed links will point at localhost" }));
+  }
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
   await app.listen(port);
   console.log(eventLogLine("info", "listening", { port }));

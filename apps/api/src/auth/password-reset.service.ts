@@ -7,6 +7,7 @@ import { PlatformSettingsService } from "../common/platform-settings.service";
 import { badRequest } from "../common/rbac";
 import { findUserByIdentifier, isPlaceholderEmail } from "../common/contact";
 
+import { webUrl } from "../common/web-url";
 const TTL_MS = 60 * 60 * 1000; // one hour
 const MIN_PASSWORD = 8;
 
@@ -66,10 +67,8 @@ export class PasswordResetService {
     await this.prisma.passwordReset.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 
     const platformName = await this.settings.str("platform.name", "Resort Mela");
-    // same convention as the agent-invite and payment-return links: PUBLIC_WEB_URL,
-    // falling back to the production console when it is unset (dev/test)
-    const base = process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com";
-    const link = `${base}/reset?token=${raw}`;
+    // one answer for every link this API mails: common/web-url.ts
+    const link = `${webUrl()}/reset?token=${raw}`;
     const r = await this.email.send(
       address,
       `${platformName} password reset`,

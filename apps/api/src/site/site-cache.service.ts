@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 
+import { isWebUrlConfigured, webUrl } from "../common/web-url";
 /**
  * Telling the website that a resort's page is out of date.
  *
@@ -27,11 +28,11 @@ export class SiteCacheService {
   }
 
   private async post(body: Record<string, string>, what: string): Promise<void> {
-    const base = process.env.WEB_URL;
     const secret = process.env.REVALIDATE_SECRET;
     // not configured is a normal state in development and in tests, and is not
     // worth a line in the log every time somebody types in the editor
-    if (!base || !secret) return;
+    if (!isWebUrlConfigured() || !secret) return;
+    const base = webUrl();
 
     try {
       const res = await fetch(`${base.replace(/\/+$/, "")}/api/site/revalidate`, {

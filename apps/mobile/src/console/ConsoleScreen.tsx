@@ -21,7 +21,20 @@ import {
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import { routeFor } from "./url-policy";
 
-export function ConsoleScreen({ consoleUrl, online }: { consoleUrl: string; online: boolean }) {
+export function ConsoleScreen({
+  consoleUrl,
+  /**
+   * Every address that is ours, not only the one this build opens. The
+   * platform moved domains, and a redirect to the new one must navigate in
+   * place rather than leave the app (2026-09-19).
+   */
+  ownedUrls = [consoleUrl],
+  online,
+}: {
+  consoleUrl: string;
+  ownedUrls?: readonly string[];
+  online: boolean;
+}) {
   const webview = useRef<WebView>(null);
   const canGoBack = useRef(false);
   const [loading, setLoading] = useState(true);
@@ -71,7 +84,7 @@ export function ConsoleScreen({ consoleUrl, online }: { consoleUrl: string; onli
           canGoBack.current = nav.canGoBack;
         }}
         onShouldStartLoadWithRequest={(req) => {
-          const route = routeFor(req.url, consoleUrl);
+          const route = routeFor(req.url, ownedUrls);
           if (route === "outside") {
             Linking.openURL(req.url).catch(() => {
               /* no app for this scheme; refusing is better than crashing */

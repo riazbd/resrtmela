@@ -781,7 +781,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
               The all-in-one resort management platform — booking calendar, front desk, restaurant POS,
               and agents with wallets.
             </p>
-            <div className="mt-4 text-xs text-slate-400">support@rootcodebd.com</div>
+            <div className="mt-4 text-xs text-slate-400">support@resortmela.com</div>
           </div>
           <div>
             <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Functionalities</div>

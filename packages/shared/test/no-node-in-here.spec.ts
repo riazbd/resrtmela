@@ -76,6 +76,25 @@ describe("what this package may import", () => {
    * And nothing that only exists in a browser either: the API imports this
    * package too, and `window` in it would take the server down instead.
    */
+  /**
+   * A word on its own: `windowSize` and `documentUrl` are left alone, and so is
+   * a module path — `export * from "./agent-window"` tripped this for two days
+   * because a hyphen is not a word character (2026-09-19).
+   */
+  const BROWSER_ONLY = /(?<![\w.\-/])(window|document|localStorage|navigator)(?![\w-])/;
+
+  it("catches a real reach for the browser", () => {
+    expect(BROWSER_ONLY.test("const w = window.innerWidth;")).toBe(true);
+    expect(BROWSER_ONLY.test("if (document) {}")).toBe(true);
+    expect(BROWSER_ONLY.test("localStorage.getItem('x')")).toBe(true);
+  });
+
+  it("leaves a module path and a longer word alone", () => {
+    expect(BROWSER_ONLY.test('export * from "./agent-window";')).toBe(false);
+    expect(BROWSER_ONLY.test("const windowSize = 3;")).toBe(false);
+    expect(BROWSER_ONLY.test("type BookingWindowDays = number;")).toBe(false);
+  });
+
   it("reaches for nothing that only exists in a browser", () => {
     const offenders: string[] = [];
     for (const file of sourceFiles(SRC)) {
@@ -85,10 +104,7 @@ describe("what this package may import", () => {
       const code = readFileSync(file, "utf8")
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(new RegExp("//[^" + String.fromCharCode(10) + "]*", "g"), "");
-      // a word on its own, so `windowSize` and `documentUrl` are left alone
-      if (/(?<![\w.])(window|document|localStorage|navigator)(?![\w])/.test(code)) {
-        offenders.push(relative(SRC, file));
-      }
+      if (BROWSER_ONLY.test(code)) offenders.push(relative(SRC, file));
     }
     expect(offenders).toEqual([]);
   });

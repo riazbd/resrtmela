@@ -23,6 +23,7 @@ import * as bcrypt from "bcryptjs";
 import { uniqueResortSlug } from "../common/resort-slug";
 import { ApiKeyService, askedScopes } from "../v1/api-key.service";
 
+import { webUrl } from "../common/web-url";
 /**
  * Starting plans for a brand-new platform. They are a seed, not a definition:
  * once a row exists it belongs to the super admin, who edits it in
@@ -2384,7 +2385,7 @@ export class PlatformService {
       // an invitation left unanswered for a month is not one anyone is waiting on
       expiresAt: new Date(Date.now() + 30 * 86_400_000),
     });
-    const link = `${process.env.PUBLIC_WEB_URL ?? "https://resortmela.rootcodebd.com"}/signup/agency?offer=${offer.code}`;
+    const link = `${webUrl()}/signup/agency?offer=${offer.code}`;
     const platformName = await this.settings.str("platform.name", "Resort Mela");
     const html = `
       <div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#0f172a;max-width:560px">

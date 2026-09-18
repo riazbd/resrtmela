@@ -17,7 +17,17 @@ import { ConsoleScreen } from "./src/console/ConsoleScreen";
 
 /** Set in app.json so the build, not the source, decides which server. */
 const CONSOLE_URL =
-  (Constants.expoConfig?.extra?.consoleUrl as string | undefined) ?? "https://resortmela.rootcodebd.com";
+  (Constants.expoConfig?.extra?.consoleUrl as string | undefined) ?? "https://resortmela.com";
+
+/**
+ * Every address that is still ours, newest first (2026-09-19).
+ *
+ * The platform moved domains, and an app already on a phone would meet the
+ * redirect to the new one and hand the console to the phone's browser. Both
+ * addresses stay here until old builds are gone.
+ */
+const CONSOLE_URLS: string[] =
+  (Constants.expoConfig?.extra?.consoleUrlsOwned as string[] | undefined) ?? [CONSOLE_URL];
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   /* already hidden; not worth crashing the app over */
@@ -43,7 +53,7 @@ export default function App() {
       <StatusBar style="dark" />
       <SafeAreaView style={styles.fill} edges={["top", "bottom"]}>
         <View style={styles.fill}>
-          <ConsoleScreen consoleUrl={CONSOLE_URL} online={online} />
+          <ConsoleScreen consoleUrl={CONSOLE_URL} ownedUrls={CONSOLE_URLS} online={online} />
         </View>
       </SafeAreaView>
     </SafeAreaProvider>

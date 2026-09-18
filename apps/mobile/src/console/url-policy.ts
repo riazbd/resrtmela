@@ -25,7 +25,28 @@ const HANDED_TO_THE_PHONE = new Set([
  */
 const NEVER = new Set(["javascript:", "data:", "file:", "blob:"]);
 
-export function routeFor(url: string, consoleUrl: string): Route {
+/**
+ * Every address the console answers at.
+ *
+ * A list rather than one origin, because the platform moved domains
+ * (2026-09-19) and an installed app knows only the address it was built with.
+ * Meeting a redirect to the new one, a single-origin rule would hand the whole
+ * console to the phone's browser — the app, in effect, uninstalled. The old
+ * address stays on the list while old builds are still on phones.
+ */
+const origins = (consoleUrl: string | readonly string[]): string[] =>
+  (typeof consoleUrl === "string" ? [consoleUrl] : consoleUrl)
+    .map((u) => {
+      try {
+        return new URL(u).origin;
+      } catch {
+        // a misconfigured build owns nothing, rather than owning everything
+        return null;
+      }
+    })
+    .filter((o): o is string => o !== null);
+
+export function routeFor(url: string, consoleUrl: string | readonly string[]): Route {
   if (!url) return "blocked";
   if (url === "about:blank") return "inside";
 
@@ -46,5 +67,5 @@ export function routeFor(url: string, consoleUrl: string): Route {
    * would then be running inside our WebView, under our icon, next to our
    * session.
    */
-  return target.origin === new URL(consoleUrl).origin ? "inside" : "outside";
+  return origins(consoleUrl).includes(target.origin) ? "inside" : "outside";
 }

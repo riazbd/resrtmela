@@ -54,3 +54,35 @@ describe("routeFor", () => {
     expect(routeFor("javascript:alert(1)", CONSOLE)).toBe("blocked");
   });
 });
+
+/**
+ * The platform moved from `resortmela.rootcodebd.com` to `resortmela.com`
+ * (2026-09-19). An installed app knows only the address it was built with, so
+ * the first redirect to the new one would read as "somewhere else" and hand the
+ * console to the phone's browser — the app, in effect, uninstalled.
+ *
+ * So ownership is a list, not a single origin. The old address stays on it for
+ * as long as an old build might still be on somebody's phone.
+ */
+describe("a console that has more than one address", () => {
+  const BOTH = ["https://resortmela.com", "https://resortmela.rootcodebd.com"];
+
+  it("keeps every address on the list inside the app", () => {
+    expect(routeFor("https://resortmela.com/daysheet", BOTH)).toBe("inside");
+    expect(routeFor("https://resortmela.rootcodebd.com/daysheet", BOTH)).toBe("inside");
+  });
+
+  it("is still nobody else's", () => {
+    expect(routeFor("https://resortmela.com.attacker.net/login", BOTH)).toBe("outside");
+    expect(routeFor("http://resortmela.com/login", BOTH)).toBe("outside");
+    expect(routeFor("https://www.google.com", BOTH)).toBe("outside");
+  });
+
+  it("still takes a single address, which is how every caller wrote it", () => {
+    expect(routeFor("https://resortmela.com/x", "https://resortmela.com")).toBe("inside");
+  });
+
+  it("owns nothing when given nothing", () => {
+    expect(routeFor("https://resortmela.com/x", [])).toBe("outside");
+  });
+});

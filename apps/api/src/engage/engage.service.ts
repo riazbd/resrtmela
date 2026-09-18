@@ -11,6 +11,7 @@ import { PlanLimitsService } from "../common/plan-limits.service";
 import { PLACEHOLDER_EMAIL_SUFFIX, reachableEmail, reachablePhone } from "../common/contact";
 import { agencyOf, sellableFor } from "../common/selling-access";
 
+import { webUrl } from "../common/web-url";
 @Injectable()
 export class EngageService {
   constructor(
@@ -474,7 +475,7 @@ export class EngageService {
       fromName = resort?.name;
     }
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.7;color:#0f172a">${input.body.replace(/\n/g, "<br/>")}</div>`;
-    const listUnsub = `${process.env.WEB_ORIGIN ?? "https://resortmela.rootcodebd.com"}/unsubscribe?u=${claims.userId}&c=${Buffer.from(`${input.subject}`).toString("base64url").slice(0, 24)}`;
+    const listUnsub = `${webUrl()}/unsubscribe?u=${claims.userId}&c=${Buffer.from(`${input.subject}`).toString("base64url").slice(0, 24)}`;
     let sent = 0;
     let failed = 0;
     for (const r of recipients) {
