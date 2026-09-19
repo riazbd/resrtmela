@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { ROLE, JwtClaims, isPermissionKey, isPlanFeature, formatMoney, ALL_PERMISSIONS, PLAN_AUDIENCES, planFeaturesFor } from "@rh/shared";
-import { requireRoles, requireResortAccess, forbid, badRequest } from "../common/rbac";
+import { requireRoles, requireResortAccess, forbid, badRequest, notFound } from "../common/rbac";
 import { AuditService } from "../common/audit.service";
 import { EmailService } from "../notifications/email.service";
 import { DiscountService } from "../common/discount.service";
@@ -245,14 +245,39 @@ export class PlatformService {
 
   async overview(claims: JwtClaims) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
-    const [resorts, agents, subs, dues, rooms] = await Promise.all([
-      this.prisma.resort.findMany({ select: { id: true, name: true, status: true, createdAt: true } }),
-      this.prisma.user.findMany({ where: { role: "AGENT" }, select: { status: true } }),
+    /**
+     * Every figure below leaves out the accounts the platform opened to try
+     * things with. This screen is the one the owner reads to know how the
+     * business is doing, and a test resort's bookings are bookings, its
+     * subscription is a subscription and its unpaid bill is an unpaid bill —
+     * so without this the resort count, the trial count, the monthly revenue
+     * and the outstanding total would all quietly be wrong.
+     *
+     * The lists further down still show them, badged. Hiding them there
+     * would make a marked account impossible to unmark.
+     */
+    const real = { demo: false };
+    const [resorts, agents, subs, dues, rooms, demoResorts, demoAgencies] = await Promise.all([
+      this.prisma.resort.findMany({
+        where: { tenant: real },
+        select: { id: true, name: true, status: true, createdAt: true },
+      }),
+      this.prisma.user.findMany({
+        // an agent with no account at all is a legacy row, not a test one
+        where: { role: "AGENT", OR: [{ account: real }, { accountId: null }] },
+        select: { status: true },
+      }),
       this.prisma.subscription.findMany({
+        where: { account: real },
         select: { status: true, fee: true, scheduleId: true },
       }),
-      this.prisma.subscriptionDue.findMany({ where: { status: { in: ["DUE", "OVERDUE"] } }, select: { amount: true } }),
-      this.prisma.room.count({ where: { deletedAt: null } }),
+      this.prisma.subscriptionDue.findMany({
+        where: { status: { in: ["DUE", "OVERDUE"] }, account: real },
+        select: { amount: true },
+      }),
+      this.prisma.room.count({ where: { deletedAt: null, resort: { tenant: real } } }),
+      this.prisma.resort.count({ where: { tenant: { demo: true } } }),
+      this.prisma.tenant.count({ where: { demo: true, kind: "AGENCY" } }),
     ]);
     const activeSubs = subs.filter((s) => s.status === "ACTIVE");
     /**
@@ -301,6 +326,12 @@ export class PlatformService {
       },
       duesOutstanding: dues.reduce((sum, d) => sum + Number(d.amount), 0),
       rooms,
+      /**
+       * Said out loud rather than silently. A total that differs from the
+       * list beneath it without explaining why is worse than one that is
+       * wrong in a way somebody can see.
+       */
+      demoExcluded: { resorts: demoResorts, agencies: demoAgencies },
     };
   }
 
@@ -319,6 +350,9 @@ export class PlatformService {
             id: true,
             name: true,
             kind: true,
+            // so the row can be badged, and the owner can tell at a glance
+            // which of these are the ones they opened to try things with
+            demo: true,
             subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, fee: true, scheduleId: true, renewsAt: true } },
           },
         },
@@ -343,7 +377,7 @@ export class PlatformService {
     const rows = await this.prisma.tenant.findMany({
       where: { kind: "AGENCY", ...(status ? { status } : {}) },
       select: {
-        id: true, name: true, status: true, suspendedReason: true, createdAt: true,
+        id: true, name: true, status: true, suspendedReason: true, createdAt: true, demo: true,
         users: {
           where: { role: "AGENT", parentAgentId: null },
           take: 1,
@@ -359,9 +393,41 @@ export class PlatformService {
       status: a.status,
       suspendedReason: a.suspendedReason,
       createdAt: a.createdAt,
+      demo: a.demo,
       owner: a.users[0] ?? null,
       subscription: a.subscriptions[0] ?? null,
     }));
+  }
+
+  /**
+   * Mark an account as one the platform opened to try things with — or stop.
+   *
+   * The platform's, not the resort's: the flag decides what counts as this
+   * business's revenue, and a customer who could set it could take
+   * themselves out of the books. It changes nothing about how the account
+   * behaves, so a test resort that turns into a real one keeps everything it
+   * has, which is the reason this is a switch and not a separate kind of
+   * tenant.
+   */
+  async setAccountDemo(claims: JwtClaims, accountId: number, demo: boolean) {
+    requireRoles(claims, [ROLE.SUPER_ADMIN]);
+    const account = await this.prisma.tenant.findUnique({
+      where: { id: accountId },
+      select: { id: true, name: true, demo: true },
+    });
+    if (!account) throw notFound("No such account");
+    if (account.demo === demo) return { id: account.id, demo };
+    await this.prisma.tenant.update({ where: { id: accountId }, data: { demo } });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: claims.userId,
+        action: demo ? "account.demo.on" : "account.demo.off",
+        entity: "tenant",
+        entityId: BigInt(accountId),
+        diff: { name: account.name, demo },
+      },
+    });
+    return { id: account.id, demo };
   }
 
   /** Verified once, it sells every open resort — not once per resort. */

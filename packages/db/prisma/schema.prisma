@@ -87,6 +87,15 @@ model Tenant {
   /// stops taking new entries; an agency stops selling).
   kind            String    @default("RESORT_OWNER") @db.VarChar(16)
   status          String    @default("active") @db.VarChar(16)
+  /// An account the platform opened to try things with, rather than a customer.
+  ///
+  /// Not a naming convention, because bookings taken in a test resort are
+  /// bookings and payments are payments: they reach Platform → Overview, which
+  /// is the screen the owner reads to know how the business is doing. Marked
+  /// accounts work exactly as real ones do — nothing is hidden and nothing is
+  /// refused — they are only left out of the platform's own totals, and the
+  /// screen says how many it left out.
+  demo            Boolean   @default(false)
   /// "billing" when the sweep suspended the account, so the sweep may lift it
   suspendedReason String?   @db.VarChar(32)
   suspendedAt     DateTime?

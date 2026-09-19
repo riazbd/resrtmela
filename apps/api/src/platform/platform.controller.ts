@@ -106,6 +106,10 @@ class ChangePlanDto {
   @IsOptional() @IsInt() @Min(1) scheduleId?: number;
 }
 
+class AccountDemoDto {
+  @IsBoolean() demo!: boolean;
+}
+
 class ResortStatusDto {
   @IsIn(["active", "suspended"]) status!: string;
   /** why, so the billing sweep can tell its own suspensions from a human's */
@@ -274,6 +278,22 @@ export class PlatformController {
     @Body() dto: ResortStatusDto,
   ) {
     return this.platform.setAccountStatus(req.user, id, dto.status as "active" | "suspended", dto.reason);
+  }
+
+  /**
+   * Mark an account as one the platform opened to try things with, or stop.
+   *
+   * On the account and not on the resort, because a customer is a tenant:
+   * one switch covers a resort owner with three resorts and an agency with
+   * none. It changes nothing about how the account behaves — only whether
+   * the platform's own totals count it.
+   */
+  @Patch("platform/accounts/:id/demo") setAccountDemo(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: AccountDemoDto,
+  ) {
+    return this.platform.setAccountDemo(req.user, id, dto.demo);
   }
 
   @Patch("platform/resorts/:id/status") setResortStatus(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number, @Body() dto: ResortStatusDto) {

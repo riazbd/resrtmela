@@ -51,6 +51,11 @@ export interface Resort {
    * means tomorrow from 18:00, the shift the front desk actually works.
    */
   timezone?: string;
+  /**
+   * The account this resort belongs to. Only `demo` so far, and only so a
+   * console opened on an account the platform made to test with says so.
+   */
+  tenant?: { demo: boolean } | null;
 }
 
 /**

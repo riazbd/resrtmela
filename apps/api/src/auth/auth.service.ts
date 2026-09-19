@@ -99,7 +99,16 @@ export class AuthService {
         account: { select: { id: true, name: true, kind: true, status: true, suspendedReason: true } },
         resorts: {
           select: {
-            resort: { select: { id: true, name: true, tenantId: true, status: true, currency: true, locale: true, timezone: true } },
+            resort: {
+              select: {
+                id: true, name: true, tenantId: true, status: true,
+                currency: true, locale: true, timezone: true,
+                // so a console opened on an account the platform made to
+                // test with says so, rather than looking like somebody's
+                // real business
+                tenant: { select: { demo: true } },
+              },
+            },
             // `commissionRate` used to ride along here. It was the agent's own
             // legacy rate, which nothing sets and nothing prices on any more —
             // shipping it would be handing the console a number that disagrees

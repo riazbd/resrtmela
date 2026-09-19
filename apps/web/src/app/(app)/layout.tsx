@@ -158,6 +158,21 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/*
+        An account the platform opened to test with, said on the account's
+        own screens and not only on the platform's. Anyone handed this login
+        should know within a second that the numbers in front of them are
+        not a real business's — a badge the owner alone can see would not
+        tell them.
+
+        Above the impersonation bar because it is true for longer: you can
+        stop impersonating, you cannot stop this being a test account.
+      */}
+      {activeResort?.tenant?.demo && (
+        <div className="flex items-center justify-center gap-2 bg-slate-800 px-4 py-1.5 text-xs font-semibold text-slate-100">
+          Test account — <b>{activeResort.name}</b> is for trying things out. Nothing here is a real booking.
+        </div>
+      )}
       {isImpersonating && (
         <div className="flex items-center justify-center gap-3 bg-amber-400 px-4 py-1.5 text-xs font-semibold text-amber-950">
           Viewing as <b>{me?.name}</b> ({role.replace(/_/g, " ")}). Actions are audited.

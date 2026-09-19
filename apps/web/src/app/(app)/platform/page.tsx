@@ -20,12 +20,32 @@ import { displayPhone } from "@/lib/contact";
 import { AgencyQueue } from "./agency-queue";
 import { OffersTab } from "./offers-tab";
 
+/**
+ * An account the platform opened to try things with.
+ *
+ * Amber rather than red: it is not a problem, it is a note. The same badge
+ * on a resort row and an agency row, because both are the same flag on the
+ * same tenant.
+ */
+function DemoBadge() {
+  return (
+    <span
+      title="Opened by the platform to test with. Left out of the figures on Overview."
+      className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-amber-200"
+    >
+      demo
+    </span>
+  );
+}
+
 interface Overview {
   resorts: { total: number; active: number; suspended: number };
   agents: { total: number; pending: number; active: number; suspended: number };
   subscriptions: { trial: number; active: number; pastDue: number; cancelled: number; mrr: number };
   duesOutstanding: number;
   rooms: number;
+  /** How many accounts the figures above left out, because they are ours to test with. */
+  demoExcluded: { resorts: number; agencies: number };
 }
 interface ResortRow {
   id: number;
@@ -38,6 +58,8 @@ interface ResortRow {
     id: number;
     name: string;
     kind: string;
+    /** Ours, opened to try things with — badged, and out of the totals. */
+    demo: boolean;
     subscriptions: { id: string; plan: string; status: string; fee: string; scheduleLabel: string | null; renewsAt: string | null }[];
   };
   _count: { rooms: number; bookings: number; guests: number };
@@ -379,6 +401,17 @@ export default function PlatformPage() {
             <StatCard icon={Wallet} label="MRR" value={money(ov.subscriptions.mrr)} sub={`${ov.subscriptions.active} active · ${ov.subscriptions.trial} trial`} />
             <StatCard icon={CreditCard} label="Dues outstanding" value={money(ov.duesOutstanding)} sub={`${ov.subscriptions.pastDue} past-due subs`} />
           </div>
+          {/* Said out loud. A total that quietly differs from the list on the
+              next tab is worse than one that is wrong where you can see it. */}
+          {(ov.demoExcluded.resorts > 0 || ov.demoExcluded.agencies > 0) && (
+            <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+              These figures leave out{" "}
+              {ov.demoExcluded.resorts > 0 && `${ov.demoExcluded.resorts} demo resort${ov.demoExcluded.resorts === 1 ? "" : "s"}`}
+              {ov.demoExcluded.resorts > 0 && ov.demoExcluded.agencies > 0 && " and "}
+              {ov.demoExcluded.agencies > 0 && `${ov.demoExcluded.agencies} demo agenc${ov.demoExcluded.agencies === 1 ? "y" : "ies"}`}
+              {" "}— accounts opened to test with. They are still listed on the tabs.
+            </div>
+          )}
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card className="p-5">
               <div className="text-sm font-bold">Subscription funnel</div>
@@ -425,7 +458,10 @@ export default function PlatformPage() {
               {resorts.map((r) => (
                 <tr key={r.id} className="border-t border-slate-100">
                   <Td>
-                    <div className="font-semibold text-slate-800">{r.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-800">{r.name}</span>
+                      {r.tenant.demo && <DemoBadge />}
+                    </div>
                     <div className="text-xs text-slate-400">{r.location ?? "—"} · tenant {r.tenant.name}</div>
                   </Td>
                   <Td>
@@ -500,6 +536,17 @@ export default function PlatformPage() {
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                       >
                         {r.status === "active" ? "Suspend" : "Activate"}
+                      </button>
+                      {/* on the account, not the resort: one owner's three
+                          resorts are one customer and one switch */}
+                      <button
+                        onClick={() => act(() => api(`/platform/accounts/${r.tenant.id}/demo`, { method: "PATCH", body: { demo: !r.tenant.demo } }))}
+                        title={r.tenant.demo
+                          ? "Count this account in the platform's figures again"
+                          : "Mark as an account opened to test with, and leave it out of the figures"}
+                        className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                      >
+                        {r.tenant.demo ? "Not demo" : "Mark demo"}
                       </button>
                     </div>
                   </Td>

@@ -13,6 +13,8 @@ interface AgencyRow {
   createdAt: string;
   owner: { id: number; name: string; email: string; phone: string } | null;
   subscription: { plan: string; status: string; trialEndsAt: string | null } | null;
+  /** Ours, opened to try things with — badged here and out of Overview's figures. */
+  demo: boolean;
 }
 
 /**
@@ -102,7 +104,17 @@ export function AgencyQueue() {
             <tbody>
               {[...pending, ...others].map((a) => (
                 <tr key={a.id} className="border-t border-slate-100">
-                  <td className="py-2 pr-3 font-semibold text-slate-800">{a.name}</td>
+                  <td className="py-2 pr-3 font-semibold text-slate-800">
+                    <span>{a.name}</span>
+                    {a.demo && (
+                      <span
+                        title="Opened by the platform to test with. Left out of the figures on Overview."
+                        className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-amber-200"
+                      >
+                        demo
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-3 text-xs text-slate-500">
                     <div>{a.owner?.name ?? "—"}</div>
                     <div>{a.owner ? displayEmail(a.owner.email) : ""}</div>
