@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, money, type BookingDetail } from "@/lib/api";
+import { client, money, type BookingDetail } from "@/lib/api";
 import { Button, Field, Input, Modal, Select, useToast } from "@/components/ui";
 import { STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind } from "@rh/shared";
 
@@ -47,7 +47,7 @@ export function ArrivalModal({ booking, open, mode, onClose, onChanged, onCheckI
     setErr(null);
     try {
       if (persons !== (booking.extraPersons ?? 0)) {
-        await api(`/bookings/${booking.id}/extra-persons`, { method: "POST", body: { persons } });
+        await client.bookings.extraPersons(booking.id, persons);
         push(persons > (booking.extraPersons ?? 0) ? `Extra persons: ${persons} — added to the bill` : `Extra persons: ${persons}`);
         await onChanged();
       }
@@ -132,7 +132,7 @@ export function DepartureModal({ booking, open, mode, onClose, onChanged, onChec
     setBusy(true);
     setErr(null);
     try {
-      await api(`/bookings/${booking.id}/charges`, { method: "POST", body: { kind, label, qty, amount } });
+      await client.bookings.addCharge(booking.id, { kind, label, qty, amount });
       push(`${STAY_CHARGE_LABELS[kind]} added — ${money(amount * qty)}`);
       setLabel("");
       setQty(1);
@@ -149,7 +149,7 @@ export function DepartureModal({ booking, open, mode, onClose, onChanged, onChec
     setBusy(true);
     setErr(null);
     try {
-      await api(`/bookings/${booking.id}/charges/${itemId}`, { method: "DELETE" });
+      await client.bookings.removeCharge(booking.id, itemId);
       await onChanged();
     } catch (ex) {
       setErr((ex as Error).message);

@@ -247,6 +247,85 @@ export interface BookingDetail extends BookingRow {
   }[];
 }
 
+/**
+ * What making a tour group answers with.
+ *
+ * One booking per room, so the answer is a tag to find them all by and the
+ * codes to read out — not the bookings themselves. The client promised
+ * `BookingDetail[]` here until 2026-09-20; the route has only ever sent an id
+ * and a code.
+ */
+export interface GroupBookingResult {
+  groupTag: string;
+  count: number;
+  bookings: { id: number; code: string }[];
+}
+
+/**
+ * One payment, as the desk recorded it.
+ *
+ * `method` is nullable because the importer had nothing to write for sheets
+ * with no method column, and a defaulted "CASH" was indistinguishable from
+ * cash somebody counted.
+ */
+export interface PaymentRow {
+  id: number;
+  bookingId: number;
+  amount: number;
+  method: string | null;
+  paymentType: string;
+  receivedById: number | null;
+  receivedAt: string;
+  note: string | null;
+  clientRef: string | null;
+}
+
+/**
+ * What taking a payment answers with.
+ *
+ * Not the booking alone: `replayed` is how a client that queues writes knows
+ * the server recognised this one as a repeat of a write it already applied.
+ * Without it, an offline desk that reconnects twice cannot tell a second
+ * receipt from the first one coming back.
+ */
+export interface PaymentReceipt {
+  payment: PaymentRow;
+  booking: BookingDetail;
+  replayed: boolean;
+}
+
+/**
+ * One stay on today's board.
+ *
+ * Deliberately not a `BookingRow`: the dashboard asks about one day, so the
+ * rows carry whether they are arriving or departing rather than repeating the
+ * dates, and the guest comes without an id because nothing on that screen
+ * opens a guest.
+ */
+export interface TodayRow {
+  id: number;
+  code: string;
+  arriving: boolean;
+  departing: boolean;
+  guest: { fullName: string; phone: string } | null;
+  agent: string | null;
+  rooms: (string | null | undefined)[];
+  state: string;
+  nights: number;
+  rent: number;
+  paid: number;
+  due: number;
+}
+
+/** The dashboard's whole read: who is coming, who is going, and what is owed. */
+export interface TodayFeed {
+  arrivals: TodayRow[];
+  departures: TodayRow[];
+  occupancyPct: number;
+  duesTotal: number;
+  duesCount: number;
+}
+
 export interface CalendarBooking {
   id: number;
   code: string;

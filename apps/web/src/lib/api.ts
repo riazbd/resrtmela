@@ -145,6 +145,7 @@ export async function download(path: string, fallbackName: string): Promise<void
 export type {
   Resort, Me, PermRole,
   BookingRow, BookingDetail, BookingQuote, QuoteLine, CalendarBooking,
+  TodayRow, TodayFeed, PaymentRow, PaymentReceipt,
   Room, RoomType, RatePlan, RoomAvail, AgentPricing,
   GuestRow,
   Employee, PayrollSheet, FoodPackage, PLReport, ExpenseRow, ExpensePage, DuesReport, DaySheet,

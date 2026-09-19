@@ -15,12 +15,13 @@ design system, and can sign out. No WebView on any screen this phase owns.
 | 1 — the Storage port | **done** (`7b17f0f`) |
 | 2 — stage A, pure logic into `@rh/shared` | **done** (`7869c4a`, `bd45941`) |
 | 3 — stage B, the stateful contexts | **done** (`2a0cc5c` … `d575c1d`, `4f7a7f7`) |
-| 4 — the app's dependencies | not started |
-| 5 — design tokens | not started |
-| 6 — primitives | not started |
-| 7 — patterns | not started |
-| 8 — the navigation shell | not started |
-| 9 — the auth screens | not started |
+| 4 — the app's dependencies | **done** (`975da78`, `253a76f`) — jest-expo, and `expo-sqlite/kv-store` in place of MMKV so a screen opens in Expo Go |
+| 5 — design tokens | **done** (`8244c6e`) |
+| 6 — primitives | **done** (`5c81a73`) |
+| 7 — patterns | **done** (`21f94b3`) — the action latch, and the three states every screen owes |
+| 8 — the navigation shell | **done** (`5e9d5fb`) — tabs from one shared `CONSOLE_NAV` |
+| 8a — the auth slice of the client | **done** (`bdba244`) |
+| 9 — the auth screens | **done** (`21f94b3`) — signs in against production |
 | 10 — the APK | not started — `0.1.0`, the WebView shell, is still the only build |
 
 **Task 8a is new**, and runs before task 9: *the auth slice of the typed

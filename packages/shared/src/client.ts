@@ -21,6 +21,7 @@ import type {
   AgencyRoomOffer,
   AgencyCalendar,
   BookingDetail,
+  BookingQuote,
   BookingRow,
   CalendarBooking,
   CmsRow,
@@ -31,10 +32,12 @@ import type {
   ExpensePage,
   ExportArchive,
   FoodPackage,
+  GroupBookingResult,
   GuestRow,
   Me,
   MyAccess,
   Page,
+  PaymentReceipt,
   PayrollSheet,
   PermRole,
   PLReport,
@@ -54,7 +57,10 @@ import type {
   ResortOption,
   Session,
   TaxRuleRow,
+  TodayFeed,
 } from "./api-types";
+import type { DiscountKind } from "./discount";
+import type { StayChargeKind } from "./stay-charges";
 
 /** What the host app must provide: one authenticated JSON call. */
 export type Fetcher = <T>(
@@ -126,6 +132,101 @@ export interface AgencySignup {
   plan?: string;
   offer?: string;
   scheduleId?: number;
+}
+
+/**
+ * What a stay costs, asked before there is a stay.
+ *
+ * No guest: the form prices rooms and dates while the clerk is still
+ * choosing, long before there is a name to attach, and requiring one here
+ * would mean the total only appeared once it was too late to be useful.
+ */
+export interface BookingQuoteRequest {
+  resortId: number;
+  roomIds: number[];
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children?: number;
+  extraPersons?: number;
+  discount?: number;
+  discountKind?: DiscountKind;
+}
+
+/** A guest the desk is typing in rather than picking off the list. */
+export interface GuestInline {
+  fullName: string;
+  phone?: string;
+  email?: string;
+  nidPassportNo?: string;
+}
+
+/**
+ * A booking, as the desk makes one.
+ *
+ * `method` on the advance is a code from the resort's own PAYMENT_METHOD
+ * list, so it is a string here: the server holds the list and answers with a
+ * sentence naming what it does accept.
+ */
+export interface NewBooking extends BookingQuoteRequest {
+  guestId?: number;
+  guest?: GuestInline;
+  remarks?: string;
+  source?: string;
+  walkIn?: boolean;
+  advancePayment?: { amount: number; method: string };
+}
+
+/** One party, one set of dates, a room each — the group form's whole shape. */
+export interface NewGroupBooking {
+  resortId: number;
+  roomIds: number[];
+  checkIn: string;
+  checkOut: string;
+  guest: GuestInline;
+  adults: number;
+  children?: number;
+  discountPerRoom?: number;
+  discountKind?: DiscountKind;
+  advancePerRoom?: number;
+  advanceMethod?: string;
+  remarks?: string;
+  source?: string;
+}
+
+/** What the edit form may change. Rooms and dates move together or not at all. */
+export interface BookingEdit {
+  checkIn?: string;
+  checkOut?: string;
+  roomIds?: number[];
+  adults?: number;
+  children?: number;
+  discount?: number;
+  discountKind?: DiscountKind;
+  remarks?: string;
+}
+
+/**
+ * Money arriving.
+ *
+ * `clientRef` is the identity of the write. A desk that queues its writes
+ * sends the same one it generated offline, and the server answers a repeat
+ * with the original receipt instead of taking the money twice.
+ */
+export interface PaymentEntry {
+  amount: number;
+  method: string;
+  type?: "ADVANCE" | "FINAL" | "REFUND";
+  note?: string;
+  clientRef?: string;
+}
+
+/** A service, damage or a fine, put on a bill at the desk. */
+export interface StayChargeEntry {
+  kind: StayChargeKind;
+  label: string;
+  amount: number;
+  qty?: number;
 }
 
 export interface DateRange {
@@ -206,9 +307,12 @@ export function createApiClient(http: Fetcher) {
     bookings: {
       list: (q: BookingListQuery) => http<Page<BookingRow>>(`/bookings${qs({ ...q })}`),
       get: (id: number) => http<BookingDetail>(`/bookings/${id}`),
-      create: (body: unknown) => http<BookingDetail>("/bookings", { method: "POST", body }),
-      createGroup: (body: unknown) => http<{ bookings: BookingDetail[] }>("/bookings/group", { method: "POST", body }),
-      update: (id: number, body: unknown) => http<BookingDetail>(`/bookings/${id}`, { method: "PATCH", body }),
+      /** What the stay will cost, priced by the code that will charge it. */
+      quote: (body: BookingQuoteRequest) => http<BookingQuote>("/bookings/quote", { method: "POST", body }),
+      create: (body: NewBooking) => http<BookingDetail>("/bookings", { method: "POST", body }),
+      createGroup: (body: NewGroupBooking) =>
+        http<GroupBookingResult>("/bookings/group", { method: "POST", body }),
+      update: (id: number, body: BookingEdit) => http<BookingDetail>(`/bookings/${id}`, { method: "PATCH", body }),
       // the controller reads `to`; this sent `state`, so the typed client's
       // transition has never worked and the console hand-rolls the call
       transition: (id: number, to: string) =>
@@ -227,10 +331,30 @@ export function createApiClient(http: Fetcher) {
           method: "POST",
           body: { ids },
         }),
-      pay: (id: number, body: unknown) =>
-        http<BookingDetail>(`/bookings/${id}/payments`, { method: "POST", body }),
-      checkout: (id: number, body?: unknown) =>
-        http<BookingDetail>(`/bookings/${id}/checkout`, { method: "POST", body }),
+      /**
+       * Money in, and the receipt for it.
+       *
+       * This promised a `BookingDetail` until 2026-09-20 and the route has
+       * never answered one. It answers the payment, the booking as it now
+       * stands, and whether the server had already applied this write — which
+       * is the only way a queued desk can tell a replay from a second payment.
+       *
+       * There is no `checkout` beside it: that method posted to
+       * `/bookings/:id/checkout`, a route the API has never declared. Leaving
+       * is `transition(id, "CHECKED_OUT")`.
+       */
+      pay: (id: number, body: PaymentEntry) =>
+        http<PaymentReceipt>(`/bookings/${id}/payments`, { method: "POST", body }),
+      /** More (or fewer) people in the room than were booked. */
+      extraPersons: (id: number, persons: number) =>
+        http<BookingDetail>(`/bookings/${id}/extra-persons`, { method: "POST", body: { persons } }),
+      addCharge: (id: number, body: StayChargeEntry) =>
+        http<BookingDetail>(`/bookings/${id}/charges`, { method: "POST", body }),
+      removeCharge: (id: number, itemId: number) =>
+        http<BookingDetail>(`/bookings/${id}/charges/${itemId}`, { method: "DELETE" }),
+      /** The platform letting an agent's payment through after the deadline. */
+      approveLate: (id: number) =>
+        http<{ ok: boolean; code: string }>(`/bookings/${id}/approve-late`, { method: "POST" }),
       invoice: (id: number) => http<unknown>(`/bookings/${id}/invoice`),
       generateInvoice: (id: number) => http<{ invoiceNo: string }>(`/bookings/${id}/invoice`, { method: "POST" }),
       emailInvoice: (id: number) => http<{ sent: boolean }>(`/bookings/${id}/email-invoice`, { method: "POST", body: {} }),
@@ -294,7 +418,7 @@ export function createApiClient(http: Fetcher) {
 
     // ── the desk ──
     daySheet: (resortId: number, date?: string) => http<DaySheet>(`/resorts/${resortId}/day-sheet${qs({ date })}`),
-    today: (resortId: number) => http<unknown>(`/resorts/${resortId}/today`),
+    today: (resortId: number) => http<TodayFeed>(`/resorts/${resortId}/today`),
     calendar: (resortId: number, from: string, to: string) =>
       http<{ bookings: CalendarBooking[]; rooms: Room[] }>(`/resorts/${resortId}/calendar${qs({ from, to })}`),
     dues: (resortId: number) => http<DuesReport>(`/resorts/${resortId}/dues`),

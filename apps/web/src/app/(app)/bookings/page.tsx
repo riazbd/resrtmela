@@ -7,7 +7,7 @@ import { bookingHandoff } from "@/lib/booking-handoff";
 import { Download, FileDown, Printer } from "lucide-react";
 import {
   api, client, money, dmy, iso,
-  type BookingDetail, type BookingQuote, type BookingRow, type RoomAvail, cur,
+  type BookingDetail, type BookingRow, type RoomAvail, cur,
 } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -144,19 +144,16 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const quoteQ = useApi(
     ["booking-quote", activeResort?.id, picked.join(","), checkIn, checkOut, extraPersons, isStaff ? `${discount}${discountKind}` : null],
     () =>
-      api<BookingQuote>("/bookings/quote", {
-        method: "POST",
-        body: {
-          resortId: activeResort!.id,
-          roomIds: picked,
-          checkIn,
-          checkOut,
-          adults,
-          children,
-          extraPersons: extraPersons > 0 ? extraPersons : undefined,
-          discount: isStaff ? discount : undefined,
-          discountKind: isStaff ? discountKind : undefined,
-        },
+      client.bookings.quote({
+        resortId: activeResort!.id,
+        roomIds: picked,
+        checkIn,
+        checkOut,
+        adults,
+        children,
+        extraPersons: extraPersons > 0 ? extraPersons : undefined,
+        discount: isStaff ? discount : undefined,
+        discountKind: isStaff ? discountKind : undefined,
       }),
     {
       enabled: open && !!activeResort && picked.length > 0 && !!checkIn && !!checkOut,
@@ -184,55 +181,46 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
     try {
       if (isGroup) {
         // tour group: one booking per room, one guest, shared terms
-        const res = await api<{ groupTag: string; count: number; bookings: { code: string }[] }>(
-          "/bookings/group",
-          {
-            method: "POST",
-            body: {
-              resortId: activeResort.id,
-              roomIds: picked,
-              checkIn,
-              checkOut,
-              adults,
-              children,
-              guest: {
-                fullName: walkIn ? "local" : fullName,
-                phone: walkIn ? undefined : phone,
-                nidPassportNo: nid || undefined,
-              },
-              discountPerRoom: isStaff ? discount : undefined,
-              discountKind: isStaff ? discountKind : undefined,
-              advancePerRoom: advAmount > 0 ? advAmount : undefined,
-              advanceMethod: advAmount > 0 ? advMethod : undefined,
-              remarks: remarks || undefined,
-            },
-          },
-        );
-        push(`Group ${res.groupTag}: ${res.count} bookings (${res.bookings.map((b) => b.code).join(", ")})`);
-        onCreated(res.groupTag);
-        onClose();
-        setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setIsGroup(false); setWalkIn(false);
-        return;
-      }
-      const created = await api<BookingDetail>("/bookings", {
-        method: "POST",
-        body: {
+        const res = await client.bookings.createGroup({
           resortId: activeResort.id,
           roomIds: picked,
           checkIn,
           checkOut,
           adults,
           children,
-          walkIn,
-          extraPersons: extraPersons > 0 ? extraPersons : undefined,
-          guest: walkIn
-            ? { fullName: fullName || "local", phone: phone || undefined, email: email || undefined }
-            : { fullName, phone, email: email || undefined, nidPassportNo: nid || undefined },
-          discount: isStaff ? discount : undefined,
+          guest: {
+            fullName: walkIn ? "local" : fullName,
+            phone: walkIn ? undefined : phone,
+            nidPassportNo: nid || undefined,
+          },
+          discountPerRoom: isStaff ? discount : undefined,
           discountKind: isStaff ? discountKind : undefined,
+          advancePerRoom: advAmount > 0 ? advAmount : undefined,
+          advanceMethod: advAmount > 0 ? advMethod : undefined,
           remarks: remarks || undefined,
-          advancePayment: advAmount > 0 ? { amount: advAmount, method: advMethod } : undefined,
-        },
+        });
+        push(`Group ${res.groupTag}: ${res.count} bookings (${res.bookings.map((b) => b.code).join(", ")})`);
+        onCreated(res.groupTag);
+        onClose();
+        setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setIsGroup(false); setWalkIn(false);
+        return;
+      }
+      const created = await client.bookings.create({
+        resortId: activeResort.id,
+        roomIds: picked,
+        checkIn,
+        checkOut,
+        adults,
+        children,
+        walkIn,
+        extraPersons: extraPersons > 0 ? extraPersons : undefined,
+        guest: walkIn
+          ? { fullName: fullName || "local", phone: phone || undefined, email: email || undefined }
+          : { fullName, phone, email: email || undefined, nidPassportNo: nid || undefined },
+        discount: isStaff ? discount : undefined,
+        discountKind: isStaff ? discountKind : undefined,
+        remarks: remarks || undefined,
+        advancePayment: advAmount > 0 ? { amount: advAmount, method: advMethod } : undefined,
       });
       setTried(false);
       push(`Booking ${created.code} created`);
@@ -371,10 +359,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
   async function pay() {
     setBusy(true);
     try {
-      await api(`/bookings/${bookingId}/payments`, {
-        method: "POST",
-        body: { amount, method },
-      });
+      await client.bookings.pay(bookingId, { amount, method });
       push("Payment recorded");
       onDone();
     } catch (ex) {
@@ -434,7 +419,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   async function approveLate() {
     setBusy(true);
     try {
-      await api(`/bookings/${id}/approve-late`, { method: "POST", body: {} });
+      await client.bookings.approveLate(id);
       push("Late payment approved — agent notified");
       await load();
       onChanged();
@@ -462,7 +447,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             path: `/bookings/${id}/transition`,
             body: { to },
           })
-        : (await api(`/bookings/${id}/transition`, { method: "POST", body: { to } }), { queued: false });
+        : (await client.bookings.transition(id, to), { queued: false });
 
       if (queued) {
         push(`Saved on this device — it will sync when the connection returns`);
@@ -473,7 +458,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       push(`Booking ${to.replace(/_/g, " ").toLowerCase()}`);
       if (to === "CHECKED_OUT" && !b?.invoiceNo) {
         try {
-          await api(`/bookings/${id}/invoice`, { method: "POST" });
+          await client.bookings.generateInvoice(id);
           push("Invoice generated — opening print view");
         } catch {
           push("Checked out (invoice generation failed)", "err");
@@ -496,7 +481,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
     if (!window.confirm("Cancel this booking? Nights will be freed.")) return;
     setBusy(true);
     try {
-      await api(`/bookings/${id}/transition`, { method: "POST", body: { to: "CANCELLED" } });
+      await client.bookings.transition(id, "CANCELLED");
       push("Booking cancelled");
       await load();
       onChanged();
@@ -539,7 +524,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
     const reason = window.prompt("Reason for cancellation?") ?? "";
     setBusy(true);
     try {
-      await api(`/bookings/${id}/cancel-request`, { method: "POST", body: { reason } });
+      await client.bookings.requestCancel(id, reason);
       push("Cancel request sent for approval");
       await load();
     } catch (ex) {
@@ -552,7 +537,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   async function decide(approve: boolean) {
     setBusy(true);
     try {
-      await api(`/bookings/${id}/cancel-decision`, { method: "POST", body: { approve } });
+      await client.bookings.decideCancel(id, approve);
       push(approve ? "Cancellation approved" : "Cancellation rejected");
       await load();
       onChanged();
@@ -757,7 +742,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             loading={busy}
             onClick={async () => {
               try {
-                await api(`/bookings/${b.id}/invoice`, { method: "POST" });
+                await client.bookings.generateInvoice(b.id);
                 // says where the next step is, because the Download and Print
                 // buttons appear in place of this one and a toast that only
                 // says "done" leaves the reader looking for them
@@ -810,7 +795,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
               loading={busy}
               onClick={async () => {
                 try {
-                  await api(`/bookings/${b.id}/email-invoice`, { method: "POST", body: {} });
+                  await client.bookings.emailInvoice(b.id);
                   push("Invoice emailed to guest");
                 } catch (ex) {
                   push((ex as Error).message, "err");

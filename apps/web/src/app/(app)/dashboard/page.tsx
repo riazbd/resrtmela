@@ -2,26 +2,18 @@
 
 import Link from "next/link";
 import { Table } from "@/components/patterns";
-import { client, money, dmy, type BookingRow } from "@/lib/api";
+import { client, money, dmy, type TodayRow } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
-
-interface TodayFeed {
-  arrivals: BookingRow[];
-  departures: BookingRow[];
-  occupancyPct: number;
-  duesTotal: number;
-  duesCount: number;
-}
 
 export default function DashboardPage() {
   const { activeResort, isStaff } = useAuth();
   const enabled = !!activeResort;
   // three independent reads, three cache entries: the room list is the same
   // one the Rooms page just fetched, and it is not fetched again
-  const todayQ = useApi(keys.today(activeResort?.id), () => client.today(activeResort!.id) as Promise<TodayFeed>, { enabled });
+  const todayQ = useApi(keys.today(activeResort?.id), () => client.today(activeResort!.id), { enabled });
   const roomsQ = useApi(keys.rooms(activeResort?.id), () => client.rooms.list(activeResort!.id), { enabled });
   const duesQ = useApi(keys.dues(activeResort?.id), () => client.dues(activeResort!.id), {
     enabled: enabled && isStaff,
@@ -35,7 +27,7 @@ export default function DashboardPage() {
   if (error) return <ErrorState error={error} />;
   if (todayQ.isPending || !feed) return <Skeleton rows={6} />;
 
-  const person = (b: BookingRow) => b.guest?.fullName ?? "—";
+  const person = (b: TodayRow) => b.guest?.fullName ?? "—";
 
   return (
     <div className="space-y-6">
