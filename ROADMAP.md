@@ -30,6 +30,37 @@ once, then `prisma migrate deploy` for the new `otp_codes` table.
 
 ---
 
+## 🧪 Accounts to test with — added 2026-09-20
+
+Two accounts on the live platform, opened through the ordinary signup so they
+behave exactly as a customer's would:
+
+| | resort | agency |
+|---|---|---|
+| sign in | `demo-resort@resortmela.com` | `demo-agency@resortmela.com` |
+| workspace | Demo Bay Resort (`demo-bay`), plan CHAIN | Demo Travels, plan AGENCY_PRO |
+
+Both mailboxes are real and forward to the owner, so password reset can be
+tested end to end. Both tenants carry `Tenant.demo`, which:
+
+- leaves them out of every figure on **Platform → Overview**, with a line on
+  that screen saying how many were left out;
+- badges them **DEMO** in the Resorts and Agents lists, with a *Mark demo /
+  Not demo* switch on each row;
+- puts a strip across the account's own console — anyone handed that login
+  should know inside a second that the numbers are not a real business's.
+
+Nothing is hidden from the account and nothing is refused, so one of these
+turning into a real customer is a switch, not a migration. Phone numbers are
+placeholders (`01700000001`/`2`) — change them before SMS is ever turned on.
+
+**Open, and the owner's call:** neither agency plan sells `agency_website` or
+`agency_api` (`features: []` on both), so the agency's Website and API screens
+are unreachable for every agency, demo or real. The code shipped 2026-09-17;
+what is missing is a plan that includes them.
+
+---
+
 ## 🔴 Blockers — break real features today
 
 ### 1. ~~SMTP credentials are empty on live~~ ✅ DONE (2026-09-07)
