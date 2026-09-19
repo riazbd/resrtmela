@@ -4,7 +4,9 @@
     "strict": true,
     /* jest's globals, because this package runs jest rather than vitest —
        jest.config.js says why. */
-    "types": ["jest"],
+    /* `node` is for the guard specs, which walk `src` with fs and path;
+       no app code may import either. */
+    "types": ["jest", "node"],
     "paths": {
       "@/*": ["./src/*"]
     }
