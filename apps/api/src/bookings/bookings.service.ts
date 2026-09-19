@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind, STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind, compareRoomNames, bookingSort } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind, STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind, compareRoomNames, byRoomName, bookingSort } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
 import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
@@ -1746,10 +1746,15 @@ export class BookingsService {
     const nextDay = new Date(date.getTime() + 86_400_000);
 
     const taxRules = await this.taxRulesFor(resortId);
+    /**
+     * Sorted in `byRoomName` below, not here: `orderBy` is text ordering,
+     * which puts room 10 between 1 and 2, and the day sheet is the screen a
+     * front desk reads top to bottom all morning. The `id` order it used to
+     * come back in was the order somebody typed the rooms in.
+     */
     const rooms = await this.prisma.room.findMany({
       where: { resortId, deletedAt: null },
       include: { roomType: { select: { maxAdults: true, maxChildren: true } } },
-      orderBy: { id: "asc" },
     });
 
     const stays = await this.prisma.booking.findMany({
@@ -1788,7 +1793,7 @@ export class BookingsService {
     let arrivals = 0;
     let departures = 0;
 
-    const roomRows = rooms.map((room) => {
+    const roomRows = rooms.sort(byRoomName).map((room) => {
       const covering = byRoom.get(room.id) ?? [];
       const b = covering[0];
       let cell: Record<string, unknown> = { mode: room.status === "OUT_OF_SERVICE" ? "oos" : "available" };

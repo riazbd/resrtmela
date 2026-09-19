@@ -25,7 +25,7 @@ import { requireResortAccess, badRequest } from "../common/rbac";
 import { bookingTotals, fbBillTotals } from "../common/money";
 import { reachableEmail, reachablePhone } from "../common/contact";
 import { toCsv, type CsvValue } from "./csv-writer";
-import { methodLabel } from "@rh/shared";
+import { methodLabel, byRoomName } from "@rh/shared";
 import type { JwtClaims } from "@rh/shared";
 
 export interface Dataset {
@@ -231,8 +231,11 @@ export class ExportService {
     const rows = await this.prisma.room.findMany({
       where: { resortId },
       include: { roomType: { select: { name: true, maxAdults: true, maxChildren: true } } },
-      orderBy: { id: "asc" },
     });
+    // somebody opens this in a spreadsheet to check their own inventory, so
+    // it reads the way the rooms screen reads — `id` was the order the rooms
+    // happened to be typed in
+    rows.sort(byRoomName);
     return {
       name: "rooms",
       headers: ["name", "type", "maxAdults", "maxChildren", "baseRate", "status"],

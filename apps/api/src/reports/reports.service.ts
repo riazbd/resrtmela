@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { BookingState } from "@rh/db";
-import { ROLE, type Role, type JwtClaims, sheetReceiptName } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, sheetReceiptName, byRoomName } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { agencyOf } from "../common/selling-access";
 import { dateOnly, round2, nightsBetween } from "../common/dates";
@@ -383,8 +383,13 @@ export class ReportsService {
       // occupancy is measured against what the resort can sell today
       where: { resortId, deletedAt: null },
       select: { id: true, name: true, status: true },
-      orderBy: { name: "asc" },
     });
+    /**
+     * `byRoomName`, not `orderBy: { name }`: this list is printed, and text
+     * ordering puts room 10 between 1 and 2. The counts below do not care,
+     * but `outOfServiceRooms` is read by a person.
+     */
+    rooms.sort(byRoomName);
     const idle = rooms.filter((r) => r.status === "OUT_OF_SERVICE");
     const sellable = rooms.length - idle.length;
 
