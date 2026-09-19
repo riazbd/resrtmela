@@ -9,7 +9,12 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { router } from "expo-router";
-import { AuthProvider as SharedAuthProvider, CacheStore, guardedStorage } from "@rh/app-core";
+import {
+  AuthProvider as SharedAuthProvider,
+  CacheStore,
+  QueryProvider,
+  guardedStorage,
+} from "@rh/app-core";
 import { createApiClient, type MoneyFormat } from "@rh/shared";
 import { deviceStorage } from "../device/storage";
 import { MoneyFormatProvider } from "../design/money";
@@ -66,15 +71,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <SharedAuthProvider
-      storage={session}
-      api={api}
-      permissionsFor={permissionsFor}
-      onActiveResort={rememberCurrency}
-      cache={cache}
-      navigate={goTo}
-    >
-      <MoneyFormatProvider value={format}>{children}</MoneyFormatProvider>
-    </SharedAuthProvider>
+    /**
+     * The data layer is outside the session, as it is in the console's
+     * `app/layout.tsx` — a screen reads through `useApi` whether or not
+     * anybody is signed in yet, and the sign-out that clears the session
+     * should not take the query client with it.
+     *
+     * It was missing until 2026-09-20, and no test could see that: a screen
+     * spec mounts the screen, never the thing around it. What found it was
+     * opening the dashboard in a browser, where it drew nothing at all and
+     * said "No QueryClient set". `the-app-carries-its-own-providers.spec.tsx`
+     * now mounts this provider rather than a harness, and asks.
+     */
+    <QueryProvider cache={cache}>
+      <SharedAuthProvider
+        storage={session}
+        api={api}
+        permissionsFor={permissionsFor}
+        onActiveResort={rememberCurrency}
+        cache={cache}
+        navigate={goTo}
+      >
+        <MoneyFormatProvider value={format}>{children}</MoneyFormatProvider>
+      </SharedAuthProvider>
+    </QueryProvider>
   );
 }

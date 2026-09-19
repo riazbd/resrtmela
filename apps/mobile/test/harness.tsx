@@ -40,8 +40,13 @@ let live: ReturnType<typeof useQueryClient> | null = null;
  * Renders nothing. It exists to reach the client the provider made, and it is
  * the provider's first child so that it has changed the defaults before the
  * screen beside it mounts its first query.
+ *
+ * Exported because `Harness` is not the only thing that provides a client:
+ * a spec that mounts the app's own `SessionProvider` — to check that the app
+ * carries a data layer at all — needs the same two defaults turned off, and
+ * hangs for the same five minutes without them.
  */
-function Settle() {
+export function Settle() {
   const client = useQueryClient();
   live = client;
   client.setDefaultOptions({ queries: { retry: false, gcTime: 0 } });
