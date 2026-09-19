@@ -114,10 +114,10 @@ describe("signing in", () => {
     await fireEvent.changeText(r.getByLabelText("Password"), "hunter22");
     const button = r.getByRole("button", { name: "Sign in" });
 
-    await act(async () => {
-      fireEvent.press(button);
-      fireEvent.press(button);
-    });
+    // each press awaited on its own: `onPress` is `signIn.go`, which returns
+    // immediately, so nothing is left pending and the two acts do not overlap
+    await fireEvent.press(button);
+    await fireEvent.press(button);
     expect(mockLogin).toHaveBeenCalledTimes(1);
 
     await act(async () => {

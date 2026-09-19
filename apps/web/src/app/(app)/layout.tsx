@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { consoleGate, navVisible, missingFeature } from "@/lib/console-access";
-import { planFeatureLabel } from "@rh/shared";
+import { CONSOLE_NAV, planFeatureLabel } from "@rh/shared";
 import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -21,43 +21,54 @@ import { OutboxBar } from "@/components/outbox-bar";
 import { Select, Button, Input, useToast } from "@/components/ui";
 
 /**
- * `perm` is what actually decides visibility now that the API checks the
- * permission matrix rather than the fixed role. Showing a link the server will
- * refuse is worse than hiding it. `roles` remains only for the two audiences a
- * permission cannot describe: the platform team and agents.
+ * The icon for each destination, and nothing else.
+ *
+ * The list itself — every href, its permission, its plan feature — moved to
+ * `@rh/shared` on 2026-09-20 so the app decides visibility from the same
+ * rows rather than from a second copy of them. What could not move is this:
+ * lucide is a React DOM library, and a shared package that imported it would
+ * stop being shareable.
  */
-const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string; feature?: string }[] = [
-  { href: "/platform", label: "Platform", icon: Globe, roles: ["SUPER"] },
-  { href: "/agent/discover", label: "Discover resorts", icon: MapIcon, roles: ["AGENT"] },
-  { href: "/agent/search", label: "Find a room", icon: Search, roles: ["AGENT"], perm: "agent.book" },
-  { href: "/agent/calendar", label: "Calendar", icon: CalendarDays, roles: ["AGENT"], perm: "agent.book" },
-  { href: "/agent/tours", label: "Tours", icon: Package, roles: ["AGENT"], perm: "agent.tours.manage" },
-  { href: "/agent/sales", label: "Quotes & invoices", icon: FileText, roles: ["AGENT"], perm: "agent.sales.manage" },
-  { href: "/agent/guests", label: "Guests", icon: Users, roles: ["AGENT"], perm: "agent.guests.view" },
-  { href: "/agent/expenses", label: "Expenses", icon: Receipt, roles: ["AGENT"], perm: "agent.expenses.manage" },
-  { href: "/agent/payroll", label: "Payroll", icon: Banknote, roles: ["AGENT"], perm: "agent.payroll.manage" },
-  { href: "/agent/wallet", label: "Wallet", icon: Wallet, roles: ["AGENT"], perm: "agent.wallet.view" },
-  { href: "/agent/team", label: "My team", icon: Users, roles: ["AGENT"], perm: "agent.staff.manage" },
-  // sold on the agency's own plan (2026-09-17): hidden when the plan leaves them out
-  { href: "/agent/website", label: "Website", icon: Globe, roles: ["AGENT"], perm: "agent.website.manage", feature: "agency_website" },
-  { href: "/agent/api", label: "API", icon: KeyRound, roles: ["AGENT"], perm: "agent.apikeys.manage", feature: "agency_api" },
-  { href: "/mailbox", label: "Bulk Email", icon: Mail, roles: ["MGMT", "AGENT"], perm: "marketing.send", feature: "bulk_email" },
-  { href: "/daysheet", labelKey: "nav.daySheet", icon: ScrollText, roles: ["STAFF"], perm: "bookings.view" },
-  { href: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard, roles: ["STAFF"], perm: "bookings.view" },
-  { href: "/calendar", labelKey: "nav.calendar", icon: CalendarDays, roles: ["*"], perm: "bookings.view" },
-  { href: "/bookings", labelKey: "nav.bookings", icon: BedDouble, roles: ["*"], perm: "bookings.view" },
-  { href: "/payments", labelKey: "nav.dues", icon: Wallet, roles: ["STAFF"], perm: "payments.view" },
-  { href: "/guests", labelKey: "nav.guests", icon: Users, roles: ["STAFF"], perm: "guests.view" },
-  { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["STAFF"], perm: "expenses.view" },
-  { href: "/fb", labelKey: "nav.fb", icon: UtensilsCrossed, roles: ["STAFF"], perm: "restaurant.view", feature: "restaurant" },
-  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["PAYROLL"], perm: "payroll.view", feature: "payroll" },
-  { href: "/reports", labelKey: "nav.reports", icon: BarChart3, roles: ["STAFF"], perm: "reports.view" },
-  { href: "/rooms", labelKey: "nav.rooms", icon: Building2, roles: ["MGMT"], perm: "rooms.view" },
-  { href: "/activities", labelKey: "nav.activities", icon: Compass, roles: ["STAFF"], perm: "activities.view", feature: "activities" },
-  { href: "/import", labelKey: "nav.import", icon: Upload, roles: ["MGMT"], perm: "import.run", feature: "imports" },
-  { href: "/profile", labelKey: "nav.profile", icon: User, roles: ["AGENT"] },
-  { href: "/settings", labelKey: "nav.settings", icon: Settings, roles: ["MGMT"], perm: "settings.manage" },
-];
+const ICONS: Record<string, LucideIcon> = {
+  "/platform": Globe,
+  "/agent/discover": MapIcon,
+  "/agent/search": Search,
+  "/agent/calendar": CalendarDays,
+  "/agent/tours": Package,
+  "/agent/sales": FileText,
+  "/agent/guests": Users,
+  "/agent/expenses": Receipt,
+  "/agent/payroll": Banknote,
+  "/agent/wallet": Wallet,
+  "/agent/team": Users,
+  "/agent/website": Globe,
+  "/agent/api": KeyRound,
+  "/mailbox": Mail,
+  "/daysheet": ScrollText,
+  "/dashboard": LayoutDashboard,
+  "/calendar": CalendarDays,
+  "/bookings": BedDouble,
+  "/payments": Wallet,
+  "/guests": Users,
+  "/expenses": Receipt,
+  "/fb": UtensilsCrossed,
+  "/payroll": Banknote,
+  "/reports": BarChart3,
+  "/rooms": Building2,
+  "/activities": Compass,
+  "/import": Upload,
+  "/profile": User,
+  "/settings": Settings,
+};
+
+const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon; roles: string[]; perm?: string; feature?: string }[] =
+  CONSOLE_NAV.map((entry) => ({
+    ...entry,
+    labelKey: entry.labelKey as DictKey | undefined,
+    // a destination with no icon would render a hole in the sidebar; Compass
+    // is the fallback so a new screen is visible before anybody picks one
+    icon: ICONS[entry.href] ?? Compass,
+  }));
 
 /**
  * Says why a button on this screen is about to refuse.

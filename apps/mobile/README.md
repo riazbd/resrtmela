@@ -32,8 +32,42 @@ Two things that cost a run each, both pinned by
 
 ## Looking at the app
 
-A green suite is not evidence that a screen works. `scripts/device.mjs` is the
-whole loop:
+A green suite is not evidence that a screen works. There are two ways to look,
+and they are not interchangeable.
+
+### The browser, every day
+
+```
+pnpm -F @rh/mobile web                                   # Metro, in one terminal
+node scripts/look.mjs /login shot.png                    # open a route, save the picture
+node scripts/look.mjs /login shot.png   --type "Phone or email=a@b.c;Password=secret"   --tap "Sign in" --wait 9000                            # drive it to a screen behind sign-in
+```
+
+Expo renders the same components through react-native-web, so this shows what
+a screen says and how it behaves for a fraction of an emulator's memory. It
+prints the words on the screen as well as saving the picture, which is often
+the more useful half.
+
+`look.mjs` needs `playwright-core`, which lives in a scratch directory rather
+than in this package — it is a tool for looking, not a dependency of the app.
+`RM_SCRATCH=<that directory> node scripts/look.mjs …`.
+
+Two things it does on purpose:
+
+- **It turns off same-origin checking** in that one throwaway browser. A phone
+  sends no `Origin` header so the app never meets CORS; a browser does, and
+  the API's allow-list is the console's domains. The looser setting belongs on
+  the looking glass, not on the door.
+- **It waits for `domcontentloaded`, not `networkidle`.** Expo's dev server
+  holds a websocket open for hot reload, so the network is never idle.
+
+**What the browser cannot tell you**: shadows, the keyboard, safe areas, the
+splash, and anything native. It is a lens, not the product — the app does not
+ship on the web.
+
+### A phone, before anything is called done
+
+`scripts/device.mjs` is that loop:
 
 ```
 pnpm start                                  # Metro, in one terminal
@@ -66,10 +100,17 @@ start — "Insufficient RAM free for launching emulator", with the commit
 figures printed. Take more than is actually free and the guest pages to disk,
 where every app on it, including the launcher, shows "isn't responding".
 
-**Stop the emulator before running the suite.** With both up, jest dies with
-exit code 3221226505 — `STATUS_STACK_BUFFER_OVERRUN`, which is what Windows
-reports when a process cannot get the memory it asked for, and which says
-nothing at all about tests. `node scripts/device.mjs up` is cheap to repeat.
+**Stop the emulator — and Metro — before running the suite.** With the
+emulator up, jest dies with exit code 3221226505
+(`STATUS_STACK_BUFFER_OVERRUN`, which is what Windows reports when a process
+cannot get the memory it asked for, and which says nothing about tests). With
+Metro up it does not die but it flakes: measured on 2026-09-20, the same suite
+took 32s with one failure alongside Metro and 7.6s green without it.
+
+**The emulator may simply not be worth it on this machine.** Metro plus the
+emulator plus a local API is what killed Metro with "JavaScript heap out of
+memory" and 214MB free. The browser lens above exists because of that, and a
+real phone costs the host nothing at all.
 
 The other half of that trade is the screen: the emulator falls back to
 SwiftShader when it cannot reach the host GPU, so every pixel is rasterised on

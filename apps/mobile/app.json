@@ -57,6 +57,11 @@
       },
       "apiUrl": "https://api.resortmela.com"
     },
-    "owner": "riaznur"
+    "owner": "riaznur",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    }
   }
 }

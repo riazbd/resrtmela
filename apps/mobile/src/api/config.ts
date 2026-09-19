@@ -19,8 +19,15 @@ interface Extra {
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 
-/** Where the API is. Trailing slash trimmed, so a join cannot double it. */
-export const API_URL = normalizeApiUrl(extra.apiUrl);
+/**
+ * Where the API is. Trailing slash trimmed, so a join cannot double it.
+ *
+ * `EXPO_PUBLIC_API_URL` wins when it is set, which is how a screen is opened
+ * against a local API with seeded data instead of against the live one. Expo
+ * inlines `EXPO_PUBLIC_*` at bundle time, so it cannot be changed after a
+ * build and cannot become a way of pointing a shipped app somewhere else.
+ */
+export const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL || extra.apiUrl);
 
 /** The console's address, for the WebView release 0.1.0 still carries. */
 export const CONSOLE_URL = extra.consoleUrl ?? "";

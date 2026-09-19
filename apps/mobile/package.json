@@ -12,9 +12,13 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "start:dev-client": "expo start --dev-client",
-    "device": "node scripts/device.mjs"
+    "device": "node scripts/device.mjs",
+    "web": "expo start --web --port 8082",
+    "look": "node scripts/look.mjs"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~57.0.16",
+    "@expo/vector-icons": "^15.0.2",
     "@react-native-community/netinfo": "12.0.1",
     "@rh/app-core": "workspace:^",
     "@rh/shared": "workspace:^",
@@ -26,11 +30,13 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2",
     "react-native-webview": "13.16.1"
   },
   "devDependencies": {

@@ -79,6 +79,32 @@ export interface MyAccess {
   features: string[];
 }
 
+/**
+ * What the API hands back when it has just decided who somebody is.
+ *
+ * One shape from three doors — login, resort signup and agency signup all
+ * return `issueToken`, because an account that has just been opened is signed
+ * in by the same act that opened it.
+ *
+ * `resortIds` is empty for the two roles whose work is not inside one resort:
+ * the platform owner sells to resorts, an agency sells across them.
+ */
+export interface Session {
+  accessToken: string;
+  tokenType: string;
+  user: { id: number; role: string; resortIds: number[] };
+}
+
+/**
+ * Two questions with one answer, because a screen may be closed to somebody
+ * for two different reasons: `permissions` is what the owner granted this
+ * person, `features` is what the resort's — or the agency's — plan includes.
+ */
+export interface MyAccess {
+  permissions: string[];
+  features: string[];
+}
+
 export interface Me {
   id: number;
   name: string;

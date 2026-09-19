@@ -43,6 +43,82 @@ export interface NavEntry {
 }
 
 /**
+ * One destination, as both clients know it.
+ *
+ * Everything here is data. What is deliberately absent is the icon and the
+ * way of drawing it: lucide on the desk, a vector set on the phone, and a
+ * shared package that imported either would stop being shareable.
+ */
+export interface NavDestination extends NavEntry {
+  /** The console's path. The app's routes are the same paths, by design. */
+  href: string;
+  /** A key into the dictionaries, for the strings that are translated. */
+  labelKey?: string;
+  /** Plain text, for the ones that are not — mostly the newer screens. */
+  label?: string;
+}
+
+/**
+ * Every destination the console offers, in the order it offers them.
+ *
+ * It lived in `apps/web/src/app/(app)/layout.tsx` until 2026-09-20. The rule
+ * that decides visibility moved here first, which left the rule shared and
+ * the rows it runs over private — so the app would have kept a second copy
+ * of thirty entries with their permissions and plan features written out
+ * again. That copy would have been wrong within a month, and wrong in the
+ * worst direction: a link the phone shows and the server refuses, or a
+ * screen the resort is paying for that the phone never offers.
+ *
+ * `perm` is what actually decides visibility now that the API checks the
+ * permission matrix rather than the fixed role. `roles` remains only for the
+ * two audiences a permission cannot describe: the platform team and agents.
+ */
+export const CONSOLE_NAV: readonly NavDestination[] = [
+  { href: "/platform", label: "Platform", roles: ["SUPER"] },
+  { href: "/agent/discover", label: "Discover resorts", roles: ["AGENT"] },
+  { href: "/agent/search", label: "Find a room", roles: ["AGENT"], perm: "agent.book" },
+  { href: "/agent/calendar", label: "Calendar", roles: ["AGENT"], perm: "agent.book" },
+  { href: "/agent/tours", label: "Tours", roles: ["AGENT"], perm: "agent.tours.manage" },
+  { href: "/agent/sales", label: "Quotes & invoices", roles: ["AGENT"], perm: "agent.sales.manage" },
+  { href: "/agent/guests", label: "Guests", roles: ["AGENT"], perm: "agent.guests.view" },
+  { href: "/agent/expenses", label: "Expenses", roles: ["AGENT"], perm: "agent.expenses.manage" },
+  { href: "/agent/payroll", label: "Payroll", roles: ["AGENT"], perm: "agent.payroll.manage" },
+  { href: "/agent/wallet", label: "Wallet", roles: ["AGENT"], perm: "agent.wallet.view" },
+  { href: "/agent/team", label: "My team", roles: ["AGENT"], perm: "agent.staff.manage" },
+  // sold on the agency's own plan (2026-09-17): hidden when the plan leaves them out
+  { href: "/agent/website", label: "Website", roles: ["AGENT"], perm: "agent.website.manage", feature: "agency_website" },
+  { href: "/agent/api", label: "API", roles: ["AGENT"], perm: "agent.apikeys.manage", feature: "agency_api" },
+  { href: "/mailbox", label: "Bulk Email", roles: ["MGMT", "AGENT"], perm: "marketing.send", feature: "bulk_email" },
+  { href: "/daysheet", labelKey: "nav.daySheet", roles: ["STAFF"], perm: "bookings.view" },
+  { href: "/dashboard", labelKey: "nav.dashboard", roles: ["STAFF"], perm: "bookings.view" },
+  { href: "/calendar", labelKey: "nav.calendar", roles: ["*"], perm: "bookings.view" },
+  { href: "/bookings", labelKey: "nav.bookings", roles: ["*"], perm: "bookings.view" },
+  { href: "/payments", labelKey: "nav.dues", roles: ["STAFF"], perm: "payments.view" },
+  { href: "/guests", labelKey: "nav.guests", roles: ["STAFF"], perm: "guests.view" },
+  { href: "/expenses", labelKey: "nav.expenses", roles: ["STAFF"], perm: "expenses.view" },
+  { href: "/fb", labelKey: "nav.fb", roles: ["STAFF"], perm: "restaurant.view", feature: "restaurant" },
+  { href: "/payroll", label: "Payroll", roles: ["PAYROLL"], perm: "payroll.view", feature: "payroll" },
+  { href: "/reports", labelKey: "nav.reports", roles: ["STAFF"], perm: "reports.view" },
+  { href: "/rooms", labelKey: "nav.rooms", roles: ["MGMT"], perm: "rooms.view" },
+  { href: "/activities", labelKey: "nav.activities", roles: ["STAFF"], perm: "activities.view", feature: "activities" },
+  { href: "/import", labelKey: "nav.import", roles: ["MGMT"], perm: "import.run", feature: "imports" },
+  { href: "/profile", labelKey: "nav.profile", roles: ["AGENT"] },
+  { href: "/settings", labelKey: "nav.settings", roles: ["MGMT"], perm: "settings.manage" },
+];
+
+/**
+ * Deliberately not in the list above: `/account`.
+ *
+ * Every entry in `CONSOLE_NAV` is filtered by role, permission and plan, and
+ * changing your own password belongs to whoever is signed in — resort staff,
+ * an agency, the platform's own owner, whatever they are. The console puts it
+ * in the sidebar's footer beside Sign out for that reason, and the app puts
+ * it in the same place at the bottom of More. Named here so the next person
+ * to notice it missing finds the answer rather than adding it.
+ */
+export const ACCOUNT_HREF = "/account";
+
+/**
  * Whether a link belongs on this person's sidebar.
  *
  * Two questions, not one. `perm` is what the owner gave this person; `feature`
