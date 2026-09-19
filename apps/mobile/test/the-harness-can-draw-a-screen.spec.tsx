@@ -11,10 +11,24 @@
  * function has not been called", which points at the wrong line entirely.
  * Every screen test in this app awaits its render, and this is why.
  *
- * **A press is `fireEvent.press`, not a DOM click.** There is no DOM here:
- * the tree is React Native's, and the queries read accessibility roles and
- * labels — which is also the reason a screen written for this harness ends
- * up accessible to a screen reader rather than merely testable.
+ * **A press is `fireEvent.press`, not a DOM click** — and it is asynchronous
+ * too. There is no DOM here: the tree is React Native's, and the queries read
+ * accessibility roles and labels, which is also why a screen written for this
+ * harness ends up accessible to a screen reader rather than merely testable.
+ *
+ * **Never call the synchronous `act()` around work that leaves a promise
+ * pending.** It does not merely warn — it poisons the renderer for the rest
+ * of the file, and every `render` after it draws nothing at all while the
+ * failure talks about a missing element. Proved on a bare `<Text>hi</Text>`:
+ * two plain renders pass, a sync `act` holding a pending promise passes, and
+ * the render after it finds nothing. Use `await act(async () => …)`, and
+ * settle the promise inside the act that started it.
+ *
+ * **`renderHook` works once per file** in this version: the first call
+ * populates `result.current` and every later one leaves it null, reproduced
+ * on a bare `useState` hook. Drive a hook through a host component and
+ * `render` instead — which is what `an-action-cannot-happen-twice.spec.tsx`
+ * does.
  */
 import { render, fireEvent } from "@testing-library/react-native";
 import { Pressable, Text, View } from "react-native";

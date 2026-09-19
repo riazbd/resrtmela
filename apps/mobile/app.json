@@ -54,7 +54,8 @@
       ],
       "eas": {
         "projectId": "e3df03f7-f176-4c28-a47a-248a2bc70d97"
-      }
+      },
+      "apiUrl": "https://api.resortmela.com"
     },
     "owner": "riaznur"
   }
