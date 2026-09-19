@@ -10,7 +10,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/api/session";
-import { color } from "../src/design/tokens";
+import { color, text } from "../src/design/tokens";
 
 export default function RootLayout() {
   return (
@@ -19,13 +19,31 @@ export default function RootLayout() {
           screen, and a light status bar over it is invisible */}
       <StatusBar style="dark" />
       <SessionProvider>
+        {/*
+          A header by default, and off for the four screens that are their
+          own world. Everything else is pushed from somewhere — the More
+          list, a row on the day sheet — and a pushed screen with no header
+          is a screen with no way back. The tab group draws its own bar, the
+          front door and the login screen are not pushed from anywhere, and
+          `+not-found` has nothing to go back to that would help.
+        */}
         <Stack
           screenOptions={{
-            headerShown: false,
+            headerShown: true,
+            headerStyle: { backgroundColor: color.surface },
+            headerTintColor: color.brand[600],
+            headerTitleStyle: { color: color.title, fontWeight: "600", fontSize: text.strong.size },
+            // a rule, not a shadow: the register below it is drawn in rules
+            headerShadowVisible: false,
             contentStyle: { backgroundColor: color.screen },
             animation: "fade",
           }}
-        />
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+        </Stack>
       </SessionProvider>
     </SafeAreaProvider>
   );

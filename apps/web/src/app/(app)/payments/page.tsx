@@ -10,6 +10,7 @@ import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { usePaymentMethods } from "@/lib/resort-options";
+import { DUES_LENSES, duesThrough, type DuesLens } from "@rh/shared";
 
 type DueRow = DuesReport["rows"][number];
 
@@ -22,9 +23,11 @@ type DueRow = DuesReport["rows"][number];
  * that guest does not owe, and "what is outstanding" was a number nobody could
  * act on. Everything is still one click away — the split is a lens, not a
  * filter that hides money.
+ *
+ * The three lenses and the rule behind them moved to  on
+ * 2026-09-20, because the phone shows the same screen and what counts as an
+ * agency booking is not a thing two clients should each decide.
  */
-const WHO = ["Everyone", "Guests", "Agencies"] as const;
-type Who = (typeof WHO)[number];
 
 export default function PaymentsPage() {
   const { activeResort, isStaff } = useAuth();
@@ -32,7 +35,7 @@ export default function PaymentsPage() {
   const t = useT();
   const qc = useQueryClient();
   const [payFor, setPayFor] = useState<DueRow | null>(null);
-  const [who, setWho] = useState<Who>("Everyone");
+  const [who, setWho] = useState<DuesLens>("Everyone");
 
   const { data, isPending, error } = useApi(
     keys.dues(activeResort?.id),
@@ -57,19 +60,7 @@ export default function PaymentsPage() {
   if (error) return <ErrorState error={error} />;
   if (isPending || !data) return <Skeleton rows={6} />;
 
-  const rows =
-    who === "Guests"
-      ? data.rows.filter((r) => r.agent === null)
-      : who === "Agencies"
-        ? data.rows.filter((r) => r.agent !== null)
-        : data.rows;
-
-  const shown =
-    who === "Guests"
-      ? { total: data.guestTotal, count: data.guestCount }
-      : who === "Agencies"
-        ? { total: data.agencyTotal, count: data.agencyCount }
-        : { total: data.total, count: data.count };
+  const { rows, ...shown } = duesThrough(data, who);
 
   return (
     <div className="space-y-4">
@@ -82,7 +73,7 @@ export default function PaymentsPage() {
       </div>
 
       <div className="flex overflow-hidden rounded-lg border border-slate-200">
-        {WHO.map((w) => (
+        {DUES_LENSES.map((w) => (
           <button
             key={w}
             onClick={() => setWho(w)}
@@ -92,7 +83,7 @@ export default function PaymentsPage() {
           >
             {w}
             <span className={`ml-1.5 ${who === w ? "opacity-80" : "text-slate-400"}`}>
-              {w === "Guests" ? data.guestCount : w === "Agencies" ? data.agencyCount : data.count}
+              {duesThrough(data, w).count}
             </span>
           </button>
         ))}
