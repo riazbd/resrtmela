@@ -53,8 +53,22 @@ module.exports = {
   transformIgnorePatterns: [
     `node_modules[\\\\/](?!(.*[\\\\/])?(${shippedAsSource})[\\\\/])`,
   ],
+  /**
+   * One React, for the same reason `metro.config.js` pins one.
+   *
+   * `@rh/app-core` keeps its own React to run its vitest suite against — the
+   * console's 19.2.8 — while this app is pinned to the 19.2.3 Expo SDK 57
+   * ships. Resolving `react` from inside `packages/app-core/src` finds
+   * app-core's copy first, and a hook called from there reads a dispatcher
+   * that the renderer never registered with: `QueryProvider` dies on
+   * `useState` before a single screen draws. Keep this list and the one in
+   * `metro.config.js` in step.
+   */
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
+    "^react$": "<rootDir>/node_modules/react",
+    "^react-dom$": "<rootDir>/node_modules/react-dom",
+    "^react/(.*)$": "<rootDir>/node_modules/react/$1",
   },
   /**
    * A screen that renders nothing still passes a test that only mounts it, so

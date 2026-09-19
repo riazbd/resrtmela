@@ -29,6 +29,42 @@ config.resolver.nodeModulesPaths = [
  * dependencies live in a `node_modules` beside it inside the store, and
  * walking up is the only way to reach them. Switching it on cost a build —
  * `expo` could not resolve `expo-modules-core`, its own dependency.
+ *
+ * But that same walking-up is how two Reacts get into one bundle. `@rh/app-
+ * core` declares React a peer and keeps its own copy to run its vitest suite
+ * against; the console is on 19.2.8 and this app is pinned to the 19.2.3 that
+ * Expo SDK 57 ships, so those are genuinely different files in the store.
+ * Metro, resolving `react` from inside `packages/app-core/src`, finds
+ * app-core's before it finds the app's.
+ *
+ * Two Reacts do not merely duplicate code. The dispatcher a hook reads lives
+ * on each copy's own internals object, so every hook in `AuthProvider`,
+ * `QueryProvider` and `OutboxProvider` would look for a renderer that had
+ * registered itself with the *other* copy and find nothing — the app's whole
+ * session layer, failing on `useState`. The mobile jest suite is where it
+ * first showed.
+ *
+ * So React is pinned to the app's copy for everything this bundle contains.
+ * `apps/mobile/jest.config.js` maps the same three names for the same reason,
+ * and the two lists have to stay in step.
  */
+const oneReact = {
+  react: "react",
+  "react-dom": "react-dom",
+  "react/jsx-runtime": "react/jsx-runtime",
+  "react/jsx-dev-runtime": "react/jsx-dev-runtime",
+};
+
+/** Resolved from the app, not from whichever package happened to ask. */
+const fromTheApp = (name) =>
+  require.resolve(name, { paths: [path.resolve(projectRoot, "node_modules")] });
+
+const inherited = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (Object.prototype.hasOwnProperty.call(oneReact, moduleName)) {
+    return { type: "sourceFile", filePath: fromTheApp(oneReact[moduleName]) };
+  }
+  return (inherited ?? context.resolveRequest)(context, moduleName, platform);
+};
 
 module.exports = config;
