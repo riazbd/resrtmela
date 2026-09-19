@@ -54,10 +54,15 @@ Nothing is hidden from the account and nothing is refused, so one of these
 turning into a real customer is a switch, not a migration. Phone numbers are
 placeholders (`01700000001`/`2`) — change them before SMS is ever turned on.
 
-**Open, and the owner's call:** neither agency plan sells `agency_website` or
-`agency_api` (`features: []` on both), so the agency's Website and API screens
-are unreachable for every agency, demo or real. The code shipped 2026-09-17;
-what is missing is a plan that includes them.
+**Settled the same day:** neither agency plan sold `agency_website` or
+`agency_api` — `features: []` on both — so those two screens, shipped
+2026-09-17, were unreachable for every agency. The owner's answer was that
+the bigger plan carries everything, so **Agency Pro now includes both** and
+Agency Basic still includes neither, which is what makes them two plans.
+Nothing was taken from anyone: both real agencies are on Basic, and the only
+account on Pro was the demo one. Opened and read afterwards — the Website
+screen offers `resortmela.com/a/demo-travels` and says it is not live until
+published; the API screen offers keys and names what each may do.
 
 ---
 
