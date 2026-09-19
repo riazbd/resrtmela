@@ -7,6 +7,160 @@ still stand. What is replaced is section 3 onward: the app does not grow
 screens out of a WebView over time. Every screen is written natively, and the
 WebView is deleted.*
 
+## 0. Revision — 2026-09-20
+
+*The console kept moving for the week after this design was written, and one of
+its premises stopped being true. Everything in this section corrects a number
+or a decision below it; the architecture (§3), the UI direction (§1), the
+offline rules (§7) and the refusals (§11) all stand. Every figure was counted
+with `git ls-tree` and `git grep` at `172881b` — the day of the design — and at
+`afb0474`.*
+
+### 0.1 Section 3 is finished, and the app is not
+
+Stages A and B both landed on 2026-09-13 (`7869c4a` … `d575c1d`, `4f7a7f7`).
+`@rh/app-core` exists — ten modules, 1,605 lines — and the pure rules are in
+`@rh/shared`. **Phase 0's tasks 1–3 are complete. Tasks 4–10 have not been
+started**: expo-router, the tokens, the primitives, the patterns, the tab
+shell, the auth screens and the APK. `apps/mobile` is still the `0.1.0` WebView
+shell, and that is still the only APK ever produced (`RELEASES.md`).
+
+Two outcomes of stage B bind every later phase: `Storage` is an injected port,
+and `navigator.onLine` does not exist for shared code — connectivity is an
+answer the caller supplies.
+
+### 0.2 The measurement in section 2 is out of date
+
+Section 2 counted only `page.tsx`, so it undercounted itself on the day it was
+written. Both columns below count every `.tsx` under `apps/web/src/app` —
+layouts and route-local components are screens too, and four of the biggest
+things built since are route-local components rather than pages.
+
+| | 2026-09-13 | 2026-09-20 | |
+|---|---|---|---|
+| UI in the app's scope | 12,397 | **15,467** | +25% |
+| out of scope — platform, marketing, the public resort and agency pages | 3,184 | 3,942 | |
+| API routes (`@Get`/`@Post`/…) | 226 | **294** | +30% |
+| methods on the typed client | 143 | **144** | +1 |
+
+**Section 2's "10,916 lines to write natively" should be read as 15,500.**
+
+### 0.3 The typed client no longer covers the API. This is the one real blocker
+
+Section 2 argued that the work is 11,000 lines and not 18,000 because
+`packages/shared/src/client.ts` already types every route and already injects
+its transport. That argument has quietly expired: the API grew by 68 routes and
+the client by one.
+
+The console did not notice because it never depended on it. Ten page files call
+the typed client; the other thirty build their URLs by hand through
+`apps/web/src/lib/api.ts` — **110 hand-written paths** in `app/**`. Whole areas
+have no typed client at all:
+
+> auth beyond `me`/`permissions` · activities · payments · import · bulk email
+> · the website editor · the day sheet · the calendar · notifications ·
+> everything under settings
+
+A second client written against those same 110 template literals is a second
+place for a renamed query parameter to be found by a user instead of a
+compiler, and the two would disagree within a month. So:
+
+- **A native screen never builds a URL.** `apps/mobile/test/` gets the guard
+  that `apps/api/test/the-console-has-one-address.spec.ts` already demonstrates
+  — a walk of `src` that fails on a path literal.
+- **The client is completed phase by phase, not all at once.** Each phase's
+  first commit adds exactly the routes that phase's screens call, typed against
+  `api-types.ts`, and ports the console's own call sites onto them in the same
+  commit. The console's suite is the gate, as it was for the extraction.
+- That work is not a tax on the app. It is the same repayment the extraction
+  was, and it lands on the console the day it is written.
+
+### 0.4 Section 5's screen count: 56 → 72, before the cut in §0.5
+
+Recounted against the routes and tabs that exist today.
+
+| group | §5 | now | what changed |
+|---|---|---|---|
+| auth and shell | 5 | 5 | — |
+| resort core | 13 | **15** | the stay bill (services, damage, fines) and editing a booking are their own screens on a phone |
+| resort remainder | 14 | **15** | a payroll month now holds many payments |
+| reports | 3 | **7** | §5 guessed three; the screen has Money, Summary, P&L, Agents, Sources, Daily, Audit trail |
+| settings | 6 | **12** | §5 guessed six; the tabs are Resort info, Subscription, Website, API, Users & Roles, Permissions, Agent access, Lists, Activity log, Discounts, Messages, Your data |
+| agent | 12 | **14** | the agency's own Website and API screens (`85b411a`, `8ca55ea`, `c65327b`) |
+| shared | 3 | **4** | changing a password is its own screen (`4932898`) |
+| | **56** | **72** | |
+
+The two measurements agree: +29% of screens against +25% of lines. Section 5's
+remark about an earlier count being "arithmetic done in a hurry" applies to its
+own reports and settings rows, which were guesses at a tabbed page nobody had
+opened.
+
+### 0.5 Four screens come out of scope, on the reasoning that already excluded the homepage
+
+§1 kept the platform console and the marketing homepage on the desk because
+that is where they are used. The same test now excludes four more, and they are
+the four a phone is worst at:
+
+- **Settings → Website** (476 lines) — choosing a template and writing page copy
+- **Settings → API** (341) — keys, webhooks and domains, a screen handed to a developer
+- **Agent → Website** (340) and **Agent → API** (204 + 150) — the same two, for an agency
+
+What replaces them is a **read-only status card** in each place: whether the
+site is published and at what address, whether keys exist and when each was
+last used. An owner on a phone needs to know the answer; nobody edits a
+template or rotates a key from a phone, and pretending otherwise buys the
+hardest 1,500 lines in the console for the least use.
+
+**Import** stays, read-only: the last run, what it did, what it rejected.
+Nobody uploads a spreadsheet from a phone either.
+
+**Net: 72 − 4 = 68 screens**, and the 1,511 lines removed are the least
+phone-suited in the whole count.
+
+### 0.6 What the app must consume, and did not have to on 2026-09-13
+
+Every feature built since put its rules in `@rh/shared` rather than in the
+console. That discipline is why the extra 25% is only UI, and the app inherits
+all of it for nothing — but a native screen that reimplements any of these is a
+defect, not a shortcut:
+
+`stay-charges.ts` · `discount.ts` · `agent-window.ts` · `booking-sort.ts`
+(`BOOKING_SORTS`, `DEFAULT_BOOKING_SORT`) · `room-order.ts` (`compareRoomNames`,
+`byRoomName`) · `payment-method.ts` · `plan-schedule.ts` · `payroll.ts` ·
+`site.ts` · `webhook.ts` · `domain.ts` · `imported-receipt.ts`
+
+`PLAN_FEATURES` gained `agency_website` and `agency_api`, and `NAV` is 30
+entries rather than the 27 §4 names. The filter in §4 is unchanged; the list it
+runs over is longer.
+
+**Addresses.** The platform moved to its own domain on 2026-09-19: the console
+is `https://resortmela.com`, the API is `https://api.resortmela.com`. The app
+reads both from `expo-constants` — `apps/mobile/app.json` already carries them
+— and never from a literal. `@rh/shared`'s `api-url.ts` takes the base as an
+argument for exactly this reason.
+
+### 0.7 What this does to section 10
+
+Phase 0 keeps its remaining seven tasks and gains one: **the auth slice of the
+typed client** — login, forgot, reset, change password, `me`, `permissions` —
+written the way §0.3 describes, with the console ported onto it in the same
+commit. It is the smallest possible proof that the rule in §0.3 holds, taken
+before four more phases depend on it.
+
+The later phases keep their shape and change their counts:
+
+| phase | §10 | now | |
+|---|---|---|---|
+| 0 | 3 | 3 | + the auth slice of the client |
+| 1 | 13 | **15** | resort core |
+| 2 | 25 | **29** | remainder, reports (7), settings (10 after §0.5), profile, account, bulk email |
+| 3 | 12 | **12** | agent, less its Website and API screens |
+| 4 | 3 | 3 | signup ×2, invoice, push — and the WebView is deleted |
+| | 56 | **68** | |
+
+An APK still ships at the end of every phase, and is still installed on a real
+phone before the next one begins.
+
 ## 1. The decision this document records
 
 The owner asked for a real application, not a wrapper: "shob functionality
@@ -27,6 +181,8 @@ Two follow-up decisions, also theirs:
   desk, where they are already used.
 
 ## 2. The size of the work, measured
+
+*Superseded by [§0.2](#02-the-measurement-in-section-2-is-out-of-date) and [§0.3](#03-the-typed-client-no-longer-covers-the-api-this-is-the-one-real-blocker) — the figures below are 2026-09-13's.*
 
 Counted, not estimated:
 
@@ -91,6 +247,8 @@ user's access rather than agreeing by coincidence.
 
 ### 3.3 How the move is done without breaking production
 
+*Done, 2026-09-13. What it cost is recorded in the phase-0 plan and summarised in [§0.1](#01-section-3-is-finished-and-the-app-is-not).*
+
 The console is live and serves a real business. The extraction is therefore two
 stages with different risk profiles, and the second one has a net.
 
@@ -125,6 +283,8 @@ and `feature` (what the resort's plan includes). A tab whose permission the
 user lacks is not rendered; the tab bar compacts rather than showing a gap.
 
 ## 5. Screens — 56
+
+*Recounted as 72, then cut to 68, in [§0.4](#04-section-5s-screen-count-56--72-before-the-cut-in-05) and [§0.5](#05-four-screens-come-out-of-scope-on-the-reasoning-that-already-excluded-the-homepage). Reports and settings below are guesses; the real tabs are listed there.*
 
 Native needs more screens than the web, because the console uses tabs and
 modals where a phone needs a pushed screen. The sections below sum to 56;
@@ -225,6 +385,8 @@ been installed and the screens opened — a 200 from the API is not proof a
 screen works.
 
 ## 10. Order of work
+
+*Phase 0 tasks 1–3 are done; the counts below are corrected in [§0.7](#07-what-this-does-to-section-10).*
 
 | phase | screens | contents | what exists at the end |
 |---|---|---|---|

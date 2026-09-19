@@ -8,6 +8,32 @@ asked for that explicitly.*
 phone, lands on the tab bar their permissions allow, sees it rendered in the
 design system, and can sign out. No WebView on any screen this phase owns.
 
+## Where this plan stands — 2026-09-20
+
+| task | state |
+|---|---|
+| 1 — the Storage port | **done** (`7b17f0f`) |
+| 2 — stage A, pure logic into `@rh/shared` | **done** (`7869c4a`, `bd45941`) |
+| 3 — stage B, the stateful contexts | **done** (`2a0cc5c` … `d575c1d`, `4f7a7f7`) |
+| 4 — the app's dependencies | not started |
+| 5 — design tokens | not started |
+| 6 — primitives | not started |
+| 7 — patterns | not started |
+| 8 — the navigation shell | not started |
+| 9 — the auth screens | not started |
+| 10 — the APK | not started — `0.1.0`, the WebView shell, is still the only build |
+
+**Task 8a is new**, and runs before task 9: *the auth slice of the typed
+client*. `packages/shared/src/client.ts` types 144 of the API's 294 routes and
+has no `auth` beyond `me`/`permissions`, so the login screen would otherwise
+hand-write its first URL and set the precedent for every screen after it. Add
+`login`, `forgot`, `reset` and `changePassword` to the client, port the
+console's own call sites onto them in the same commit, and keep the console's
+suite green. The reasoning is in §0.3 of the design.
+
+Task 9 then has no path literal in it, and `apps/mobile/test/` gains the guard
+that fails on one.
+
 ## Global constraints
 
 1. **TDD.** Red first, and the failing output is shown before the fix. No
