@@ -9,7 +9,6 @@
  * The rule is ownership: our console navigates in place, everything else is
  * handed to the phone, which already knows what a `tel:` is for.
  */
-import { describe, expect, it } from "vitest";
 import { routeFor } from "../src/console/url-policy";
 
 const CONSOLE = "https://resortmela.rootcodebd.com";
