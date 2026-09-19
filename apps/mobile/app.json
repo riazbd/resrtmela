@@ -42,11 +42,16 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 180
         }
-      ]
+      ],
+      "expo-router",
+      "expo-sqlite"
     ],
     "extra": {
       "consoleUrl": "https://resortmela.com",
-      "consoleUrlsOwned": ["https://resortmela.com", "https://resortmela.rootcodebd.com"],
+      "consoleUrlsOwned": [
+        "https://resortmela.com",
+        "https://resortmela.rootcodebd.com"
+      ],
       "eas": {
         "projectId": "e3df03f7-f176-4c28-a47a-248a2bc70d97"
       }
