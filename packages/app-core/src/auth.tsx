@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createApiClient } from "@rh/shared";
 import type { Me, Resort } from "@rh/shared";
 import type { CacheStore } from "./offline-cache";
 import type { Storage } from "./storage";
@@ -97,6 +98,15 @@ export function AuthProvider({
   const [features, setFeatures] = useState<string[]>([]);
   const [permTick, setPermTick] = useState(0);
 
+  /**
+   * The routes this module calls, typed, built from the fetcher the host
+   * injected. It used to write `/auth/me` and `/auth/login` out four times —
+   * which was fine while the console was the only client, and stopped being
+   * fine the moment a second one had to agree with it about the same four
+   * strings.
+   */
+  const client = useMemo(() => createApiClient(api), [api]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -105,7 +115,7 @@ export function AuthProvider({
         return;
       }
       try {
-        const meData = await api<Me>("/auth/me");
+        const meData = await client.me();
         if (!alive) return;
         setMe(meData);
         const resorts = meData.resorts.map((r) => r.resort);
@@ -123,7 +133,7 @@ export function AuthProvider({
     return () => {
       alive = false;
     };
-  }, [storage, api]);
+  }, [storage, client]);
 
   // money renders in the active resort's currency and locale
   useEffect(() => {
@@ -175,7 +185,7 @@ export function AuthProvider({
   const adoptToken = useCallback(
     async (accessToken: string) => {
       storage.setItem(TOKEN, accessToken);
-      const meData = await api<Me>("/auth/me");
+      const meData = await client.me();
       setMe(meData);
       const resort = meData.resorts.map((r) => r.resort)[0] ?? null;
       setActive(resort);
@@ -184,18 +194,15 @@ export function AuthProvider({
       // set here is not readable until the next render
       return meData;
     },
-    [storage, api],
+    [storage, client],
   );
 
   const login = useCallback(
     async (identifier: string, password: string) => {
-      const res = await api<{ accessToken: string }>("/auth/login", {
-        method: "POST",
-        body: { identifier, password },
-      });
+      const res = await client.auth.login(identifier, password);
       return adoptToken(res.accessToken);
     },
-    [adoptToken],
+    [adoptToken, client],
   );
 
   const logout = useCallback(() => {
@@ -219,11 +226,11 @@ export function AuthProvider({
       if (current) storage.setItem(IMPERSONATOR, current);
       storage.removeItem(RESORT_ID);
       storage.setItem(TOKEN, accessToken);
-      const meData = await api<Me>("/auth/me");
+      const meData = await client.me();
       setMe(meData);
       setActive(meData.resorts.map((r) => r.resort)[0] ?? null);
     },
-    [storage, api],
+    [storage, client],
   );
 
   const exitImpersonation = useCallback(() => {

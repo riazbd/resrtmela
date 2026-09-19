@@ -19,7 +19,7 @@
 
 import { useState } from "react";
 import { newPasswordError } from "@rh/shared";
-import { api } from "@/lib/api";
+import { api, client } from "@/lib/api";
 import { Button, Card, Field, Input, useToast } from "@/components/ui";
 
 /** Your own, from inside the console. */
@@ -40,10 +40,7 @@ export function ChangeMyPassword() {
     }
     setBusy(true);
     try {
-      await api("/auth/me/password", {
-        method: "POST",
-        body: { currentPassword: current, newPassword: next },
-      });
+      await client.auth.changePassword(next, current);
       push("Your password has been changed");
       setCurrent("");
       setNext("");

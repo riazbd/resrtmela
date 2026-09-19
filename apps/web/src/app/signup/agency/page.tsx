@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { RegisterAs } from "@/components/register-as";
 import { useRouter } from "next/navigation";
-import { api, API_URL } from "@/lib/api";
+import { client, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
@@ -114,12 +114,11 @@ export default function AgencySignupPage() {
     setErr(null);
     setBusy(true);
     try {
-      const res = await api<{ accessToken: string }>("/auth/signup/agency", {
-        method: "POST",
-        body: usingOffer
-          ? { agencyName, name, email, phone, password, offer: offer.code, scheduleId: shelf?.id }
+      const res = await client.auth.signupAgency(
+        usingOffer
+          ? { agencyName, name, email, phone, password, offer: offer.code ?? undefined, scheduleId: shelf?.id }
           : { agencyName, name, email, phone, password, plan, scheduleId: shelf?.id },
-      });
+      );
       const me = await adoptToken(res.accessToken);
       router.replace(landingFor(me.role));
     } catch (ex) {

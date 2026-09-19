@@ -4,7 +4,7 @@ import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { client } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 import { BedDouble, CalendarDays, ShieldCheck, UtensilsCrossed, ArrowLeft } from "lucide-react";
 import { landingFor } from "@/lib/console-access";
@@ -53,7 +53,7 @@ function LoginInner() {
   async function submitForgot() {
     setForgotBusy(true);
     try {
-      await api("/auth/password/forgot", { method: "POST", body: { identifier: forgotIdentifier } });
+      await client.auth.forgotPassword(forgotIdentifier);
     } catch {
       // the endpoint deliberately never reveals whether the address has an
       // account (Task 1); a network failure here gets the same one sentence

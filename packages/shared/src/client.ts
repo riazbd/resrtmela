@@ -33,6 +33,7 @@ import type {
   FoodPackage,
   GuestRow,
   Me,
+  MyAccess,
   Page,
   PayrollSheet,
   PermRole,
@@ -51,6 +52,7 @@ import type {
   TourPackageDetail,
   TourPackageRow,
   ResortOption,
+  Session,
   TaxRuleRow,
 } from "./api-types";
 
@@ -90,6 +92,42 @@ export interface BookingListQuery {
   sort?: string;
 }
 
+/**
+ * What opening a resort's workspace asks for.
+ *
+ * `plan` and `scheduleId` carry the card and the billing period that were on
+ * screen when the button was pressed. They are optional on the wire and it
+ * cost this project a bug to make them so: `plan` was absent from the API's
+ * DTO for a while, and `ValidationPipe({ whitelist: true })` stripped it
+ * without a word, so every workspace opened on the entry plan whatever had
+ * been clicked.
+ */
+export interface ResortSignup {
+  companyName: string;
+  resortName: string;
+  location?: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  slug?: string;
+  offer?: string;
+  plan?: string;
+  scheduleId?: number;
+}
+
+/** The same front door for an agency. It lands pending: the platform verifies each one. */
+export interface AgencySignup {
+  agencyName: string;
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  plan?: string;
+  offer?: string;
+  scheduleId?: number;
+}
+
 export interface DateRange {
   from?: string;
   to?: string;
@@ -99,9 +137,70 @@ export function createApiClient(http: Fetcher) {
   return {
     // ── who am I ──
     me: () => http<Me>("/auth/me"),
+    /**
+     * Two answers, not one: `permissions` is what the owner granted, `features`
+     * is what the plan includes. The signature promised only the first for
+     * three days after the API started sending both.
+     */
     permissions: (resortId?: number) =>
-      http<{ permissions: string[] }>(`/auth/permissions${qs({ resortId })}`),
+      http<MyAccess>(`/auth/permissions${qs({ resortId })}`),
     myResorts: () => http<Resort[]>("/resorts/mine"),
+
+    // ── the doors into a session ──
+    /**
+     * Every route on `auth.controller.ts`, so that no screen — on the desk or
+     * on a phone — writes one of these paths itself. `the-way-into-a-session-
+     * is-typed.spec.ts` is what keeps this list level with that controller.
+     */
+    auth: {
+      /**
+       * One identifier, whichever kind it is.
+       *
+       * The controller reads `identifier ?? phone ?? email` and the login box
+       * does not ask which was typed, so neither does this: an address and a
+       * phone number travel the same way, and guessing here would be a second
+       * opinion about something the server already decides.
+       */
+      login: (identifier: string, password: string) =>
+        http<Session>("/auth/login", { method: "POST", body: { identifier, password } }),
+
+      signup: (body: ResortSignup) =>
+        http<Session>("/auth/signup", { method: "POST", body }),
+
+      signupAgency: (body: AgencySignup) =>
+        http<Session>("/auth/signup/agency", { method: "POST", body }),
+
+      /**
+       * Answers the same way whether or not the account exists — the neutral
+       * sentence is the point, and it is the server's to keep, not a caller's.
+       */
+      forgotPassword: (identifier: string) =>
+        http<{ sent: boolean }>("/auth/password/forgot", {
+          method: "POST",
+          body: { identifier },
+        }),
+
+      resetPassword: (token: string, password: string) =>
+        http<{ ok: true }>("/auth/password/reset", {
+          method: "POST",
+          body: { token, password },
+        }),
+
+      /**
+       * `currentPassword` is omitted rather than sent as `undefined`: an
+       * account opened by invitation has no password yet, and the controller
+       * only demands the old one when a hash exists. `qs` learned the same
+       * lesson about query strings — an absent field and an empty one are
+       * different requests.
+       */
+      changePassword: (newPassword: string, currentPassword?: string) =>
+        http<{ ok: boolean }>("/auth/me/password", {
+          method: "POST",
+          body: currentPassword === undefined
+            ? { newPassword }
+            : { newPassword, currentPassword },
+        }),
+    },
 
     // ── bookings ──
     bookings: {

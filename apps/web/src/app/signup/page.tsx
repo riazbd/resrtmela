@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { RegisterAs } from "@/components/register-as";
 import { useRouter } from "next/navigation";
-import { api, API_URL } from "@/lib/api";
+import { client, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { landingFor } from "@/lib/console-access";
 import { Button, Input } from "@/components/ui";
@@ -130,9 +130,7 @@ export default function SignupPage() {
     setErr(null);
     setBusy(true);
     try {
-      const res = await api<SignupResult>("/auth/signup", {
-        method: "POST",
-        body: {
+      const res = await client.auth.signup({
           companyName,
           resortName,
           location: location || undefined,
@@ -141,16 +139,15 @@ export default function SignupPage() {
           phone,
           password,
           slug: effectiveSlug || undefined,
-          offer: usingOffer ? offer.code : undefined,
+          offer: usingOffer ? (offer.code ?? undefined) : undefined,
           // the plan card that was clicked — sent as the form described it, so
           // what the visitor read while typing is what the workspace opens on.
           // An offer names its own plan and wins; the API decides that.
-          plan: entry?.name,
+          plan: entry?.name ?? undefined,
           // which rhythm was picked on the pricing page. The API checks it
           // against the plan and falls back to monthly rather than refusing,
           // so a stale link cannot cost somebody their signup.
           scheduleId: shelf?.id,
-        },
       });
       // adoptToken loads /auth/me and activates the first resort — the same
       // thing login does after its own POST. Without it the console's own

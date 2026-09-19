@@ -3,7 +3,7 @@
 import { FormEvent, Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { client } from "@/lib/api";
 import { Button, Input } from "@/components/ui";
 import { newPasswordError } from "@/lib/password-reset";
 import { ArrowLeft } from "lucide-react";
@@ -23,10 +23,14 @@ function ResetInner() {
       setErr(problem);
       return;
     }
+    /* The button is disabled without one and the panel above says why, but the
+       handler never checked: this used to post `token: null` and show whatever
+       the API said about it. The typed client is what asked the question. */
+    if (!token) return;
     setErr(null);
     setBusy(true);
     try {
-      await api("/auth/password/reset", { method: "POST", body: { token, password } });
+      await client.auth.resetPassword(token, password);
       router.replace("/login?reset=1");
     } catch (ex) {
       // the API's own message names the actual problem (expired, used, unknown

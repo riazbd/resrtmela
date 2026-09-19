@@ -212,15 +212,37 @@ describe("what they may do", () => {
   });
 
   /**
-   * The plan belongs to a resort, so an agent has no features — and must not
-   * inherit the ones from whichever resort was last looked at.
+   * An agent's features are the agency's own, and this provider does not
+   * second-guess which plan they came from.
+   *
+   * This test used to assert the opposite — that an agent is given no
+   * features at all — and it passed for three days without ever being true.
+   * It read `auth.features` immediately after `isAgent` turned true, which is
+   * one microtask before the permissions promise resolves, so it was reading
+   * the initial empty array every time. Porting `auth.tsx` onto the typed
+   * client moved the timing by that one tick and the assertion failed at
+   * once; the code underneath had not changed.
+   *
+   * The premise was stale as well. Until 2026-09-17 a plan feature belonged
+   * to a resort and an agency had none, so blanking them was arguable. Since
+   * agency plans started selling `agency_website` and `agency_api`,
+   * `GET /auth/permissions` answers for the agency when the caller is an
+   * agent — and a client that threw that answer away would hide the two
+   * screens the agency is paying for.
    */
-  it("gives an agent no plan features, because an agency is on no resort's plan", async () => {
+  it("takes an agent's features from the answer, which is the agency's own plan", async () => {
     const storage = memoryStorage();
     storage.setItem("rh.token", "t");
-    mount({ storage, me: meWith("AGENT", []), features: ["restaurant"] });
+    const { permCalls } = mount({
+      storage,
+      me: meWith("AGENT", []),
+      features: ["agency_website", "agency_api"],
+    });
     await waitFor(() => expect(auth.isAgent).toBe(true));
-    expect(auth.features).toEqual([]);
+    await waitFor(() => expect(auth.features).toEqual(["agency_website", "agency_api"]));
+    // asked without a resort id: an agency belongs to none, and the server
+    // reads the agency off the token rather than off a resort
+    expect(permCalls).toEqual([undefined]);
   });
 
   it("reports the plan's features separately from the person's permissions", async () => {
