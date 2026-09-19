@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind, STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind } from "@rh/shared";
+import { ROLE, type Role, type JwtClaims, BOOKING_CODE_PREFIX, formatMoney, DISCOUNT_KINDS, isDiscountKind, discountAmount, type DiscountKind, STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind, compareRoomNames, bookingSort } from "@rh/shared";
 import { requireResortAccess, requireRoles, badRequest, forbid, actorIdOrNull, SYSTEM_ACTOR_ID } from "../common/rbac";
 import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { anonGuestKey, normalizePhone, phoneKey, dateOnly, nightsBetween, eachNight, round2, todayIn } from "../common/dates";
@@ -854,6 +854,8 @@ export class BookingsService {
       /** guest name, guest phone, or booking code */
       search?: string;
       mine?: boolean;
+      /** one of BOOKING_SORTS; anything else reads as the default */
+      sort?: string;
       skip?: number;
       take?: number;
     },
@@ -895,6 +897,7 @@ export class BookingsService {
         : {}),
     };
     const taxRules = await this.taxRulesFor(q.resortId);
+    const order = bookingSort(q.sort);
     const [rows, total] = await Promise.all([
       this.prisma.booking.findMany({
         where,
@@ -904,7 +907,15 @@ export class BookingsService {
           items: { include: { room: { select: { id: true, name: true } } } },
           payments: true,
         },
-        orderBy: [{ checkIn: "desc" }, { id: "desc" }],
+        /**
+         * The chosen order, then the id the same way.
+         *
+         * The id is not decoration: `createdAt` has second resolution and two
+         * bookings taken in the same second would otherwise swap places
+         * between two reads of the same list. `checkIn` and `checkOut` are
+         * dates, so a busy day is a tie for every row on it.
+         */
+        orderBy: [{ [order.field]: order.direction }, { id: order.direction }],
         skip: q.skip ?? 0,
         take: Math.min(q.take ?? 50, 200),
       }),
@@ -921,8 +932,14 @@ export class BookingsService {
         checkOut: b.checkOut,
         guest: b.guest,
         agent: b.agentUser?.name ?? null,
-        // room lines only: an extra person's line names the room they sleep in
-        rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => i.room?.name).filter(Boolean),
+        // room lines only: an extra person's line names the room they sleep in.
+        // In number order too — the line read "7, 6, 4, 2" because the items
+        // came back in the order they were added to the booking.
+        rooms: b.items
+          .filter((i) => i.itemKind === "ROOM")
+          .map((i) => i.room?.name)
+          .filter((n): n is string => !!n)
+          .sort(compareRoomNames),
         adults: b.adults,
         children: b.children,
         ...BookingsService.computeTotals(b, taxRules),

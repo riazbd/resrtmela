@@ -86,6 +86,14 @@ class ListBookingsQuery {
   @IsOptional() @Type(() => Number) @IsInt() skip?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Max(200) take?: number;
   @IsOptional() @IsString() @MaxLength(80) search?: string;
+  /**
+   * Which order to read the list in.
+   *
+   * Not `@IsIn([...BOOKING_SORTS])`: a key that no longer exists is a stale
+   * bookmark, and a 400 in front of a clerk who bookmarked a list is worse
+   * than the list in its usual order. `bookingSort` falls back for us.
+   */
+  @IsOptional() @IsString() @MaxLength(24) sort?: string;
 }
 
 class UpdateBookingDto {

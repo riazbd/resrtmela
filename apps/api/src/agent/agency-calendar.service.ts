@@ -31,6 +31,7 @@ import { agencyOf, sellableFor } from "../common/selling-access";
 import { bookableUntil } from "../common/agent-window";
 import type { JwtClaims } from "@rh/shared";
 
+import { byRoomName } from "@rh/shared";
 /** A span of nights one room is not free, from the agency's side of the desk. */
 export interface AgencyStay {
   roomId: number;
@@ -149,7 +150,6 @@ export class AgencyCalendarService {
           baseRate: true,
           roomType: { select: { name: true } },
         },
-        orderBy: { name: "asc" },
       }),
       this.prisma.booking.findMany({
         where: {
@@ -205,8 +205,10 @@ export class AgencyCalendarService {
         return {
           resort: { id: link.resort.id, name: link.resort.name, location: link.resort.location },
           bookableUntil: bookableUntil(link.resort)?.toISOString().slice(0, 10) ?? null,
+          // number order, the way the resort counts them, not text order
           rooms: rooms
             .filter((r) => r.resortId === link.resortId)
+            .sort(byRoomName)
             .map((r) => ({
               id: r.id,
               name: r.name,

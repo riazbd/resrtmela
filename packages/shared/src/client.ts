@@ -86,6 +86,8 @@ export interface BookingListQuery {
   take?: number;
   /** guest name, guest phone or booking code — matched by the server, over every row */
   search?: string;
+  /** one of BOOKING_SORTS; anything else reads as the default (newest booked first) */
+  sort?: string;
 }
 
 export interface DateRange {

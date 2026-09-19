@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, JwtClaims } from "@rh/shared";
+import { JwtClaims, ROLE, byRoomName, type Role } from "@rh/shared";
 import { requireRoles, requireResortAccess } from "../common/rbac";
 import { requireSellingAccess } from "../common/selling-access";
 import { AuditService } from "../common/audit.service";
@@ -263,14 +263,17 @@ export class TenancyService {
       return { ...resort, rooms };
     }
 
-    return this.prisma.resort.findUniqueOrThrow({
+    const resort = await this.prisma.resort.findUniqueOrThrow({
       where: { id: resortId },
       include: {
         roomTypes: true,
-        rooms: { orderBy: { name: "asc" } },
+        rooms: true,
         activities: { where: { active: true } },
         _count: { select: { bookings: true, guests: true } },
       },
     });
+    // the order a person counts rooms in, not the order text sorts in
+    resort.rooms.sort(byRoomName);
+    return resort;
   }
 }

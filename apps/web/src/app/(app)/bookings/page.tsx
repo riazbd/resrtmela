@@ -25,7 +25,7 @@ import { EditBookingModal } from "./edit-booking";
 import { whatTheBookingNeeds, BOOKING_GAP_MESSAGES } from "@/lib/booking-form";
 import { ArrivalModal, DepartureModal, chargeLines } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
-import { STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind } from "@rh/shared";
+import { STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
@@ -903,6 +903,14 @@ function BookingsInner() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
+  /**
+   * Which order the list reads in.
+   *
+   * The default is what was booked most recently, which is the desk's
+   * afternoon question. It used to be check-in descending, so a booking taken
+   * this morning for next March sat wherever March fell.
+   */
+  const [sort, setSort] = useState<string>(DEFAULT_BOOKING_SORT);
   // a keystroke is not a query: the guest list settled on this and so does this
   const dq = useDebounced(q, 300);
   const [group, setGroup] = useState("");
@@ -918,7 +926,7 @@ function BookingsInner() {
 
   // the search goes to the server; filtering the fetched page meant a guest
   // on row 101 came back "no bookings match"
-  const filters = { state, source, group, from, to, search: dq };
+  const filters = { state, source, group, from, to, search: dq, sort };
   const listQ = useApi(
     keys.bookings(activeResort?.id, filters),
     () =>
@@ -931,6 +939,7 @@ function BookingsInner() {
         group: group || undefined,
         from: from || undefined,
         to: to || undefined,
+        sort,
       }),
     // the previous filter's rows stay on screen while the next set loads, so
     // changing a filter does not blank the table the clerk is reading from
@@ -982,7 +991,7 @@ function BookingsInner() {
 
   // a selection is about rows on screen; changing the filter leaves it holding
   // ids the operator can no longer see, which is how the wrong thing gets deleted
-  useEffect(() => setPicked(new Set()), [state, source, group, from, to, dq, activeResort?.id]);
+  useEffect(() => setPicked(new Set()), [state, source, group, from, to, dq, sort, activeResort?.id]);
 
   const toggle = (id: number) =>
     setPicked((prev) => {
@@ -1035,6 +1044,14 @@ function BookingsInner() {
         </Field>
         <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="!w-36" /></Field>
         <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="!w-36" /></Field>
+        <Field label="Sort by">
+          {/* the orders come from @rh/shared, so one the console offers is one
+              the API answers — an option that quietly did nothing would be
+              indistinguishable from a list that had not refreshed */}
+          <Select value={sort} onChange={(e) => setSort(e.target.value)} className="!w-52">
+            {BOOKING_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </Select>
+        </Field>
         <div className="ml-auto">
           <Button onClick={() => setShowNew(true)}>+ New booking</Button>
         </div>

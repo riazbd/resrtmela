@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
 import { CommissionService } from "../common/commission.service";
-import { JwtClaims, Role, ROLE } from "@rh/shared";
+import { JwtClaims, ROLE, Role, byRoomName } from "@rh/shared";
 import { agentPricing } from "../common/money";
 import { agencyOf, requireSellingAccess } from "../common/selling-access";
 import { dateOnly, eachNight } from "../common/dates";
@@ -56,7 +56,7 @@ export class AvailabilityService {
       // a retired room is history; it cannot be sold, so it is not on the grid
       where: { resortId, deletedAt: null },
       include: { roomType: { select: { id: true } } },
-      orderBy: { name: "asc" },
+
     });
 
     const nights = await this.prisma.bookingNight.findMany({
@@ -93,7 +93,8 @@ export class AvailabilityService {
         : ((await this.prisma.resort.findUnique({ where: { id: resortId }, select: { showRatesToAgents: true } }))
             ?.showRatesToAgents ?? false);
 
-    return rooms.map((r) => {
+    // the order a person counts rooms in: text order put 12 before 2
+    return rooms.sort(byRoomName).map((r) => {
       const baseRate = Number(r.baseRate);
       return {
         roomId: r.id,

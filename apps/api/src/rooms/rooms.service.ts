@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { ROLE, type Role, JwtClaims } from "@rh/shared";
+import { JwtClaims, ROLE, byRoomName, type Role } from "@rh/shared";
 import { isManagement, requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { PlanLimitsService } from "../common/plan-limits.service";
@@ -80,12 +80,20 @@ export class RoomsService {
   async listRooms(claims: JwtClaims, resortId: number) {
     requireResortAccess(claims, resortId);
     await this.perms.require(claims, resortId, "rooms.view");
-    return this.prisma.room.findMany({
+    const rows = await this.prisma.room.findMany({
       // retired rooms are history, not inventory
       where: { resortId, deletedAt: null },
       include: { roomType: true },
-      orderBy: [{ roomTypeId: "asc" }, { name: "asc" }],
     });
+    /**
+     * Number order, and not grouped by type first.
+     *
+     * Grouped by type, an eight-room resort's inventory read 3, 4, 5, 6, 7, 8,
+     * 1, 2 — the type is a column on the row, so the grouping bought nothing
+     * and cost the one order a clerk can scan. The type is still there to sort
+     * or filter by; the default is the order on the wall.
+     */
+    return rows.sort(byRoomName);
   }
 
   async createRoom(
