@@ -60,18 +60,41 @@ export default function More() {
   const t = useT();
 
   const destinations = me ? moreFor({ role, can, features }) : [];
+
+  /**
+   * An agency signs in for an account, staff sign in at a resort, and
+   * somebody with neither is told nothing rather than something wrong.
+   */
+  const whose =
+    role === "AGENT"
+      ? me?.account
+        ? { kind: "AGENCY", name: me.account.name }
+        : null
+      : activeResort
+        ? { kind: "RESORT", name: activeResort.name }
+        : null;
   const titleOf = (d: NavDestination) =>
     d.labelKey ? t(d.labelKey as never) : (d.label ?? d.href);
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      {activeResort ? (
+      {/*
+        Who is signed in, which is not always a resort.
+
+        This read "RESORT · Sky Eco Resort" to an agency — somebody
+        else's business, picked because the session takes the first of
+        `me.resorts` and that field means two things. For staff it is
+        where they work; for an agency it is who they may sell.
+        `consoleGate` has called AGENT resortless since it was written,
+        and this screen had not heard.
+      */}
+      {whose ? (
         <View style={styles.header}>
           <Text step="caption" tone="muted" weight="medium">
-            RESORT
+            {whose.kind}
           </Text>
           <Text step="strong" weight="medium" tone="title">
-            {activeResort.name}
+            {whose.name}
           </Text>
         </View>
       ) : null}

@@ -79,7 +79,14 @@ export default function LoginScreen() {
             Resort Mela
           </Text>
           <Text step="body" tone="muted">
-            Sign in to your resort console
+            {/*
+              Not "your resort console". Agencies sign in on this same
+              screen and their whole side of the app is not a resort —
+              being greeted as staff at a resort you do not work at is
+              the same mistake the More screen made at the top of its
+              menu, one screen earlier.
+            */}
+            Sign in to keep the day straight
           </Text>
         </View>
 
