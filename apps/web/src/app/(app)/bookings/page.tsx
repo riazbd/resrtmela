@@ -23,11 +23,11 @@ import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
 import { EditBookingModal } from "./edit-booking";
 import { whatTheBookingNeeds, BOOKING_GAP_MESSAGES } from "@/lib/booking-form";
-import { ArrivalModal, DepartureModal, chargeLines } from "./stay-desk";
+import { ArrivalModal, DepartureModal } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
 import {
-  STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
-  BOOKING_STATES, bookingStateLabel,
+  type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
+  BOOKING_STATES, bookingStateLabel, billLines,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -636,38 +636,28 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         </div>
       )}
 
+      {/*
+        The bill, one line per thing on it.
+        `billLines` moved to @rh/shared on 2026-09-20: this block was four
+        `.filter()` calls in one expression, with three different meanings of
+        `qty` worked out inline and a division by `b.nights` that is zero on
+        a same-day booking. The phone shows the same bill, and a guest shown
+        one total at the desk and another on a phone has been overcharged by
+        one of them.
+      */}
       <div>
-        <div className="mb-1 text-xs font-medium text-slate-500">Rooms</div>
-        <div className="flex flex-wrap gap-1.5">
-          {b.items.filter((i) => i.kind === "ROOM").map((i) => (
-            <span key={i.id} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
-              {i.room?.name ?? i.kind} · {money(i.unitPrice)}/night
-            </span>
-          ))}
-        </div>
-        {/*
-          Everything else on the bill, each said for what it is. These used to
-          be chips beside the rooms reading "EXTRA_PERSON · ৳800/night", which
-          was neither the name nor the price.
-        */}
-        {b.items.some((i) => i.kind !== "ROOM") && (
-          <ul className="mt-2 space-y-0.5 text-xs text-slate-600">
-            {b.items.filter((i) => i.kind === "EXTRA_PERSON").map((i) => (
-              <li key={i.id} className="flex justify-between gap-2">
-                <span>Extra person{b.nights > 0 && i.qty / b.nights !== 1 ? "s" : ""} — {i.room?.name ?? "room"} <span className="text-slate-400">({b.nights > 0 ? i.qty / b.nights : i.qty} × {b.nights} night(s))</span></span>
-                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
-              </li>
-            ))}
-            {chargeLines(b).map((i) => (
-              <li key={i.id} className="flex justify-between gap-2">
-                <span>{isStayChargeKind(i.chargeKind) ? STAY_CHARGE_LABELS[i.chargeKind] : "Charge"} — {i.label}{i.qty > 1 ? ` × ${i.qty}` : ""}</span>
-                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
-              </li>
-            ))}
-            {b.items.filter((i) => i.kind === "FB" || i.kind === "ACTIVITY").map((i) => (
-              <li key={i.id} className="flex justify-between gap-2">
-                <span>{i.kind === "FB" ? "Restaurant" : (i.slot?.name ?? "Activity")}</span>
-                <span className="tabular-nums">{money((i.unitPrice ?? 0) * i.qty)}</span>
+        <div className="mb-1 text-xs font-medium text-slate-500">Bill</div>
+        {billLines(b).length === 0 ? (
+          <div className="text-xs text-slate-400">Nothing on the bill yet</div>
+        ) : (
+          <ul className="space-y-0.5 text-xs text-slate-600">
+            {billLines(b).map((line) => (
+              <li key={line.id} className="flex justify-between gap-2">
+                <span>
+                  {line.label}
+                  {line.detail ? <span className="ml-1 text-slate-400">({line.detail})</span> : null}
+                </span>
+                <span className="tabular-nums">{money(line.amount)}</span>
               </li>
             ))}
           </ul>

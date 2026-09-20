@@ -22,6 +22,7 @@ export * from "./booking-state";
 export * from "./day-label";
 export * from "./dues-lens";
 export * from "./stay-charges";
+export * from "./stay-bill";
 export * from "./agent-window";
 export * from "./contact";
 export * from "./brand";

@@ -207,8 +207,28 @@ export interface BookingQuote {
   lines: QuoteLine[];
 }
 
-export interface BookingDetail extends BookingRow {
+/**
+ * One booking, in full.
+ *
+ * **Not** `extends BookingRow`, and the difference is one field that cost a
+ * crash. The list route sends `rooms: string[]`; the detail route never has,
+ * and the type said it did until 2026-09-20 — the phone's detail screen
+ * trusted it, called `b.rooms.filter(...)` and died on the first real
+ * booking. The rooms are in `items`, and `roomNames()` reads them out.
+ *
+ * The tax fields below were the other half of the same mistake: the route
+ * has always sent them and none of them were written down, so a screen
+ * wanting to show the breakdown had to cast.
+ */
+export interface BookingDetail extends Omit<BookingRow, "rooms"> {
+  resortId: number;
   cancelState: string;
+  /** The rent before discount and before tax — what the rooms alone come to. */
+  roomRent: number;
+  taxable: number;
+  taxRatePct: number;
+  tax: number;
+  taxLines: { code: string; label: string; ratePct: number; amount: number }[];
   /** present only for the agent who owns this booking, and only when the resort shows rates */
   agentPricing?: AgentPricing | null;
   invoiceNo?: string;
