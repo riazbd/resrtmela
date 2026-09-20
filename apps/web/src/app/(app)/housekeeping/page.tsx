@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table } from "@/components/patterns";
+import { Table, Tabs } from "@/components/patterns";
 import { client, dmy } from "@/lib/api";
 import {
   housekeepingLabel,
@@ -33,6 +33,12 @@ export default function HousekeepingPage() {
   const { push } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<number | null>(null);
+  /**
+   * What is left, not everything — the same correction the phone needed.
+   * Listing every room with the destination button beside it made a
+   * resort with nothing to do read, at a glance, as ten rooms to clean.
+   */
+  const [lens, setLens] = useState<"To do" | "All">("To do");
 
   const mayMove = can("housekeeping.manage");
   const enabled = !!activeResort;
@@ -46,10 +52,11 @@ export default function HousekeepingPage() {
   if (listQ.error) return <ErrorState error={listQ.error as Error} />;
   if (listQ.isPending) return <Spinner />;
 
-  const rows = housekeepingOrder(listQ.data ?? []);
-  const toClean = rows.filter((r) => r.housekeeping === "DIRTY").length;
-  const underway = rows.filter((r) => r.housekeeping === "CLEANING").length;
-  const ready = rows.filter((r) => r.housekeeping === "CLEAN").length;
+  const all = housekeepingOrder(listQ.data ?? []);
+  const toClean = all.filter((r) => r.housekeeping === "DIRTY").length;
+  const underway = all.filter((r) => r.housekeeping === "CLEANING").length;
+  const ready = all.filter((r) => r.housekeeping === "CLEAN").length;
+  const rows = lens === "All" ? all : all.filter((r) => r.housekeeping !== "CLEAN");
 
   async function move(room: HousekeepingRow) {
     const next = nextHousekeepingState(room.housekeeping);
@@ -94,12 +101,17 @@ export default function HousekeepingPage() {
         <Stat label="Ready" value={String(ready)} tone="green" />
       </div>
 
-      <Card className="!p-0" title={`${rows.length} room${rows.length === 1 ? "" : "s"}`}>
-        {rows.length === 0 ? (
+      <Tabs tabs={["To do", "All"] as const} value={lens} onChange={setLens} />
+
+      <Card
+        className="!p-0"
+        title={lens === "All" ? `${rows.length} room${rows.length === 1 ? "" : "s"}` : "Left to do"}
+      >
+        {all.length === 0 ? (
           <Empty msg="No rooms — add the resort's rooms and they appear here" />
-        ) : toClean === 0 && underway === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-slate-500">
-            Everything is ready. The list fills again as guests leave.
+            Everything is ready. Nothing is waiting — open All to see every room.
           </div>
         ) : null}
 

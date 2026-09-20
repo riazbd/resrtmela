@@ -31,6 +31,7 @@ import {
 import { client, useAuth } from "../../../src/api/session";
 import { WhichResort } from "../../../src/screens/which-resort";
 import { Button } from "../../../src/design/button";
+import { Chip } from "../../../src/design/chip";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
 import { Card, Row, Stat } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
@@ -42,6 +43,17 @@ export default function HousekeepingScreen() {
   const mayMove = can("housekeeping.manage");
   const [busy, setBusy] = useState<number | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
+  /**
+   * The screen opens on what is left to do, and that is not a
+   * preference.
+   *
+   * Listing every room with the destination button beside it made a
+   * resort with everything clean show ten rows each shouting "Needs
+   * cleaning" — a screen whose whole job is "what is left" reading, at
+   * a glance, as the exact opposite. Found by looking at a screenshot;
+   * the sweep before it reported the screen fine.
+   */
+  const [lens, setLens] = useState<"To do" | "All">("To do");
 
   const list = useApi<HousekeepingRow[]>(
     ["housekeeping", resortId],
@@ -92,10 +104,12 @@ export default function HousekeepingScreen() {
     );
   }
 
-  const rows = housekeepingOrder(list.data);
-  const toClean = rows.filter((r) => r.housekeeping === "DIRTY").length;
-  const underway = rows.filter((r) => r.housekeeping === "CLEANING").length;
-  const ready = rows.filter((r) => r.housekeeping === "CLEAN").length;
+  const all = housekeepingOrder(list.data);
+  const toClean = all.filter((r) => r.housekeeping === "DIRTY").length;
+  const underway = all.filter((r) => r.housekeeping === "CLEANING").length;
+  const ready = all.filter((r) => r.housekeeping === "CLEAN").length;
+  const left = all.filter((r) => r.housekeeping !== "CLEAN");
+  const rows = lens === "All" ? all : left;
 
   return (
     <>
@@ -111,32 +125,42 @@ export default function HousekeepingScreen() {
           <Stat
             label="To clean"
             value={String(toClean)}
-            sub={underway > 0 ? `${underway} underway` : "rooms waiting"}
+            sub={underway > 0 ? `${underway} underway` : `room${toClean === 1 ? "" : "s"} waiting`}
             tone={toClean > 0 ? "danger" : "ok"}
           />
           <Stat label="Ready" value={String(ready)} sub="can be sold" tone="ok" />
         </View>
 
-        {rows.length === 0 ? (
+        <View style={styles.lenses}>
+          <Chip
+            label="To do"
+            on={lens === "To do"}
+            onPress={() => setLens("To do")}
+          />
+          <Chip label="All" on={lens === "All"} onPress={() => setLens("All")} />
+        </View>
+
+        {all.length === 0 ? (
           <View style={styles.middle}>
             <Empty
               message="No rooms"
               hint="Add the resort's rooms and they appear here to be cleaned."
             />
           </View>
-        ) : toClean === 0 && underway === 0 ? (
+        ) : rows.length === 0 ? (
           <View style={styles.middle}>
-            {/* a zero with no sentence beside it reads as a screen that
-                failed to load, not as a morning's work finished */}
+            {/* and now the sentence and the list agree: both are empty.
+                It sat above ten rows once, saying the list would fill
+                again while the list was right there. */}
             <Empty
               message="Everything is ready"
-              hint="Every room has been cleaned. The list fills again as guests leave."
+              hint="Nothing is waiting. Tap All to see every room."
             />
           </View>
         ) : null}
 
         {rows.length > 0 ? (
-          <Card title="Every room">
+          <Card title={lens === "All" ? "Every room" : "Left to do"}>
             {rows.map((room, i) => (
               <RoomRow
                 key={room.id}
@@ -235,6 +259,7 @@ function RoomRow({
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
+  lenses: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   middle: { paddingVertical: space.lg },
   refused: { textAlign: "center" },
 });

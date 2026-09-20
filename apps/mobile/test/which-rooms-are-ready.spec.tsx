@@ -100,6 +100,9 @@ describe("which rooms are ready", () => {
     ]);
     const r = await open();
     await waitFor(() => expect(r.getByText("Urgent")).toBeTruthy());
+    // the whole order, across all three states, is on the All list
+    fireEvent.press(r.getByText("All"));
+    await waitFor(() => expect(r.getByText("Done")).toBeTruthy());
     const names = r.getAllByLabelText(/, (Needs cleaning|Being cleaned|Ready)/).map((n) =>
       String(n.props.accessibilityLabel).split(",")[0],
     );
@@ -116,7 +119,7 @@ describe("which rooms are ready", () => {
 
   it("names who last moved it, where a person did", async () => {
     mockList.mockResolvedValue([
-      room({ housekeeping: "CLEAN", housekeepingBy: "Shefali", housekeepingAt: "2026-09-21T04:00:00.000Z" }),
+      room({ housekeeping: "CLEANING", housekeepingBy: "Shefali", housekeepingAt: "2026-09-21T04:00:00.000Z" }),
     ]);
     const r = await open();
     await waitFor(() => expect(r.getByText(/Shefali/)).toBeTruthy());
@@ -190,5 +193,63 @@ describe("the states it owes", () => {
     mockList.mockResolvedValue([room({ housekeeping: "CLEAN" })]);
     const r = await open();
     await waitFor(() => expect(r.getByText(/Everything is ready/i)).toBeTruthy());
+  });
+});
+
+/**
+ * The screen opens on what is left to do, and that is not a preference.
+ *
+ * The first version listed every room with the destination button beside
+ * it, so a resort with everything clean showed ten rows each shouting
+ * "Needs cleaning" — a screen whose job is "what is left" reading, at a
+ * glance, as the exact opposite. Worse, "Everything is ready" sat above
+ * a list of ten rooms, which is a sentence contradicted by the thing
+ * under it.
+ *
+ * Found by looking at the screenshot. The sweep before it said ok.
+ */
+describe("what the list opens on", () => {
+  it("shows only what is left to do", async () => {
+    mockList.mockResolvedValue([
+      room({ id: 1, name: "Dirty one", housekeeping: "DIRTY" }),
+      room({ id: 2, name: "Finished one", housekeeping: "CLEAN" }),
+    ]);
+    const r = await open();
+    await waitFor(() => expect(r.getByText("Dirty one")).toBeTruthy());
+    expect(r.queryByText("Finished one")).toBeNull();
+  });
+
+  it("shows every room when asked", async () => {
+    mockList.mockResolvedValue([
+      room({ id: 1, name: "Dirty one", housekeeping: "DIRTY" }),
+      room({ id: 2, name: "Finished one", housekeeping: "CLEAN" }),
+    ]);
+    const r = await open();
+    await waitFor(() => expect(r.getByText("Dirty one")).toBeTruthy());
+    fireEvent.press(r.getByText("All"));
+    await waitFor(() => expect(r.getByText("Finished one")).toBeTruthy());
+  });
+
+  /**
+   * With nothing left, the sentence and the list agree: both are empty.
+   */
+  it("says everything is ready and means it, with no list under it", async () => {
+    mockList.mockResolvedValue([room({ id: 2, name: "Finished one", housekeeping: "CLEAN" })]);
+    const r = await open();
+    await waitFor(() => expect(r.getByText(/Everything is ready/i)).toBeTruthy());
+    expect(r.queryByText("Finished one")).toBeNull();
+  });
+
+  /**
+   * A finished room keeps the way back — people tap the wrong row — but
+   * it does not shout. It is on the All list and it is a quiet button.
+   */
+  it("keeps the way back on a finished room, out of the way", async () => {
+    mockList.mockResolvedValue([room({ id: 2, name: "Finished one", housekeeping: "CLEAN" })]);
+    const r = await open();
+    await waitFor(() => expect(r.getByText(/Everything is ready/i)).toBeTruthy());
+    fireEvent.press(r.getByText("All"));
+    await waitFor(() => expect(r.getByText("Finished one")).toBeTruthy());
+    expect(r.getByText("Needs cleaning")).toBeTruthy();
   });
 });
