@@ -20,6 +20,9 @@ const mockUpdate = jest.fn();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 let mockCan = (_key: string) => true;
+/** Whether the session has finished restoring from the device. */
+let mockLoading = false;
+let mockResort: { id: number; name: string; timezone: string } | null = null;
 
 jest.mock("expo-router", () => ({
   router: { push: (p: string) => mockPush(p), replace: jest.fn(), back: () => mockBack() },
@@ -30,7 +33,8 @@ jest.mock("expo-router", () => ({
 
 jest.mock("../src/api/session", () => ({
   useAuth: () => ({
-    activeResort: { id: 3, name: "Demo Bay Resort", timezone: "Asia/Dhaka" },
+    activeResort: mockResort,
+    loading: mockLoading,
     can: (key: string) => mockCan(key),
   }),
   client: {
@@ -89,6 +93,8 @@ const TEN = [
 
 beforeEach(() => {
   mockCan = () => true;
+  mockLoading = false;
+  mockResort = { id: 3, name: "Demo Bay Resort", timezone: "Asia/Dhaka" };
   mockList.mockReset().mockResolvedValue(TEN);
   mockTypes.mockReset().mockResolvedValue([type()]);
   mockUpdate.mockReset().mockResolvedValue(room());
@@ -139,6 +145,30 @@ describe("every room a resort has", () => {
     await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
     await fireEvent.press(r.getByLabelText(/^1 Camellia,/));
     expect(mockPush).toHaveBeenCalledWith("/rooms/11");
+  });
+
+  /**
+   * The state between signing in and knowing where you work.
+   *
+   * A screen reached before the session has restored has no resort
+   * either, and nineteen of them said "No resort selected — choose one
+   * from the More tab" while it was still loading. Found on a device,
+   * where restoring takes seconds; in a browser it is under a
+   * millisecond and never showed.
+   */
+  it("waits rather than blaming the person, while the session restores", async () => {
+    mockLoading = true;
+    mockResort = null;
+    const r = await open(RoomsScreen);
+    await waitFor(() => expect(r.getByText("Loading the rooms…")).toBeTruthy());
+    expect(r.queryByText("No resort selected")).toBeNull();
+  });
+
+  it("asks for a resort once there is nothing left to wait for", async () => {
+    mockLoading = false;
+    mockResort = null;
+    const r = await open(RoomsScreen);
+    await waitFor(() => expect(r.getByText("No resort selected")).toBeTruthy());
   });
 
   it("says so when a resort has no rooms", async () => {

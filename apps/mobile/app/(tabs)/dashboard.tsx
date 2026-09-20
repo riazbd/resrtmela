@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { formatMoney, type TodayRow } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { useMoneyFormat } from "../../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Card, Row, Stat } from "../../src/design/surface";
@@ -40,23 +41,18 @@ export default function DashboardScreen() {
   });
 
   /**
-   * Not a spinner. A tab can be opened before the session has settled on a
-   * resort — a fresh install on a slow connection — and a person waiting on a
-   * spinner that will never stop has no way to know that is what is
-   * happening. `consoleGate` exists because this was once a boolean.
+   * Phase 0 wrote this as "not a spinner", and the reasoning was sound as
+   * far as it went: a tab can be opened before the session has settled on
+   * a resort, and somebody watching a spinner that will never stop has no
+   * way to know that is what is happening.
+   *
+   * The answer was the wrong half of the choice. `WhichResort` spins only
+   * while `loading` is true — a flag that does turn false — and says the
+   * sentence once there is nothing left to wait for. Found on a device,
+   * where restoring takes seconds and every screen was telling people to
+   * go and fix something that was not broken.
    */
-  if (resortId === undefined) {
-    return (
-      <View style={styles.middle}>
-        <Text step="body" weight="medium" tone="title">
-          No resort selected
-        </Text>
-        <Text step="small" tone="muted" style={styles.centred}>
-          Choose a resort from the More tab, or ask the owner to add you to one.
-        </Text>
-      </View>
-    );
-  }
+  if (resortId === undefined) return <WhichResort what="today" />;
 
   if (day.error && !day.data) return <Problem error={day.error} onRetry={() => void day.refetch()} />;
   if (!day.data) return <Loading what="today" />;

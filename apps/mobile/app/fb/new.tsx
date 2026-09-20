@@ -27,6 +27,7 @@ import {
   type ResortOption,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Chip } from "../../src/design/chip";
 import { Counter } from "../../src/design/counter";
@@ -122,7 +123,7 @@ export default function NewTicketScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="who is in house" />
       </>
     );
   }

@@ -19,6 +19,7 @@ import { Stack } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { dayLabel, formatMoney, stayRange, type RatePlan, type RoomType } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Chip } from "../../src/design/chip";
 import { DateNav } from "../../src/design/date-nav";
@@ -92,7 +93,7 @@ export default function RatePlansScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the rate plans" />
       </>
     );
   }

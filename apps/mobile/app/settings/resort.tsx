@@ -20,9 +20,10 @@ import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
 import { currencySymbol, type ResortSettings } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Field, Input } from "../../src/design/input";
-import { Empty, Loading, Problem } from "../../src/design/states";
+import { Loading, Problem } from "../../src/design/states";
 import { Card, Row } from "../../src/design/surface";
 import { Text } from "../../src/design/text";
 import { Toggle } from "../../src/design/toggle";
@@ -45,7 +46,7 @@ export default function ResortSettingsScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the resort's settings" />
       </>
     );
   }

@@ -17,6 +17,7 @@ import { Stack, router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { DUES_LENSES, duesThrough, formatMoney, type DuesLens, type DuesReport } from "@rh/shared";
 import { client, useAuth } from "../src/api/session";
+import { WhichResort } from "../src/screens/which-resort";
 import { useMoneyFormat } from "../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../src/design/states";
 import { Card, Row, Stat } from "../src/design/surface";
@@ -45,10 +46,7 @@ export default function DuesScreen() {
     return (
       <>
         {header}
-        <Empty
-          message="No resort selected"
-          hint="Choose a resort from the More tab, or ask the owner to add you to one."
-        />
+        <WhichResort what="what is owed" />
       </>
     );
   }

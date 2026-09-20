@@ -26,6 +26,7 @@ import {
   type ActivitySlot,
 } from "@rh/shared";
 import { client, useAuth } from "../src/api/session";
+import { WhichResort } from "../src/screens/which-resort";
 import { useMoneyFormat } from "../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../src/design/states";
 import { Card, Row } from "../src/design/surface";
@@ -68,7 +69,7 @@ export default function ActivitiesScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the activities" />
       </>
     );
   }

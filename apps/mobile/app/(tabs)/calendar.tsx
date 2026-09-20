@@ -41,6 +41,7 @@ import {
   type Room,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { DateNav } from "../../src/design/date-nav";
 import { Lenses } from "../../src/design/lenses";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
@@ -160,10 +161,7 @@ export default function CalendarScreen() {
     return (
       <>
         {header}
-        <Empty
-          message="No resort selected"
-          hint="Choose a resort from the More tab, or ask the owner to add you to one."
-        />
+        <WhichResort what="the calendar" />
       </>
     );
   }

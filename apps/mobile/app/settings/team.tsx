@@ -22,6 +22,7 @@ import { Stack } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import type { PermRole, ResortUser } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Empty, Loading, Problem } from "../../src/design/states";
 import { Card, Row } from "../../src/design/surface";
 import { Text } from "../../src/design/text";
@@ -49,7 +50,7 @@ export default function TeamScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the team" />
       </>
     );
   }

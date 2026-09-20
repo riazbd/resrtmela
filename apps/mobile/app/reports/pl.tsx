@@ -16,8 +16,9 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { addDaysIso, formatMoney, stayRange, todayIn, type PLReport } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem } from "../../src/design/states";
+import { Loading, Problem } from "../../src/design/states";
 import { Card, Row, Stat } from "../../src/design/surface";
 import { Text } from "../../src/design/text";
 import { color, space } from "../../src/design/tokens";
@@ -48,7 +49,7 @@ export default function ProfitAndLossScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the profit and loss" />
       </>
     );
   }

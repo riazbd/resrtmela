@@ -30,6 +30,7 @@ import {
   type FbInHouse,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { DateNav } from "../../src/design/date-nav";
 import { useMoneyFormat } from "../../src/design/money";
@@ -60,7 +61,7 @@ export default function RestaurantScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the day's bills" />
       </>
     );
   }

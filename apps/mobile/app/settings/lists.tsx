@@ -24,6 +24,7 @@ import { Stack } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
 import type { ResortOption } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Chip } from "../../src/design/chip";
 import { Field, Input } from "../../src/design/input";
@@ -48,7 +49,7 @@ export default function ListsScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the lists" />
       </>
     );
   }

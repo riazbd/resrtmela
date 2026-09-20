@@ -25,6 +25,7 @@ import {
   type BookingRow,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Input } from "../../src/design/input";
 import { useMoneyFormat } from "../../src/design/money";
@@ -89,10 +90,7 @@ export default function BookingsScreen() {
     return (
       <>
         {header}
-        <Empty
-          message="No resort selected"
-          hint="Choose a resort from the More tab, or ask the owner to add you to one."
-        />
+        <WhichResort what="the bookings" />
       </>
     );
   }

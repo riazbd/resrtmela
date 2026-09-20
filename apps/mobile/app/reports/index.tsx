@@ -26,9 +26,10 @@ import {
   type ResortMetrics,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Lenses } from "../../src/design/lenses";
 import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../../src/design/states";
+import { Loading, Problem, Stale } from "../../src/design/states";
 import { Card, Row, Stat } from "../../src/design/surface";
 import { Text } from "../../src/design/text";
 import { space } from "../../src/design/tokens";
@@ -80,7 +81,7 @@ export default function ReportsScreen() {
     return (
       <>
         {header}
-        <Empty message="No resort selected" hint="Choose a resort from the More tab." />
+        <WhichResort what="the figures" />
       </>
     );
   }
