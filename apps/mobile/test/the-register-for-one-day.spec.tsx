@@ -21,9 +21,12 @@ let mockResort: { id: number; name: string; timezone?: string } | null = {
   timezone: "Asia/Dhaka",
 };
 
+let mockParams: Record<string, string> = {};
+
 jest.mock("expo-router", () => ({
   router: { push: (p: string) => mockPush(p), replace: jest.fn() },
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
+  useLocalSearchParams: () => mockParams,
   Stack: { Screen: () => null },
 }));
 
@@ -79,6 +82,7 @@ const taken = (over: Partial<DaySheet["rooms"][number]["cell"]> = {}) =>
   });
 
 beforeEach(() => {
+  mockParams = {};
   mockResort = { id: 3, name: "Demo Bay Resort", timezone: "Asia/Dhaka" };
   mockDaySheet.mockReset().mockResolvedValue(sheet());
   mockPush.mockReset();
@@ -155,6 +159,36 @@ describe("the day it opens on, before the session has settled", () => {
     await waitFor(() => expect(mockDaySheet).toHaveBeenCalled());
     // 23:56 UTC on the 19th is already the 20th in Dhaka
     expect(mockDaySheet.mock.calls[0]![1]).toBe("2026-09-20");
+  });
+});
+
+/**
+ * The month view taps a night and lands here. Without this the register
+ * opened on today whatever was tapped, which is the one thing that screen
+ * exists to avoid.
+ */
+describe("a day somebody was sent to", () => {
+  it("opens on the date in the address", async () => {
+    mockParams = { date: "2026-10-04" };
+    await render(<Harness><DaySheetScreen /></Harness>);
+    await waitFor(() => expect(mockDaySheet).toHaveBeenCalledWith(3, "2026-10-04"));
+  });
+
+  it("ignores something that is not a date rather than asking for it", async () => {
+    mockParams = { date: "yesterday" };
+    await render(<Harness><DaySheetScreen /></Harness>);
+    await waitFor(() => expect(mockDaySheet).toHaveBeenCalled());
+    expect(mockDaySheet.mock.calls[0]![1]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("still lets the arrows move from there", async () => {
+    mockParams = { date: "2026-10-04" };
+    const r = await render(<Harness><DaySheetScreen /></Harness>);
+    // the drawn screen, not the request: the call having gone out is not the
+    // arrows being on screen, and waiting on the wrong one is a flake
+    await waitFor(() => expect(r.getByRole("button", { name: "Next day" })).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Next day" }));
+    await waitFor(() => expect(mockDaySheet).toHaveBeenCalledWith(3, "2026-10-05"));
   });
 });
 

@@ -101,3 +101,43 @@ export function occupancyOf(
     taken: sellableRoomIds.reduce((n, id) => n + (held.has(`${id}|${day}`) ? 1 : 0), 0),
   }));
 }
+
+/**
+ * How nearly gone a night is, and what to say about it.
+ *
+ * The room grid answers "who is in 103 on the 14th". This answers the
+ * question a desk is asked far more often — "can I take a booking for the
+ * 22nd" — and it carries three decisions worth stating once:
+ *
+ *   - **Nearly full is its own state.** Red and green alone say "some rooms"
+ *     for both one room and nine, and one room left is exactly when a desk
+ *     starts phoning people back.
+ *   - **The thresholds are absolute, not proportional.** Nine rooms with one
+ *     left and ninety with one left are the same position: the next caller
+ *     is turned away either way.
+ *   - **It says how many.** "4 left" is what somebody answering the phone
+ *     has to say out loud; "some availability" is not.
+ */
+export const TIGHT_AT = 2;
+
+export type NightLoadState = "free" | "tight" | "full" | "none";
+
+export interface NightLoad {
+  state: NightLoadState;
+  /** Rooms still sellable that night. Never below zero, however overbooked. */
+  left: number;
+  /** What to draw under the date. */
+  label: string;
+}
+
+export function nightLoad(taken: number, sellable: number): NightLoad {
+  // no rooms at all, or every one out of service: "Full" would be a lie and
+  // "10 left" impossible, so there is nothing to say
+  if (sellable <= 0) return { state: "none", left: 0, label: "—" };
+  // overbooking happens — a room goes out of service after the bookings were
+  // taken — and "-1 left" on a calendar helps nobody
+  const left = Math.max(0, sellable - taken);
+  if (left === 0) return { state: "full", left, label: "Full" };
+  if (left <= TIGHT_AT) return { state: "tight", left, label: `${left} left` };
+  return { state: "free", left, label: `${left} left` };
+}

@@ -28,20 +28,51 @@ import {
   isHeldState,
   isWeekend,
   mergeRuns,
+  monthGrid,
+  monthLength,
+  monthOf,
+  monthStart,
+  nightLoad,
   nightsHeld,
   occupancyOf,
   todayIn,
   type CalendarBooking,
+  type NightLoadState,
   type Room,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
 import { DateNav } from "../../src/design/date-nav";
+import { Lenses } from "../../src/design/lenses";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Text } from "../../src/design/text";
 import { TOUCH_TARGET, color, radius, space } from "../../src/design/tokens";
 
 /** A month at a time, which is what a resort's calendar is mostly asked. */
 const SPAN = 30;
+
+/**
+ * Two questions, one screen — as the console has it.
+ *
+ * *Rooms* answers "who is in 103 on the 14th". *Month* answers "can I take a
+ * booking for the 22nd", which is asked far more often and which the room
+ * grid makes you count columns for.
+ */
+const VIEWS = ["Rooms", "Month"] as const;
+// `CalendarView`, not `View`: react-native already owns that name here
+type CalendarView = (typeof VIEWS)[number];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/** A night's state, in this app's tokens. The rule itself is `nightLoad`. */
+const LOAD_LOOK: Record<
+  NightLoadState,
+  { bg: string; line: string; tone: "ok" | "warn" | "danger" | "muted" }
+> = {
+  free: { bg: color.ok.bg, line: color.ok.line, tone: "ok" },
+  tight: { bg: color.warn.bg, line: color.warn.line, tone: "warn" },
+  full: { bg: color.danger.bg, line: color.danger.line, tone: "danger" },
+  none: { bg: color.surface, line: color.line, tone: "muted" },
+};
 
 /** Wide enough for a date above it and a thumb on it. */
 const DAY_WIDTH = 44;
@@ -70,12 +101,26 @@ export default function CalendarScreen() {
    * shipped that bug for an afternoon.
    */
   const [chosen, setStart] = useState<string | null>(null);
-  const start = chosen ?? todayIn(activeResort?.timezone);
-  const end = addDaysIso(start, SPAN);
+  const [view, setView] = useState<CalendarView>("Rooms");
+  const today = todayIn(activeResort?.timezone);
+  const anchor = chosen ?? today;
+
+  /**
+   * The window follows the lens.
+   *
+   * The room grid reads thirty days from wherever you are. The month grid
+   * draws a calendar month, and asking for thirty days from the 20th would
+   * leave the first nineteen squares with no data — which the grid would
+   * then cheerfully draw as "3 left" on nights that are sold out.
+   */
+  const month = monthOf(anchor);
+  const start = view === "Month" ? (monthStart(month) ?? anchor) : anchor;
+  const span = view === "Month" ? monthLength(month) : SPAN;
+  const end = addDaysIso(start, span);
 
   const days = useMemo(
-    () => Array.from({ length: SPAN }, (_, i) => addDaysIso(start, i)),
-    [start],
+    () => Array.from({ length: span }, (_, i) => addDaysIso(start, i)),
+    [start, span],
   );
 
   // the room list is the one every other screen reads, under one cache key;
@@ -159,19 +204,24 @@ export default function CalendarScreen() {
       {header}
       <Stale age={calQ.stale} />
       <View style={styles.nav}>
-        <DateNav
-          value={start}
-          onChange={setStart}
-          timezone={activeResort?.timezone}
-          // the arrows move a day; the month buttons below move a month
-        />
+        {/*
+          The day arrows belong to the room grid, which can start anywhere.
+          In the month lens the window is a calendar month, so a control that
+          says "Tuesday, 1 September — Back to today" is describing the edge
+          of the window rather than where the reader is. The month range and
+          its own arrows say that better, and say it once.
+        */}
+        {view === "Rooms" ? (
+          <DateNav value={start} onChange={setStart} timezone={activeResort?.timezone} />
+        ) : null}
         <View style={styles.months}>
-          <MonthStep label="Previous month" onPress={() => setStart(addDaysIso(start, -SPAN))} />
+          <MonthStep label="Previous month" onPress={() => setStart(addDaysIso(start, -span))} />
           <Text step="caption" tone="muted">
-            {dayLabel(start)} — {dayLabel(addDaysIso(start, SPAN - 1))}
+            {dayLabel(start)} — {dayLabel(addDaysIso(start, span - 1))}
           </Text>
-          <MonthStep label="Next month" onPress={() => setStart(addDaysIso(start, SPAN))} />
+          <MonthStep label="Next month" onPress={() => setStart(addDaysIso(start, span))} />
         </View>
+        <Lenses options={VIEWS} value={view} onChange={setView} />
       </View>
 
       {/*
@@ -185,6 +235,14 @@ export default function CalendarScreen() {
           <RefreshControl refreshing={calQ.isRefetching} onRefresh={() => void calQ.refetch()} />
         }
       >
+        {view === "Month" ? (
+          <MonthOfNights
+            month={month}
+            today={today}
+            sellable={sellable.length}
+            occupancy={occupancy}
+          />
+        ) : (
         <View style={styles.sheet}>
           <View>
             <View style={[styles.name, styles.head]} />
@@ -202,8 +260,88 @@ export default function CalendarScreen() {
             </View>
           </ScrollView>
         </View>
+        )}
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * The month, as squares: which nights are gone, and how nearly.
+ *
+ * The past is dimmed rather than dropped. A month missing its first
+ * fortnight is hard to read as a month, and last week's occupancy is exactly
+ * what somebody reviewing the month came to see.
+ */
+function MonthOfNights({
+  month,
+  today,
+  sellable,
+  occupancy,
+}: {
+  month: string;
+  today: string;
+  sellable: number;
+  occupancy: { day: string; taken: number }[];
+}) {
+  const takenOn = new Map(occupancy.map((o) => [o.day, o.taken]));
+  const weeks = monthGrid(month);
+
+  return (
+    <View style={styles.month}>
+      <View style={styles.week}>
+        {WEEKDAYS.map((name, i) => (
+          <Text
+            key={name}
+            step="caption"
+            weight="medium"
+            // the last two columns are the weekend here: Bangladesh's week
+            // runs Sunday to Thursday
+            tone={i >= 5 ? "warn" : "muted"}
+            style={styles.weekday}
+          >
+            {name}
+          </Text>
+        ))}
+      </View>
+
+      {weeks.map((week, w) => (
+        <View key={w} style={styles.week}>
+          {week.map((day, d) => {
+            if (!day) return <View key={`pad-${w}-${d}`} style={styles.square} />;
+            const load = nightLoad(takenOn.get(day) ?? 0, sellable);
+            const look = LOAD_LOOK[load.state];
+            const past = day < today;
+            const spoken = dayLabel(day);
+            return (
+              <Pressable
+                key={day}
+                accessibilityRole="button"
+                accessibilityLabel={`${spoken}, ${
+                  load.state === "full" ? "full" : `${load.left} left of ${sellable}`
+                }`}
+                onPress={() => router.push(`/daysheet?date=${day}` as never)}
+                style={({ pressed }) => [
+                  styles.square,
+                  styles.night,
+                  { backgroundColor: look.bg, borderColor: look.line },
+                  day === today ? styles.todayRing : null,
+                  past ? styles.past : null,
+                  pressed ? styles.pressed : null,
+                ]}
+              >
+                <Text step="strong" weight="bold" tone={look.tone} tabular>
+                  {Number(day.slice(8, 10))}
+                </Text>
+                <Text step="caption" tone={look.tone} numberOfLines={1}>
+                  {load.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -347,6 +485,20 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
   },
   sheet: { flexDirection: "row", paddingBottom: space.xl },
+  month: { padding: space.lg, gap: space.sm },
+  week: { flexDirection: "row", gap: space.xs },
+  weekday: { flex: 1, textAlign: "center" },
+  square: { flex: 1, aspectRatio: 0.82 },
+  night: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  todayRing: { borderColor: color.brand[600], borderWidth: 2 },
+  /** Dimmed, not dropped. */
+  past: { opacity: 0.45 },
   row: { flexDirection: "row", alignItems: "stretch" },
   name: {
     width: NAME_WIDTH,

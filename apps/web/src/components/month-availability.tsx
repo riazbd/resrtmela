@@ -19,6 +19,7 @@
  *    is exactly what somebody reviewing the month came to see.
  */
 import { isWeekend, monthGrid, monthOf } from "@/lib/calendar-month";
+import { nightLoad, type NightLoadState } from "@rh/shared";
 
 export interface DayLoad {
   /** `YYYY-MM-DD` */
@@ -30,16 +31,20 @@ export interface DayLoad {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
- * How a night reads. The thresholds are absolute, not proportional: a resort
- * with nine rooms and one left is in the same position as one with ninety and
- * one left — the next caller is turned away either way.
+ * How a night reads.
+ *
+ * *Which* state a night is in moved to `@rh/shared`'s `nightLoad` on
+ * 2026-09-20 — the phone draws the same month, and two screens that
+ * disagree about where amber starts give a caller two different answers.
+ * What stays here is the Tailwind for each state, which React Native
+ * cannot use.
  */
-function look(left: number, sellable: number) {
-  if (sellable === 0) return { box: "border-slate-200 bg-white", num: "text-slate-300", note: "text-slate-300", label: "—" };
-  if (left <= 0) return { box: "border-red-200 bg-red-50", num: "text-red-700", note: "text-red-600", label: "Full" };
-  if (left <= 2) return { box: "border-amber-200 bg-amber-50", num: "text-amber-800", note: "text-amber-700", label: `${left} left` };
-  return { box: "border-emerald-200 bg-emerald-50", num: "text-emerald-800", note: "text-emerald-700", label: `${left} left` };
-}
+const LOOK: Record<NightLoadState, { box: string; num: string; note: string }> = {
+  none: { box: "border-slate-200 bg-white", num: "text-slate-300", note: "text-slate-300" },
+  full: { box: "border-red-200 bg-red-50", num: "text-red-700", note: "text-red-600" },
+  tight: { box: "border-amber-200 bg-amber-50", num: "text-amber-800", note: "text-amber-700" },
+  free: { box: "border-emerald-200 bg-emerald-50", num: "text-emerald-800", note: "text-emerald-700" },
+};
 
 export function MonthAvailability({
   month,
@@ -80,10 +85,10 @@ export function MonthAvailability({
         {weeks.flat().map((day, i) => {
           if (!day) return <div key={`pad-${i}`} />;
           const held = taken.get(day) ?? 0;
-          const left = Math.max(0, sellable - held);
+          const load = nightLoad(held, sellable);
           const past = day < today;
           const isToday = day === today;
-          const l = look(left, sellable);
+          const l = LOOK[load.state];
           return (
             <button
               key={day}
@@ -96,7 +101,7 @@ export function MonthAvailability({
               } ${isToday ? "ring-2 ring-brand-500 ring-offset-1" : ""}`}
             >
               <div className={`text-lg font-bold leading-none ${l.num}`}>{Number(day.slice(8, 10))}</div>
-              <div className={`mt-1 text-[11px] font-medium leading-none ${l.note}`}>{l.label}</div>
+              <div className={`mt-1 text-[11px] font-medium leading-none ${l.note}`}>{load.label}</div>
               {/* the word is wider than a 47px cell on a phone, where it spilled into
                   Saturday; the amber column header already says which days these are */}
               {isWeekend(day) && (

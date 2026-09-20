@@ -13,7 +13,7 @@
  */
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Stack, router } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { formatMoney, todayIn, type DaySheetRoom } from "@rh/shared";
 import { client, useAuth } from "../src/api/session";
@@ -56,7 +56,13 @@ export default function DaySheetScreen() {
    * today is recomputed from whatever the session now knows.
    */
   const [chosen, setDate] = useState<string | null>(null);
-  const date = chosen ?? todayIn(activeResort?.timezone);
+  /**
+   * A day somebody was sent to — the month view taps a night and lands here.
+   * It is the starting point, not a lock: the arrows still move from it.
+   */
+  const { date: asked } = useLocalSearchParams<{ date?: string }>();
+  const sentTo = typeof asked === "string" && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : null;
+  const date = chosen ?? sentTo ?? todayIn(activeResort?.timezone);
 
   const sheet = useApi(
     keys.daySheet(resortId, date),
