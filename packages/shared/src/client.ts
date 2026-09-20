@@ -15,6 +15,14 @@
  * where a token lives is not this file's concern.
  */
 import type {
+  AgencyApiKey,
+  AgencyRole,
+  AgencySite,
+  AgencyStaff,
+  Removal,
+  TourCategorySaved,
+  AgencyWallet,
+  AgencyActivity,
   AgencyEmployee,
   AgencyExpensePage,
   AgencyGuestRow,
@@ -675,15 +683,38 @@ export function createApiClient(http: Fetcher) {
     // ── the agency's own side ──
     agent: {
       me: () => http<{ agencyId: number; isOwner: boolean; permissions: string[] }>("/agent/me"),
-      wallet: () => http<unknown>("/agent/wallet"),
-      activity: (q: { q?: string; take?: number } = {}) => http<unknown[]>(`/agent/activity${qs(q)}`),
+      wallet: () => http<AgencyWallet>("/agent/wallet"),
+
+      /**
+       * Who works at the agency, and on what role.
+       *
+       * `staff` is served by the *platform* controller and `roles` by the
+       * agent one — two controllers, one screen. Written down here so a
+       * caller does not have to know that, and so the next person does
+       * not hunt for `/agent/staff` in agent.controller.ts, where it
+       * is not.
+       */
+      staff: () => http<AgencyStaff[]>("/agent/staff"),
+      roles: () => http<AgencyRole[]>("/agent/roles"),
+
+      /** The agency's own website, and the keys it signs requests with. */
+      site: () => http<AgencySite>("/agent/site"),
+      apiKeys: {
+        list: () => http<AgencyApiKey[]>("/agent/api-keys"),
+        // the secret is returned once and never again
+        create: (name: string, scopes?: string[]) =>
+          http<{ secret: string }>("/agent/api-keys", { method: "POST", body: { name, scopes } }),
+        revoke: (id: number) => http<{ ok: true }>(`/agent/api-keys/${id}`, { method: "DELETE" }),
+      },
+      activity: (q: { q?: string; take?: number } = {}) =>
+        http<AgencyActivity[]>(`/agent/activity${qs(q)}`),
 
       tours: {
         categories: () => http<TourCategoryNode[]>("/agent/tours/categories"),
         createCategory: (body: { name: string; parentId?: number | null }) =>
-          http<unknown>("/agent/tours/categories", { method: "POST", body }),
+          http<TourCategorySaved>("/agent/tours/categories", { method: "POST", body }),
         updateCategory: (id: number, body: unknown) =>
-          http<unknown>(`/agent/tours/categories/${id}`, { method: "PATCH", body }),
+          http<TourCategorySaved>(`/agent/tours/categories/${id}`, { method: "PATCH", body }),
         deleteCategory: (id: number) =>
           http<{ deleted: boolean }>(`/agent/tours/categories/${id}`, { method: "DELETE" }),
         packages: (q: { q?: string; active?: boolean } = {}) =>
@@ -703,7 +734,9 @@ export function createApiClient(http: Fetcher) {
           http<ExpenseHeadRow>("/agent/expense-heads", { method: "POST", body: { name } }),
         updateHead: (id: number, body: { name?: string; active?: boolean }) =>
           http<ExpenseHeadRow>(`/agent/expense-heads/${id}`, { method: "PATCH", body }),
-        deleteHead: (id: number) => http<unknown>(`/agent/expense-heads/${id}`, { method: "DELETE" }),
+        // deleted when nothing has been booked against it, deactivated when
+        // something has — an expense still has to be able to name its head
+        deleteHead: (id: number) => http<Removal>(`/agent/expense-heads/${id}`, { method: "DELETE" }),
         expenses: (q: { from?: string; to?: string; headId?: number; skip?: number; take?: number } = {}) =>
           http<AgencyExpensePage>(`/agent/expenses${qs(q)}`),
         addExpense: (body: unknown) => http<{ id: number }>("/agent/expenses", { method: "POST", body }),
@@ -715,7 +748,8 @@ export function createApiClient(http: Fetcher) {
         addEmployee: (body: unknown) => http<{ id: number }>("/agent/employees", { method: "POST", body }),
         editEmployee: (id: number, body: unknown) =>
           http<{ id: number }>(`/agent/employees/${id}`, { method: "PATCH", body }),
-        removeEmployee: (id: number) => http<unknown>(`/agent/employees/${id}`, { method: "DELETE" }),
+        // same two answers as a head: paid wages keep the person on the books
+        removeEmployee: (id: number) => http<Removal>(`/agent/employees/${id}`, { method: "DELETE" }),
         sheet: (month: string) => http<PayrollSheet>(`/agent/payroll${qs({ month })}`),
         pay: (employeeId: number, body: unknown) =>
           http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),

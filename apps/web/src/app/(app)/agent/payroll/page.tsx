@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, money } from "@/lib/api";
+import { api, client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -92,7 +92,7 @@ function PeopleTab() {
   const { push } = useToast();
   const [adding, setAdding] = useState(false);
   const { data, isLoading, error } = useApi<AgencyEmployee[]>(keys.agentEmployees(), () =>
-    api<AgencyEmployee[]>("/agent/employees"),
+    client.agent.payroll.employees(),
   );
 
   if (error) return <ErrorState error={error as Error} />;
@@ -102,9 +102,9 @@ function PeopleTab() {
   async function remove(emp: AgencyEmployee) {
     if (!window.confirm(`Remove ${emp.name} from the payroll?`)) return;
     try {
-      const result = await api<{ deactivated?: boolean }>(`/agent/employees/${emp.id}`, { method: "DELETE" });
+      const result = await client.agent.payroll.removeEmployee(emp.id);
       push(
-        result.deactivated
+        "deactivated" in result
           ? `${emp.name} is off the payroll — what they were already paid stays on the books`
           : `${emp.name} removed`,
       );

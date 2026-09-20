@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, money, dmy } from "@/lib/api";
+import { api, client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
 import { Table } from "@/components/patterns";
@@ -55,7 +55,7 @@ export default function AgentWalletPage() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    api<WalletView>("/agent/wallet").then(setWallet).catch((e) => setError(e as Error));
+    client.agent.wallet().then(setWallet).catch((e) => setError(e as Error));
   }, []);
 
   if (role !== "AGENT") return <Empty msg="Agents only" />;

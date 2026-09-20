@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { api, money } from "@/lib/api";
+import { api, client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -54,7 +54,7 @@ function TreeTab() {
   const qc = useQueryClient();
   const { push } = useToast();
   const { data, isLoading, error, stale } = useApi<TourCategoryNode[]>(keys.agentTours(), () =>
-    api<TourCategoryNode[]>("/agent/tours/categories"),
+    client.agent.tours.categories(),
   );
   const [adding, setAdding] = useState<{ parentId: number | null; parentName: string } | null>(null);
 
@@ -215,7 +215,7 @@ function PackagesTab() {
   const { push } = useToast();
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const { data, isLoading, error, stale } = useApi<TourPackageRow[]>(keys.agentPackages(), () =>
-    api<TourPackageRow[]>("/agent/tours/packages"),
+    client.agent.tours.packages(),
   );
 
   if (error) return <ErrorState error={error as Error} />;
@@ -335,7 +335,7 @@ function PackageEditor({
   const { submit } = useOutbox();
   const isNew = id === "new";
   const { data: tree } = useApi<TourCategoryNode[]>(keys.agentTours(), () =>
-    api<TourCategoryNode[]>("/agent/tours/categories"),
+    client.agent.tours.categories(),
   );
   const { data: existing } = useApi<TourPackageDetail>(
     keys.agentPackage(isNew ? 0 : (id as number)),

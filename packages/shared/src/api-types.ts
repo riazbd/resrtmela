@@ -1152,3 +1152,166 @@ export interface TaxLineRow {
   ratePct: number;
   amount: number;
 }
+
+/**
+ * An agency's wallet, and how its balance got there.
+ *
+ * There is no payment gateway behind this. An agency hands over cash or
+ * sends bKash, and somebody at the platform credits the wallet — which
+ * is why `by` and `method` exist at all: the agency could see the
+ * balance move and not who moved it. Both are null on entries made
+ * before they were recorded, so a screen shows what it has and does not
+ * invent the rest.
+ *
+ * `id` is a string because the row is a `BigInt` and JSON has no such
+ * thing. `amount` is signed: positive is money in.
+ */
+export const WALLET_KINDS = [
+  "TOPUP",
+  "COMMISSION",
+  "BOOKING_HOLD",
+  "PAYOUT",
+  "REFUND",
+  "ADJUST",
+] as const;
+
+export type WalletKind = (typeof WALLET_KINDS)[number];
+
+export interface AgencyWalletTxn {
+  id: string;
+  kind: WalletKind;
+  /** signed — positive is money into the wallet */
+  amount: number;
+  balanceAfter: number;
+  note: string | null;
+  bookingId: number | null;
+  /** how the money came, for a top-up somebody took by hand */
+  method: string | null;
+  /** who at the platform moved it */
+  by: string | null;
+  createdAt: string;
+}
+
+export interface AgencyWallet {
+  balance: number;
+  active: boolean;
+  /** the last hundred, newest first */
+  txns: AgencyWalletTxn[];
+}
+
+/** One line of what an agency and its staff did. */
+export interface AgencyActivity {
+  id: string;
+  actor: { id: number; name: string } | null;
+  resort: { id: number; name: string } | null;
+  action: string;
+  entity: string;
+  entityId: number | null;
+  at: string;
+}
+
+/**
+ * A category as the server hands it back after a write.
+ *
+ * Not a `TourCategoryNode`: the list route nests them and this one
+ * cannot, because a row that was just created has no children and does
+ * know its parent. Typing the reply as the tree node would have put a
+ * `children` array on a screen that never receives one.
+ */
+export interface TourCategorySaved {
+  id: number;
+  name: string;
+  parentId: number | null;
+  active: boolean;
+}
+
+/**
+ * What the server did when asked to remove something.
+ *
+ * It deletes what nothing uses and deactivates what something does — an
+ * expense already booked against a head still has to name it. The reply
+ * says which happened, and a screen that reports "deleted" for the other
+ * one is telling the person their history is gone when it is not.
+ */
+export type Removal = { deleted: true } | { deactivated: true };
+
+/** Somebody the agency owner added to their own account. */
+export interface AgencyStaff {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  agentRoleId: number | null;
+  createdAt: string;
+}
+
+/** A role the agency wrote, and how many people hold it. */
+export interface AgencyRole {
+  id: number;
+  name: string;
+  permissions: string[];
+  staff: number;
+}
+
+/**
+ * A key the agency's own website signs its requests with.
+ *
+ * `id` is a string for the same reason a wallet line's is. The secret is
+ * shown once, at creation, and never again — which is why `prefix` is
+ * here: it is the only part of the key this route will ever hand back,
+ * and the only way to tell one row from another when revoking.
+ */
+export interface AgencyApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  active: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+/** One of the agency's resorts, as its own website lists them. */
+export interface AgencySiteResort {
+  id: number;
+  slug: string;
+  name: string;
+  location: string | null;
+}
+
+/** A photograph on the agency's site. */
+export interface AgencySitePhoto {
+  id: number;
+  url: string;
+  alt: string | null;
+  sortOrder: number;
+}
+
+/**
+ * The agency's own website, as its editor sees it.
+ *
+ * The phone shows whether it is published and at what address, and
+ * leaves the editing on the desk — an intro paragraph, a theme colour
+ * and a photo order are not one-handed work.
+ */
+export interface AgencySite {
+  slug: string;
+  name: string;
+  published: boolean;
+  publishedAt: string | null;
+  headline: string | null;
+  intro: string | null;
+  themeColor: string | null;
+  phone: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  address: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  hiddenResortIds: number[];
+  resorts: AgencySiteResort[];
+  photos: AgencySitePhoto[];
+  /** how much of the agency's upload quota its photographs take */
+  storage: { used: number; quota: number };
+}

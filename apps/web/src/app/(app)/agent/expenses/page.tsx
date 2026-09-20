@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, money, dmy } from "@/lib/api";
+import { api, client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -54,7 +54,7 @@ function EntriesTab() {
   const [adding, setAdding] = useState(false);
 
   const { data: heads } = useApi<ExpenseHeadRow[]>(keys.agentHeads(), () =>
-    api<ExpenseHeadRow[]>("/agent/expense-heads"),
+    client.agent.books.heads(),
   );
   const { data, isLoading, error, stale } = useApi<AgencyExpensePage>(keys.agentExpenses(range), () =>
     api<AgencyExpensePage>(`/agent/expenses?from=${range.from}&to=${range.to}`),
@@ -239,7 +239,7 @@ function HeadsTab() {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const { data, isLoading, error } = useApi<ExpenseHeadRow[]>(keys.agentHeads(), () =>
-    api<ExpenseHeadRow[]>("/agent/expense-heads"),
+    client.agent.books.heads(),
   );
 
   if (error) return <ErrorState error={error as Error} />;
@@ -249,7 +249,7 @@ function HeadsTab() {
   async function create() {
     setBusy(true);
     try {
-      await api("/agent/expense-heads", { method: "POST", body: { name } });
+      await client.agent.books.createHead(name);
       setName("");
       reload();
     } catch (ex) {
@@ -262,11 +262,9 @@ function HeadsTab() {
   async function retire(head: ExpenseHeadRow) {
     if (!window.confirm(`Remove "${head.name}"?`)) return;
     try {
-      const result = await api<{ deactivated?: boolean }>(`/agent/expense-heads/${head.id}`, {
-        method: "DELETE",
-      });
+      const result = await client.agent.books.deleteHead(head.id);
       push(
-        result.deactivated
+        "deactivated" in result
           ? `"${head.name}" is retired — past entries keep it, so old reports still add up`
           : `"${head.name}" deleted`,
       );

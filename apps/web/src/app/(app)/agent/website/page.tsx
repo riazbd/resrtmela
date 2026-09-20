@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Trash2, Upload as UploadIcon } from "lucide-react";
-import { api, upload } from "@/lib/api";
+import { api, client, upload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, useToast } from "@/components/ui";
 import { OwnDomains } from "@/components/own-domains";
+import type { AgencySite } from "@rh/shared";
 
 /**
  * An agency's own page (2026-09-17 design, §1).
@@ -17,25 +18,15 @@ import { OwnDomains } from "@/components/own-domains";
  * the business. What it can decide is which of its resorts to leave off.
  */
 
-interface Draft {
-  slug: string;
-  name: string;
-  published: boolean;
-  publishedAt: string | null;
-  headline: string | null;
-  intro: string | null;
-  themeColor: string | null;
-  phone: string | null;
-  email: string | null;
-  whatsapp: string | null;
-  address: string | null;
-  facebook: string | null;
-  instagram: string | null;
-  hiddenResortIds: number[];
-  resorts: { id: number; slug: string; name: string; location: string | null }[];
-  photos: { id: number; url: string; alt: string | null; sortOrder: number }[];
-  storage: { used: number; quota: number };
-}
+/**
+ * The draft is `AgencySite` now, from `@rh/shared`, written from what the
+ * editor service actually returns. The local copy here was missing
+ * nothing — but typing the call revealed that the *shared* one was, and
+ * a type written from a screen rather than from the service is how a
+ * field goes missing on the client that gets written second.
+ */
+type Draft = AgencySite;
+
 
 const FIELDS = ["headline", "intro", "themeColor", "phone", "email", "whatsapp", "address", "facebook", "instagram"] as const;
 type Words = Record<(typeof FIELDS)[number], string>;
@@ -63,7 +54,7 @@ export default function AgencyWebsitePage() {
   }, []);
 
   const load = useCallback(() => {
-    api<Draft>("/agent/site")
+    client.agent.site()
       .then((s) => {
         take(s);
         fail.clear();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, client } from "@/lib/api";
 import { AGENT_PERMISSIONS, PERMISSIONS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -63,8 +63,8 @@ export default function AgentTeamPage() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<StaffRow[]>("/agent/staff").then(setStaff).catch((e) => setError(e as Error));
-    api<RoleRow[]>("/agent/roles").then(setRoles).catch(() => setRoles([]));
+    client.agent.staff().then(setStaff).catch((e) => setError(e as Error));
+    client.agent.roles().then(setRoles).catch(() => setRoles([]));
   }, []);
   useEffect(() => load(), [load]);
 

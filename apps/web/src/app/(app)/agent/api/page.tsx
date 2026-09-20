@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Plus, Trash2 } from "lucide-react";
-import { api, API_URL } from "@/lib/api";
+import { api, client, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
@@ -37,7 +37,7 @@ export default function AgencyApiPage() {
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(() => {
-    api<KeyRow[]>("/agent/api-keys")
+    client.agent.apiKeys.list()
       .then((r) => {
         setKeys(r);
         fail.clear();
