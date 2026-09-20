@@ -33,7 +33,16 @@ export function Card({
     <View style={[styles.card, style]}>
       {title ? (
         <View style={styles.cardHead}>
-          <Text step="strong" weight="medium" tone="title">
+          {/*
+            One line, and not a matter of taste. A `Text` directly inside a
+            row is measured against infinity and then painted into the box
+            it actually got; when the paint needs a hair more than the
+            measure promised, Android wraps at the space and clips the
+            second line, because the height was settled for one. The
+            restaurant screen headed its card "The" for a week. See
+            `a-word-does-not-fall-off-the-end`.
+          */}
+          <Text step="strong" weight="medium" tone="title" numberOfLines={1}>
             {title}
           </Text>
           {action}

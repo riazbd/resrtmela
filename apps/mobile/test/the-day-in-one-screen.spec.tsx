@@ -6,9 +6,14 @@
  * arrival should be reading one screen in two places.
  *
  * What it must not do is decide anything for itself. `today` is one request
- * that already answers occupancy, both lists and what is owed — computed
- * server-side with the tax rules, which never reach the phone. A screen that
- * added up `due` itself would be a second implementation of the bill.
+ * that already answers occupancy, both lists and what the desk should be
+ * collecting — computed server-side with the tax rules, which never reach
+ * the phone. A screen that added up `due` itself would be a second
+ * implementation of the bill.
+ *
+ * That last figure is today's arrivals, not the resort's ledger, and it is
+ * named `arrivalsDueTotal` since 2026-09-21 for that reason — see
+ * `the-dashboard-says-what-it-counted`.
  */
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
 import { ApiError, type TodayFeed } from "@rh/shared";
@@ -56,8 +61,8 @@ const feed = (over: Partial<TodayFeed> = {}): TodayFeed =>
     arrivals: [arrival()],
     departures: [],
     occupancyPct: 40,
-    duesTotal: 4000,
-    duesCount: 1,
+    arrivalsDueTotal: 4000,
+    arrivalsDueCount: 1,
     ...over,
   }) as TodayFeed;
 
@@ -73,12 +78,12 @@ describe("the four figures", () => {
     await waitFor(() => expect(mockToday).toHaveBeenCalledWith(3));
   });
 
-  it("shows occupancy, both counts, and what is owed", async () => {
+  it("shows occupancy, both counts, and what the desk collects today", async () => {
     const r = await render(<Harness><DashboardScreen /></Harness>);
     await waitFor(() => expect(r.getByText("40%")).toBeTruthy());
     expect(r.getByLabelText("Arrivals: 1")).toBeTruthy();
     expect(r.getByLabelText("Departures: 0")).toBeTruthy();
-    expect(r.getByLabelText("Outstanding dues: ৳4,000")).toBeTruthy();
+    expect(r.getByLabelText("To collect today: ৳4,000")).toBeTruthy();
   });
 
   /**
@@ -87,10 +92,10 @@ describe("the four figures", () => {
    * two currencies or carried an agency balance, and nobody would know which
    * of the two screens was lying.
    */
-  it("shows the server's dues total rather than adding the rows up", async () => {
-    mockToday.mockResolvedValue(feed({ duesTotal: 99, arrivals: [arrival({ due: 4000 })] }));
+  it("shows the server's figure rather than adding the rows up", async () => {
+    mockToday.mockResolvedValue(feed({ arrivalsDueTotal: 99, arrivals: [arrival({ due: 4000 })] }));
     const r = await render(<Harness><DashboardScreen /></Harness>);
-    await waitFor(() => expect(r.getByLabelText("Outstanding dues: ৳99")).toBeTruthy());
+    await waitFor(() => expect(r.getByLabelText("To collect today: ৳99")).toBeTruthy());
   });
 });
 

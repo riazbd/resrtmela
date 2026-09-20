@@ -68,7 +68,7 @@ export default function ProfileScreen() {
     }
   });
 
-  const header = <Stack.Screen options={{ title: "Your account" }} />;
+  const header = <Stack.Screen options={{ title: "My Profile" }} />;
 
   if (!me) {
     return (

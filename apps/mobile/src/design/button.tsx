@@ -91,7 +91,7 @@ export function Button({
             color={kind === "primary" || kind === "danger" ? color.onBrand : color.body}
           />
         ) : null}
-        <Text step="body" weight="medium" tone={ink[kind]}>
+        <Text step="body" weight="medium" tone={ink[kind]} numberOfLines={1}>
           {label}
         </Text>
       </View>

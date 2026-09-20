@@ -27,7 +27,7 @@ const BY_HREF: Record<string, IconName> = {
   "/agent/payroll": "cash-multiple",
   "/agent/wallet": "wallet-outline",
   "/agent/team": "account-multiple-outline",
-  "/agent/website": "earth",
+  "/agent/website": "web",
   "/agent/api": "key-outline",
   "/mailbox": "email-outline",
   "/daysheet": "script-text-outline",
@@ -41,6 +41,7 @@ const BY_HREF: Record<string, IconName> = {
   "/payroll": "cash-multiple",
   "/reports": "chart-bar",
   "/rooms": "domain",
+  "/housekeeping": "broom",
   "/activities": "compass-outline",
   "/import": "upload-outline",
   "/profile": "account-outline",
@@ -49,12 +50,26 @@ const BY_HREF: Record<string, IconName> = {
 };
 
 /**
- * A destination with no icon of its own gets a compass rather than a hole,
- * so a screen added to `CONSOLE_NAV` is visible here before anybody has
- * chosen a picture for it.
+ * What a destination shows before anybody has chosen a picture for it.
+ *
+ * It was a compass until 2026-09-21, and the compass is also
+ * `/activities`' own icon — so when Housekeeping arrived without one,
+ * the More list drew the two screens one under the other behind the
+ * same picture and neither the code nor the eye could tell the borrowed
+ * one from the chosen one. A question mark can be mistaken for nothing
+ * else, which is the whole job: a hole that is visible rather than a
+ * plausible icon that hides.
+ */
+export const NO_ICON_YET: IconName = "help-circle-outline";
+
+/**
+ * A destination with no icon of its own gets a placeholder rather than a
+ * hole, so a screen added to `CONSOLE_NAV` is visible here before
+ * anybody has drawn for it. `every-destination-has-its-own-picture`
+ * fails while any destination is still relying on it.
  */
 export function iconFor(href: string): IconName {
-  return BY_HREF[href] ?? "compass-outline";
+  return BY_HREF[href] ?? NO_ICON_YET;
 }
 
 /** More is not a destination in the list; it is this app's own. */

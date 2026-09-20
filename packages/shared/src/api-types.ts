@@ -361,13 +361,23 @@ export interface TodayRow {
   due: number;
 }
 
-/** The dashboard's whole read: who is coming, who is going, and what is owed. */
+/**
+ * The dashboard's whole read: who is coming, who is going, and what the
+ * desk should be collecting today.
+ *
+ * The last two were `duesTotal`/`duesCount` until 2026-09-21, which
+ * reads as the resort's ledger and is not what they hold: they count
+ * only the bookings arriving today, so the phone showed "Outstanding
+ * dues ৳0" to a resort owed one and a half lakh. Named for their scope
+ * now, so the next screen to reach for them reaches with its eyes
+ * open. The ledger itself is `/payments`.
+ */
 export interface TodayFeed {
   arrivals: TodayRow[];
   departures: TodayRow[];
   occupancyPct: number;
-  duesTotal: number;
-  duesCount: number;
+  arrivalsDueTotal: number;
+  arrivalsDueCount: number;
 }
 
 export interface CalendarBooking {

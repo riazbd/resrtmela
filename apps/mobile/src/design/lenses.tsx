@@ -42,11 +42,17 @@ export function Lenses<T extends string>({
               pressed && !on ? styles.pressed : null,
             ]}
           >
-            <Text step="small" weight="medium" tone={on ? "onBrand" : "muted"}>
+            {/*
+              One line. Without it this bar offered "This month · Last 90
+              days · This" — the third option losing its second word to a
+              wrap that the row then clipped, while the accessibility tree
+              went on reporting "This year" to anything that asked in text.
+            */}
+            <Text step="small" weight="medium" tone={on ? "onBrand" : "muted"} numberOfLines={1}>
               {option}
             </Text>
             {count === undefined ? null : (
-              <Text step="caption" tone={on ? "onBrand" : "muted"} tabular>
+              <Text step="caption" tone={on ? "onBrand" : "muted"} tabular numberOfLines={1}>
                 {count}
               </Text>
             )}

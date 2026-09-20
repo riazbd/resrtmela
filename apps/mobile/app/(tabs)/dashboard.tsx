@@ -72,11 +72,29 @@ export default function DashboardScreen() {
           <Stat label="Occupancy" value={`${feed.occupancyPct}%`} sub="rooms checked in" />
           <Stat label="Arrivals" value={String(feed.arrivals.length)} sub="expected today" tone="ok" />
           <Stat label="Departures" value={String(feed.departures.length)} sub="due out today" />
+          {/*
+            "Outstanding dues" until 2026-09-21, which is the resort's
+            whole ledger and belongs to the Dues screen. This counts only
+            the people arriving today, so a resort owed one and a half
+            lakh read ৳0 here while Dues, one tap away, read ৳1,59,000.
+            The figure was right and the word was not.
+          */}
           <Stat
-            label="Outstanding dues"
-            value={whole(feed.duesTotal)}
-            sub={`${feed.duesCount} booking${feed.duesCount === 1 ? "" : "s"}`}
-            tone={feed.duesTotal > 0 ? "danger" : "title"}
+            label="To collect today"
+            value={whole(feed.arrivalsDueTotal)}
+            sub={
+              /*
+                `> 0`, not `=== 0`: an app whose API has not caught up with
+                it yet reads `undefined` here, and "from undefined arrivals"
+                is what the phone printed for a full minute after this field
+                was renamed. The two deploy separately, so that minute can
+                happen to anybody.
+              */
+              feed.arrivalsDueCount > 0
+                ? `from ${feed.arrivalsDueCount} arrival${feed.arrivalsDueCount === 1 ? "" : "s"}`
+                : "nothing to collect"
+            }
+            tone={feed.arrivalsDueTotal > 0 ? "danger" : "title"}
           />
         </View>
 

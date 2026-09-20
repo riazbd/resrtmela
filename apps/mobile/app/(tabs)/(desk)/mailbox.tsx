@@ -35,7 +35,7 @@ export default function MailboxScreen() {
     { enabled: Boolean(me) },
   );
 
-  const header = <Stack.Screen options={{ title: "Bulk email" }} />;
+  const header = <Stack.Screen options={{ title: "Bulk Email" }} />;
 
   if (credits.error && !credits.data) {
     return (

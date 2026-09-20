@@ -71,7 +71,7 @@ export default function DaySheetScreen() {
     { enabled: resortId !== undefined },
   );
 
-  const header = <Stack.Screen options={{ title: "Day sheet" }} />;
+  const header = <Stack.Screen options={{ title: "Day Sheet" }} />;
 
   if (resortId === undefined) {
     return (

@@ -34,7 +34,7 @@ const DATASETS = [
 export default function ImportScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: "Import" }} />
+      <Stack.Screen options={{ title: "Import CSV" }} />
       <ScrollView contentContainerStyle={styles.page}>
         <View style={styles.why}>
           <Text step="strong" weight="medium" tone="title">

@@ -224,12 +224,12 @@ describe("the day in one screen", () => {
         ],
         departures: [],
         occupancyPct: 40,
-        duesTotal: 4000,
-        duesCount: 1,
+        arrivalsDueTotal: 4000,
+        arrivalsDueCount: 1,
       }) as T);
     const feed = await client.today(3);
     expect(feed.occupancyPct).toBe(40);
-    expect(feed.duesCount).toBe(1);
+    expect(feed.arrivalsDueCount).toBe(1);
     expect(feed.arrivals[0]!.arriving).toBe(true);
     expect(feed.arrivals[0]!.guest.fullName).toBe("Rafiq Hasan");
     expect(feed.departures).toEqual([]);

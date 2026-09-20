@@ -66,7 +66,7 @@ export function Counter({
         disabled={value <= min}
         onPress={() => onChange(clamp(value - 1))}
       />
-      <Text step="strong" weight="medium" tone="title" tabular accessibilityLabel={`${value}`}>
+      <Text step="strong" weight="medium" tone="title" tabular numberOfLines={1} accessibilityLabel={`${value}`}>
         {value}
       </Text>
       <Step

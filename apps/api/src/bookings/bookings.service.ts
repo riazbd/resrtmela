@@ -2277,13 +2277,17 @@ export class BookingsService {
       where: { night: t, item: { booking: { resortId, state: "CHECKED_IN", deletedAt: null } } },
     });
     const totalRooms = await this.prisma.room.count({ where: { resortId, deletedAt: null } });
+    // only today's arrivals: what the desk collects as people walk up,
+    // which is deliberately not the resort's outstanding ledger
+    // today's arrivals only: what the desk collects as people walk up,
+    // which is deliberately not the resort's outstanding ledger
     const dues = withTotals.filter((b) => b.arriving && b.due > 0);
     return {
       arrivals: withTotals.filter((b) => b.arriving),
       departures: withTotals.filter((b) => b.departing),
       occupancyPct: totalRooms ? Math.round((occupied / totalRooms) * 100) : 0,
-      duesTotal: round2(dues.reduce((s, b) => s + b.due, 0)),
-      duesCount: dues.length,
+      arrivalsDueTotal: round2(dues.reduce((s, b) => s + b.due, 0)),
+      arrivalsDueCount: dues.length,
     };
   }
 }
