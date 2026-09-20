@@ -41,6 +41,13 @@ export default function DeskLayout() {
         contentStyle: { backgroundColor: color.screen },
         animation: "fade",
       }}
-    />
+    >
+      {/*
+        `new-booking` brings its own Stack — three steps and the draft
+        under them — so this one must not put a header above it. Left to
+        itself it drew two, the outer one titled with the folder name.
+      */}
+      <Stack.Screen name="new-booking" options={{ headerShown: false }} />
+    </Stack>
   );
 }

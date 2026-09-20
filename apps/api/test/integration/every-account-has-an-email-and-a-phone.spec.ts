@@ -32,8 +32,7 @@ import {
   makeBillingService,
   makeSalesService,
   makeExportService,
-  makeEngageService,
-} from "../helpers/services";
+  makeEngageService, makePushService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import { ensureResortRoles } from "../../src/common/permissions";
 import type { EmailService } from "../../src/notifications/email.service";
@@ -56,7 +55,7 @@ const recordingEmail = () =>
     },
   }) as unknown as EmailService;
 
-const auth = () => new AuthService(asPrisma);
+const auth = () => new AuthService(asPrisma, makePushService(asPrisma));
 const platform = () => makePlatformService(asPrisma, recordingEmail());
 
 /** The fixture manager's details, fixed here so a duplicate can be named. */

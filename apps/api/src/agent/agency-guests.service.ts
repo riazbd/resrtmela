@@ -20,7 +20,7 @@ import { agencyOf, sellableFor } from "../common/selling-access";
 import { AvailabilityService } from "../bookings/availability.service";
 import { TaxService } from "../common/tax.service";
 import { AgencyContextService } from "./agency-context.service";
-import type { JwtClaims } from "@rh/shared";
+import { roomOffer, type JwtClaims } from "@rh/shared";
 
 const GUESTS = "agent.guests.view";
 const BOOK = "agent.book";
@@ -200,7 +200,12 @@ export class AgencyGuestsService {
       if (until && dateOnly(query.to).getTime() > until.getTime()) continue;
       const grid = await this.availability.roomsGrid(asAgency, link.resortId, query.from, query.to);
       const free = grid
-        .filter((r) => r.busyNights.length === 0 && r.status !== "OUT_OF_SERVICE")
+        // `roomOffer`, not a second opinion: this was the same rule written
+        // out again, and a rule with two copies is a rule that disagrees
+        // with itself the first time one of them is changed. No
+        // `arrivingToday` — an agent searching across resorts is not the
+        // person who cleans them.
+        .filter((r) => roomOffer(r).sellable)
         .map((r) => ({
           roomId: r.roomId,
           roomName: r.roomName,

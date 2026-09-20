@@ -144,12 +144,18 @@ function GuestLine({ guest, last }: { guest: GuestRow; last: boolean }) {
           : undefined
       }
       right={
+        /*
+          A bare "1" over a bare date said nothing. Seen on the phone on
+          2026-09-21: two numbers stacked on the right of every row with
+          no word between them, and a reader has to open a guest to find
+          out which is which.
+        */
         <View style={styles.right}>
-          <Text step="body" weight="medium" tone="title" tabular>
-            {guest.bookingCount}
+          <Text step="body" weight="medium" tone="title" tabular numberOfLines={1}>
+            {guest.bookingCount} stay{guest.bookingCount === 1 ? "" : "s"}
           </Text>
-          <Text step="caption" tone="muted">
-            {guest.lastStay ? dayLabel(guest.lastStay.checkIn) : "—"}
+          <Text step="caption" tone="muted" numberOfLines={1}>
+            {guest.lastStay ? `last ${dayLabel(guest.lastStay.checkIn)}` : "never stayed"}
           </Text>
         </View>
       }

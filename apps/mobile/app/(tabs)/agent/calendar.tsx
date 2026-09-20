@@ -155,6 +155,7 @@ export default function AgentCalendarScreen() {
                       <Night
                         key={night}
                         night={night}
+                        today={night === todayIn(PLATFORM_TIMEZONE)}
                         count={free.get(night) ?? 0}
                       />
                     ),
@@ -174,16 +175,16 @@ export default function AgentCalendarScreen() {
   );
 }
 
-function Night({ night, count }: { night: string; count: number }) {
+function Night({ night, count, today }: { night: string; count: number; today: boolean }) {
   const day = Number(night.slice(8));
   const none = count === 0;
   return (
     <Pressable
       accessibilityRole={none ? "text" : "button"}
       accessibilityLabel={
-        none
-          ? `${day}: nothing free`
-          : `${day}: ${count} room${count === 1 ? "" : "s"} free`
+        `${today ? "Today, " : ""}${
+          none ? `${day}: nothing free` : `${day}: ${count} room${count === 1 ? "" : "s"} free`
+        }`
       }
       // a night with nothing left is not worth a search that comes back
       // empty; the number has already said it
@@ -195,9 +196,18 @@ function Night({ night, count }: { night: string; count: number }) {
                 `/agent/search?checkIn=${night}&checkOut=${addDaysIso(night, 1)}` as never,
               )
       }
-      style={[styles.cell, isWeekend(night) ? styles.weekendCell : null]}
+      /*
+        Today is marked. Every other dated screen in this app says so,
+        and a month grid that does not makes a reader count rows to find
+        out where they are.
+      */
+      style={[
+        styles.cell,
+        isWeekend(night) ? styles.weekendCell : null,
+        today ? styles.todayCell : null,
+      ]}
     >
-      <Text step="caption" tone="muted">
+      <Text step="caption" tone={today ? "ok" : "muted"} weight={today ? "medium" : undefined}>
         {day}
       </Text>
       <Text
@@ -224,6 +234,9 @@ const styles = StyleSheet.create({
   weekdays: { flexDirection: "row", paddingBottom: space.xs },
   weekday: { flex: 1, textAlign: "center" },
   week: { flexDirection: "row" },
+  // an outline, not a fill: the fill is what a weekend uses, and today
+  // falling on a Friday must still read as both
+  todayCell: { borderWidth: 1, borderColor: color.brand[600] },
   cell: {
     flex: 1,
     minHeight: TOUCH_TARGET,

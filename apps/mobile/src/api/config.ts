@@ -29,8 +29,13 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
  */
 export const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL || extra.apiUrl);
 
-/** The console's address, for the WebView release 0.1.0 still carries. */
+/**
+ * The console's address.
+ *
+ * It carried the WebView until phase 4 deleted it — releases 0.1.0
+ * through 0.5.0 shipped a browser pointed here, and every screen the app
+ * did not have yet was that browser. The URL stays because the app still
+ * sends people to the desk for the handful of things that belong on a
+ * wide screen: an import, a role's thirty checkboxes, writing a quote.
+ */
 export const CONSOLE_URL = extra.consoleUrl ?? "";
-
-/** Every address that is ours, old names included. See `src/console/url-policy.ts`. */
-export const CONSOLE_URLS_OWNED = extra.consoleUrlsOwned ?? [CONSOLE_URL];

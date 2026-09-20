@@ -78,9 +78,9 @@ describe("the sentence about choosing a resort", () => {
     //                          and is always a valid method, so no resort
     //                          means fewer chips, not a broken screen
     //   profile              — marks which of your resorts is open now
-    "app/bookings/[id]/index.tsx",
-    "app/bookings/[id]/edit.tsx",
-    "app/bookings/[id]/pay.tsx",
+    "app/(tabs)/(desk)/bookings/[id]/index.tsx",
+    "app/(tabs)/(desk)/bookings/[id]/edit.tsx",
+    "app/(tabs)/(desk)/bookings/[id]/pay.tsx",
     "app/(tabs)/(desk)/profile.tsx",
   ]);
 

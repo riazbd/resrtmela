@@ -25,18 +25,18 @@ import {
   type BookingDetail,
   type DiscountKind,
 } from "@rh/shared";
-import { Stay, type StayTools } from "../../../src/booking/stay";
-import { client, useAuth } from "../../../src/api/session";
-import { Button } from "../../../src/design/button";
-import { Chip } from "../../../src/design/chip";
-import { Counter } from "../../../src/design/counter";
-import { DateNav } from "../../../src/design/date-nav";
-import { Field, Input } from "../../../src/design/input";
-import { Empty } from "../../../src/design/states";
-import { Card } from "../../../src/design/surface";
-import { Text } from "../../../src/design/text";
-import { useAction } from "../../../src/design/use-action";
-import { color, radius, space } from "../../../src/design/tokens";
+import { Stay, type StayTools } from "../../../../../src/booking/stay";
+import { client, useAuth } from "../../../../../src/api/session";
+import { Button } from "../../../../../src/design/button";
+import { Chip } from "../../../../../src/design/chip";
+import { Counter } from "../../../../../src/design/counter";
+import { DateNav } from "../../../../../src/design/date-nav";
+import { Field, Input } from "../../../../../src/design/input";
+import { Empty } from "../../../../../src/design/states";
+import { Card } from "../../../../../src/design/surface";
+import { Text } from "../../../../../src/design/text";
+import { useAction } from "../../../../../src/design/use-action";
+import { color, radius, space } from "../../../../../src/design/tokens";
 
 export default function EditScreen() {
   return (

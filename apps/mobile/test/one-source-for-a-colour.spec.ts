@@ -24,7 +24,15 @@ const SRC = join(__dirname, "..", "src");
  * it. Exempted by name rather than by silence, and the exemption is checked
  * below so it cannot outlive what it excuses.
  */
-const NOT_A_NATIVE_SCREEN = ["console"];
+/**
+ * Nothing, since 2026-09-21.
+ *
+ * It held `console` — release 0.1.0's WebView, which was a stylesheet for
+ * a browser and not a native screen. Phase 4 deleted the WebView and this
+ * spec is what said so: "exempts only things that still exist" failed on
+ * the next run, which is exactly the job it was given.
+ */
+const NOT_A_NATIVE_SCREEN: string[] = [];
 
 function filesUnder(dir: string): string[] {
   const out: string[] = [];
@@ -72,9 +80,10 @@ describe("where a colour may be written", () => {
   });
 
   /**
-   * An exemption that outlives its reason is how a guard rots. When phase 4
-   * deletes the WebView this fails, and whoever reads it deletes the
-   * exemption rather than wondering what it was for.
+   * An exemption that outlives its reason is how a guard rots. Phase 4
+   * deleted the WebView, this failed on the next run, and the exemption
+   * went with it — which is the whole point of writing it this way. The
+   * list is empty now and the case stays, for the next one.
    */
   it("exempts only things that still exist", () => {
     const present = readdirSync(SRC).filter((e: string) =>

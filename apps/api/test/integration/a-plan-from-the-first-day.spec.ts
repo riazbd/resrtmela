@@ -19,7 +19,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, type Fixture } from "../helpers/db";
-import { makeSubscriptionService } from "../helpers/services";
+import { makeSubscriptionService, makePushService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -29,7 +29,7 @@ const asPrismaService = prisma as unknown as PrismaService;
 let fx: Fixture;
 let seq = 0;
 
-const auth = () => new AuthService(asPrismaService);
+const auth = () => new AuthService(asPrismaService, makePushService(asPrismaService));
 const subs = () => makeSubscriptionService(asPrismaService);
 
 beforeEach(async () => {

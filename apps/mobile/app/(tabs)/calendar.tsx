@@ -265,6 +265,16 @@ export default function CalendarScreen() {
           </ScrollView>
         </View>
         )}
+
+        {/*
+          What the colours mean.
+
+          Four fills and a grey, and until 2026-09-21 nothing on the screen
+          said which was which — a reader had to tap a bar to find out
+          whether the pale one was a held night or a paid one. Seen on a
+          phone; no test can notice a missing sentence.
+        */}
+        {view === "Rooms" ? <NightKey /> : null}
       </ScrollView>
     </>
   );
@@ -398,6 +408,37 @@ function DayHeads({
   );
 }
 
+/**
+ * The key to the grid above it.
+ *
+ * Read off `NIGHT_MEANING` rather than written out, so a state that
+ * changes firmness changes its swatch too. "Free" and "Out of service"
+ * are not held states and are named here because the grid draws them.
+ */
+function NightKey() {
+  const held = (["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] as const).map((state) => {
+    const m = NIGHT_MEANING[state];
+    return {
+      label: m.label,
+      fill: m.gone ? color.ink[200] : HELD_FILL[m.firmness],
+    };
+  });
+  return (
+    <View style={styles.key}>
+      {[{ label: "Free", fill: color.ok.bg }, ...held, { label: "Out of service", fill: color.ink[100] }].map(
+        (k) => (
+          <View key={k.label} style={styles.keyItem} accessible accessibilityLabel={k.label}>
+            <View style={[styles.swatch, { backgroundColor: k.fill }]} />
+            <Text step="caption" tone="muted">
+              {k.label}
+            </Text>
+          </View>
+        ),
+      )}
+    </View>
+  );
+}
+
 function RoomName({ room }: { room: Room }) {
   const outOfService = room.status !== "ACTIVE";
   return (
@@ -477,6 +518,15 @@ function RoomNights({
 }
 
 const styles = StyleSheet.create({
+  key: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
+  },
+  keyItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
+  swatch: { width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: color.line },
   nav: { padding: space.lg, gap: space.sm, backgroundColor: color.screen },
   months: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   monthStep: {

@@ -7,6 +7,7 @@ import { AuditService } from "../common/audit.service";
 import { BookingsService } from "../bookings/bookings.service";
 import { PermissionsService } from "../common/permissions";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PushService } from "../notifications/push.service";
 import { OptionsService } from "../options/options.service";
 import { TaxService } from "../common/tax.service";
 
@@ -20,6 +21,7 @@ export class PaymentsService {
     @Inject(PermissionsService) private readonly perms: PermissionsService,
     @Inject(OptionsService) private readonly options: OptionsService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   /**
@@ -115,6 +117,24 @@ export class PaymentsService {
     const detail = await this.bookings.detail(claims, bookingId); // recompute + persist state
     if (input.type !== "REFUND") {
       await this.notifications.notifyPayment(bookingId, Number(payment.amount), input.method);
+      /**
+       * And whoever keeps the books.
+       *
+       * Not the person who took it — they watched it happen. A refund is
+       * deliberately silent here for the same reason it is silent to the
+       * guest: money going back out is a conversation somebody is already
+       * having, not news.
+       */
+      await this.push.toResort(
+        b.resortId,
+        "payment.received",
+        {
+          title: "Payment received",
+          body: `${input.method} · ${b.code}`,
+          path: `/bookings/${bookingId}`,
+        },
+        { exceptUserId: claims.userId },
+      );
     }
     return { payment: { ...payment, amount: Number(payment.amount) }, booking: detail, replayed: false };
   }

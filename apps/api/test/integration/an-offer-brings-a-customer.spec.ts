@@ -19,7 +19,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, scheduleOf, seedResort, type Fixture, seedPlanSchedules } from "../helpers/db";
-import { makePlatformService } from "../helpers/services";
+import { makePlatformService, makePushService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import { PlatformService } from "../../src/platform/platform.service";
 import type { EmailService } from "../../src/notifications/email.service";
@@ -48,7 +48,7 @@ const platform = () =>
     inviteAgency(c: JwtClaims, resortId: number, i: { email: string; name?: string }): Promise<unknown>;
   };
 const auth = () =>
-  new AuthService(asPrisma) as unknown as AuthService & {
+  new AuthService(asPrisma, makePushService(asPrisma)) as unknown as AuthService & {
     signup(i: Record<string, string>): Promise<unknown>;
     signupAgency(i: Record<string, string>): Promise<{ user: { id: number } }>;
   };

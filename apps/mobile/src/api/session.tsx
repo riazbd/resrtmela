@@ -15,6 +15,7 @@
  */
 import { useMemo, useState, type ReactNode } from "react";
 import { AuthProvider as SharedAuthProvider, QueryProvider } from "@rh/app-core";
+import { platform, pushToken } from "./push";
 import type { MoneyFormat } from "@rh/shared";
 import { MoneyFormatProvider } from "../design/money";
 import { Outbox } from "./outbox";
@@ -22,6 +23,39 @@ import { api, cache, client, goTo, permissionsFor, session } from "./wire";
 
 export { useAuth, type AuthValue } from "@rh/app-core";
 export { api, client } from "./wire";
+
+/**
+ * Ask to be told things, and stop asking.
+ *
+ * Both are fire-and-forget. A person who declines notifications, a
+ * device with no Play Services, a phone offline at the moment of
+ * sign-in — none of those is a reason to fail a sign-in, and all of
+ * them happen.
+ *
+ * `forgetThisDevice` runs while the token is still in storage, because
+ * it is an authenticated call. `AuthProvider` sequences that; this only
+ * has to not await it.
+ */
+async function rememberThisDevice() {
+  const { token } = await pushToken();
+  if (!token) return;
+  try {
+    await client.auth.registerDevice(token, platform);
+  } catch {
+    // a sign-in is not failed by a notification that could not be set up
+  }
+}
+
+async function forgetThisDevice() {
+  const { token } = await pushToken();
+  if (!token) return;
+  try {
+    await client.auth.forgetDevice(token, platform);
+  } catch {
+    // the server sweeps tokens Expo calls dead, so a missed delete is
+    // eventually corrected rather than permanent
+  }
+}
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   /**
@@ -57,6 +91,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         onActiveResort={rememberCurrency}
         cache={cache}
         navigate={goTo}
+        onSignedIn={rememberThisDevice}
+        onSignedOut={forgetThisDevice}
       >
         <MoneyFormatProvider value={format}>
           {/*

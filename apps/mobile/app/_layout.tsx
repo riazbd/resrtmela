@@ -50,10 +50,19 @@ export default function RootLayout() {
         >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-          {/* a stack of its own, three steps deep, with its own headers */}
-          <Stack.Screen name="new-booking" options={{ headerShown: false }} />
+          {/*
+            `new-booking` was declared here until 2026-09-21 and moved into
+            `(tabs)/(desk)` so it keeps the bar. A `Stack.Screen` naming a
+            route that is no longer a child of this stack is what produced
+            `[Layout children]: No route named "new-booking"` on every
+            screen — a warning about this file, shown over whatever the
+             reader happened to be looking at.
+          */}
+          <Stack.Screen name="plans" options={{ headerShown: true, title: "What it costs" }} />
+          <Stack.Screen name="signup" options={{ headerShown: false }} />
         </Stack>
       </SessionProvider>
     </SafeAreaProvider>

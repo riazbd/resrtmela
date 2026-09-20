@@ -28,13 +28,13 @@ const MOBILE = join(__dirname, "..");
  * The two places that are allowed to know where the API is.
  *
  * `src/api/` is the transport itself — someone has to hold the base URL and
- * call `fetch`. `src/console/` is release 0.1.0's WebView, which is a URL by
- * definition; it is not a screen written against this rule, it is the thing
- * the rule replaces, and phase 4 deletes it. Both are named rather than
- * silently skipped, and the last test here fails if one stops existing, so an
- * exemption cannot outlive its reason.
+ * call `fetch`. It is the only one left: `src/console/` was release 0.1.0's
+ * WebView — a URL by definition, and the thing this rule replaced — and
+ * phase 4 deleted it on 2026-09-21. The one that remains is named rather
+ * than silently skipped, and the last test here fails if it stops existing,
+ * so an exemption cannot outlive its reason.
  */
-const MAY_NAME_THE_API = [join("src", "api"), join("src", "console")];
+const MAY_NAME_THE_API = [join("src", "api")];
 
 /** The directories a screen can live in. `test/` is not one of them. */
 const WALKED = ["src", "app"];

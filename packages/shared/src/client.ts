@@ -31,6 +31,7 @@ import type {
   AgencyRoomOffer,
   AgencyCalendar,
   BookingDetail,
+  InvoicePayload,
   BookingQuote,
   BookingRow,
   CalendarBooking,
@@ -82,6 +83,7 @@ import type {
 } from "./api-types";
 import type { DiscountKind } from "./discount";
 import type { HousekeepingState } from "./housekeeping";
+import type { PlanAudience, PlanOnSale } from "./plans-on-sale";
 import type { StayChargeKind } from "./stay-charges";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -352,6 +354,30 @@ export function createApiClient(http: Fetcher) {
       signup: (body: ResortSignup) =>
         http<Session>("/auth/signup", { method: "POST", body }),
 
+      /**
+       * This phone, asking to be told things.
+       *
+       * No resort in the path: a token belongs to a person, and who is
+       * sent to is worked out at send time from the permission matrix.
+       * `forget` is the sign-out half and is not optional — a device
+       * that changes hands must stop receiving a resort's bookings.
+       */
+      /**
+       * The price list, before anybody has an account.
+       *
+       * Public — `/cms/plans` takes no token, and could not: the person
+       * reading it is deciding whether to have one. The web has drawn
+       * this since the homepage had prices; the phone showed nothing and
+       * signed everybody up on the entry plan.
+       */
+      plansOnSale: (audience: PlanAudience = "RESORT") =>
+        http<PlanOnSale[]>(`/cms/plans${qs({ audience })}`),
+
+      registerDevice: (token: string, platform: "android" | "ios") =>
+        http<{ ok: boolean }>("/devices", { method: "POST", body: { token, platform } }),
+      forgetDevice: (token: string, platform: "android" | "ios") =>
+        http<{ ok: boolean }>("/devices/forget", { method: "POST", body: { token, platform } }),
+
       signupAgency: (body: AgencySignup) =>
         http<Session>("/auth/signup/agency", { method: "POST", body }),
 
@@ -439,7 +465,7 @@ export function createApiClient(http: Fetcher) {
       /** The platform letting an agent's payment through after the deadline. */
       approveLate: (id: number) =>
         http<{ ok: boolean; code: string }>(`/bookings/${id}/approve-late`, { method: "POST" }),
-      invoice: (id: number) => http<unknown>(`/bookings/${id}/invoice`),
+      invoice: (id: number) => http<InvoicePayload>(`/bookings/${id}/invoice`),
       generateInvoice: (id: number) => http<{ invoiceNo: string }>(`/bookings/${id}/invoice`, { method: "POST" }),
       emailInvoice: (id: number) => http<{ sent: boolean }>(`/bookings/${id}/email-invoice`, { method: "POST", body: {} }),
       cancelRequests: (resortId: number) => http<BookingRow[]>(`/bookings/cancel-requests${qs({ resortId })}`),

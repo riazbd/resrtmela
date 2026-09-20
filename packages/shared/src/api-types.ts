@@ -1389,3 +1389,93 @@ export interface HousekeepingRow {
   departedToday: boolean;
   arrivingToday: boolean;
 }
+
+/**
+ * A bill as the resort issues it (phase 4, task 2).
+ *
+ * `client.bookings.invoice` answered `unknown` until 2026-09-21 — one of
+ * twenty-three routes that did — so the console cast it and the phone
+ * could not show a guest their bill at all.
+ *
+ * Written from `invoicePayload` in the service, not from the console's
+ * JSX. Phase 3 learned that the hard way: `AgencySite` was typed off a
+ * screen and was missing two fields the server had always sent.
+ *
+ * **Two halves with different lifetimes.** Everything down to `items` is
+ * the charge, and an invoice that was frozen replays exactly what it said
+ * the day it was issued. The settlement below it is read fresh every
+ * time, because what has been paid against a bill goes on moving after
+ * the bill is printed. A screen that renders the frozen half and asks the
+ * live half for the balance is showing the truth twice.
+ */
+export interface InvoicePayload {
+  invoiceNo: string;
+  issuedAt: string | null;
+  resort: {
+    id: number;
+    name: string;
+    location: string | null;
+    address: string | null;
+    phone: string | null;
+    website: string | null;
+    /** A VAT invoice in Bangladesh has to show the seller's BIN. */
+    binNumber: string | null;
+    checkInTime: string | null;
+    checkOutTime: string | null;
+    currency: string;
+    locale: string;
+  };
+  booking: {
+    code: string;
+    state: string;
+    checkIn: string | null;
+    checkOut: string | null;
+    nights: number;
+    adults: number;
+    children: number;
+    remarks: string | null;
+    agent: string | null;
+  };
+  guest: {
+    fullName: string;
+    phone: string | null;
+    nidPassportNo: string | null;
+    email: string | null;
+  };
+  items: {
+    description: string;
+    /** Only a room line is multiplied by the nights; everything else is null. */
+    nights: number | null;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+  }[];
+  /**
+   * What `computeTotals` sends, spread here as it is into a `BookingRow`.
+   * Named rather than inherited: a `BookingRow` is a row in a list and an
+   * invoice is a document, and one extending the other would say they are
+   * the same thing.
+   */
+  nights: number;
+  roomRent: number;
+  discount: number;
+  taxable: number;
+  taxRatePct?: number;
+  tax: number;
+  taxLines?: { code: string; label: string; ratePct: number; amount: number }[];
+  /** taxable + tax: what the invoice comes to. */
+  total: number;
+  paid: number;
+  refunded: number;
+  due: number;
+
+  /** Read fresh on every request — see the note above. */
+  payments: {
+    date: string;
+    method: string;
+    type: string;
+    amount: number;
+    receivedBy: string | null;
+  }[];
+  paymentState: string;
+}

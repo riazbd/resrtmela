@@ -22,16 +22,16 @@ import {
   todayIn,
   type RoomAvail,
 } from "@rh/shared";
-import { useDraft } from "../../src/booking/draft";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Button } from "../../src/design/button";
-import { DateNav } from "../../src/design/date-nav";
-import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem } from "../../src/design/states";
-import { Card } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { color, radius, space } from "../../src/design/tokens";
+import { useDraft } from "../../../../src/booking/draft";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Button } from "../../../../src/design/button";
+import { DateNav } from "../../../../src/design/date-nav";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Empty, Loading, Problem } from "../../../../src/design/states";
+import { Card } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { color, radius, space } from "../../../../src/design/tokens";
 
 export default function WhenAndWhereScreen() {
   const { activeResort } = useAuth();

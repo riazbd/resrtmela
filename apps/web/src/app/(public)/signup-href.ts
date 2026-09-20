@@ -41,40 +41,15 @@ export function signupHref({
 }
 
 /**
- * The other half of the same contract: which plan the signup form describes
- * and submits, given what the link said.
+ * `plannedPlan` and `plannedShelf` used to live here.
  *
- * The form used to take `plans[0]` unconditionally, so it told a visitor who
- * had clicked Chain that they were getting "Starter · 15 rooms" while they
- * typed — which is why nobody reported this as a bug until a workspace was
- * already open on the wrong plan.
+ * They moved to `@rh/shared` on 2026-09-21, when the phone grew a price
+ * list and a signup that carries a plan. They are decisions about what a
+ * person is buying rather than arithmetic, and two clients answering them
+ * differently is the most expensive kind of drift — the kind a customer
+ * finds, on a bill.
  *
- * An unrecognised name falls back rather than showing nothing. A plan can be
- * retired between somebody bookmarking a link and opening it, and a form that
- * describes no plan at all is the state this copy exists to prevent; the API
- * refuses the name on submit, and its refusal names the shelf.
+ * `signupHref` stays: building a URL is this client's own business, and
+ * the phone pushes a route instead.
  */
-export function plannedPlan<T extends { name: string }>(shelf: readonly T[] | null, wanted: string | null): T | null {
-  if (!shelf?.length) return null;
-  const asked = wanted?.trim().toUpperCase();
-  return (asked ? shelf.find((p) => p.name.toUpperCase() === asked) : null) ?? shelf[0];
-}
-
-/**
- * The shelf a signup is standing on: the one asked for when this plan has it,
- * otherwise the plan's first.
- *
- * The same rule `scheduleFor` applies on the server, said once more here so the
- * summary line and the charge cannot disagree. It used to live inside the
- * signup page's JSX, where its only input was a query string that could not
- * change after load. The form lets the visitor change plan now, so a schedule
- * id belonging to the plan they just left has to fall away — carrying it to the
- * server would be a bill for a card nobody pressed.
- */
-export function plannedShelf<T extends { id: number }>(
-  plan: { schedules: readonly T[] } | null | undefined,
-  wanted: number | null,
-): T | null {
-  if (!plan) return null;
-  return plan.schedules.find((s) => s.id === wanted) ?? plan.schedules[0] ?? null;
-}
+export { plannedPlan, plannedShelf } from "@rh/shared";

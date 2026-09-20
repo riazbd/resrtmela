@@ -29,7 +29,7 @@ jest.mock("../src/api/session", () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const BookingScreen = require("../app/bookings/[id]").default;
+const BookingScreen = require("../app/(tabs)/(desk)/bookings/[id]").default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Harness } = require("./harness");
 

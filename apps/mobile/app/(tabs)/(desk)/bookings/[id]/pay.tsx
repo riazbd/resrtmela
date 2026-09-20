@@ -15,17 +15,17 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { formatMoney, type BookingDetail, type ResortOption } from "@rh/shared";
-import { Stay, type StayTools } from "../../../src/booking/stay";
-import { client, useAuth } from "../../../src/api/session";
-import { useStayDesk } from "../../../src/api/desk";
-import { Button } from "../../../src/design/button";
-import { Chip } from "../../../src/design/chip";
-import { Field, Input } from "../../../src/design/input";
-import { useMoneyFormat } from "../../../src/design/money";
-import { Card, Stat } from "../../../src/design/surface";
-import { Text } from "../../../src/design/text";
-import { useAction } from "../../../src/design/use-action";
-import { color, radius, space } from "../../../src/design/tokens";
+import { Stay, type StayTools } from "../../../../../src/booking/stay";
+import { client, useAuth } from "../../../../../src/api/session";
+import { useStayDesk } from "../../../../../src/api/desk";
+import { Button } from "../../../../../src/design/button";
+import { Chip } from "../../../../../src/design/chip";
+import { Field, Input } from "../../../../../src/design/input";
+import { useMoneyFormat } from "../../../../../src/design/money";
+import { Card, Stat } from "../../../../../src/design/surface";
+import { Text } from "../../../../../src/design/text";
+import { useAction } from "../../../../../src/design/use-action";
+import { color, radius, space } from "../../../../../src/design/tokens";
 
 export default function PayScreen() {
   return (

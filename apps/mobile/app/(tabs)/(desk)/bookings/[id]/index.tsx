@@ -32,15 +32,15 @@ import {
   type BookingDetail,
   type NextState,
 } from "@rh/shared";
-import { client, useAuth } from "../../../src/api/session";
-import { useStayDesk } from "../../../src/api/desk";
-import { Button } from "../../../src/design/button";
-import { Money, useMoneyFormat } from "../../../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
-import { Card, Row, Stat } from "../../../src/design/surface";
-import { Text } from "../../../src/design/text";
-import { useAction } from "../../../src/design/use-action";
-import { color, radius, space } from "../../../src/design/tokens";
+import { client, useAuth } from "../../../../../src/api/session";
+import { useStayDesk } from "../../../../../src/api/desk";
+import { Button } from "../../../../../src/design/button";
+import { Money, useMoneyFormat } from "../../../../../src/design/money";
+import { Empty, Loading, Problem, Stale } from "../../../../../src/design/states";
+import { Card, Row, Stat } from "../../../../../src/design/surface";
+import { Text } from "../../../../../src/design/text";
+import { useAction } from "../../../../../src/design/use-action";
+import { color, radius, space } from "../../../../../src/design/tokens";
 
 /** "2 adults, 1 child" — and the ones who turned up unannounced, separately. */
 function whoIsStaying(b: BookingDetail): string {
@@ -219,10 +219,17 @@ export default function BookingScreen() {
           </Card>
         ) : null}
 
+        {/*
+          The invoice number was a footnote and nothing else: the app knew
+          the bill existed and could not show it. A guest at the counter
+          asking for their bill is the case this screen exists for.
+        */}
         {activeResort && b.invoiceNo ? (
-          <Text step="caption" tone="muted" style={styles.footnote}>
-            Invoice {b.invoiceNo}
-          </Text>
+          <Button
+            label={`Invoice ${b.invoiceNo}`}
+            kind="ghost"
+            onPress={() => router.push(`/bookings/${b.id}/invoice` as never)}
+          />
         ) : null}
       </ScrollView>
     </>

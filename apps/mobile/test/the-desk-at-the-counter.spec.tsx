@@ -69,10 +69,10 @@ jest.mock("../src/api/desk", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const BookingScreen = require("../app/bookings/[id]").default;
-const ArriveScreen = require("../app/bookings/[id]/arrive").default;
-const DepartScreen = require("../app/bookings/[id]/depart").default;
-const PayScreen = require("../app/bookings/[id]/pay").default;
+const BookingScreen = require("../app/(tabs)/(desk)/bookings/[id]").default;
+const ArriveScreen = require("../app/(tabs)/(desk)/bookings/[id]/arrive").default;
+const DepartScreen = require("../app/(tabs)/(desk)/bookings/[id]/depart").default;
+const PayScreen = require("../app/(tabs)/(desk)/bookings/[id]/pay").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

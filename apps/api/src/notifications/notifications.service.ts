@@ -4,6 +4,7 @@ import { EmailService } from "./email.service";
 import { SmsService } from "./sms.service";
 import { PlatformSettingsService } from "../common/platform-settings.service";
 import { TemplatesService } from "./templates.service";
+import { PushService } from "./push.service";
 import { TaxService } from "../common/tax.service";
 import { dedupeKeyFor, renderTemplate, emailEnvelope, emailHtml, type TemplateName, type PlatformIdentity } from "./templates";
 import { todayIn } from "../common/dates";
@@ -35,6 +36,7 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
     @Inject(PlatformSettingsService) private readonly settings: PlatformSettingsService,
     @Inject(TemplatesService) private readonly templates: TemplatesService,
     @Inject(TaxService) private readonly tax: TaxService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   onModuleInit() {
@@ -193,6 +195,47 @@ export class NotificationsService implements OnModuleInit, OnModuleDestroy {
         if (before === 0) {
           await this.notifyBooking(b.id, "checkin_reminder", {}, day);
           swept++;
+        }
+      }
+
+      /**
+       * And the desk, once, rather than once per arrival.
+       *
+       * The loop above reminds each guest. This is the other audience:
+       * whoever opens the resort tomorrow wants one line saying how many
+       * are coming, not eleven buzzes. The dedupe key is the day, so a
+       * dispatcher tick that runs twice does not send it twice.
+       */
+      if (arrivals.length > 0) {
+        const byResort = await this.prisma.booking.groupBy({
+          by: ["resortId"],
+          where: { id: { in: arrivals.map((a) => a.id) } },
+          _count: { _all: true },
+        });
+        for (const r of byResort) {
+          // not a template key: the dedupe row is a record that a push
+          // went, and nothing renders it
+          const key = `checkin_due_push:resort:${r.resortId}:${day}`;
+          if ((await this.prisma.notificationJob.count({ where: { dedupeKey: key } })) > 0) continue;
+          const n = r._count._all;
+          await this.push.toResort(r.resortId, "checkin.due", {
+            title: "Arrivals tomorrow",
+            body: `${n} booking${n === 1 ? "" : "s"} checking in`,
+            path: "/daysheet",
+          });
+          await this.prisma.notificationJob.create({
+            data: {
+              channel: "PUSH",
+              toRef: `resort:${r.resortId}`,
+              template: "checkin_due_push",
+              dedupeKey: key,
+              resortId: r.resortId,
+              // written already sent: the row is the dedupe record, not a
+              // queue entry — the push has gone by the time it exists
+              sentAt: new Date(),
+              payload: { arrivals: n },
+            },
+          });
         }
       }
     }

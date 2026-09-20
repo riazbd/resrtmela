@@ -16,16 +16,16 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import type { BookingDetail } from "@rh/shared";
-import { Stay, type StayTools } from "../../../src/booking/stay";
-import { client } from "../../../src/api/session";
-import { useStayDesk } from "../../../src/api/desk";
-import { Button } from "../../../src/design/button";
-import { Counter } from "../../../src/design/counter";
-import { Field } from "../../../src/design/input";
-import { Card } from "../../../src/design/surface";
-import { Text } from "../../../src/design/text";
-import { useAction } from "../../../src/design/use-action";
-import { color, radius, space } from "../../../src/design/tokens";
+import { Stay, type StayTools } from "../../../../../src/booking/stay";
+import { client } from "../../../../../src/api/session";
+import { useStayDesk } from "../../../../../src/api/desk";
+import { Button } from "../../../../../src/design/button";
+import { Counter } from "../../../../../src/design/counter";
+import { Field } from "../../../../../src/design/input";
+import { Card } from "../../../../../src/design/surface";
+import { Text } from "../../../../../src/design/text";
+import { useAction } from "../../../../../src/design/use-action";
+import { color, radius, space } from "../../../../../src/design/tokens";
 
 export default function ArriveScreen() {
   return (

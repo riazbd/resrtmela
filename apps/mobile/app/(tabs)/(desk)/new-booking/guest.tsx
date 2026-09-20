@@ -24,17 +24,17 @@ import {
   formatMoney,
   whatTheBookingNeeds,
 } from "@rh/shared";
-import { useDraft } from "../../src/booking/draft";
-import { useAuth } from "../../src/api/session";
-import { Button } from "../../src/design/button";
-import { Chip } from "../../src/design/chip";
-import { Counter } from "../../src/design/counter";
-import { Field, Input } from "../../src/design/input";
-import { useMoneyFormat } from "../../src/design/money";
-import { Card } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { Toggle } from "../../src/design/toggle";
-import { space } from "../../src/design/tokens";
+import { useDraft } from "../../../../src/booking/draft";
+import { useAuth } from "../../../../src/api/session";
+import { Button } from "../../../../src/design/button";
+import { Chip } from "../../../../src/design/chip";
+import { Counter } from "../../../../src/design/counter";
+import { Field, Input } from "../../../../src/design/input";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Card } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { Toggle } from "../../../../src/design/toggle";
+import { space } from "../../../../src/design/tokens";
 
 export default function WhoScreen() {
   const { isStaff, isAgent } = useAuth();

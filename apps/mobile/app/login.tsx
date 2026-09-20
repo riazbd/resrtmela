@@ -169,6 +169,21 @@ export default function LoginScreen() {
             )}
           </View>
         ) : null}
+
+        {/*
+          One line, not a second column of buttons.
+
+          This screen briefly carried four: sign in, forgot password, see
+          the prices, open a resort, open an agency. A form with five ways
+          out is not a form. Those choices belong on the welcome screen,
+          which is where somebody without an account now arrives; this is
+          for the person who already has one.
+        */}
+        <Button
+          label="New here? Create an account"
+          kind="ghost"
+          onPress={() => router.push("/signup" as never)}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );

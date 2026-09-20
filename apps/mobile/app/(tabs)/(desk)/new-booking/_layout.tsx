@@ -11,7 +11,7 @@
  * far as this file is concerned.
  */
 import { Stack, useLocalSearchParams } from "expo-router";
-import { Draft, type BookingDraft } from "../../src/booking/draft";
+import { Draft, type BookingDraft } from "../../../../src/booking/draft";
 
 const isDay = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);

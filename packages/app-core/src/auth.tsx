@@ -39,6 +39,16 @@ export interface AuthPorts {
    * phone.
    */
   onActiveResort: (resort: Resort | null) => void;
+  /**
+   * Told when a session begins and when it ends.
+   *
+   * Both optional and both fire-and-forget. The phone registers its push
+   * token on the way in and forgets it on the way out; the console has
+   * neither and passes neither. `onSignedOut` runs **before** the token is
+   * cleared, because forgetting a device is an authenticated call.
+   */
+  onSignedIn?: () => void;
+  onSignedOut?: () => void;
   /** Emptied on sign-out. `null` where nothing is cached. */
   cache: CacheStore | null;
   /** Where to go on leaving an impersonated session. A router push, or a location assignment. */
@@ -84,6 +94,8 @@ export function AuthProvider({
   onActiveResort,
   cache,
   navigate,
+  onSignedIn,
+  onSignedOut,
 }: AuthPorts & { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [activeResort, setActive] = useState<Resort | null>(null);
@@ -192,9 +204,15 @@ export function AuthProvider({
       if (resort) storage.setItem(RESORT_ID, String(resort.id));
       // handed back so the caller can send them somewhere that is theirs: state
       // set here is not readable until the next render
+      /**
+       * Every way into a session comes through here — sign in, sign up,
+       * and adopting a token from a reset link — so the host is told once,
+       * from one place, rather than three screens each remembering to.
+       */
+      onSignedIn?.();
       return meData;
     },
-    [storage, client],
+    [storage, client, onSignedIn],
   );
 
   const login = useCallback(
@@ -206,6 +224,16 @@ export function AuthProvider({
   );
 
   const logout = useCallback(() => {
+    /**
+     * Before the token goes, not after.
+     *
+     * Forgetting this device is an authenticated request, and a request
+     * made after the token is gone is a 401. It is deliberately not
+     * awaited: a person pressing Sign out on a bad connection must not be
+     * left staring at a spinner, and the server sweeps tokens Expo calls
+     * dead anyway.
+     */
+    void onSignedOut?.();
     storage.removeItem(TOKEN);
     storage.removeItem(IMPERSONATOR);
     // whatever the app kept for reading offline belongs to the person signing
@@ -217,7 +245,7 @@ export function AuthProvider({
     setActive(null);
     setPerms([]);
     setFeatures([]);
-  }, [storage, cache]);
+  }, [storage, cache, onSignedOut]);
 
   const impersonate = useCallback(
     async (accessToken: string) => {

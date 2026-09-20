@@ -19,8 +19,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@rh/db";
 import { testPrisma, resetDb, seedResort, seedPlanSchedules, type Fixture, scheduleOf } from "../helpers/db";
 import {
-  makeBillingService, makeBookingsService, makePlatformService, makeSubscriptionService,
-} from "../helpers/services";
+  makeBillingService, makeBookingsService, makePlatformService, makeSubscriptionService, makePushService } from "../helpers/services";
 import { AuthService } from "../../src/auth/auth.service";
 import type { PrismaService } from "../../src/prisma/prisma.service";
 import { ROLE, type JwtClaims } from "@rh/shared";
@@ -52,7 +51,7 @@ afterAll(async () => {
 });
 
 const signupAgency = (plan = "AGENCY_BASIC") =>
-  (new AuthService(asPrisma) as unknown as {
+  (new AuthService(asPrisma, makePushService(asPrisma)) as unknown as {
     signupAgency(i: Record<string, string>): Promise<{ user: { id: number } }>;
   }).signupAgency({
     agencyName: "Sea Breeze Travels",

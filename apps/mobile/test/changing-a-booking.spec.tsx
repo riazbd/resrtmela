@@ -50,8 +50,8 @@ jest.mock("../src/api/desk", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const EditScreen = require("../app/bookings/[id]/edit").default;
-const BookingScreen = require("../app/bookings/[id]").default;
+const EditScreen = require("../app/(tabs)/(desk)/bookings/[id]/edit").default;
+const BookingScreen = require("../app/(tabs)/(desk)/bookings/[id]").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

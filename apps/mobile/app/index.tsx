@@ -20,7 +20,10 @@ export default function Index() {
   const gate = consoleGate({ loading, me, activeResort });
 
   useEffect(() => {
-    if (gate === "login") router.replace("/login");
+    // the welcome, not the form: a person the app has never met is being
+    // asked to decide something, and a sign-in box is the answer to a
+    // decision already made
+    if (gate === "login") router.replace("/welcome");
     if (gate === "ready" && me) router.replace(landingFor(me.role) as never);
   }, [gate, me]);
 

@@ -1,12 +1,25 @@
 import { Body, Controller, Get, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsInt, IsOptional } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, MaxLength } from "class-validator";
 import { Type } from "class-transformer";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { NotificationsService } from "./notifications.service";
+import { PushService } from "./push.service";
 import { ROLE, type Role } from "@rh/shared";
 
 class RecentQuery {
   @IsOptional() @Type(() => Number) @IsInt() take?: number;
+}
+
+/**
+ * A phone asking to be told things.
+ *
+ * `platform` is checked rather than taken as given: it decides nothing
+ * today, and an unchecked string column is how a free-text field ends up
+ * holding nine spellings of "android".
+ */
+class DeviceDto {
+  @IsString() @MaxLength(255) token!: string;
+  @IsIn(["android", "ios"]) platform!: string;
 }
 
 class DispatchDto {
@@ -16,7 +29,28 @@ class DispatchDto {
 @Controller()
 @UseGuards(AuthGuard)
 export class NotificationsController {
-  constructor(@Inject(NotificationsService) private readonly notifications: NotificationsService) {}
+  constructor(
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(PushService) private readonly push: PushService,
+  ) {}
+
+  /**
+   * Whoever is holding this token is whoever is signed in.
+   *
+   * No resort in the path: a token belongs to a person, and the people it
+   * is sent on behalf of are worked out at send time from the permission
+   * matrix. A route that took a resort would let one be claimed.
+   */
+  @Post("devices")
+  registerDevice(@Req() req: AuthedRequest, @Body() dto: DeviceDto) {
+    return this.push.register(req.user.userId, dto.token, dto.platform);
+  }
+
+  /** Sign-out. Not optional — see the note on `forget`. */
+  @Post("devices/forget")
+  forgetDevice(@Req() req: AuthedRequest, @Body() dto: DeviceDto) {
+    return this.push.forget(req.user.userId, dto.token);
+  }
 
   @Get("notifications/recent")
   async recent(@Req() req: AuthedRequest, @Query() q: RecentQuery) {

@@ -12,6 +12,7 @@ import { AvailabilityService } from "../../src/bookings/availability.service";
 import { RoomsService } from "../../src/rooms/rooms.service";
 import { ActivitiesService } from "../../src/activities/activities.service";
 import { NotificationsService } from "../../src/notifications/notifications.service";
+import { PushService } from "../../src/notifications/push.service";
 import { EmailService } from "../../src/notifications/email.service";
 import { SmsService } from "../../src/notifications/sms.service";
 import { DiscountService } from "../../src/common/discount.service";
@@ -70,7 +71,22 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     // queues rows and posts nothing: `deliverDue` is the sweep's, and no test
     // of a booking should be reaching anybody's website
     new WebhookService(prisma, async () => ({ status: 200 })),
+    makePushService(prisma),
   );
+}
+
+/**
+ * The push sender, which never reaches Expo in a test.
+ *
+ * `deliver` is the only thing that would, and it is behind `fetch`. A
+ * spec that wants to know who *would* have been sent to mocks `fetch`
+ * and reads the batch — `a-phone-that-asked-to-be-told` does exactly
+ * that. Everything else gets a real service that quietly sends nothing,
+ * because a booking must not fail on a notification and a test should
+ * prove that rather than arrange around it.
+ */
+export function makePushService(prisma: PrismaService): PushService {
+  return new PushService(prisma, new PermissionsService(prisma));
 }
 
 /** Constructing this by hand in a spec is how helpers go stale; go through here. */
@@ -84,6 +100,7 @@ export function makeNotificationsService(prisma: PrismaService): NotificationsSe
     new PlatformSettingsService(prisma),
     makeTemplatesService(prisma),
     makeTaxService(prisma),
+    makePushService(prisma),
   );
 }
 
@@ -200,6 +217,7 @@ export function makePaymentsService(prisma: PrismaService): PaymentsService {
     new PermissionsService(prisma),
     makeOptionsService(prisma),
     makeTaxService(prisma),
+    makePushService(prisma),
   );
 }
 

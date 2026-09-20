@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException, Inject } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
+import { PushService } from "../notifications/push.service";
 import { signToken } from "../common/auth.guard";
 import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
@@ -32,7 +33,10 @@ import { ROLE, type Role } from "@rh/shared";
  */
 @Injectable()
 export class AuthService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PushService) private readonly push: PushService,
+  ) {}
 
   /**
    * The resort plan a signup opens on: the one they picked, or the entry plan.
@@ -342,6 +346,27 @@ export class AuthService {
       });
       return u;
     });
+    /**
+     * The platform is told, because nothing else will tell it.
+     *
+     * An agency lands pending and cannot sell until somebody verifies it
+     * by hand. Until this push existed that somebody had to happen to
+     * open the Platform tab; an agency that signed up on a Friday waited
+     * until Sunday to find out anyone had noticed.
+     */
+    const owners = await this.prisma.user.findMany({
+      where: { role: "SUPER_ADMIN" },
+      select: { id: true },
+    });
+    await this.push.toUsers(
+      owners.map((o) => o.id),
+      "agent.access.requested",
+      {
+        title: "An agency signed up",
+        body: `${input.agencyName} is waiting to be verified`,
+        path: "/platform",
+      },
+    );
     return this.issueToken(user.id, user.role);
   }
 

@@ -23,6 +23,7 @@ import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
 import { WebhookService } from "../v1/webhook.service";
+import { PushService } from "../notifications/push.service";
 import { assertWithinAgentWindow } from "../common/agent-window";
 
 export interface CreateBookingInput {
@@ -154,6 +155,7 @@ export class BookingsService {
     @Inject(TaxService) private readonly tax: TaxService,
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(WebhookService) private readonly webhooks: WebhookService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -693,6 +695,23 @@ export class BookingsService {
       "booking.created",
       { code: booking.code, checkIn, checkOut, adults: input.adults, children: input.children },
       agentUserId,
+    );
+    /**
+     * And the desk's phones.
+     *
+     * `exceptUserId` is the person who took it: their own phone buzzing in
+     * their hand a second after they pressed Create is noise, and noise is
+     * how notifications get turned off.
+     */
+    await this.push.toResort(
+      input.resortId,
+      "booking.created",
+      {
+        title: "New booking",
+        body: `${booking.code} · ${input.adults} adult${input.adults === 1 ? "" : "s"}`,
+        path: `/bookings/${booking.id}`,
+      },
+      { exceptUserId: claims.userId },
     );
     return this.detail(claims, booking.id);
   }

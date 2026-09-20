@@ -47,14 +47,65 @@ These are phase 2's, still in force, plus two of this phase's own.
 
 | task | state |
 |---|---|
-| 1 — signup, both kinds | not started |
-| 2 — the invoice, and giving it to a guest | not started |
-| 3 — `DeviceToken`, and the token's life | not started |
-| 4 — what is worth waking somebody for | not started |
-| 5 — the twenty-three untyped routes | not started |
-| 6 — the polish list the sweeps found | not started |
-| 7 — delete the WebView | not started |
-| 8 — the suite, the APK, the phone | not started |
+| 1 — signup, both kinds | **done** — the rule in `@rh/shared`, two screens, and the doors on the login screen |
+| 2 — the invoice, and giving it to a guest | **done** — typed off the service, rendered, shared as a PDF |
+| 3 — `DeviceToken`, and the token's life | **done** — the table, the two routes, registered on sign-in and forgotten on sign-out |
+| 4 — what is worth waking somebody for | **done** — four events, audience from the permission matrix |
+| 5 — the twenty-three untyped routes | **one down, twenty-two left** — the invoice was typed because task 2 needed it; the rest is debt, carried |
+| 6 — the polish list the sweeps found | **done** — all six |
+| 7 — delete the WebView | **done** — and two guards fired to say so |
+| 8 — the suite, the APK, the phone | in progress |
+| 9 — the bar, on every screen that has one | **done** — 23 routes checked on a phone |
+| 10 — a price list, and a plan that survives to signup | **done** — not in the plan, and should have been |
+| 11 — a welcome, because the first screen was a form | **done** — same |
+
+### Three things this plan did not contain
+
+All three were found by the owner opening the app, not by me reading
+it, and all three were the same kind of miss: I wrote the plan from
+the spec's list of screens and never asked what a person meets when
+they open the thing.
+
+**The bar.** `bookings/[id]` and the two task flows lived outside the
+tab navigator, so it vanished on the booking detail, the payment form
+and all three steps of taking a booking. There was a documented reason
+for the task flows — a bar invites somebody to wander off mid-payment —
+and the owner overruled it twice, which settles it. Twenty-three routes
+now carry it.
+
+**The price list.** The phone sent no plan, so everybody who signed up
+on it landed on the entry plan whatever they had read — and they had
+read nothing, because the phone had no prices. The web has had all of
+this since it launched. Asked why the plan did not cover it, the honest
+answer is that I read the spec's screen list, which says "signup ×2",
+and did not open the web.
+
+**The welcome.** Opening signed out went straight to a sign-in form,
+and task 1 made it worse by hanging three more buttons off the bottom.
+A form is for somebody who has decided.
+
+### What task 5 actually got
+
+One of twenty-three. `invoice` was typed because task 2 could not be
+written without it, and typing it was the ordinary experience: the
+payload carries `rent` *and* `roomRent`, and a screen written from the
+console's JSX would have missed both halves of the frozen/live split.
+
+The other twenty-two are routes the console calls and no phone screen
+does — the cancel pair, expenses create, payroll pay, six reports, the
+audit log, addUser. They are debt and they are named here rather than
+quietly dropped from the plan.
+
+### What the deletion cost, and what caught it
+
+`App.tsx`, `src/console/`, `index.ts` and `test/url-policy.spec.ts` are
+gone. Two guards failed on the next run and both were right:
+
+- `one-source-for-a-colour` → "exempts only things that still exist"
+- `a-screen-never-writes-an-address` → the same exemption, by another name
+
+Both were written to fail exactly then. The exemption lists are empty now
+and the cases stay, for the next thing that earns one.
 
 ---
 

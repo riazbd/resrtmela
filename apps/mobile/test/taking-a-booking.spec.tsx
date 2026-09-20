@@ -58,9 +58,9 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const WhenAndWhere = require("../app/new-booking/index").default;
-const Who = require("../app/new-booking/guest").default;
-const Money = require("../app/new-booking/money").default;
+const WhenAndWhere = require("../app/(tabs)/(desk)/new-booking/index").default;
+const Who = require("../app/(tabs)/(desk)/new-booking/guest").default;
+const Money = require("../app/(tabs)/(desk)/new-booking/money").default;
 const { Draft } = require("../src/booking/draft");
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
