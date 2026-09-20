@@ -82,3 +82,23 @@ became a rule rather than a memory, and this phase inherits those rules —
 
 Every task ends at a screen opened on the phone. The phase ends with the
 agent's twelve swept in one pass.
+
+
+## What the phone found this phase
+
+The sweep reports text, and text says nothing about the bar under it.
+Both of this phase's screen defects were found by **looking at a
+screenshot** after a sweep had already reported everything ok:
+
+1. **A row cut in half.** "Konglak Vip Zone, Sajek Valley, Rangamati"
+   is a real location in this data, and joined with the room count on
+   one line it ate it. The size moved to a line of its own.
+2. **The bar read "Find a room" and "Quotes & in…"** — the same ellipsis
+   the owner had already caught as "Rooms & Ra…". `barLabel` was working;
+   phase 3's new screens each set their own `Stack.Screen` title, which
+   overrides the bar from underneath. Seven tab screens did it, two of
+   them written before this phase.
+
+The second is the one worth remembering: it was reintroduced by the
+person who had just fixed it, a few hours later, without noticing. That
+is what a rule is for, and `a-tab-does-not-name-itself.spec.ts` is it.
