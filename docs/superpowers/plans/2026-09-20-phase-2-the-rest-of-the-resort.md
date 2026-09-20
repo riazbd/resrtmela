@@ -13,19 +13,48 @@ user.
 
 | task | state |
 |---|---|
-| 1 — the nav guard, and rooms: list, detail, edit, types | not started |
-| 2 — guests: list and detail | not started |
-| 3 — expenses | not started |
-| 4 — reports: occupancy, P&L, dues | not started |
-| 5 — settings: resort, taxes, payment methods, branding | not started |
-| 6 — settings: team & roles, rate plans | not started |
-| 7 — housekeeping | not started |
-| 8 — F&B: menu, order, bill | not started |
-| 9 — activities | not started |
-| 10 — payroll | not started |
-| 11 — import | not started |
-| 12 — profile, and bulk email | not started |
+| 1 — the nav guard, and rooms: list, detail, edit, types | **done** |
+| 2 — guests: list and detail | **done** — assembled from two routes, because there is no `GET /guests/:id` |
+| 3 — expenses | **done** — and the client's `expenses.categories` was typed `string[]` over a route that has always returned `{ category, uses }[]` |
+| 4 — reports: the period, and P&L | **done** — `ResortMetrics` came off `unknown`, and the console's local copy of it is deleted |
+| 5 — settings: the resort, its lists | **done** — `ResortSettings` came off `unknown`, which phase 1 named as a debt and left here |
+| 6 — settings: team, rate plans | **done** — team is read-only, and the hub says why |
+| 7 — profile | **done** |
+| 8 — housekeeping | **blocked** — see below |
+| 9 — F&B: menu, order, bill | not started — needs a client slice first |
+| 10 — activities | not started — needs a client slice first |
+| 11 — payroll | not started — needs a client slice first |
+| 12 — import, and bulk email | not started |
 | 13 — the APK, on a device | not started |
+
+## What the remaining tasks actually cost
+
+Written down after tasks 1–7, because the second half of this phase is
+not the same shape as the first and the plan should stop pretending it
+is.
+
+**Housekeeping has no API.** §5 lists it as a screen; there is no
+housekeeping controller, no route, and no page in the console. HOUSEKEEPING
+exists only as a *role*. So this is not a screen to write — it is a
+feature to design, and it belongs in a spec rather than at the end of a
+list of ports. Task 8 is blocked until somebody decides what a
+housekeeping screen is for.
+
+**F&B, activities and payroll each need a client slice before a screen.**
+The typed client has no group for any of them: the console reaches all
+three through hand-written `api<...>` calls — four in activities, three
+in F&B, one in payroll. §0.3's rule applies, so each task starts by
+typing those routes against the controllers and porting the console onto
+them in the same commit, exactly as phase 1's task 1 did for the desk.
+That is where the drift is, and it is worth the order: phase 1's slice
+found four wrong methods, one of them pointing at a route that had never
+existed.
+
+**Import and bulk email are desk work by nature**, and the argument for
+them on a phone is weak: an import is a spreadsheet, and a campaign is a
+paragraph somebody wants to re-read before sending to four hundred
+people. They stay last, and may end up where the subscription and the
+permission matrix are — named on the settings hub as deliberately absent.
 
 Twenty-five screens. The order is by what is most visibly missing rather than
 by the section order in §5: **Rooms is a tab on the bar** and it says "Not
