@@ -57,7 +57,7 @@ function EntriesTab() {
     client.agent.books.heads(),
   );
   const { data, isLoading, error, stale } = useApi<AgencyExpensePage>(keys.agentExpenses(range), () =>
-    api<AgencyExpensePage>(`/agent/expenses?from=${range.from}&to=${range.to}`),
+    client.agent.books.expenses({ from: range.from, to: range.to }),
   );
 
   if (error) return <ErrorState error={error as Error} />;
@@ -67,7 +67,7 @@ function EntriesTab() {
   async function remove(id: number) {
     if (!window.confirm("Delete this entry?")) return;
     try {
-      await api(`/agent/expenses/${id}`, { method: "DELETE" });
+      await client.agent.books.removeExpense(id);
       reload();
     } catch (ex) {
       push((ex as Error).message, "err");

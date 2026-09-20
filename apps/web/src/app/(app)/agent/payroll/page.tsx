@@ -50,7 +50,7 @@ function SheetTab() {
   const qc = useQueryClient();
   const [month, setMonth] = useState(thisMonth());
   const { data, isLoading, error, stale } = useApi<PayrollSheet>(keys.agentPayroll(month), () =>
-    api<PayrollSheet>(`/agent/payroll?month=${month}`),
+    client.agent.payroll.sheet(month),
   );
 
   if (error) return <ErrorState error={error as Error} />;

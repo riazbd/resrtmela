@@ -760,8 +760,16 @@ export function createApiClient(http: Fetcher) {
         // same two answers as a head: paid wages keep the person on the books
         removeEmployee: (id: number) => http<Removal>(`/agent/employees/${id}`, { method: "DELETE" }),
         sheet: (month: string) => http<PayrollSheet>(`/agent/payroll${qs({ month })}`),
-        pay: (employeeId: number, body: unknown) =>
-          http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
+        /**
+         * `month` is required and `amount` is not: paying without one
+         * settles the salary in full, which is what a month usually is.
+         * `kind` is checked against `PAYROLL_PAYMENT_KINDS` and defaults
+         * to SALARY.
+         */
+        pay: (
+          employeeId: number,
+          body: { month: string; amount?: number; method?: string; note?: string; kind?: string },
+        ) => http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
         undoPay: (paymentId: number) =>
           http<{ deleted: boolean }>(`/agent/payroll/payment/${paymentId}`, { method: "DELETE" }),
       },
