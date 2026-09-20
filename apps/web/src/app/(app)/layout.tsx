@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { consoleGate, navVisible, missingFeature } from "@/lib/console-access";
 import { CONSOLE_NAV, planFeatureLabel } from "@rh/shared";
-import { LangProvider, useLang, type DictKey } from "@/lib/i18n";
+import { DICTS, LangProvider, useLang, type DictKey, type Lang } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { OutboxProvider } from "@/lib/outbox";
@@ -201,7 +201,16 @@ function Shell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <n.icon className="h-4 w-4 opacity-70" strokeWidth={1.75} />
-                {n.label ?? (n.labelKey ? (lang === "bn" ? BN_NAV[n.labelKey] ?? n.labelKey : EN_NAV[n.labelKey] ?? n.labelKey) : n.href)}
+                {/*
+                  The shared dictionary, and only it. The sidebar kept a
+                  private copy of these fourteen words until 2026-09-21,
+                  and the day a fifteenth destination was added the menu
+                  read "nav.housekeeping" for a day. `navLabel` throws
+                  rather than printing the key, because a word that is
+                  missing should fail where it is written, not render
+                  quietly in front of a customer.
+                */}
+                {n.label ?? (n.labelKey ? navLabel(lang, n.labelKey) : n.href)}
               </Link>
             );
           })}
@@ -471,35 +480,21 @@ function AddResortButton() {
   );
 }
 
-const BN_NAV: Record<string, string> = {
-  "nav.daySheet": "দিনলিপি",
-  "nav.dashboard": "ড্যাশবোর্ড",
-  "nav.calendar": "ক্যালেন্ডার",
-  "nav.bookings": "বুকিং",
-  "nav.dues": "বকেয়া",
-  "nav.guests": "অতিথি",
-  "nav.expenses": "খরচ",
-  "nav.fb": "রেস্টুরেন্ট",
-  "nav.reports": "রিপোর্ট",
-  "nav.rooms": "রুম ও রেট",
-  "nav.activities": "অ্যাক্টিভিটি",
-  "nav.import": "ইমপোর্ট",
-  "nav.profile": "প্রোফাইল",
-  "nav.settings": "সেটিংস",
-};
-const EN_NAV: Record<string, string> = {
-  "nav.daySheet": "Day Sheet",
-  "nav.dashboard": "Dashboard",
-  "nav.calendar": "Calendar",
-  "nav.bookings": "Bookings",
-  "nav.dues": "Dues",
-  "nav.guests": "Guests",
-  "nav.expenses": "Expenses",
-  "nav.fb": "Restaurant",
-  "nav.reports": "Reports",
-  "nav.rooms": "Rooms & Rates",
-  "nav.activities": "Activities",
-  "nav.import": "Import CSV",
-  "nav.profile": "My Profile",
-  "nav.settings": "Settings",
-};
+/**
+ * One destination's word, from the one dictionary.
+ *
+ * It throws on a key with no word. That reads as harsh for a menu label,
+ * and it is the point: the previous version answered `?? n.labelKey` and
+ * so a missing translation rendered as `nav.housekeeping` in the live
+ * sidebar for a day without failing anything. A build that stops is a
+ * bug somebody fixes; a menu that prints its own source is a bug
+ * everybody scrolls past.
+ *
+ * `the-sidebar-has-a-word-for-every-link` keeps it from ever getting
+ * that far.
+ */
+function navLabel(lang: Lang, key: DictKey): string {
+  const word = DICTS[lang][key] ?? DICTS.en[key];
+  if (!word) throw new Error(`no word for ${key} — add it to DICTS in @rh/app-core`);
+  return word;
+}
