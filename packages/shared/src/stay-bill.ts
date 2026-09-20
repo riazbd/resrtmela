@@ -28,7 +28,7 @@
  * that summed these would be a second implementation of the bill.
  */
 import type { BookingDetail } from "./api-types";
-import { formatMoney, type MoneyFormat } from "./index";
+import { formatMoney, type MoneyFormat } from "./money";
 import { STAY_CHARGE_LABELS, isStayChargeKind } from "./stay-charges";
 
 export type BillLineKind = "ROOM" | "EXTRA_PERSON" | "CHARGE" | "FB" | "ACTIVITY" | "OTHER";

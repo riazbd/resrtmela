@@ -17,7 +17,7 @@
  * reading a field that is no longer the truth.
  */
 import type { Room } from "./api-types";
-import { formatMoney, type MoneyFormat } from "./index";
+import { formatMoney, type MoneyFormat } from "./money";
 
 /** A database enum, so it is declared in code — the accepted exception. */
 export const ROOM_STATUSES = ["ACTIVE", "OUT_OF_SERVICE"] as const;

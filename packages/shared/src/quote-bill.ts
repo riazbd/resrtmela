@@ -24,7 +24,7 @@
  * shown another on a phone has been overcharged by one of them.
  */
 import type { BookingQuote, QuoteLine } from "./api-types";
-import { formatMoney, type MoneyFormat } from "./index";
+import { formatMoney, type MoneyFormat } from "./money";
 
 export type QuoteRowKind = "line" | "discount" | "tax" | "total" | "advance" | "due";
 
