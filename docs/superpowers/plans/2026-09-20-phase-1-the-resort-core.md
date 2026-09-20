@@ -15,7 +15,7 @@ emulator.
 |---|---|
 | 1 — the desk slice of the typed client | **done** (`the-desk-is-typed.spec.ts`, and the guard `a-screen-never-writes-an-address.spec.ts`) |
 | 2 — the read screens: dashboard, day sheet, dues | **done** — and each one found something a test could not: the app had no query provider, and the day sheet opened on UTC's yesterday |
-| 3 — the bookings list | not started |
+| 3 — the bookings list | **done** — and it drew "Invalid Date" over every row while nineteen tests passed |
 | 4 — the booking detail and its stay bill | not started |
 | 5 — the calendar and month availability | not started |
 | 6 — making a booking (single, group, walk-in) | not started |
