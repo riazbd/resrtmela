@@ -44,6 +44,7 @@ export * from "./room-status";
 export * from "./booking-sort";
 export * from "./new-booking";
 export * from "./quote-bill";
+export * from "./housekeeping";
 
 /** Cross-app constants shared by the API and the console. */
 
@@ -116,6 +117,8 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
   { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
   { key: "guests.view", label: "View guests", group: "Inventory" },
+  { key: "housekeeping.view", label: "See which rooms are ready", group: "Inventory" },
+  { key: "housekeeping.manage", label: "Mark rooms cleaned", group: "Inventory" },
   { key: "restaurant.view", label: "View restaurant bills", group: "Restaurant" },
   { key: "restaurant.create", label: "Create restaurant bills (POS)", group: "Restaurant" },
   { key: "restaurant.menu", label: "Manage food packages", group: "Restaurant" },
@@ -293,6 +296,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
     "payments.view", "payments.create", "expenses.view", "expenses.create",
     "rooms.view", "rooms.manage", "guests.view",
+    "housekeeping.view", "housekeeping.manage",
     "restaurant.view", "restaurant.create", "restaurant.menu",
     "agents.view", "agents.manage", "reports.view", "reports.pl",
     "payroll.view", "payroll.manage",
@@ -305,8 +309,19 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   "Front Desk": [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.walkin",
     "payments.view", "payments.create", "rooms.view", "guests.view",
+    // the desk sees whether a room is ready, because it sells the room;
+    // it does not set the state, because it is not the one who knows
+    "housekeeping.view",
     "restaurant.view", "restaurant.create", "activities.view",
   ],
+  /**
+   * The role that had nothing.
+   *
+   * `HOUSEKEEPING` has existed since phase 0 and `permissionsFor`
+   * answered it with an empty array, so somebody added as a housekeeper
+   * signed in to an app with no screens in it at all.
+   */
+  Housekeeping: ["housekeeping.view", "housekeeping.manage", "rooms.view"],
   Agent: ["agent.book", "agent.wallet.view"],
   "Agency owner": [...AGENT_PERMISSIONS],
 };

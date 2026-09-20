@@ -41,6 +41,9 @@ const SHORTER: Record<string, string> = {
   // bar showed "Rooms & Ra…". The rates live on that screen either way,
   // and nobody looking for them looks anywhere else.
   "/rooms": "Rooms",
+  // "Housekeeping" is twelve characters. The spec caught it before the
+  // screen was ever drawn, which is what the spec is for.
+  "/housekeeping": "Cleaning",
 
   // the agent's bar, found by the same rule before phase 3 drew it
   "/agent/discover": "Discover",      // "Discover resorts" — the resorts are what there is to discover

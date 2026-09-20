@@ -23,7 +23,7 @@ describe("the list itself", () => {
   it("has every destination the console offers", () => {
     // the count is asserted so that adding a screen to one client and not
     // the other shows up here rather than as a missing tab on a phone
-    expect(CONSOLE_NAV.length).toBe(29);
+    expect(CONSOLE_NAV.length).toBe(30);
   });
 
   it("gives every entry somewhere to go and something to read", () => {

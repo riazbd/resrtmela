@@ -301,7 +301,11 @@ describe("the register", () => {
     const r = await render(<Harness><DaySheetScreen /></Harness>);
     await waitFor(() => expect(r.getByText("Free")).toBeTruthy());
     await fireEvent.press(r.getByLabelText("Room 1 Camellia, free"));
-    expect(mockPush).toHaveBeenCalledWith("/new-booking?roomId=11&checkIn=2026-09-20");
+    // the night is the one on screen, which is the resort's today — not a
+    // date written down here. Hardcoded, this passed until midnight in
+    // Dhaka and then failed for a reason that had nothing to do with it.
+    const night = todayIn("Asia/Dhaka");
+    expect(mockPush).toHaveBeenCalledWith(`/new-booking?roomId=11&checkIn=${night}`);
   });
 
   /** A room nobody can sell is not a room to start a booking in. */

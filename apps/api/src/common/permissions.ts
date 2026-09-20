@@ -83,7 +83,7 @@ export class PermissionsService {
     }
     if (claims.role === ROLE.MANAGER) return DEFAULT_ROLE_PERMISSIONS.Manager ?? [];
     if (claims.role === ROLE.FRONT_DESK) return DEFAULT_ROLE_PERMISSIONS["Front Desk"] ?? [];
-    if (claims.role === ROLE.HOUSEKEEPING) return [];
+    if (claims.role === ROLE.HOUSEKEEPING) return DEFAULT_ROLE_PERMISSIONS.Housekeeping ?? [];
     return [];
   }
 

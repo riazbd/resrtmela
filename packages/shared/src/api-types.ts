@@ -1335,3 +1335,25 @@ export interface DiscoverResort {
   access: "OPEN" | "WAITING";
   reason: string | null;
 }
+
+/**
+ * A room on the housekeeping list.
+ *
+ * `departedToday` and `arrivingToday` are the two facts a client cannot
+ * work out for itself, and they are what `housekeepingOrder` sorts on —
+ * the room somebody left this morning with somebody arriving into it
+ * tonight is the one to clean first.
+ */
+export interface HousekeepingRow {
+  id: number;
+  name: string;
+  roomTypeName: string | null;
+  /** ACTIVE, or OUT_OF_SERVICE — a room not for sale still gets cleaned */
+  status: string;
+  housekeeping: string;
+  housekeepingAt: string | null;
+  /** who last moved it; null when the departure did, not a person */
+  housekeepingBy: string | null;
+  departedToday: boolean;
+  arrivingToday: boolean;
+}

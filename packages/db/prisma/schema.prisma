@@ -54,6 +54,19 @@ enum RoomStatus {
   OUT_OF_SERVICE
 }
 
+/// Whether a room has been cleaned since the last guest left.
+///
+/// Three, not four. Larger hotels run a supervisor's INSPECTED tick after
+/// CLEAN; at this size the person cleaning and the person checking are the
+/// same person, and a state nobody sets makes the other three harder to
+/// read. It can be added when a resort asks; it cannot be taken away once
+/// every room carries one.
+enum HousekeepingState {
+  DIRTY
+  CLEANING
+  CLEAN
+}
+
 enum ItemKind {
   ROOM
   ACTIVITY
@@ -321,6 +334,7 @@ model User {
   salesPaymentsRecv SalesPayment[]     @relation("SalesPaymentReceivedBy")
   duesPaid          SubscriptionDue[]  @relation("DuePaidBy")
   chargesPaid       PlatformCharge[]   @relation("ChargePaidBy")
+  roomsCleaned      Room[]             @relation("RoomCleanedBy")
   walletTxnsMade    WalletTxn[]        @relation("WalletTxnBy")
   auditLogs         AuditLog[]         @relation("AuditActor")
   wallet            Wallet?
@@ -523,6 +537,21 @@ model Room {
   extraPersonAllowed Boolean @default(false)
   extraPersonRate    Decimal @default(0) @db.Decimal(10, 2)
   extraPersonMax     Int     @default(0)
+
+  /// Whether the room has been cleaned since the last guest left.
+  ///
+  /// Set to DIRTY automatically on check-out — the one automatic rule here,
+  /// and the one that makes the feature work: without it somebody marks
+  /// every departure by hand, and on a busy morning they will not, and by
+  /// ten o'clock the list is wrong and nobody trusts it again.
+  ///
+  /// New rooms start CLEAN. A room nobody has stayed in is ready.
+  housekeeping     HousekeepingState @default(CLEAN)
+  /// When the state last moved, and who moved it — an owner does ask. The
+  /// whole history is in the audit trail and does not need a second home.
+  housekeepingAt   DateTime?
+  housekeepingById Int?
+  housekeepingBy   User?             @relation("RoomCleanedBy", fields: [housekeepingById], references: [id])
 
   /// Retired: out of the inventory, still in the history.
   ///

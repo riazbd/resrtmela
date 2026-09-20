@@ -16,6 +16,7 @@
  */
 import type {
   AgencyApiKey,
+  HousekeepingRow,
   DiscoverResort,
   AgencyRole,
   AgencySite,
@@ -80,6 +81,7 @@ import type {
   TodayFeed,
 } from "./api-types";
 import type { DiscountKind } from "./discount";
+import type { HousekeepingState } from "./housekeeping";
 import type { StayChargeKind } from "./stay-charges";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -456,6 +458,18 @@ export function createApiClient(http: Fetcher) {
       createType: (resortId: number, body: unknown) =>
         http<RoomType>(`/resorts/${resortId}/room-types`, { method: "POST", body }),
       updateType: (id: number, body: unknown) => http<RoomType>(`/room-types/${id}`, { method: "PATCH", body }),
+      /**
+       * Which rooms are ready. Its own permission, not `rooms.view`: a
+       * housekeeper may read this and nothing else about the inventory.
+       */
+      housekeeping: (resortId: number) =>
+        http<HousekeepingRow[]>(`/resorts/${resortId}/housekeeping`),
+      setHousekeeping: (roomId: number, state: HousekeepingState) =>
+        http<{ id: number; housekeeping: HousekeepingState; housekeepingAt: string }>(
+          `/rooms/${roomId}/housekeeping`,
+          { method: "PATCH", body: { state } },
+        ),
+
       ratePlans: (resortId: number) => http<RatePlan[]>(`/resorts/${resortId}/rate-plans`),
       createRatePlan: (resortId: number, body: unknown) =>
         http<RatePlan>(`/resorts/${resortId}/rate-plans`, { method: "POST", body }),

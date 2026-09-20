@@ -1,7 +1,15 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, Prisma as P } from "@rh/db";
 import { PrismaService } from "../prisma/prisma.service";
-import { JwtClaims, ROLE, byRoomName, type Role } from "@rh/shared";
+import {
+  HOUSEKEEPING_STATES,
+  JwtClaims,
+  ROLE,
+  byRoomName,
+  isHousekeepingState,
+  todayIn,
+  type Role,
+} from "@rh/shared";
 import { isManagement, requireResortAccess, requireRoles, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { PlanLimitsService } from "../common/plan-limits.service";
@@ -327,4 +335,122 @@ export class RoomsService {
       return plan ? Number(plan.price) : baseRate;
     });
   }
+
+  // ── housekeeping ──
+
+  /**
+   * Which rooms are ready, and which are not.
+   *
+   * `HOUSEKEEPING` has been a role since phase 0 and `permissionsFor`
+   * answered it with an empty array, so somebody added as a housekeeper
+   * signed in to nothing at all. This is the first route that role has.
+   *
+   * Two facts travel with the state, and they are the two a client
+   * cannot work out for itself: whether a guest **left this room today**
+   * and whether one **arrives into it tonight**. `housekeepingOrder` in
+   * `@rh/shared` turns them into the order the list is read in, and it
+   * lives there because the console and the phone must not disagree
+   * about which room is the urgent one.
+   */
+  async housekeeping(claims: JwtClaims, resortId: number) {
+    requireResortAccess(claims, resortId);
+    await this.perms.require(claims, resortId, "housekeeping.view");
+
+    const resort = await this.prisma.resort.findUniqueOrThrow({
+      where: { id: resortId },
+      select: { timezone: true },
+    });
+    const today = dateOnly(todayIn(resort.timezone));
+
+    const rows = await this.prisma.room.findMany({
+      where: { resortId, deletedAt: null },
+      include: {
+        roomType: { select: { name: true } },
+        housekeepingBy: { select: { name: true } },
+      },
+    });
+
+    /**
+     * Who left today and who arrives tonight, in one query rather than
+     * one per room. A cancelled or no-show booking is neither.
+     */
+    const moving = await this.prisma.bookingItem.findMany({
+      where: {
+        itemKind: "ROOM",
+        booking: {
+          resortId,
+          deletedAt: null,
+          state: { notIn: ["CANCELLED", "NO_SHOW"] },
+          OR: [{ checkIn: today }, { checkOut: today }],
+        },
+      },
+      select: {
+        roomId: true,
+        booking: { select: { checkIn: true, checkOut: true } },
+      },
+    });
+
+    const departed = new Set<number>();
+    const arriving = new Set<number>();
+    for (const item of moving) {
+      if (item.roomId == null) continue;
+      if (item.booking.checkOut?.getTime() === today.getTime()) departed.add(item.roomId);
+      if (item.booking.checkIn?.getTime() === today.getTime()) arriving.add(item.roomId);
+    }
+
+    return rows.sort(byRoomName).map((r) => ({
+      id: r.id,
+      name: r.name,
+      roomTypeName: r.roomType?.name ?? null,
+      status: r.status,
+      housekeeping: r.housekeeping,
+      housekeepingAt: r.housekeepingAt,
+      housekeepingBy: r.housekeepingBy?.name ?? null,
+      departedToday: departed.has(r.id),
+      arrivingToday: arriving.has(r.id),
+    }));
+  }
+
+  /**
+   * Move one room between the three states.
+   *
+   * The state is checked against the declared vocabulary rather than
+   * trusted: a client sending "INSPECTED" would otherwise write a value
+   * every screen has to cope with and none of them expects.
+   */
+  async setHousekeeping(claims: JwtClaims, roomId: number, state: string) {
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+      select: { id: true, resortId: true, name: true, housekeeping: true },
+    });
+    if (!room) throw badRequest("room not found");
+    requireResortAccess(claims, room.resortId);
+    await this.perms.require(claims, room.resortId, "housekeeping.manage");
+
+    if (!isHousekeepingState(state)) {
+      throw badRequest(`A room is ${HOUSEKEEPING_STATES.join(", ")} — not "${state}".`);
+    }
+
+    const updated = await this.prisma.room.update({
+      where: { id: roomId },
+      data: {
+        housekeeping: state,
+        housekeepingAt: new Date(),
+        housekeepingById: claims.userId,
+      },
+      select: { id: true, housekeeping: true, housekeepingAt: true },
+    });
+
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: room.resortId,
+      action: "room.housekeeping",
+      entity: "room",
+      entityId: roomId,
+      diff: { from: room.housekeeping, to: state },
+    });
+
+    return updated;
+  }
+
 }

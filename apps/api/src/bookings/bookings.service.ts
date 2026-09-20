@@ -1463,6 +1463,32 @@ export class BookingsService {
       if (to === "CANCELLED" || to === "NO_SHOW") {
         await this.activities.releaseBookingActivities(tx, b.id);
       }
+      /**
+       * A guest left, so the rooms they slept in need cleaning.
+       *
+       * The one automatic rule housekeeping has, and the one that makes
+       * it work at all: without it somebody marks every departure by
+       * hand, and on a busy morning they will not, and by ten o'clock
+       * the list is wrong and nobody trusts it again.
+       *
+       * Only on check-out. A cancellation and a no-show are people who
+       * never arrived — marking those rooms dirty would hand the
+       * housekeeper rooms nobody has been in.
+       */
+      if (to === "CHECKED_OUT") {
+        const slept = await tx.bookingItem.findMany({
+          where: { bookingId: b.id, itemKind: "ROOM", roomId: { not: null } },
+          select: { roomId: true },
+        });
+        const ids = slept.map((i) => i.roomId!).filter(Boolean);
+        if (ids.length > 0) {
+          await tx.room.updateMany({
+            where: { id: { in: ids } },
+            // no `housekeepingById`: nobody did this, the departure did
+            data: { housekeeping: "DIRTY", housekeepingAt: new Date(), housekeepingById: null },
+          });
+        }
+      }
       await this.notifications.notifyBooking(b.id, "booking_confirmed");
 
       await this.audit.log(

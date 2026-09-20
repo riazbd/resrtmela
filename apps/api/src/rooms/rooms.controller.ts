@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards, Inject } from "@nestjs/common";
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { HOUSEKEEPING_STATES } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { RoomsService } from "./rooms.service";
 
@@ -42,6 +43,11 @@ class UpdateRoomDto extends ExtraBedDto {
   @IsOptional() @IsEnum(["ACTIVE", "OUT_OF_SERVICE"]) status?: "ACTIVE" | "OUT_OF_SERVICE";
   /** A room entered under the wrong type is corrected, not deleted and remade. */
   @IsOptional() @IsInt() roomTypeId?: number;
+}
+
+/** Against the declared vocabulary — a fourth state is not a typo to accept. */
+class HousekeepingDto {
+  @IsIn([...HOUSEKEEPING_STATES]) state!: string;
 }
 
 class CreateRatePlanDto {
@@ -105,6 +111,25 @@ export class RoomsController {
    */
   @Delete("rooms/:id") deleteRoom(@Req() req: AuthedRequest, @Param("id", ParseIntPipe) id: number) {
     return this.rooms.deleteRoom(req.user, id);
+  }
+
+  /**
+   * Which rooms are ready. Its own permission, not `rooms.view`: a
+   * housekeeper may read this and nothing else about the inventory,
+   * and the front desk may read it without being able to change it.
+   */
+  @Get("resorts/:resortId/housekeeping")
+  housekeeping(@Req() req: AuthedRequest, @Param("resortId", ParseIntPipe) resortId: number) {
+    return this.rooms.housekeeping(req.user, resortId);
+  }
+
+  @Patch("rooms/:id/housekeeping")
+  setHousekeeping(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: HousekeepingDto,
+  ) {
+    return this.rooms.setHousekeeping(req.user, id, dto.state);
   }
 
   @Get("resorts/:resortId/rate-plans")

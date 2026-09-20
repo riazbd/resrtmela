@@ -100,6 +100,16 @@ export const CONSOLE_NAV: readonly NavDestination[] = [
   { href: "/payroll", label: "Payroll", roles: ["PAYROLL"], perm: "payroll.view", feature: "payroll" },
   { href: "/reports", labelKey: "nav.reports", roles: ["STAFF"], perm: "reports.view" },
   { href: "/rooms", labelKey: "nav.rooms", roles: ["MGMT"], perm: "rooms.view" },
+  /**
+   * The one destination a `HOUSEKEEPING` account can reach.
+   *
+   * `MGMT` here means what it means on every row below — resort side,
+   * as against the platform's and the agency's. `navVisible` reads
+   * `roles` only for SUPER and AGENT; everything else is decided by the
+   * permission, and `housekeeping.view` is held by management, the
+   * front desk (which sells the room) and the housekeeper.
+   */
+  { href: "/housekeeping", labelKey: "nav.housekeeping", roles: ["MGMT"], perm: "housekeeping.view" },
   { href: "/activities", labelKey: "nav.activities", roles: ["STAFF"], perm: "activities.view", feature: "activities" },
   { href: "/import", labelKey: "nav.import", roles: ["MGMT"], perm: "import.run", feature: "imports" },
   { href: "/profile", labelKey: "nav.profile", roles: ["AGENT"] },
