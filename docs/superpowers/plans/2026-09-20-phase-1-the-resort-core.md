@@ -9,6 +9,23 @@ bill, take the money, check them out, and read the day back. On a real
 phone, installed from a real build — not in a browser lens and not in an
 emulator.
 
+**Where that stands (2026-09-20).** Every one of those verbs has been done
+against production, through the app: BK-00009 was taken on the phone's
+three-step form, checked in, paid twice, charged, uncharged, checked out
+and then edited. The build is real and installed — but on the emulator,
+because no phone has been attached to this machine. The last step is
+somebody plugging one in, and the reason it is the last step rather than
+an optional one is written below.
+
+**What the device found that nothing else could.** Three defects on the
+very first screen, with 268 tests green and a fortnight of browser lenses
+behind them: money printed "BDT 39,500" because Hermes ships without full
+ICU and `Intl` returns the currency code without failing; the figure then
+wrapped *inside its own digits*; and the status bar sat on top of the
+content, because the four tab screens are the only ones with no header and
+a browser has no status bar. Nothing was broken enough to throw. That is
+the whole argument for constraint 7.
+
 ## Where this plan stands
 
 | task | state |
@@ -21,7 +38,7 @@ emulator.
 | 6 — making a booking (single, group, walk-in) | **done** — three steps, a draft above them, and BK-00009 taken on production through it. Looking at it found two things twenty tests did not |
 | 7 — arrival, departure, payment | **done** — walked on production: checked in, took ৳2,000, added and removed a charge, checked out. The outbox is wired, so the three writes a guest is waiting for survive a dead network |
 | 8 — editing a booking | **done** — and it found a console bug: Edit was offered on a checked-in booking to a front desk the API refuses |
-| 9 — the APK, on a phone | not started |
+| 9 — the APK, on a device | **built and installed** (0.2.1, EAS `2c991d71`) — and the first screen of the first build had three defects 268 tests and a fortnight of browser lenses had not found. Not yet on a *real phone*: none has been attached to this machine |
 
 ## What task 1 found
 
