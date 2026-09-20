@@ -9,9 +9,18 @@
  * not it is on the bar, so each one is declared and the ones that are not
  * this person's get `href: null`. That hides the tab and keeps the route
  * reachable, which is what a deep link from a notification needs.
+ *
+ * These four are the only screens in the app with no header, and a header
+ * is what holds a screen clear of the status bar. The first real build put
+ * the clock through the word "Occupancy" and the wifi bars through
+ * "Arrivals" — invisible in a browser, which has no status bar, and
+ * invisible to every test, which has no screen. So the group carries the
+ * top inset itself.
  */
+import { View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useT } from "@rh/app-core";
 import type { NavDestination } from "@rh/shared";
 import { useAuth } from "../../src/api/session";
@@ -34,6 +43,7 @@ const FILES = [
 export default function TabLayout() {
   const { me, role, can, features } = useAuth();
   const t = useT();
+  const insets = useSafeAreaInsets();
 
   const mine = me ? tabsFor({ role, can, features }) : [];
   const onTheBar = new Map(mine.map((d, i) => [d.href, { d, i }]));
@@ -43,6 +53,13 @@ export default function TabLayout() {
     d.labelKey ? t(d.labelKey as never) : (d.label ?? d.href);
 
   return (
+    /**
+     * The inset is the group's, not each screen's. Padding the navigator
+     * keeps the status-bar strip in the screen's own colour and stops
+     * content scrolling up behind the clock; putting it in eight screen
+     * files instead would be eight chances to forget.
+     */
+    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: color.screen }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -92,5 +109,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }

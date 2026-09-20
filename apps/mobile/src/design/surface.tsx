@@ -69,7 +69,23 @@ export function Stat({
       <Text step="caption" tone="muted">
         {label}
       </Text>
-      <Text step="figure" weight="bold" tone={tone} tabular>
+      {/*
+        One line, shrinking if it has to.
+        The first real build drew "BDT 39,5 / 00" — a figure broken across
+        two lines *inside the digits*, which is not a number any more. The
+        currency symbol is one character again now, but a resort with
+        larger figures would reach the same edge, and a tile that wraps a
+        total is worse than a tile with small type in it.
+      */}
+      <Text
+        step="figure"
+        weight="bold"
+        tone={tone}
+        tabular
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
         {value}
       </Text>
       {sub ? (

@@ -334,6 +334,39 @@ export interface MoneyFormat {
   decimals?: number;
 }
 
+/**
+ * The symbol, written down, for the currencies this platform serves.
+ *
+ * `currencyDisplay: "narrowSymbol"` is the correct request and it is not
+ * enough. Hermes — the engine the phone runs on — ships without full ICU:
+ * `Intl.NumberFormat` exists, it does not throw, it groups the digits
+ * correctly, and it answers every currency with its *code*. So the first
+ * real build's dashboard read "BDT 39,500" where every browser had shown
+ * "৳39,500", and the longer prefix wrapped the figure mid-number.
+ *
+ * Nothing failed. The app simply spoke a different language about money
+ * than the console did, to the same owner about the same resort — which
+ * is the same shape of defect `MONTHS_SHORT` exists to prevent in
+ * `day-label.ts`, and it is fixed the same way: write the handful of
+ * values down, and ask the engine only for what every engine gets right.
+ *
+ * A currency that is not here is left to ICU. "AED 1,000" is what a
+ * reader expects, and inventing a glyph would be worse than the code.
+ */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  BDT: "৳",
+  USD: "$",
+  INR: "₹",
+  EUR: "€",
+  GBP: "£",
+  THB: "฿",
+  JPY: "¥",
+  CNY: "¥",
+  LKR: "Rs",
+  NPR: "Rs",
+  PKR: "Rs",
+};
+
 export function formatMoney(
   amount: number | string | null | undefined,
   format: MoneyFormat = {},
@@ -343,6 +376,22 @@ export function formatMoney(
   const currency = format.currency || DEFAULT_CURRENCY;
   const locale = format.locale || DEFAULT_LOCALE;
   const decimals = format.decimals ?? 2;
+
+  const known = CURRENCY_SYMBOLS[currency.toUpperCase()];
+  if (known) {
+    // the digits and their grouping are the engine's — every engine gets
+    // en-IN's lakh right — and the symbol is ours
+    try {
+      const digits = new Intl.NumberFormat(locale, {
+        style: "decimal",
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }).format(value);
+      return `${known}${digits}`;
+    } catch {
+      return `${known}${value.toFixed(decimals)}`;
+    }
+  }
 
   try {
     return new Intl.NumberFormat(locale, {
@@ -367,17 +416,20 @@ export function formatMoney(
 
 /** Just the symbol — for field labels like "Base rate (৳/night)". */
 export function currencySymbol(format: MoneyFormat = {}): string {
+  const currency = format.currency || DEFAULT_CURRENCY;
+  const known = CURRENCY_SYMBOLS[currency.toUpperCase()];
+  if (known) return known;
   try {
     return (
       new Intl.NumberFormat(format.locale || DEFAULT_LOCALE, {
         style: "currency",
-        currency: format.currency || DEFAULT_CURRENCY,
+        currency,
         currencyDisplay: "narrowSymbol",
       })
         .formatToParts(0)
-        .find((p) => p.type === "currency")?.value ?? (format.currency || DEFAULT_CURRENCY)
+        .find((p) => p.type === "currency")?.value ?? currency
     );
   } catch {
-    return format.currency || DEFAULT_CURRENCY;
+    return currency;
   }
 }
