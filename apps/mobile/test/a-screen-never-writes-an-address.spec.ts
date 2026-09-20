@@ -124,17 +124,38 @@ describe("a screen never builds a URL", () => {
  * The other side of the rule: there has to be something to use instead.
  *
  * A prohibition with no alternative is how a guard gets commented out on a
- * Friday. `src/api/session.ts` exports the one client, already carrying the
- * token, and every screen reaches the API through it.
+ * Friday. One client is built, already carrying the token, and every screen
+ * reaches the API through it.
+ *
+ * It is built in `src/api/wire.ts` and re-exported from `src/api/session`,
+ * which is where every screen imports it from. The split exists because
+ * `session` and `outbox` imported each other — a require cycle Metro
+ * reports on a device and nothing else mentions — so the pieces they share
+ * moved to the bottom of the graph. What a screen writes did not change.
  */
 describe("what a screen uses instead", () => {
-  it("is one client, built once, exported from src/api", () => {
-    const session = readFileSync(join(MOBILE, "src", "api", "session.tsx"), "utf8");
-    expect(session).toContain("export const client = createApiClient(api)");
+  const wire = () => readFileSync(join(MOBILE, "src", "api", "wire.ts"), "utf8");
+  const session = () => readFileSync(join(MOBILE, "src", "api", "session.tsx"), "utf8");
+
+  it("is one client, built once, in src/api", () => {
+    expect(wire()).toContain("export const client = createApiClient(api)");
+  });
+
+  it("is still reached from src/api/session, which is what screens import", () => {
+    expect(session()).toContain('export { api, client } from "./wire"');
   });
 
   it("is the same client the console has, from @rh/shared", () => {
-    const session = readFileSync(join(MOBILE, "src", "api", "session.tsx"), "utf8");
-    expect(session).toContain('from "@rh/shared"');
+    expect(wire()).toContain('from "@rh/shared"');
+  });
+
+  /**
+   * The cycle itself, written down. `wire` is the bottom: it may not
+   * import either of the two modules that import it, or the circle is
+   * back and the launch log says so again.
+   */
+  it("is built where neither session nor outbox can be imported from", () => {
+    expect(wire()).not.toMatch(/from "\.\/session"/);
+    expect(wire()).not.toMatch(/from "\.\/outbox"/);
   });
 });

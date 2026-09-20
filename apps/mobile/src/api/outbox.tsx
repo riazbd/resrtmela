@@ -19,7 +19,7 @@ import { Alert } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { OfflineQueue, OutboxProvider, guardedStorage } from "@rh/app-core";
 import { deviceStorage } from "../device/storage";
-import { api } from "./session";
+import { api } from "./wire";
 
 /**
  * Last known connectivity, kept here so the queue can ask at the instant a

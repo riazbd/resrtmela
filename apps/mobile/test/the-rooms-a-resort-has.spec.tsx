@@ -35,6 +35,9 @@ jest.mock("../src/api/session", () => ({
   useAuth: () => ({
     activeResort: mockResort,
     loading: mockLoading,
+    // signed in throughout: these are about a person who has a session
+    // and no resort, which is a different sentence from having neither
+    me: { id: 1, name: "Rahim" },
     can: (key: string) => mockCan(key),
   }),
   client: {

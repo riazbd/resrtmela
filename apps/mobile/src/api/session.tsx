@@ -6,57 +6,22 @@
  * phone: where the token is kept, how a call is made, how permissions are
  * fetched, where money formatting is held, what the offline cache is, and
  * what "go to this screen" means.
+ *
+ * All six now come from `./wire`, which is the bottom of this graph rather
+ * than the middle of it — see the note there for the require cycle that
+ * made the move necessary. `api` and `client` are re-exported because the
+ * whole app imports them from here and where they are built is not the
+ * app's business.
  */
 import { useMemo, useState, type ReactNode } from "react";
-import { router } from "expo-router";
-import {
-  AuthProvider as SharedAuthProvider,
-  CacheStore,
-  QueryProvider,
-  guardedStorage,
-} from "@rh/app-core";
-import { createApiClient, type MoneyFormat } from "@rh/shared";
-import { deviceStorage } from "../device/storage";
+import { AuthProvider as SharedAuthProvider, QueryProvider } from "@rh/app-core";
+import type { MoneyFormat } from "@rh/shared";
 import { MoneyFormatProvider } from "../design/money";
-import { API_URL } from "./config";
 import { Outbox } from "./outbox";
-import { makeApi } from "./transport";
+import { api, cache, client, goTo, permissionsFor, session } from "./wire";
 
 export { useAuth, type AuthValue } from "@rh/app-core";
-
-/**
- * One store, two views of it, and the difference is load-bearing.
- *
- * The session is guarded: nothing it does has a cleverer answer to a failed
- * write than carrying on, and a front desk that cannot open because storage
- * misbehaved is not a trade worth making. The cache is *not* guarded,
- * because `CacheStore` has a better answer to a full store than swallowing —
- * it drops the oldest half and retries — and a guard would silently retire
- * that.
- */
-const device = deviceStorage();
-const session = guardedStorage(device);
-const cache = new CacheStore(device);
-
-/**
- * Stepping out of an impersonated session. In the console this is a full
- * page load, so nothing of the tenant's is left in memory; a phone has no
- * such thing, so it is a router replace and the provider clears what it
- * holds itself.
- *
- * A module constant rather than an inline arrow: it reaches a dependency
- * array inside the provider, and a new function each render would make the
- * context value new each render, re-rendering every screen that reads it.
- */
-const goTo = (path: string) => router.replace(path as never);
-
-const onSignedOut = () => router.replace("/login");
-
-export const api = makeApi({ baseUrl: API_URL, storage: session, onSignedOut });
-export const client = createApiClient(api);
-
-/** Two answers in one request: what this person may do, and what the plan includes. */
-const permissionsFor = (resortId?: number) => client.permissions(resortId);
+export { api, client } from "./wire";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   /**
