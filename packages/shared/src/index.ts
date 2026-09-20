@@ -373,46 +373,58 @@ export function formatMoney(
   format: MoneyFormat = {},
 ): string {
   const n = amount == null || amount === "" ? 0 : Number(amount);
-  const value = Number.isFinite(n) ? n : 0;
+  const safe = Number.isFinite(n) ? n : 0;
   const currency = format.currency || DEFAULT_CURRENCY;
   const locale = format.locale || DEFAULT_LOCALE;
   const decimals = format.decimals ?? 2;
 
+  /**
+   * A figure that rounds away to nothing is nothing, and nothing has no
+   * sign. Without this, −৳0.40 at whole-taka precision prints "-৳0",
+   * which reads as a debt of zero — a sentence with no meaning on a
+   * bill.
+   */
+  const value = Number(safe.toFixed(decimals)) === 0 ? 0 : safe;
+
   const known = CURRENCY_SYMBOLS[currency.toUpperCase()];
-  if (known) {
-    /**
-     * The digits and their grouping are the engine's — every engine gets
-     * en-IN's lakh right — and the symbol is ours.
-     *
-     * The sign is formatted separately and put in front of the symbol.
-     * Prefixing a formatted negative gives "৳-4,000", which reads as a
-     * typo and hides the minus inside the currency mark; a loss that does
-     * not look like a loss is the worst way for this to be wrong. Rounded
-     * first, so a value that formats as zero is not given a sign.
-     */
-    const fixed = Number(value.toFixed(decimals));
-    const size = Math.abs(fixed);
-    const sign = fixed < 0 ? "-" : "";
-    try {
-      const digits = new Intl.NumberFormat(locale, {
-        style: "decimal",
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      }).format(size);
-      return `${sign}${known}${digits}`;
-    } catch {
-      return `${sign}${known}${size.toFixed(decimals)}`;
-    }
-  }
 
   try {
-    return new Intl.NumberFormat(locale, {
+    const printed = new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
       currencyDisplay: "narrowSymbol",
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     }).format(value);
+
+    /**
+     * ICU answered with a symbol: keep every bit of it.
+     *
+     * **Where the symbol goes is the locale's business, not ours.**
+     * German and French put the euro after the number — "1.234,50 €" —
+     * and the first version of this fix placed every known symbol in
+     * front, which would have been wrong for both. The API renders
+     * invoices with this function, so that would have been wrong on
+     * paper a guest keeps.
+     */
+    if (!known || !printed.includes(currency.toUpperCase())) return printed;
+
+    /**
+     * ICU gave back the *code*, which is Hermes without full currency
+     * data: `Intl.NumberFormat` exists, does not throw, groups the
+     * digits correctly, and hands back "BDT" where "৳" belongs. Nothing
+     * fails — the app simply speaks a different language about money
+     * than the console does, to the same owner about the same resort.
+     *
+     * So only the code is replaced, and the position ICU chose for it
+     * is left alone. The space beside it goes with it: "BDT 39,500"
+     * becomes "৳39,500" rather than "৳ 39,500".
+     */
+    const code = currency.toUpperCase();
+    // the separator ICU puts beside a code is a non-breaking space, not a
+    // plain one, so both are matched — and it goes with the code, because
+    // "৳ 39,500" is not how anybody writes taka
+    return printed.replace(new RegExp(`[\\s ]?${code}[\\s ]?`), known);
   } catch {
     // an unknown currency or malformed locale must not blank out a screen
     try {

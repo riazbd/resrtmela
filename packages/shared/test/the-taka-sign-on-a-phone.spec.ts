@@ -57,9 +57,32 @@ describe("the symbol is ours, not the engine's", () => {
     expect(formatMoney(-0.5, { currency: "USD", locale: "en-US" })).toBe("-$0.50");
   });
 
-  it("does not sign a zero", () => {
+  /**
+   * A figure that rounds away to nothing is nothing. "-৳0" on a bill is
+   * a debt of zero, which is a sentence with no meaning.
+   */
+  it("does not sign a zero, however it got there", () => {
     expect(formatMoney(0, { currency: "BDT", decimals: 0 })).toBe("৳0");
     expect(formatMoney(-0, { currency: "BDT", decimals: 0 })).toBe("৳0");
+    expect(formatMoney(-0.4, { currency: "BDT", decimals: 0 })).toBe("৳0");
+  });
+
+  /**
+   * Where the symbol goes is the locale's business, not ours.
+   *
+   * German and French put the euro *after* the number. The first fix
+   * here placed the symbol itself, as a prefix, for every currency it
+   * knew — which would have been wrong for both, and the API renders
+   * invoices with this function. Caught before deploying by asking what
+   * ICU actually returns rather than assuming.
+   */
+  it("leaves placement to the locale where the engine knows it", () => {
+    // ICU separates with a non-breaking space, so the rule is asserted
+    // as an order rather than as an exact string
+    const euro = formatMoney(1234.5, { currency: "EUR", locale: "de-DE" });
+    expect(euro.startsWith("1.234,50")).toBe(true);
+    expect(euro.endsWith("€")).toBe(true);
+    expect(formatMoney(1234.5, { currency: "USD", locale: "en-US" })).toBe("$1,234.50");
   });
 
   it("says the symbol on its own, for a field label", () => {
