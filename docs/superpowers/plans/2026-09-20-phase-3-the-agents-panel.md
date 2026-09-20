@@ -58,18 +58,18 @@ Then the three administrative ones.
 | task | state |
 |---|---|
 | 1 — the agent slice, checked against the controllers, console call sites ported | **done** — `6e4e02d`; nine routes answered `unknown`, four were missing, two defects found by typing |
-| 2 — discover, the screen an agent lands on | not started |
-| 3 — search, and the room it finds | not started |
-| 4 — calendar | not started |
-| 5 — quotes and invoices | not started |
-| 6 — wallet | not started |
-| 7 — expenses | not started |
-| 8 — payroll | not started |
-| 9 — tours | not started |
-| 10 — guests | not started |
-| 11 — team | not started |
-| 12 — website and api | not started |
-| 13 — the whole panel, on the owner's phone | not started |
+| 2 — discover, the screen an agent lands on | **done** — `aa50d54` |
+| 3 — search, and the room it finds | **done** — `a158d57`; `agentRate` absent is not zero |
+| 4 — calendar | **done** — `52257c6`; one number a night, counted in @rh/shared |
+| 5 — quotes and invoices | **done** — `3e9a36e`; the list, the document, and taking money |
+| 6 — wallet | **done** — `797e3ba` |
+| 7 — expenses | **done** — `797e3ba` |
+| 8 — payroll | **done** — `797e3ba`; `pay`'s body was `unknown` and the call was wrong |
+| 9 — tours | **done** |
+| 10 — guests | **done** |
+| 11 — team | **done** |
+| 12 — website and api | **done** — revoking a key is the one write |
+| 13 — the whole panel, on the owner's phone | in progress |
 
 ## How it is verified
 

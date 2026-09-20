@@ -31,17 +31,16 @@ const APP = join(__dirname, "..", "app");
  * screen is declared done, and the phase's plan is the other half of the
  * same statement.
  */
-const NOT_YET: Record<string, string> = {
-  // phase 3 — the agent's own panel
-  "/agent/tours": "phase 3",
-  "/agent/guests": "phase 3",
-  "/agent/expenses": "phase 3",
-  "/agent/payroll": "phase 3",
-  "/agent/wallet": "phase 3",
-  "/agent/team": "phase 3",
-  "/agent/website": "phase 3",
-  "/agent/api": "phase 3",
-};
+/**
+ * Empty, as of phase 3.
+ *
+ * Every destination `CONSOLE_NAV` offers now has a route behind it, on
+ * both sides of the app. The list stays because the next one added to
+ * the console arrives in the phone's More list the moment it is added
+ * there — and a destination with no route is found by whoever taps it,
+ * not by whoever wrote it.
+ */
+const NOT_YET: Record<string, string> = {};
 
 /**
  * Every path expo-router will serve, read off the file tree the way the
