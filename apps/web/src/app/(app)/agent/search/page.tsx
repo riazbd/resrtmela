@@ -10,6 +10,7 @@ import { Table } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { MapPin, Search } from "lucide-react";
 import type { AgencyRoomOffer } from "@rh/shared";
+import { todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 
 /**
  * What is free between two dates.
@@ -42,7 +43,7 @@ function bookHref(resortId: number, from: string, to: string, roomId?: number): 
   return `/bookings?${q.toString()}`;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayIn(PLATFORM_TIMEZONE);
 const plusDays = (iso: string, days: number) =>
   new Date(new Date(`${iso}T00:00:00Z`).getTime() + days * 86_400_000).toISOString().slice(0, 10);
 

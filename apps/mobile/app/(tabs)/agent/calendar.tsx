@@ -33,6 +33,7 @@ import {
   monthStart,
   todayIn,
   type AgencyCalendar,
+  PLATFORM_TIMEZONE,
 } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
@@ -45,9 +46,9 @@ const WEEKDAY_INITIALS = ["S", "M", "T", "W", "T", "F", "S"];
 export default function AgentCalendarScreen() {
   const { me } = useAuth();
   // an agency has no resort and so no resort's timezone; its month is its own
-  const [month, setMonth] = useState(() => monthOf(todayIn(undefined)));
+  const [month, setMonth] = useState(() => monthOf(todayIn(PLATFORM_TIMEZONE)));
 
-  const from = monthStart(month) ?? todayIn(undefined);
+  const from = monthStart(month) ?? todayIn(PLATFORM_TIMEZONE);
   const to = addDaysIso(from, monthLength(month) - 1);
 
   const feed = useApi<AgencyCalendar>(

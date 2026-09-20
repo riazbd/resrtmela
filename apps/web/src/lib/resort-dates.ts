@@ -6,4 +6,4 @@
  * package with one front door cannot export both. The console keeps the name
  * it has always used.
  */
-export { todayIn, addDaysIso, shiftMonth as monthOf } from "@rh/shared";
+export { todayIn, addDaysIso, shiftMonth as monthOf, PLATFORM_TIMEZONE } from "@rh/shared";

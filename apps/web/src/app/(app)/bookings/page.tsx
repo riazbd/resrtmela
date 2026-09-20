@@ -28,7 +28,7 @@ import {
   type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
   BOOKING_STATES, bookingStateLabel, billLines,
   whatTheBookingNeeds, BOOKING_GAP_MESSAGES, extraPersonRoom,
-  nextStates, transitionCanWait, paths, canEditStay, todayIn,
+  nextStates, transitionCanWait, paths, canEditStay, todayIn, addDaysIso,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -73,8 +73,21 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
   const { activeResort, isStaff, role, isAgent } = useAuth();
   const { push } = useToast();
-  const [checkIn, setCheckIn] = useState(iso(new Date()));
-  const [checkOut, setCheckOut] = useState(iso(new Date(Date.now() + 86400000)));
+  /**
+   * The resort's day, not the browser's.
+   *
+   * `iso` is `toISOString().slice(0, 10)` — UTC, always — so between
+   * midnight and six in Dhaka this form opened pre-filled with
+   * **yesterday**, and a clerk taking a walk-in at one in the morning
+   * could sell a night that had already gone. Found on 2026-09-21 at two
+   * in the morning, when the housekeeping mark refused to appear because
+   * "today" here was the 20th and the resort was on the 21st.
+   *
+   * The fourth time this project has met the same fault. `todayIn` is the
+   * answer every time.
+   */
+  const [checkIn, setCheckIn] = useState(() => todayIn(activeResort?.timezone));
+  const [checkOut, setCheckOut] = useState(() => addDaysIso(todayIn(activeResort?.timezone), 1));
   const [picked, setPicked] = useState<number[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -98,7 +111,9 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
     if (!open || !preset) return;
     if (preset.checkIn) setCheckIn(preset.checkIn);
     if (preset.checkOut) setCheckOut(preset.checkOut);
-    else if (preset.checkIn) setCheckOut(iso(new Date(new Date(preset.checkIn).getTime() + 86400000)));
+    // the night after the one they picked, counted on the string rather
+    // than through a Date that would drag UTC back in
+    else if (preset.checkIn) setCheckOut(addDaysIso(preset.checkIn, 1));
     if (preset.roomId) setPicked([preset.roomId]);
     else setPicked([]);
   }, [open, preset]);

@@ -14,7 +14,7 @@ import { Button as Btn } from "@/components/ui";
 import { HowItArrived, paymentMethodsFrom } from "./how-it-arrived";
 import { POLICY_FIELDS } from "./policy-fields";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
-import { monthOf } from "@/lib/resort-dates";
+import { monthOf, todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
 import { displayPhone } from "@/lib/contact";
 import { AgencyQueue } from "./agency-queue";
@@ -688,7 +688,8 @@ export default function PlatformPage() {
               // ragged edge that reads as a rendering fault
               while (days.length % 7 !== 0) days.push(null);
               const byDay = new Map(cal.map((c) => [Number(c.date.slice(8)), c]));
-              const todayIso = new Date().toISOString().slice(0, 10);
+              // which square to ring: the platform's day, not the server's
+              const todayIso = todayIn(PLATFORM_TIMEZONE);
               return days.map((day, i) => {
                 const c = day ? byDay.get(day) : undefined;
                 const iso = day ? `${month}-${String(day).padStart(2, "0")}` : "";

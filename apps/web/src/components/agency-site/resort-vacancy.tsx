@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney, type AgencyResort, type PublishedVacancy } from "@rh/shared";
 import { API_URL } from "@/lib/api-url";
 import { enquiry, whatsappLink } from "./contact";
+import { todayIn, addDaysIso, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 
 /**
  * What is free at one resort, and a message to the agency about it.
@@ -23,8 +24,10 @@ export function ResortVacancy({
   whatsapp: string | null;
   accent: string;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  // a visitor has no session and the payload carries no zone, so the
+  // house zone decides — UTC would offer last night's rooms until six
+  const today = todayIn(PLATFORM_TIMEZONE);
+  const tomorrow = addDaysIso(today, 1);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(tomorrow);
   const [rows, setRows] = useState<PublishedVacancy[] | null>(null);

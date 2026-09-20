@@ -24,6 +24,7 @@ import {
   addDaysIso,
   dayLabel,
   formatMoney,
+  PLATFORM_TIMEZONE,
   todayIn,
   type AgencyExpensePage,
   type ExpenseHeadRow,
@@ -45,8 +46,10 @@ export default function AgentExpensesScreen() {
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
-  // an agency has no resort and so no resort's timezone
-  const today = todayIn(undefined);
+  // an agency has no resort and so no resort's timezone. It was
+  // `todayIn(undefined)`, which reads as "no zone in particular" and
+  // means UTC — a day behind in Dhaka until six in the morning.
+  const today = todayIn(PLATFORM_TIMEZONE);
   const [from, setFrom] = useState(`${today.slice(0, 8)}01`);
   const [to, setTo] = useState(today);
   const [adding, setAdding] = useState(false);
@@ -207,7 +210,7 @@ export default function AgentExpensesScreen() {
 function NewEntry({ heads, onDone }: { heads: ExpenseHeadRow[]; onDone: () => void }) {
   const qc = useQueryClient();
   const [headId, setHeadId] = useState(heads[0]?.id ?? 0);
-  const [date, setDate] = useState(todayIn(undefined));
+  const [date, setDate] = useState(todayIn(PLATFORM_TIMEZONE));
   const [details, setDetails] = useState("");
   const [amount, setAmount] = useState(0);
   const [tried, setTried] = useState(false);

@@ -14,6 +14,22 @@
  * and none in the console. It decides here.
  */
 
+/**
+ * The zone to use when there is no resort to ask.
+ *
+ * An agency has no `timezone` — it is not a place, it sells across
+ * several — and neither does the platform itself or a public site
+ * rendered for a stranger. `todayIn(undefined)` falls back to UTC, which
+ * for six hours after midnight is the wrong day in Bangladesh, so those
+ * callers name this instead of naming nothing.
+ *
+ * It is the same value `platform.service.ts` gives a resort it creates.
+ * A platform that one day sells outside Bangladesh will have to make this
+ * a setting; until then a constant that says so is better than nine
+ * copies of `new Date()`.
+ */
+export const PLATFORM_TIMEZONE = "Asia/Dhaka";
+
 /** Today at this resort, as `YYYY-MM-DD`. */
 export function todayIn(timeZone: string | undefined, now: Date = new Date()): string {
   return civilDate(now, timeZone);

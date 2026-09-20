@@ -25,6 +25,7 @@ import { MoneyReceived } from "@/components/money-received";
 import { ErrorState } from "@/components/error-state";
 import { FileText, Plus, Printer, Send, Trash2 } from "lucide-react";
 import type { SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
+import { todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 
 /**
  * Quotations and invoices.
@@ -256,7 +257,8 @@ function DocEditor({
     clientEmail: "",
     clientPhone: "",
     clientAddress: "",
-    issueDate: new Date().toISOString().slice(0, 10),
+    // the date printed on a document a guest reads: the house zone, not UTC
+    issueDate: todayIn(PLATFORM_TIMEZONE),
     validUntil: "",
     discount: 0,
     taxRate: 0,

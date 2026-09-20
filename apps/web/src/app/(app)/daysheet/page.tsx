@@ -36,7 +36,12 @@ export default function DaySheetPage() {
     <div className="space-y-4">
       {/* date navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <DateNav value={date} onChange={setDate} todayLabel={t("ds.today")} />
+        <DateNav
+          value={date}
+          onChange={setDate}
+          today={todayIn(activeResort?.timezone)}
+          todayLabel={t("ds.today")}
+        />
         <div className="text-sm font-semibold text-slate-600">
           {new Date(date + "T00:00:00").toLocaleDateString("en-GB", {
             weekday: "long", day: "numeric", month: "long", year: "numeric",

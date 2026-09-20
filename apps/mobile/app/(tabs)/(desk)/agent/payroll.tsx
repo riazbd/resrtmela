@@ -15,7 +15,14 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi, useQueryClient } from "@rh/app-core";
-import { MONTHS_LONG, formatMoney, shiftMonth, todayIn, type PayrollSheet } from "@rh/shared";
+import {
+  MONTHS_LONG,
+  PLATFORM_TIMEZONE,
+  formatMoney,
+  shiftMonth,
+  todayIn,
+  type PayrollSheet,
+} from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { Button } from "../../../../src/design/button";
 import { Field, Input } from "../../../../src/design/input";
@@ -38,7 +45,7 @@ export default function AgentPayrollScreen() {
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
-  const [month, setMonth] = useState(() => todayIn(undefined).slice(0, 7));
+  const [month, setMonth] = useState(() => todayIn(PLATFORM_TIMEZONE).slice(0, 7));
   const [paying, setPaying] = useState<number | null>(null);
   const [amount, setAmount] = useState(0);
   const [refused, setRefused] = useState<string | null>(null);

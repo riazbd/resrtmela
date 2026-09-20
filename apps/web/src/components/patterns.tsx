@@ -147,11 +147,22 @@ export function Table({
 export function DateNav({
   value,
   onChange,
+  today,
   todayLabel = "Today",
   className = "",
 }: {
   value: string;
   onChange: (iso: string) => void;
+  /**
+   * The resort's today, and required rather than worked out here.
+   *
+   * This button read `new Date().toISOString()` — UTC — so between
+   * midnight and six in Dhaka "Today" went to yesterday, on the day
+   * sheet and the expense register at once. A pattern component cannot
+   * know a resort's zone, so it asks for the answer instead of guessing,
+   * and the compiler makes every caller supply one.
+   */
+  today: string;
   todayLabel?: string;
   className?: string;
 }) {
@@ -167,7 +178,7 @@ export function DateNav({
       <Button variant="ghost" size="sm" onClick={() => shift(-1)} aria-label="Previous day">
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => onChange(new Date().toISOString().slice(0, 10))}>
+      <Button variant="ghost" size="sm" onClick={() => onChange(today)}>
         {todayLabel}
       </Button>
       <Button variant="ghost" size="sm" onClick={() => shift(1)} aria-label="Next day">

@@ -10,6 +10,7 @@ import { Table, Tabs } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { Plus, Trash2 } from "lucide-react";
 import type { AgencyExpensePage, ExpenseHeadRow } from "@rh/shared";
+import { todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 
 /**
  * The agency's own expenses.
@@ -167,7 +168,8 @@ function AddExpense({
   const { push } = useToast();
   const { submit } = useOutbox();
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    // an agency is not a place, so the platform's own zone decides
+    date: todayIn(PLATFORM_TIMEZONE),
     headId: heads[0]?.id ?? 0,
     details: "",
     amount: "",

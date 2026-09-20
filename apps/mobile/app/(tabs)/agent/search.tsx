@@ -27,6 +27,7 @@ import {
   nightsBetweenIso,
   todayIn,
   type AgencyRoomOffer,
+  PLATFORM_TIMEZONE,
 } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { Button } from "../../../src/design/button";
@@ -46,7 +47,7 @@ export default function RoomSearchScreen() {
 
   // an agency has no resort, so it has no resort's timezone either; the
   // dates it asks about are its own day
-  const today = todayIn(undefined);
+  const today = todayIn(PLATFORM_TIMEZONE);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(addDaysIso(today, 1));
   /** What was last asked — not what the pickers currently read. */
