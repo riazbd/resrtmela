@@ -75,11 +75,16 @@ const room = (over: Partial<Room> = {}): Room => ({
   ...over,
 });
 
-/** Creation order, which is what the API sends on this route. */
+/**
+ * The order `listRooms` actually sends — it sorts with `byRoomName` on
+ * the server and says why. This fixture arrived shuffled at first, to
+ * prove a client-side sort that the route made unnecessary and that no
+ * real response would ever have exercised.
+ */
 const TEN = [
-  room({ id: 13, name: "10 Bakul", baseRate: 4500 }),
   room({ id: 11, name: "1 Camellia" }),
   room({ id: 12, name: "2 Lotus", baseRate: 6500, status: "OUT_OF_SERVICE" }),
+  room({ id: 13, name: "10 Bakul", baseRate: 4500 }),
 ];
 
 beforeEach(() => {
@@ -102,13 +107,12 @@ describe("every room a resort has", () => {
   });
 
   /**
-   * This route sends creation order. A plain string sort puts "10 Bakul"
-   * between "1 Camellia" and "2 Lotus"; `byRoomName` reads the number.
-   *
-   * The day sheet does the opposite and must: the API orders *that* route,
-   * and a second opinion would undo it.
+   * The server's order, undisturbed — the day sheet's rule, and this
+   * route obeys it too. `listRooms` already sorts with `byRoomName`,
+   * so a client that sorted again would be one release away from
+   * overriding an order the server had a reason for.
    */
-  it("puts them in the order a person counts rooms in", async () => {
+  it("draws them in the order the server sent", async () => {
     const r = await open(RoomsScreen);
     await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
     const names = r.getAllByText(/Camellia|Lotus|Bakul/).map((n) => n.props.children);

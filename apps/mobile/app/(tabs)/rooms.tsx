@@ -7,17 +7,23 @@
  *
  * The console draws this as a six-column table. A phone has room for the
  * three things somebody scanning the list is looking for — which room,
- * what it costs a night, and whether it is open — with the rest behind the
- * row. The order is the server's, sorted by `byRoomName` because the API
- * sends rooms in creation order here and "10 Bakul" belongs after
- * "9 Krishnachura" rather than after "1 Camellia".
+ * what it costs a night, and whether it is open — with the rest behind
+ * the row.
+ *
+ * **The order is the server's, and this screen does not touch it.**
+ * `listRooms` sorts with `byRoomName` and says why: grouped by type, an
+ * eight-room resort read 3, 4, 5, 6, 7, 8, 1, 2. This file sorted again
+ * on its first afternoon, with a comment claiming the route sent
+ * creation order — it does not, and the comment was written from the
+ * type rather than from the service. Harmless, because it was the same
+ * comparator, and wrong in the way the day sheet's room order was wrong:
+ * a client holding a second opinion about order is one release away from
+ * overriding the server's.
  */
-import { useMemo } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import {
-  byRoomName,
   extraPersonNote,
   formatMoney,
   roomStatusLabel,
@@ -39,15 +45,8 @@ export default function RoomsScreen() {
     enabled: resortId !== undefined,
   });
 
-  /**
-   * Sorted here, and this is the one screen where that is right.
-   *
-   * The day sheet must *not* sort — the API orders that route and a second
-   * opinion would undo it. This route sends creation order, which puts
-   * "10 Bakul" between "1 Camellia" and "2 Lotus" on a plain string sort
-   * and nowhere sensible at all unsorted.
-   */
-  const rooms = useMemo(() => [...(list.data ?? [])].sort(byRoomName), [list.data]);
+  // the server's order, kept — see the note at the top of this file
+  const rooms = list.data ?? [];
 
   const header = <Stack.Screen options={{ title: "Rooms & rates" }} />;
 

@@ -56,8 +56,18 @@ interface RoomTypeLite {
  * could take bookings from it and never filter by it.
  */
 
+/**
+ * What was made, so the page can do something useful with it.
+ *
+ * This was `(code: string) => void` and the page's handler ignored the
+ * argument entirely — so a group booking told the clerk its tag in a
+ * toast and then showed them the whole list to find the two bookings
+ * in. The tag is what the Group filter above the table takes.
+ */
+type Created = { kind: "one"; id: number; code: string } | { kind: "group"; tag: string };
+
 function NewBookingModal({ open, onClose, onCreated, preset }: {
-  open: boolean; onClose: () => void; onCreated: (code: string) => void;
+  open: boolean; onClose: () => void; onCreated: (made: Created) => void;
   preset?: { roomId?: number | null; checkIn?: string | null; checkOut?: string | null } | null;
 }) {
   const methodChoices = usePaymentMethods(useAuth().activeResort?.id);
@@ -199,7 +209,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           remarks: remarks || undefined,
         });
         push(`Group ${res.groupTag}: ${res.count} bookings (${res.bookings.map((b) => b.code).join(", ")})`);
-        onCreated(res.groupTag);
+        onCreated({ kind: "group", tag: res.groupTag });
         onClose();
         setPicked([]); setFullName(""); setPhone(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setIsGroup(false); setWalkIn(false);
         return;
@@ -223,7 +233,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
       });
       setTried(false);
       push(`Booking ${created.code} created`);
-      onCreated(created.code);
+      onCreated({ kind: "one", id: created.id, code: created.code });
       onClose();
       setPicked([]); setFullName(""); setPhone(""); setEmail(""); setNid(""); setDiscount(0); setDiscountKind("FLAT"); setAdvAmount(0); setRemarks(""); setWalkIn(false); setExtraPersons(0);
     } catch (ex) {
@@ -1121,7 +1131,27 @@ function BookingsInner() {
       </Card>
       <div className="text-xs text-slate-400">{filtered.length} of {total} bookings</div>
 
-      <NewBookingModal open={showNew} preset={presetOn ? preset : null} onClose={() => setShowNew(false)} onCreated={() => void load()} />
+      <NewBookingModal
+        open={showNew}
+        preset={presetOn ? preset : null}
+        onClose={() => setShowNew(false)}
+        onCreated={(made) => {
+          void load();
+          if (made.kind === "group") {
+            /**
+             * A group is several bookings and there is no one of them to
+             * open, so the list is narrowed to the tag the server just
+             * minted — which is what the Group filter is for, and what
+             * the clerk would otherwise type out of a toast.
+             */
+            setGroup(made.tag);
+          } else {
+            // one booking: open it, rather than leaving somebody to find
+            // the code they were just shown among ninety rows
+            setOpenId(made.id);
+          }
+        }}
+      />
 
       <Modal open={openId !== null} onClose={() => setOpenId(null)} title="Booking" wide>
         {openId !== null && (
