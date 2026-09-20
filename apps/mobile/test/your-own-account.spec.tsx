@@ -38,7 +38,7 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const ProfileScreen = require("../app/profile").default;
+const ProfileScreen = require("../app/(tabs)/(desk)/profile").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

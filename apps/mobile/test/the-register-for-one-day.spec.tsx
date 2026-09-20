@@ -39,7 +39,7 @@ jest.mock("../src/api/session", () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const DaySheetScreen = require("../app/daysheet").default;
+const DaySheetScreen = require("../app/(tabs)/(desk)/daysheet").default;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { Harness } = require("./harness");
 

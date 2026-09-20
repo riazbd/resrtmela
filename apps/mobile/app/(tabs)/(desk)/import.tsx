@@ -18,11 +18,11 @@
  */
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
-import { CONSOLE_URL } from "../src/api/config";
-import { Button } from "../src/design/button";
-import { Card, Row } from "../src/design/surface";
-import { Text } from "../src/design/text";
-import { color, radius, space } from "../src/design/tokens";
+import { CONSOLE_URL } from "../../../src/api/config";
+import { Button } from "../../../src/design/button";
+import { Card, Row } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { color, radius, space } from "../../../src/design/tokens";
 
 /** What the console can bring in, in the order its own page lists them. */
 const DATASETS = [

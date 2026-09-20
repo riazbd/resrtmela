@@ -25,14 +25,14 @@ import {
   todayIn,
   type ResortMetrics,
 } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Lenses } from "../../src/design/lenses";
-import { useMoneyFormat } from "../../src/design/money";
-import { Loading, Problem, Stale } from "../../src/design/states";
-import { Card, Row, Stat } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Lenses } from "../../../../src/design/lenses";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Loading, Problem, Stale } from "../../../../src/design/states";
+import { Card, Row, Stat } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { space } from "../../../../src/design/tokens";
 
 /**
  * How far back to look. Named periods rather than a date picker, because

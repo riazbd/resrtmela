@@ -81,7 +81,7 @@ describe("the sentence about choosing a resort", () => {
     "app/bookings/[id]/index.tsx",
     "app/bookings/[id]/edit.tsx",
     "app/bookings/[id]/pay.tsx",
-    "app/profile.tsx",
+    "app/(tabs)/(desk)/profile.tsx",
   ]);
 
   it("is what every screen that reads activeResort reaches for", () => {

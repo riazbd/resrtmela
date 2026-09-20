@@ -42,9 +42,9 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const ReportsScreen = require("../app/reports/index").default;
-const { rangeFor } = require("../app/reports/index");
-const PlScreen = require("../app/reports/pl").default;
+const ReportsScreen = require("../app/(tabs)/(desk)/reports/index").default;
+const { rangeFor } = require("../app/(tabs)/(desk)/reports/index");
+const PlScreen = require("../app/(tabs)/(desk)/reports/pl").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

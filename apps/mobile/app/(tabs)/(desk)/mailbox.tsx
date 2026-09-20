@@ -17,11 +17,11 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { dayLabel, type EmailCampaign } from "@rh/shared";
 import { useApi } from "@rh/app-core";
-import { client, useAuth } from "../src/api/session";
-import { Empty, Loading, Problem, Stale } from "../src/design/states";
-import { Card, Row, Stat } from "../src/design/surface";
-import { Text } from "../src/design/text";
-import { color, radius, space } from "../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
+import { Card, Row, Stat } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { color, radius, space } from "../../../src/design/tokens";
 
 export default function MailboxScreen() {
   const { me } = useAuth();

@@ -25,13 +25,13 @@ import {
   type Activity,
   type ActivitySlot,
 } from "@rh/shared";
-import { client, useAuth } from "../src/api/session";
-import { WhichResort } from "../src/screens/which-resort";
-import { useMoneyFormat } from "../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../src/design/states";
-import { Card, Row } from "../src/design/surface";
-import { Text } from "../src/design/text";
-import { color, radius, space } from "../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { WhichResort } from "../../../src/screens/which-resort";
+import { useMoneyFormat } from "../../../src/design/money";
+import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
+import { Card, Row } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { color, radius, space } from "../../../src/design/tokens";
 
 /** As `Date.getUTCDay()` counts them, which is how the API stores them. */
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

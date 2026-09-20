@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useT } from "@rh/app-core";
 import type { NavDestination } from "@rh/shared";
 import { useAuth } from "../../src/api/session";
+import { barLabel } from "../../src/nav/bar-label";
 import { MORE_ICON, iconFor } from "../../src/nav/icons";
 import { tabsFor } from "../../src/nav/tabs";
 import { TOUCH_TARGET, color, text } from "../../src/design/tokens";
@@ -85,7 +86,7 @@ export default function TabLayout() {
               // `null` hides the tab without unregistering the route, so a
               // notification can still deep-link into it
               href: on ? (file.href as never) : null,
-              title: on ? titleOf(on.d) : "",
+              title: on ? barLabel(on.d.href, titleOf(on.d)) : "",
               tabBarIcon: ({ color: tint, size }) => (
                 <MaterialCommunityIcons name={iconFor(file.href)} size={size} color={tint} />
               ),
@@ -108,6 +109,18 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/*
+        Every destination the More list offers, inside the navigator and
+        off the bar. `href: null` is the same trick the loop above uses
+        for a tab this person may not see: the route stays registered, so
+        a deep link still lands, and no button is drawn for it.
+
+        Before this they were siblings of the whole navigator, and the bar
+        disappeared the moment anybody opened one — thirteen screens with
+        a back arrow and no way anywhere else.
+      */}
+      <Tabs.Screen name="(desk)" options={{ href: null }} />
     </Tabs>
     </View>
   );

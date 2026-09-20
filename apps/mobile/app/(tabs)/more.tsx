@@ -28,13 +28,28 @@ function Row({ href, label }: { href: string; label: string }) {
       <Pressable
         accessibilityRole="link"
         accessibilityLabel={label}
-        style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
+        style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
-        <MaterialCommunityIcons name={iconFor(href)} size={20} color={color.muted} />
-        <Text step="body" tone="title" style={styles.rowLabel}>
-          {label}
-        </Text>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={color.ink[300]} />
+        {/*
+          The layout is on this View and not on the Pressable, and that is
+          the whole fix. `Link asChild` clones its child and passes a
+          `style` of its own, which replaced the one carrying
+          `flexDirection: "row"` — so every row drew as a column: icon on
+          one line, the name under it, the chevron under that and on the
+          left. The owner saw it before any of us did; a browser never
+          showed it because react-native-web resolves the clone
+          differently.
+
+          A Pressable that owns only its pressed tint cannot lose a
+          layout it does not hold.
+        */}
+        <View style={styles.row}>
+          <MaterialCommunityIcons name={iconFor(href)} size={20} color={color.muted} />
+          <Text step="body" tone="title" style={styles.rowLabel} numberOfLines={1}>
+            {label}
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={color.ink[300]} />
+        </View>
       </Pressable>
     </Link>
   );

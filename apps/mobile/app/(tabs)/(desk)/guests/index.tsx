@@ -15,13 +15,13 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useDebounced } from "@rh/app-core";
 import { dayLabel, type GuestRow, type Page } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Input } from "../../src/design/input";
-import { Empty, Loading, Problem, Stale } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Input } from "../../../../src/design/input";
+import { Empty, Loading, Problem, Stale } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { space } from "../../../../src/design/tokens";
 
 export default function GuestsScreen() {
   const { activeResort } = useAuth();

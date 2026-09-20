@@ -13,11 +13,11 @@
  */
 import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { useAuth } from "../src/api/session";
-import { Button } from "../src/design/button";
-import { Text } from "../src/design/text";
-import { CONSOLE_URL } from "../src/api/config";
-import { space } from "../src/design/tokens";
+import { useAuth } from "../../../src/api/session";
+import { Button } from "../../../src/design/button";
+import { Text } from "../../../src/design/text";
+import { CONSOLE_URL } from "../../../src/api/config";
+import { space } from "../../../src/design/tokens";
 
 export default function Platform() {
   const { me, logout } = useAuth();

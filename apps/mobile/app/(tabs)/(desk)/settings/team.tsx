@@ -21,12 +21,12 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import type { PermRole, ResortUser } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Empty, Loading, Problem } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { color, radius, space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Empty, Loading, Problem } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { color, radius, space } from "../../../../src/design/tokens";
 
 export default function TeamScreen() {
   const { activeResort } = useAuth();

@@ -19,16 +19,16 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
 import { currencySymbol, type ResortSettings } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Button } from "../../src/design/button";
-import { Field, Input } from "../../src/design/input";
-import { Loading, Problem } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { Toggle } from "../../src/design/toggle";
-import { useAction } from "../../src/design/use-action";
-import { color, radius, space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Button } from "../../../../src/design/button";
+import { Field, Input } from "../../../../src/design/input";
+import { Loading, Problem } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { Toggle } from "../../../../src/design/toggle";
+import { useAction } from "../../../../src/design/use-action";
+import { color, radius, space } from "../../../../src/design/tokens";
 
 export default function ResortSettingsScreen() {
   const { activeResort } = useAuth();

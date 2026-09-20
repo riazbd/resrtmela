@@ -16,14 +16,14 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { DUES_LENSES, duesThrough, formatMoney, type DuesLens, type DuesReport } from "@rh/shared";
-import { client, useAuth } from "../src/api/session";
-import { WhichResort } from "../src/screens/which-resort";
-import { useMoneyFormat } from "../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../src/design/states";
-import { Card, Row, Stat } from "../src/design/surface";
-import { Lenses } from "../src/design/lenses";
-import { Text } from "../src/design/text";
-import { space } from "../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { WhichResort } from "../../../src/screens/which-resort";
+import { useMoneyFormat } from "../../../src/design/money";
+import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
+import { Card, Row, Stat } from "../../../src/design/surface";
+import { Lenses } from "../../../src/design/lenses";
+import { Text } from "../../../src/design/text";
+import { space } from "../../../src/design/tokens";
 
 export default function DuesScreen() {
   const { activeResort } = useAuth();

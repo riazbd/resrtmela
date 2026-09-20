@@ -16,14 +16,14 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { addDaysIso, formatMoney, lastNightLabel, todayIn, type DaySheetRoom } from "@rh/shared";
-import { client, useAuth } from "../src/api/session";
-import { WhichResort } from "../src/screens/which-resort";
-import { DateNav } from "../src/design/date-nav";
-import { useMoneyFormat } from "../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../src/design/states";
-import { Card, Row, Stat } from "../src/design/surface";
-import { Text } from "../src/design/text";
-import { color, radius, space } from "../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { WhichResort } from "../../../src/screens/which-resort";
+import { DateNav } from "../../../src/design/date-nav";
+import { useMoneyFormat } from "../../../src/design/money";
+import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
+import { Card, Row, Stat } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { color, radius, space } from "../../../src/design/tokens";
 
 /** The three things a room can be tonight, in the words a clerk uses. */
 function saying(room: DaySheetRoom): string {

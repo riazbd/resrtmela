@@ -47,9 +47,9 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const GuestsScreen = require("../app/guests/index").default;
-const GuestScreen = require("../app/guests/[id]").default;
-const ExpensesScreen = require("../app/expenses").default;
+const GuestsScreen = require("../app/(tabs)/(desk)/guests/index").default;
+const GuestScreen = require("../app/(tabs)/(desk)/guests/[id]").default;
+const ExpensesScreen = require("../app/(tabs)/(desk)/expenses").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

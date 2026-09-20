@@ -25,14 +25,14 @@ import {
   stayRange,
   type BookingRow,
 } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Button } from "../../src/design/button";
-import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem } from "../../src/design/states";
-import { Card, Row, Stat } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Button } from "../../../../src/design/button";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Empty, Loading, Problem } from "../../../../src/design/states";
+import { Card, Row, Stat } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { space } from "../../../../src/design/tokens";
 
 export default function GuestScreen() {
   const { id, phone, name } = useLocalSearchParams<{

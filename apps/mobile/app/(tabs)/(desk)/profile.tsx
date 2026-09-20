@@ -18,14 +18,14 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { displayEmail } from "@rh/shared";
-import { client, useAuth } from "../src/api/session";
-import { Button } from "../src/design/button";
-import { Field, Input } from "../src/design/input";
-import { Empty } from "../src/design/states";
-import { Card, Row } from "../src/design/surface";
-import { Text } from "../src/design/text";
-import { useAction } from "../src/design/use-action";
-import { color, radius, space } from "../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { Button } from "../../../src/design/button";
+import { Field, Input } from "../../../src/design/input";
+import { Empty } from "../../../src/design/states";
+import { Card, Row } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { useAction } from "../../../src/design/use-action";
+import { color, radius, space } from "../../../src/design/tokens";
 
 /** Short enough to type on a phone, long enough to be worth typing. */
 const SHORTEST = 8;

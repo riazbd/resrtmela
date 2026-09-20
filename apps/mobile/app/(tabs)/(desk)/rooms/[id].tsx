@@ -21,18 +21,18 @@ import {
   roomStatusLabel,
   type Room,
 } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Button } from "../../src/design/button";
-import { Counter } from "../../src/design/counter";
-import { Field, Input } from "../../src/design/input";
-import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { Toggle } from "../../src/design/toggle";
-import { useAction } from "../../src/design/use-action";
-import { color, radius, space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Button } from "../../../../src/design/button";
+import { Counter } from "../../../../src/design/counter";
+import { Field, Input } from "../../../../src/design/input";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Empty, Loading, Problem } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { Toggle } from "../../../../src/design/toggle";
+import { useAction } from "../../../../src/design/use-action";
+import { color, radius, space } from "../../../../src/design/tokens";
 
 export default function RoomScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

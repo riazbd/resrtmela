@@ -63,10 +63,10 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const FbScreen = require("../app/fb/index").default;
-const TicketScreen = require("../app/fb/new").default;
-const ActivitiesScreen = require("../app/activities").default;
-const PayrollScreen = require("../app/payroll").default;
+const FbScreen = require("../app/(tabs)/(desk)/fb/index").default;
+const TicketScreen = require("../app/(tabs)/(desk)/fb/new").default;
+const ActivitiesScreen = require("../app/(tabs)/(desk)/activities").default;
+const PayrollScreen = require("../app/(tabs)/(desk)/payroll").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

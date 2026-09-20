@@ -65,11 +65,11 @@ jest.mock("../src/api/session", () => ({
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const SettingsScreen = require("../app/settings/index").default;
-const ResortScreen = require("../app/settings/resort").default;
-const ListsScreen = require("../app/settings/lists").default;
-const TeamScreen = require("../app/settings/team").default;
-const RatesScreen = require("../app/settings/rates").default;
+const SettingsScreen = require("../app/(tabs)/(desk)/settings/index").default;
+const ResortScreen = require("../app/(tabs)/(desk)/settings/resort").default;
+const ListsScreen = require("../app/(tabs)/(desk)/settings/lists").default;
+const TeamScreen = require("../app/(tabs)/(desk)/settings/team").default;
+const RatesScreen = require("../app/(tabs)/(desk)/settings/rates").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 

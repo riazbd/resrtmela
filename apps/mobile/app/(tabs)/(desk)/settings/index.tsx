@@ -15,12 +15,12 @@
  */
 import { ScrollView, StyleSheet } from "react-native";
 import { Stack, router } from "expo-router";
-import { useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Empty } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { space } from "../../src/design/tokens";
+import { useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Empty } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { space } from "../../../../src/design/tokens";
 
 interface Section {
   href: string;

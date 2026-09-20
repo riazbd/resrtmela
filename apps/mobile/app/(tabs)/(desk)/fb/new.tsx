@@ -26,18 +26,18 @@ import {
   type NewFbBillItem,
   type ResortOption,
 } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { WhichResort } from "../../src/screens/which-resort";
-import { Button } from "../../src/design/button";
-import { Chip } from "../../src/design/chip";
-import { Counter } from "../../src/design/counter";
-import { Field, Input } from "../../src/design/input";
-import { useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem } from "../../src/design/states";
-import { Card, Row } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { useAction } from "../../src/design/use-action";
-import { color, radius, space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../../src/api/session";
+import { WhichResort } from "../../../../src/screens/which-resort";
+import { Button } from "../../../../src/design/button";
+import { Chip } from "../../../../src/design/chip";
+import { Counter } from "../../../../src/design/counter";
+import { Field, Input } from "../../../../src/design/input";
+import { useMoneyFormat } from "../../../../src/design/money";
+import { Empty, Loading, Problem } from "../../../../src/design/states";
+import { Card, Row } from "../../../../src/design/surface";
+import { Text } from "../../../../src/design/text";
+import { useAction } from "../../../../src/design/use-action";
+import { color, radius, space } from "../../../../src/design/tokens";
 
 interface Line extends NewFbBillItem {
   /** Stable across re-orders, which an index is not. */
