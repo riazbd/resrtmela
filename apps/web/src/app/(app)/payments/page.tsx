@@ -10,7 +10,7 @@ import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { usePaymentMethods } from "@/lib/resort-options";
-import { DUES_LENSES, duesThrough, type DuesLens } from "@rh/shared";
+import { DUES_LENSES, duesThrough, paths, type DuesLens } from "@rh/shared";
 
 type DueRow = DuesReport["rows"][number];
 
@@ -192,7 +192,7 @@ function CollectModal({ row, onClose, onDone }: {
       submit({
         kind: "payment",
         label: `${money(amount)} · ${row!.code}`,
-        path: `/bookings/${row!.id}/payments`,
+        path: paths.bookingPayments(row!.id),
         body: { amount, method },
       }),
     onSuccess: ({ queued }) => {

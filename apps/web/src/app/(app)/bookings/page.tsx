@@ -28,6 +28,7 @@ import {
   type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
   BOOKING_STATES, bookingStateLabel, billLines,
   whatTheBookingNeeds, BOOKING_GAP_MESSAGES, extraPersonRoom,
+  nextStates, transitionCanWait, paths,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -42,7 +43,11 @@ interface RoomTypeLite {
 /*
  * The six states moved to `@rh/shared` on 2026-09-20, because the phone needs
  * the same six and a second copy of an enum is how one of them ends up
- * missing a value.
+ * missing a value. `NEXT_ACTIONS` — which of them each state can reach —
+ * followed it the same day, for the stronger version of the same reason:
+ * that map decides which buttons a clerk is offered, so a copy that drifts
+ * offers "Check in" on a cancelled booking and the desk finds out from a
+ * guest. It is `nextStates` now.
  *
  * The source list went the other way: it was never the console's to hold.
  * Booking sources are a list the resort owns — the API validates `source`
@@ -50,20 +55,6 @@ interface RoomTypeLite {
  * written — so six hardcoded codes meant a resort that added "BOOKING.COM"
  * could take bookings from it and never filter by it.
  */
-
-const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
-  PENDING: [
-    { to: "CONFIRMED", label: "Confirm" },
-  ],
-  CONFIRMED: [
-    { to: "CHECKED_IN", label: "Check in" },
-    { to: "NO_SHOW", label: "Mark No-Show" },
-  ],
-  CHECKED_IN: [{ to: "CHECKED_OUT", label: "Check out" }],
-  CHECKED_OUT: [],
-  CANCELLED: [],
-  NO_SHOW: [],
-};
 
 function NewBookingModal({ open, onClose, onCreated, preset }: {
   open: boolean; onClose: () => void; onCreated: (code: string) => void;
@@ -447,12 +438,12 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
        * outbox and the desk keeps moving; everything else on this screen still
        * requires a connection, because it can wait.
        */
-      const queueable = to === "CHECKED_IN" || to === "CHECKED_OUT";
+      const queueable = transitionCanWait(to);
       const { queued } = queueable
         ? await submit({
             kind: to === "CHECKED_IN" ? "checkin" : "checkout",
             label: `${to === "CHECKED_IN" ? "Check in" : "Check out"} ${b?.code ?? `#${id}`}`,
-            path: `/bookings/${id}/transition`,
+            path: paths.bookingTransition(id),
             body: { to },
           })
         : (await client.bookings.transition(id, to), { queued: false });
@@ -709,7 +700,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
         {isStaff &&
-          (NEXT_ACTIONS[b.state] ?? []).map((a) => (
+          nextStates(b.state).map((a) => (
             <Button
               key={a.to}
               size="sm"

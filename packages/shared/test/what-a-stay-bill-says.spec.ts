@@ -24,7 +24,7 @@
  * of them.
  */
 import { describe, expect, it } from "vitest";
-import { billLines } from "../src/index";
+import { billLines, chargeLines } from "../src/index";
 import type { BookingDetail } from "../src/api-types";
 
 type Item = BookingDetail["items"][number];
@@ -218,5 +218,35 @@ describe("the whole bill", () => {
 
   it("has nothing to say about a booking with no items", () => {
     expect(billLines(booking([]))).toEqual([]);
+  });
+});
+
+/**
+ * The charge lines on their own (2026-09-20).
+ *
+ * The departure screen lists what has been put on the bill beyond the
+ * stay, so each line can be taken off again before the invoice is issued.
+ * The console exports this from `stay-desk.tsx`; the phone's check-out
+ * screen needs the same list, and "which of these is removable" is not a
+ * question two screens should answer differently.
+ */
+describe("what was charged beyond the stay", () => {
+  const stay = (items: Item[]) =>
+    ({ items, nights: 2 }) as Pick<BookingDetail, "items" | "nights">;
+
+  it("picks out the charges and leaves the stay alone", () => {
+    const lines = chargeLines(
+      stay([
+        item({ id: 1, kind: "ROOM", unitPrice: 6500 }),
+        item({ id: 2, kind: "CHARGE", chargeKind: "DAMAGE", label: "Broken lamp", unitPrice: 800 }),
+        item({ id: 3, kind: "FB", label: "Restaurant", unitPrice: 450 }),
+      ]),
+    );
+    expect(lines.map((l) => l.id)).toEqual([2]);
+  });
+
+  /** A bill with nothing added is the normal case, not an error. */
+  it("is empty when nothing was added", () => {
+    expect(chargeLines(stay([item({ kind: "ROOM" })]))).toEqual([]);
   });
 });

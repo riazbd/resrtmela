@@ -149,3 +149,18 @@ export function roomNames(booking: Pick<BookingDetail, "items">): string[] {
   }
   return [...seen.values()];
 }
+
+/**
+ * What was put on the bill beyond the stay.
+ *
+ * Water from the minibar, a broken lamp, a smoking fine. The check-out
+ * screen lists them so each can be taken off again before the invoice is
+ * issued — and an issued invoice does not take another line, which is why
+ * that screen is where they are added at all.
+ *
+ * Only `CHARGE` rows: the rooms are the stay, and food and activities have
+ * their own bills and are not removed from here.
+ */
+export function chargeLines(booking: Pick<BookingDetail, "items">) {
+  return booking.items.filter((item) => item.kind === "CHARGE");
+}

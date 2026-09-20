@@ -234,6 +234,24 @@ export interface DateRange {
   to?: string;
 }
 
+/**
+ * The two addresses a client cannot keep to itself.
+ *
+ * Almost every write goes through a method here and no caller ever sees a
+ * path. Three cannot: a check-in, a check-out and a payment may be held
+ * until the network returns, and a held write is a row in storage — it has
+ * to carry where it was going as data.
+ *
+ * Both clients wrote those out by hand at the call site, which is exactly
+ * where `checkout` went wrong: two addresses for one route, only one of
+ * them checked against the server. One copy, used by the method that posts
+ * it and by the queue that holds it.
+ */
+export const paths = {
+  bookingTransition: (id: number) => `/bookings/${id}/transition`,
+  bookingPayments: (id: number) => `/bookings/${id}/payments`,
+} as const;
+
 export function createApiClient(http: Fetcher) {
   return {
     // ── who am I ──
@@ -316,7 +334,7 @@ export function createApiClient(http: Fetcher) {
       // the controller reads `to`; this sent `state`, so the typed client's
       // transition has never worked and the console hand-rolls the call
       transition: (id: number, to: string) =>
-        http<BookingDetail>(`/bookings/${id}/transition`, { method: "POST", body: { to } }),
+        http<BookingDetail>(paths.bookingTransition(id), { method: "POST", body: { to } }),
       cancel: (id: number, reason?: string) =>
         http<BookingDetail>(`/bookings/${id}/cancel`, { method: "POST", body: { reason } }),
       remove: (id: number) => http<{ deleted: boolean }>(`/bookings/${id}`, { method: "DELETE" }),
@@ -344,7 +362,7 @@ export function createApiClient(http: Fetcher) {
        * is `transition(id, "CHECKED_OUT")`.
        */
       pay: (id: number, body: PaymentEntry) =>
-        http<PaymentReceipt>(`/bookings/${id}/payments`, { method: "POST", body }),
+        http<PaymentReceipt>(paths.bookingPayments(id), { method: "POST", body }),
       /** More (or fewer) people in the room than were booked. */
       extraPersons: (id: number, persons: number) =>
         http<BookingDetail>(`/bookings/${id}/extra-persons`, { method: "POST", body: { persons } }),

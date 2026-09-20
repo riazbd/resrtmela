@@ -12,8 +12,16 @@ import { TOUCH_TARGET, color, radius, space } from "./tokens";
 export type ButtonKind = "primary" | "ghost" | "danger" | "subtle";
 
 export interface ButtonProps {
-  /** What a person reads, and what a screen reader announces. */
+  /** What a person reads, and — unless `accessibilityLabel` says
+   * otherwise — what a screen reader announces. */
   label: string;
+  /**
+   * What a screen reader announces instead, when the words on the button
+   * are not enough on their own. A row of "×" buttons is the case: every
+   * one of them reads the same, and which line each removes is exactly
+   * what a listener needs to know.
+   */
+  accessibilityLabel?: string;
   onPress: () => void;
   kind?: ButtonKind;
   /** Working. The press is refused while this is true — see below. */
@@ -41,6 +49,7 @@ const ink = {
 
 export function Button({
   label,
+  accessibilityLabel,
   onPress,
   kind = "primary",
   loading = false,
@@ -60,7 +69,7 @@ export function Button({
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: refuses, busy: loading }}
       disabled={refuses}
       onPress={onPress}

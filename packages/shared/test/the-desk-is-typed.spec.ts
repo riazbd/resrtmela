@@ -30,7 +30,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createApiClient } from "../src/index";
+import { createApiClient, paths } from "../src/index";
 
 interface Sent {
   path: string;
@@ -318,5 +318,33 @@ describe("every desk route the client knows exists on the server", () => {
   it("no longer offers a check-out that posts nowhere", () => {
     const { client } = recording();
     expect((client.bookings as Record<string, unknown>).checkout).toBeUndefined();
+  });
+});
+
+/**
+ * The addresses a queued write has to carry (2026-09-20).
+ *
+ * Most writes go through the client and the screen never sees a path. Two
+ * cannot: check-in, check-out and taking money may be held until the
+ * network returns, and a held write is a row in storage — it has to carry
+ * where it was going as data.
+ *
+ * Both clients wrote those paths out by hand at the call site, which is
+ * the same drift `checkout` came from, one door along: the queue's copy
+ * and the client's copy are two addresses for one route, and only one of
+ * them is checked against the server. So there is one copy, the client
+ * posts to it, and this asks that it still does.
+ */
+describe("the queue and the client agree about where a write goes", () => {
+  it("posts a transition to the address the queue would hold", async () => {
+    const { client, sent } = recording();
+    await client.bookings.transition(41, "CHECKED_IN");
+    expect(sent.at(-1)?.path).toBe(paths.bookingTransition(41));
+  });
+
+  it("posts a payment to the address the queue would hold", async () => {
+    const { client, sent } = recording();
+    await client.bookings.pay(41, { amount: 100, method: "CASH" });
+    expect(sent.at(-1)?.path).toBe(paths.bookingPayments(41));
   });
 });

@@ -42,3 +42,18 @@ beforeAll(() => {
 afterAll(() => {
   console.warn = realWarn;
 });
+
+/**
+ * NetInfo reads the radio through a native module, and without one its
+ * reachability probe dereferences an undefined state and throws inside the
+ * provider's first effect — which takes the whole app tree with it, because
+ * the outbox mounts above every screen.
+ *
+ * The package ships its own mock for exactly this. The default it reports
+ * is "connected", which is the right assumption for a test: a spec that
+ * wants to be offline says so.
+ */
+jest.mock("@react-native-community/netinfo", () =>
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require("@react-native-community/netinfo/jest/netinfo-mock.js"),
+);

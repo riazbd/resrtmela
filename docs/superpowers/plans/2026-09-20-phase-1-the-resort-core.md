@@ -19,7 +19,7 @@ emulator.
 | 4 — the booking detail and its stay bill | **done** (read-only; the write actions arrive with task 7) — and `BookingDetail` was lying about two things |
 | 5 — the calendar and month availability | **done** — two lenses on one screen, as the console has it |
 | 6 — making a booking (single, group, walk-in) | **done** — three steps, a draft above them, and BK-00009 taken on production through it. Looking at it found two things twenty tests did not |
-| 7 — arrival, departure, payment | not started |
+| 7 — arrival, departure, payment | **done** — walked on production: checked in, took ৳2,000, added and removed a charge, checked out. The outbox is wired, so the three writes a guest is waiting for survive a dead network |
 | 8 — editing a booking | not started |
 | 9 — the APK, on a phone | not started |
 

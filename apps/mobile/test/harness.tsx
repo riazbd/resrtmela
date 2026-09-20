@@ -30,7 +30,7 @@
  * well as these two.
  */
 import type { ReactNode } from "react";
-import { QueryProvider, useQueryClient } from "@rh/app-core";
+import { OfflineQueue, OutboxProvider, QueryProvider, memoryStorage, useQueryClient } from "@rh/app-core";
 import { MoneyFormatProvider } from "../src/design/money";
 
 /** Typed off the hook, so this file needs no dependency of its own. */
@@ -58,13 +58,43 @@ afterEach(() => {
   live = null;
 });
 
+/**
+ * An outbox that never sends anything and never queues anything.
+ *
+ * It is here because the app mounts one above every screen, and a harness
+ * that does not is a harness a screen can pass inside and fail outside —
+ * which is precisely how the missing `QueryProvider` survived a green
+ * suite until somebody opened the app in a browser. A spec that cares what
+ * was queued mocks `src/api/desk` and asserts on that instead.
+ */
+function quietOutbox(children: ReactNode) {
+  const queue = new OfflineQueue(
+    async () => undefined,
+    memoryStorage(),
+    () => true,
+  );
+  return (
+    <OutboxProvider
+      queue={queue}
+      send={async () => undefined}
+      watchOnline={(onChange) => {
+        onChange(true);
+        return () => {};
+      }}
+      announceRejected={() => {}}
+    >
+      {children}
+    </OutboxProvider>
+  );
+}
+
 export function Harness({ children }: { children: ReactNode }) {
   return (
     <QueryProvider cache={null}>
       <Settle />
       {/* the empty format is the default one — taka, en-IN — which is what a
           resort that has never set a currency gets in production too */}
-      <MoneyFormatProvider value={{}}>{children}</MoneyFormatProvider>
+      <MoneyFormatProvider value={{}}>{quietOutbox(children)}</MoneyFormatProvider>
     </QueryProvider>
   );
 }

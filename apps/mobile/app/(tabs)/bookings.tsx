@@ -13,7 +13,7 @@
  */
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Stack, router } from "expo-router";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi, useDebounced } from "@rh/app-core";
 import {
   BOOKING_SORTS,
@@ -43,7 +43,17 @@ export default function BookingsScreen() {
     [money],
   );
 
-  const [typed, setTyped] = useState("");
+  /**
+   * A search somebody was sent here with.
+   *
+   * Taking a group makes one booking per room, so there is no single
+   * booking to open and the form sends the clerk here searched by the
+   * group's tag. It used to send them to the whole list: the parameter was
+   * written and never read, so the two bookings just taken were somewhere
+   * among the ninety. A starting point, not a lock — the box clears.
+   */
+  const { search: sentWith } = useLocalSearchParams<{ search?: string }>();
+  const [typed, setTyped] = useState(typeof sentWith === "string" ? sentWith : "");
   const [state, setState] = useState<string | null>(null);
   const [sort, setSort] = useState<string>(DEFAULT_BOOKING_SORT);
   const [filtering, setFiltering] = useState(false);

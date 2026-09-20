@@ -9,30 +9,37 @@
  * console's detail panel draws from. A guest shown one total at the desk and
  * another on a phone has been overcharged by one of them.
  *
- * Nothing here writes yet. Check-in, check-out, taking money and adding a
- * charge arrive with the rest of the write screens; until then this is the
- * page a clerk reads from.
+ * What a clerk can do from here is `nextStates` in `@rh/shared` — the same
+ * six answers the console runs on, so the two cannot come to offer
+ * different buttons on the same booking. Arriving and leaving each open a
+ * screen rather than firing straight away, because each asks the one
+ * question that moment is the only moment able to answer: who actually
+ * came, and what else is owed.
  */
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import {
   billLines,
   bookingStateLabel,
+  nextStates,
   dayLabel,
   formatMoney,
   methodLabel,
   roomNames,
   type BookingDetail,
+  type NextState,
 } from "@rh/shared";
-import { client, useAuth } from "../../src/api/session";
-import { Button } from "../../src/design/button";
-import { Money, useMoneyFormat } from "../../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../../src/design/states";
-import { Card, Row, Stat } from "../../src/design/surface";
-import { Text } from "../../src/design/text";
-import { color, radius, space } from "../../src/design/tokens";
+import { client, useAuth } from "../../../src/api/session";
+import { useStayDesk } from "../../../src/api/desk";
+import { Button } from "../../../src/design/button";
+import { Money, useMoneyFormat } from "../../../src/design/money";
+import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
+import { Card, Row, Stat } from "../../../src/design/surface";
+import { Text } from "../../../src/design/text";
+import { useAction } from "../../../src/design/use-action";
+import { color, radius, space } from "../../../src/design/tokens";
 
 /** "2 adults, 1 child" — and the ones who turned up unannounced, separately. */
 function whoIsStaying(b: BookingDetail): string {
@@ -130,6 +137,8 @@ export default function BookingScreen() {
           </View>
         </Card>
 
+        <Desk booking={b} onDone={() => void booking.refetch()} />
+
         <View style={styles.figures}>
           <Stat label="Total" value={whole(b.total)} />
           <Stat label="Paid" value={whole(b.paid)} tone="ok" />
@@ -219,6 +228,98 @@ export default function BookingScreen() {
   );
 }
 
+/**
+ * What can be done to this booking, and nothing that cannot.
+ *
+ * The list is `nextStates`, so a cancelled booking is offered nothing and
+ * a checked-out one is offered nothing — the two states where a button
+ * would be a lie. Taking money is separate from all of them: it is owed or
+ * it is not, whatever state the stay is in.
+ *
+ * Arriving and leaving push a screen instead of writing, because each has
+ * a question to ask first. A no-show has none, so it goes straight
+ * through — after a confirmation, because it says a guest did not come and
+ * is not walked back with one tap.
+ */
+function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void }) {
+  const desk = useStayDesk();
+  const [refused, setRefused] = useState<string | null>(null);
+  const [asking, setAsking] = useState<NextState | null>(null);
+
+  const move = useAction(async () => {
+    const action = asking;
+    if (!action) return;
+    setAsking(null);
+    setRefused(null);
+    try {
+      await desk.transition(booking, action.to);
+      onDone();
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That did not go through.");
+    }
+  });
+
+  const ahead = nextStates(booking.state);
+  if (ahead.length === 0 && booking.due <= 0) return null;
+
+  return (
+    <View style={styles.desk}>
+      {asking ? (
+        <View style={styles.asking}>
+          <Text step="body" tone="title" weight="medium">
+            {asking.label}?
+          </Text>
+          <Text step="small" tone="muted">
+            {asking.to === "NO_SHOW"
+              ? "This says the guest never came. The nights stay held and the booking is closed."
+              : "This cannot be undone from here."}
+          </Text>
+          <View style={styles.askRow}>
+            <Button label="Yes" kind="danger" loading={move.busy} onPress={move.go} block={false} />
+            <Button label="Not now" kind="ghost" onPress={() => setAsking(null)} block={false} />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.actions}>
+          {ahead.map((action) => (
+            <Button
+              key={action.to}
+              label={action.label}
+              kind={action.grave ? "ghost" : "primary"}
+              block={false}
+              onPress={() => {
+                if (action.to === "CHECKED_IN") {
+                  router.push(`/bookings/${booking.id}/arrive` as never);
+                } else if (action.to === "CHECKED_OUT") {
+                  router.push(`/bookings/${booking.id}/depart` as never);
+                } else if (action.grave) {
+                  setAsking(action);
+                } else {
+                  setAsking(action);
+                }
+              }}
+            />
+          ))}
+          {booking.due > 0 ? (
+            <Button
+              label="Take payment"
+              kind={ahead.length > 0 ? "ghost" : "primary"}
+              block={false}
+              onPress={() => router.push(`/bookings/${booking.id}/pay` as never)}
+            />
+          ) : null}
+        </View>
+      )}
+
+      {refused ? (
+        <Text step="small" tone="danger" weight="medium">
+          {refused}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.fact} accessible accessibilityLabel={`${label}: ${value}`}>
@@ -248,6 +349,17 @@ const styles = StyleSheet.create({
   factLabel: { width: 72 },
   factValue: { flex: 1 },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
+  desk: { gap: space.sm },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  asking: {
+    gap: space.sm,
+    backgroundColor: color.warn.bg,
+    borderWidth: 1,
+    borderColor: color.warn.line,
+    borderRadius: radius.md,
+    padding: space.md,
+  },
+  askRow: { flexDirection: "row", gap: space.sm },
   emptyBox: { paddingVertical: space.lg },
   footnote: { textAlign: "center" },
 });

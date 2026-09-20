@@ -18,10 +18,13 @@ const mockList = jest.fn();
 const mockPush = jest.fn();
 let mockResort: { id: number; name: string } | null = { id: 3, name: "Demo Bay Resort" };
 
+let mockParams: Record<string, string> = {};
+
 jest.mock("expo-router", () => ({
   router: { push: (p: string) => mockPush(p), replace: jest.fn() },
   useRouter: () => ({ push: mockPush, replace: jest.fn() }),
   Stack: { Screen: () => null },
+  useLocalSearchParams: () => mockParams,
 }));
 
 jest.mock("../src/api/session", () => ({
@@ -65,6 +68,7 @@ const page = (rows: BookingRow[] = [row()], total = rows.length): Page<BookingRo
   ({ rows, total }) as Page<BookingRow>;
 
 beforeEach(() => {
+  mockParams = {};
   mockResort = { id: 3, name: "Demo Bay Resort" };
   mockList.mockReset().mockResolvedValue(page());
   mockPush.mockReset();
@@ -265,5 +269,38 @@ describe("the states it owes", () => {
     mockList.mockResolvedValue(page([], 0));
     await fireEvent.changeText(r.getByLabelText("Search bookings"), "zzzz");
     await waitFor(() => expect(r.getByText("Nothing matches that")).toBeTruthy(), { timeout: 2000 });
+  });
+});
+
+/**
+ * Sent here already searching (2026-09-20).
+ *
+ * Taking a group makes one booking per room and there is no single
+ * booking to open, so the third step of the form sends the clerk to this
+ * list searched by the group's tag. It sent them to the whole list
+ * instead — nine bookings, no filter, and the two it had just made
+ * somewhere among them — because the parameter was written and never
+ * read. Found by opening it.
+ */
+describe("a search somebody was sent to", () => {
+  it("opens already searching for what it was given", async () => {
+    mockParams = { search: "GRP-7" };
+    const r = await render(<Harness><BookingsScreen /></Harness>);
+    await waitFor(() =>
+      expect(mockList).toHaveBeenCalledWith(expect.objectContaining({ search: "GRP-7" })),
+    );
+    expect(r.getByLabelText("Search bookings").props.value).toBe("GRP-7");
+  });
+
+  /** A starting point, not a lock: the box still clears. */
+  it("lets the search be changed from there", async () => {
+    mockParams = { search: "GRP-7" };
+    const r = await render(<Harness><BookingsScreen /></Harness>);
+    await waitFor(() => expect(r.getByLabelText("Search bookings")).toBeTruthy());
+    await fireEvent.changeText(r.getByLabelText("Search bookings"), "Rafiq");
+    await waitFor(
+      () => expect(mockList).toHaveBeenCalledWith(expect.objectContaining({ search: "Rafiq" })),
+      { timeout: 2000 },
+    );
   });
 });

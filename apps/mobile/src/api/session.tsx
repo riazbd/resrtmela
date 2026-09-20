@@ -19,6 +19,7 @@ import { createApiClient, type MoneyFormat } from "@rh/shared";
 import { deviceStorage } from "../device/storage";
 import { MoneyFormatProvider } from "../design/money";
 import { API_URL } from "./config";
+import { Outbox } from "./outbox";
 import { makeApi } from "./transport";
 
 export { useAuth, type AuthValue } from "@rh/app-core";
@@ -92,7 +93,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         cache={cache}
         navigate={goTo}
       >
-        <MoneyFormatProvider value={format}>{children}</MoneyFormatProvider>
+        <MoneyFormatProvider value={format}>
+          {/*
+            Inside the session and inside the query client, because the
+            outbox writes as whoever is signed in and refreshes what they
+            are looking at when a held write lands.
+          */}
+          <Outbox>{children}</Outbox>
+        </MoneyFormatProvider>
       </SharedAuthProvider>
     </QueryProvider>
   );

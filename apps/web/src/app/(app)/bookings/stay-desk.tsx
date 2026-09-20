@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { client, money, type BookingDetail } from "@/lib/api";
 import { Button, Field, Input, Modal, Select, useToast } from "@/components/ui";
-import { STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, isStayChargeKind, type StayChargeKind } from "@rh/shared";
+import { STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, chargeLines, isStayChargeKind, type StayChargeKind } from "@rh/shared";
 
 function ErrorLine({ msg }: { msg: string | null }) {
   if (!msg) return null;
@@ -87,11 +87,6 @@ export function ArrivalModal({ booking, open, mode, onClose, onChanged, onCheckI
       </div>
     </Modal>
   );
-}
-
-/** The charge lines on a booking, with what each was for. */
-export function chargeLines(booking: BookingDetail) {
-  return booking.items.filter((i) => i.kind === "CHARGE");
 }
 
 /**
