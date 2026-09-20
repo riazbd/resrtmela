@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_BOOKING_WINDOW_PRESETS, AGENT_BOOKING_WINDOW_MAX_DAYS } from "@rh/shared";
-import { api, download, money, type PermRole, cur, API_URL } from "@/lib/api";
+import { api, client, download, money, type PermRole, cur, API_URL } from "@/lib/api";
+import type { ResortSettings } from "@rh/shared";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
@@ -16,28 +17,14 @@ import { WebsiteTab } from "./website-tab";
 import { ApiTab } from "./api-tab";
 import { changedContactFields, displayEmail, displayPhone, emailError, isPlaceholderEmail, isPlaceholderPhone, phoneError } from "@/lib/contact";
 
-interface ResortDetail {
-  id: number;
-  name: string;
-  location: string | null;
-  timezone: string;
-  currency: string;
-  showRatesToAgents: boolean;
-  taxRatePct: string | number;
-  invoicePrefix: string;
-  bookingPrefix: string;
-  fbPrefix: string;
-  checkInTime: string;
-  checkOutTime: string;
-  address: string | null;
-  website: string | null;
-  contactPhone: string | null;
-  fyStartMonthDay: string;
-  agentPaymentHours?: number;
-  /** null is no limit */
-  agentBookingWindowDays?: number | null;
-  _count?: { bookings: number; guests: number };
-}
+/**
+ * `ResortDetail` lived here as a local interface beside a hand-written
+ * `api<ResortDetail>()`. `GET /resorts/:id` is typed now — as
+ * `ResortSettings` in `@rh/shared`, written from the Prisma model and
+ * from the *two* projections that route has, because an agency gets the
+ * shop window rather than the settings.
+ */
+type ResortDetail = ResortSettings;
 
 interface PlanOption {
   name: string;
@@ -175,7 +162,7 @@ export default function SettingsPage() {
   const visibleTabs = TABS.filter((t) => t !== "Subscription" || can("billing.view"));
 
   const qc = useQueryClient();
-  const infoQ = useApi(["resort", rid], () => api<ResortDetail>(`/resorts/${rid}`), { enabled: !!rid });
+  const infoQ = useApi(["resort", rid], () => client.resort.get(rid!), { enabled: !!rid });
   const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => api<Usage>(`/tenants/${activeResort!.tenantId}/usage`), {
     enabled: !!activeResort,
   });
@@ -1443,7 +1430,7 @@ function DiscountsTab({ rid }: { rid: number }) {
   }, [rid]);
   useEffect(() => {
     load();
-    api<{ roomTypes?: { id: number; name: string }[] }>(`/resorts/${rid}`).then((r) => setRoomTypes(r.roomTypes ?? [])).catch(() => {});
+    client.resort.get(rid!).then((r) => setRoomTypes(r.roomTypes ?? [])).catch(() => {});
   }, [load, rid]);
 
   async function create() {

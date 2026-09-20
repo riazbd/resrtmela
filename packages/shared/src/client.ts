@@ -42,6 +42,8 @@ import type {
   PermRole,
   PLReport,
   ResortMetrics,
+  ResortSettings,
+  ResortUser,
   PlatformSettings,
   BillingSweepResult,
   RatePlan,
@@ -521,9 +523,10 @@ export function createApiClient(http: Fetcher) {
 
     // ── the resort itself ──
     resort: {
-      get: (id: number) => http<unknown>(`/resorts/${id}`),
-      update: (id: number, body: unknown) => http<unknown>(`/resorts/${id}`, { method: "PATCH", body }),
-      users: (id: number) => http<unknown[]>(`/resorts/${id}/users`),
+      get: (id: number) => http<ResortSettings>(`/resorts/${id}`),
+      update: (id: number, body: Partial<ResortSettings>) =>
+        http<ResortSettings>(`/resorts/${id}`, { method: "PATCH", body }),
+      users: (id: number) => http<ResortUser[]>(`/resorts/${id}/users`),
       addUser: (id: number, body: unknown) => http<unknown>(`/resorts/${id}/users`, { method: "POST", body }),
       updateUser: (id: number, userId: number, body: unknown) =>
         http<unknown>(`/resorts/${id}/users/${userId}`, { method: "PATCH", body }),

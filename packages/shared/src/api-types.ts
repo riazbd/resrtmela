@@ -594,6 +594,83 @@ export interface FoodPackage {
  * not income, `stillDue` is never profit, and `taxCollected` is money
  * held for the government rather than earned.
  */
+/**
+ * A resort's own settings, from `GET /resorts/:id`.
+ *
+ * Typed `unknown` until 2026-09-20, which phase 1's plan named as a debt
+ * and left to the settings slice: its bookings page read this route twice
+ * through a hand-written `api<...>` because there was nothing to read it
+ * with.
+ *
+ * **An agent gets a different object from this route** — the shop window,
+ * not the settings — so every field an agent never sees is optional here.
+ * `requireSellingAccess` lets an agency in and the projection behind it
+ * narrows what they get; a type that promised `binNumber` to an agent
+ * would be lying about the half of the route it never sees.
+ */
+/**
+ * Somebody who works at a resort, from `GET /resorts/:id/users`.
+ *
+ * Typed `unknown[]` until 2026-09-20. The row is the *user* flattened
+ * with the link that says they work here, which is why `roleId` and
+ * `roleName` sit beside the person's own fields rather than under a
+ * `role` object.
+ *
+ * There is deliberately no wallet on it: that is an agency's account
+ * with the platform, and a resort reading it would be reading the
+ * agency's trade with everybody else.
+ */
+export interface ResortUser {
+  id: number;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  /** The platform-wide role — RESORT_ADMIN, FRONT_DESK, AGENT and so on. */
+  role: string;
+  status: string;
+  createdAt: string;
+  /** The resort's own role, which is what the permission matrix reads. */
+  roleId: number | null;
+  roleName: string | null;
+}
+
+export interface ResortSettings {
+  id: number;
+  name: string;
+  slug?: string;
+  location: string | null;
+  timezone: string;
+  currency: string;
+  locale: string;
+  checkInTime: string;
+  checkOutTime: string;
+  showRatesToAgents: boolean;
+  /** Everything from here down is the staff projection only. */
+  address?: string | null;
+  website?: string | null;
+  contactPhone?: string | null;
+  /** The fallback when a resort has defined no tax rules; see `TaxRuleRow`. */
+  taxRatePct?: string | number;
+  /** Business Identification Number — a VAT invoice in Bangladesh must show it. */
+  binNumber?: string | null;
+  /** Agent bookings must be fully paid this many hours before check-in. */
+  agentPaymentHours?: number;
+  /** How many days ahead an agency may book. Null is no limit. */
+  agentBookingWindowDays?: number | null;
+  agentCommissionKind?: string;
+  agentCommissionRate?: string | number;
+  invoicePrefix?: string;
+  bookingPrefix?: string;
+  fbPrefix?: string;
+  /** Financial year start, `MM-DD`. */
+  fyStartMonthDay?: string;
+  status?: string;
+  suspendedReason?: string | null;
+  roomTypes?: RoomType[];
+  rooms?: Room[];
+  _count?: { bookings: number; guests: number };
+}
+
 export interface ResortMetrics {
   /** the stays' rent before discount */
   resortRevenue: number;

@@ -38,7 +38,6 @@ const NOT_YET: Record<string, string> = {
   "/activities": "phase 2",
   "/import": "phase 2",
   "/profile": "phase 2",
-  "/settings": "phase 2",
   "/mailbox": "phase 2",
   // phase 3 — the agent's own panel
   "/agent/tours": "phase 3",

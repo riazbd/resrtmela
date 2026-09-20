@@ -106,7 +106,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
   // room types for the extra-person gate — a property of the resort, cached
   const typesQ = useApi(
     keys.resort(activeResort?.id),
-    () => api<{ roomTypes?: RoomTypeLite[] }>(`/resorts/${activeResort!.id}`),
+    () => client.resort.get(activeResort!.id),
     { enabled: open && !!activeResort, staleTime: 3_600_000 },
   );
   const roomTypes: RoomTypeLite[] = typesQ.data?.roomTypes ?? [];
@@ -396,7 +396,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
   // opening ten bookings in a row is ten requests, not twenty
   const settingsQ = useApi(
     keys.resort(activeResort?.id),
-    () => api<{ agentPaymentHours?: number }>(`/resorts/${activeResort!.id}`),
+    () => client.resort.get(activeResort!.id),
     { enabled: !!activeResort, staleTime: 3_600_000 },
   );
   const payHours = settingsQ.data ? (settingsQ.data.agentPaymentHours ?? 48) : null;
