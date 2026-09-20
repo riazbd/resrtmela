@@ -25,7 +25,7 @@ user.
 | 10 — activities | **done** — read-only; it names the on-with-no-slots gap |
 | 11 — payroll | **done** — paying is on the phone; hiring is not |
 | 12 — import, and bulk email | **done** — bulk email reads; import says, in as many words, that it runs on the desk |
-| 13 — the APK, on a device | **in progress** — 0.4.0 committed (`f4c1a51`); the EAS build needs an `EXPO_TOKEN` in the environment |
+| 13 — the app, on a device | **done** — Expo Go on the owner's own phone (Android 15, 1080×2400). 24 screens swept: 24 ok, 0 failed, no JS errors. Five defects found there and nowhere else — see below |
 
 **No resort-side destination lands on "Not built yet" any more.** The
 guard's list holds only phase 3's eight agent routes.
@@ -128,3 +128,34 @@ Production's demo resort — `demo-resort@resortmela.com`, resort 3, "Demo Bay
 Resort": three room types, ten rooms, nine bookings, five expenses, and now
 BK-00009, which phase 1 took, paid, charged, checked out and edited through
 the app itself.
+
+## What the phone found, and nothing else could
+
+Expo Go on the owner's own phone, 2026-09-20. Five defects in the first
+twenty minutes, none of them reachable from a browser or from the 973
+tests that were green throughout.
+
+1. **A signed-out person was told to choose a resort.** Yesterday's fix
+   counted the states and got two — waiting, and signed-in-with-none. There
+   are three. Same defect one state further along.
+2. **`session` ↔ `outbox` require cycle.** Metro prints it to the app's own
+   console on every launch, to nothing a test run reads.
+3. **`index` ↔ `quote-bill` / `stay-bill` / `room-status` require cycle** in
+   `@rh/shared`, over `formatMoney` — which the API renders invoices with.
+4. **"Can't perform a React state update on a component that hasn't
+   mounted."** Cleared by fixing (2), which is what a cycle's uninitialized
+   values look like from the outside.
+5. **The day sheet called a last night a departure**, while the dashboard,
+   correctly, counted none. The console said "Departs today" for a guest
+   leaving the next morning.
+
+Each is now a rule rather than a memory: three source-scanning guards
+(`nobody-writes-that-sentence-twice`, `no-module-imports-its-own-barrel`,
+and the client guard in `a-screen-never-writes-an-address`), and
+`lastNightLabel` in `@rh/shared` so both clients say the same words.
+
+**The emulator is not the route to any of this.** It was tried first and
+cost an hour: 2 GB on a 7.8 GB laptop ANRs on the splash, `uiautomator`
+hangs on any spinner, and it takes the owner's machine away while it runs.
+Expo Go over `adb reverse` costs Metro's ~400 MB, runs the same Hermes the
+shipped app does, and found five things in twenty minutes.
