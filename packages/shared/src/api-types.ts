@@ -726,6 +726,33 @@ export interface PLReport {
   combined: { billed: number; income: number; stillDue: number; expenses: number; net: number };
 }
 
+// ───────────────────────── writing to guests ─────────────────────────
+
+/**
+ * What is left to send with, and where to pay for more.
+ *
+ * Credits are bought by asking: `POST /email-credits/purchase` queues an
+ * order and grants nothing until the platform approves it, which is why
+ * `payTo` travels with the balance — the instructions are the platform's
+ * and change without a deploy.
+ */
+export interface EmailCredits {
+  credits: number;
+  payTo: string;
+}
+
+/** A campaign that has already gone out. `id` is a string: it is a bigint. */
+export interface EmailCampaign {
+  id: string;
+  subject: string;
+  body: string;
+  recipients: number;
+  /** SENT, FAILED or PARTIAL — a send that reached some of the list. */
+  status: string;
+  sentAt: string;
+  resortId: number | null;
+}
+
 // ───────────────────────── the restaurant ─────────────────────────
 
 export interface FbBillItem {

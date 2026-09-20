@@ -252,6 +252,7 @@ describe("every desk route the client knows exists on the server", () => {
     "apps/api/src/fb/fb.controller.ts",
     "apps/api/src/activities/activities.controller.ts",
     "apps/api/src/payroll/payroll.controller.ts",
+    "apps/api/src/engage/engage.controller.ts",
   ];
 
   /** `@Post("bookings/:id/charges")` becomes a test for `/bookings/41/charges`. */
@@ -337,6 +338,9 @@ describe("every desk route the client knows exists on the server", () => {
     await client.payroll.sheet(3, "2026-09");
     await client.payroll.pay(3, 4, {});
     await client.payroll.unpay(77);
+
+    await client.engage.credits();
+    await client.engage.campaigns();
     await client.daySheet(3, "2026-10-01");
     await client.calendar(3, "2026-10-01", "2026-10-31");
     await client.dues(3);

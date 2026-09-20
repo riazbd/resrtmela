@@ -21,11 +21,14 @@ user.
 | 6 — settings: team, rate plans | **done** — team is read-only, and the hub says why |
 | 7 — profile | **done** |
 | 8 — housekeeping | **blocked** — see below |
-| 9 — F&B: menu, order, bill | not started — needs a client slice first |
-| 10 — activities | not started — needs a client slice first |
-| 11 — payroll | not started — needs a client slice first |
-| 12 — import, and bulk email | not started |
+| 9 — F&B: the day's bills, and a ticket | **done** — and the slice first, which is where `setSchedules`' wrong body key was caught |
+| 10 — activities | **done** — read-only; it names the on-with-no-slots gap |
+| 11 — payroll | **done** — paying is on the phone; hiring is not |
+| 12 — import, and bulk email | **done** — bulk email reads; import says, in as many words, that it runs on the desk |
 | 13 — the APK, on a device | not started |
+
+**No resort-side destination lands on "Not built yet" any more.** The
+guard's list holds only phase 3's eight agent routes.
 
 Twenty-five screens. The order is by what is most visibly missing rather than
 by the section order in §5: **Rooms is a tab on the bar** and it said "Not

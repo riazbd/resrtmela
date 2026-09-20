@@ -32,9 +32,6 @@ const APP = join(__dirname, "..", "app");
  * same statement.
  */
 const NOT_YET: Record<string, string> = {
-  // phase 2 — the rest of the resort
-  "/import": "phase 2",
-  "/mailbox": "phase 2",
   // phase 3 — the agent's own panel
   "/agent/tours": "phase 3",
   "/agent/guests": "phase 3",

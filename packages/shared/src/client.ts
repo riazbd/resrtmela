@@ -45,6 +45,8 @@ import type {
   ActivitySlot,
   FbBill,
   FbInHouse,
+  EmailCampaign,
+  EmailCredits,
   PLReport,
   ResortMetrics,
   ResortSettings,
@@ -549,6 +551,19 @@ export function createApiClient(http: Fetcher) {
      * reached all four of these through hand-written paths, which is the
      * arrangement §0.3 exists to end.
      */
+    /**
+     * Writing to a whole guest list, and paying for the right to.
+     *
+     * There was no group for this until 2026-09-20. Sending is not here
+     * on purpose: a campaign is a paragraph somebody wants to re-read
+     * before it reaches four hundred people, and the phone reads the
+     * balance and what has already gone out.
+     */
+    engage: {
+      credits: () => http<EmailCredits>("/email-credits"),
+      campaigns: () => http<EmailCampaign[]>("/email-campaigns"),
+    },
+
     activities: {
       list: (resortId: number) => http<Activity[]>(`/resorts/${resortId}/activities`),
       create: (resortId: number, body: NewActivity) =>
