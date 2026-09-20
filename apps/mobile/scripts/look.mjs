@@ -85,6 +85,35 @@ const context = await chromium.launchPersistentContext(PROFILE, {
   args: ["--disable-web-security", "--disable-site-isolation-trials"],
 });
 const browser = context.browser() ?? { close: () => context.close() };
+
+/**
+ * Give the tab a phone's edges.
+ *
+ * `--insets notch`, `--insets android`, or exact numbers as
+ * `--insets top=44,bottom=34`. Default: a plain Android phone, because
+ * that is what most of this platform's users hold and because the one
+ * shape a browser measures on its own — no edges at all — is the one
+ * shape no phone has. `--insets none` turns it off.
+ *
+ * Without this the lens draws the status bar's strip as usable screen,
+ * which is how the day sheet's first row ended up underneath it in a
+ * shipped build.
+ */
+const INSETS = flags.get("insets") ?? "android";
+if (INSETS !== "none") {
+  const pairs = INSETS.includes("=")
+    ? Object.fromEntries(
+        INSETS.split(",").map((p) => {
+          const [k, v] = p.split("=");
+          return [k.trim(), Number(v)];
+        }),
+      )
+    : INSETS;
+  await context.addInitScript((given) => {
+    globalThis.__RM_INSETS__ = given;
+  }, pairs);
+}
+
 const page = context.pages()[0] ?? (await context.newPage());
 
 const problems = [];
