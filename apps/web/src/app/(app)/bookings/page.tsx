@@ -18,14 +18,17 @@ import { methodLabel } from "@rh/shared";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
-import { usePaymentMethods } from "@/lib/resort-options";
+import { usePaymentMethods, useResortOptions } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
 import { EditBookingModal } from "./edit-booking";
 import { whatTheBookingNeeds, BOOKING_GAP_MESSAGES } from "@/lib/booking-form";
 import { ArrivalModal, DepartureModal, chargeLines } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
-import { STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT } from "@rh/shared";
+import {
+  STAY_CHARGE_LABELS, isStayChargeKind, type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
+  BOOKING_STATES, bookingStateLabel,
+} from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
@@ -36,8 +39,17 @@ interface RoomTypeLite {
   extraPersonRate?: string | number;
 }
 
-const STATES = ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"];
-const SOURCES = ["DIRECT", "AGENT", "FACEBOOK", "WHATSAPP", "PHONE", "APP"];
+/*
+ * The six states moved to `@rh/shared` on 2026-09-20, because the phone needs
+ * the same six and a second copy of an enum is how one of them ends up
+ * missing a value.
+ *
+ * The source list went the other way: it was never the console's to hold.
+ * Booking sources are a list the resort owns — the API validates `source`
+ * against `BOOKING_SOURCE` and the importer has read that list since it was
+ * written — so six hardcoded codes meant a resort that added "BOOKING.COM"
+ * could take bookings from it and never filter by it.
+ */
 
 const NEXT_ACTIONS: Record<string, { to: string; label: string }[]> = {
   PENDING: [
@@ -885,6 +897,8 @@ function BookingsInner() {
   }, [handoff.resortId, activeResort?.id, me, setActiveResort]);
   const [state, setState] = useState("");
   const [source, setSource] = useState("");
+  // the resort's own list, not six codes written here — see the note above
+  const sourceChoices = useResortOptions(activeResort?.id, "BOOKING_SOURCE");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
@@ -1018,13 +1032,13 @@ function BookingsInner() {
             {/* without an explicit value an option sends its *text*, so this filter
                 asked the API for "CHECKED-IN" where the enum is CHECKED_IN and three
                 of the six states silently returned the wrong set */}
-            {STATES.map((s) => <option key={s} value={s}>{s.replace(/_/g, "-")}</option>)}
+            {BOOKING_STATES.map((s) => <option key={s} value={s}>{bookingStateLabel(s)}</option>)}
           </Select>
         </Field>
         <Field label="Source">
           <Select value={source} onChange={(e) => setSource(e.target.value)} className="!w-32">
             <option value="">All</option>
-            {SOURCES.map((s) => <option key={s}>{s}</option>)}
+            {sourceChoices.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
           </Select>
         </Field>
         <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="!w-36" /></Field>

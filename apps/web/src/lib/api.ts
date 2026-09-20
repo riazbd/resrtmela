@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { ApiError, formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
+import { ApiError, dayLabel, formatMoney, currencySymbol, createApiClient, type MoneyFormat } from "@rh/shared";
 
 // one definition, in a module a server component may also import
 import { API_URL } from "./api-url";
@@ -183,14 +183,16 @@ export const money = (n: number | string | null | undefined) =>
 /** The active resort's currency symbol, for input labels. */
 export const cur = () => currencySymbol(moneyFormat);
 
-export const dmy = (d: string | Date | null | undefined) =>
-  !d
-    ? "—"
-    : new Date(d).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "2-digit",
-      });
+/**
+ * A date as a person reads it.
+ *
+ * Moved onto `@rh/shared`'s `dayLabel` on 2026-09-20. This version read
+ * `new Date(d).toLocaleDateString(...)`, which renders in the *browser's*
+ * zone — and these dates are stored at UTC midnight, so every one of them
+ * reads a day early for anybody west of Greenwich. Bangladesh is east, which
+ * is the only reason it has never shown.
+ */
+export const dmy = (d: string | Date | null | undefined) => dayLabel(d, { style: "full" });
 
 export const iso = (d: Date) => d.toISOString().slice(0, 10);
 

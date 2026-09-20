@@ -14,20 +14,9 @@
  */
 import { Pressable, StyleSheet, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { addDaysIso, todayIn } from "@rh/shared";
+import { addDaysIso, dayLabel, todayIn } from "@rh/shared";
 import { Text } from "./text";
 import { TOUCH_TARGET, color, radius, space } from "./tokens";
-
-/** "Sunday, 20 September 2026" — the console's own wording. */
-function spelled(iso: string): string {
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 function Arrow({
   icon,
@@ -71,7 +60,7 @@ export function DateNav({
 
       <View style={styles.middle}>
         <Text step="body" weight="medium" tone="title" numberOfLines={1}>
-          {spelled(value)}
+          {dayLabel(value, { style: "long" })}
         </Text>
         {isToday ? (
           <Text step="caption" tone="ok" weight="medium">
