@@ -69,6 +69,7 @@ import type {
   RoomType,
   SalesDocDetail,
   SalesDocKind,
+  SalesDocStatus,
   SalesDocRow,
   TourCategoryNode,
   TourPackageDetail,
@@ -775,11 +776,22 @@ export function createApiClient(http: Fetcher) {
           http<{ id: number; number: string }>(`/agent/sales/${id}/convert`, { method: "POST", body: {} }),
         send: (id: number, body: { to?: string; message?: string } = {}) =>
           http<{ sent: boolean; to: string }>(`/agent/sales/${id}/send`, { method: "POST", body }),
+        // the reply carries the document's new arithmetic, so a screen
+        // does not have to guess what the payment did to the balance
         recordPayment: (id: number, body: { amount: number; note?: string }) =>
-          http<unknown>(`/agent/sales/${id}/payments`, { method: "POST", body }),
+          http<{ id: number; paid: number; due: number; status: SalesDocStatus }>(
+            `/agent/sales/${id}/payments`,
+            { method: "POST", body },
+          ),
         setStatus: (id: number, status: string) =>
-          http<unknown>(`/agent/sales/${id}/status`, { method: "PATCH", body: { status } }),
-        remove: (id: number) => http<unknown>(`/agent/sales/${id}`, { method: "DELETE" }),
+          http<{ id: number; status: SalesDocStatus }>(`/agent/sales/${id}/status`, {
+            method: "PATCH",
+            body: { status },
+          }),
+        // a document that was sent is voided rather than deleted — a
+        // client holding a copy of it still has to be able to find it
+        remove: (id: number) =>
+          http<{ deleted: true } | { voided: true }>(`/agent/sales/${id}`, { method: "DELETE" }),
         /** The printable copy is HTML, fetched by the host app, not JSON. */
         printPath: (id: number) => `/agent/sales/${id}/print`,
       },
