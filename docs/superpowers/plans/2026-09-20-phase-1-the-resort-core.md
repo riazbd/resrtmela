@@ -17,7 +17,7 @@ emulator.
 | 2 — the read screens: dashboard, day sheet, dues | **done** — and each one found something a test could not: the app had no query provider, and the day sheet opened on UTC's yesterday |
 | 3 — the bookings list | **done** — and it drew "Invalid Date" over every row while nineteen tests passed |
 | 4 — the booking detail and its stay bill | **done** (read-only; the write actions arrive with task 7) — and `BookingDetail` was lying about two things |
-| 5 — the calendar and month availability | not started |
+| 5 — the calendar and month availability | **timeline done**; month availability is next |
 | 6 — making a booking (single, group, walk-in) | not started |
 | 7 — arrival, departure, payment | not started |
 | 8 — editing a booking | not started |

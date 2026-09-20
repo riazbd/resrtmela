@@ -10,6 +10,7 @@ import { OCCUPIED, DUE_STRIPE, FREE_CELL, type OccupiedState } from "@/lib/calen
 import { Button, Card } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { mergeRuns } from "@/lib/calendar-bars";
+import { nightsHeld, occupancyOf } from "@rh/shared";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 import { monthOf, monthStart, monthLength, isWeekend, startsTheWeek } from "@/lib/calendar-month";
 import { MonthAvailability } from "@/components/month-availability";
@@ -102,27 +103,17 @@ export default function CalendarPage() {
   const loading = roomsQ.isPending || calQ.isPending;
   const error = roomsQ.error ?? calQ.error;
 
-  /** `roomId|YYYY-MM-DD` → the stay holding it. Checkout morning is free. */
-  const held = useMemo(() => {
-    const map = new Map<string, CalendarBooking>();
-    for (const b of bookings) {
-      const from = b.checkIn.slice(0, 10);
-      const to = b.checkOut.slice(0, 10);
-      for (const day of days) {
-        if (day < from || day >= to) continue;
-        for (const r of b.rooms) if (r.id !== null) map.set(`${r.id}|${day}`, b);
-      }
-    }
-    return map;
-  }, [bookings, days]);
-
-  /** How full each day is — the strip that answers "how are we doing" at a glance. */
+  /**
+   * `roomId|YYYY-MM-DD` → the stay holding it, and how full each day is.
+   *
+   * Both moved to `@rh/shared` on 2026-09-20, because the phone draws the
+   * same grid and the rule underneath is one an eye skips over: a stay holds
+   * up to but not including `checkOut`, so checkout morning is a night the
+   * resort can sell that evening.
+   */
+  const held = useMemo(() => nightsHeld(bookings, days), [bookings, days]);
   const occupancy = useMemo(
-    () =>
-      days.map((day) => ({
-        day,
-        taken: sellable.reduce((n, r) => n + (held.has(`${r.id}|${day}`) ? 1 : 0), 0),
-      })),
+    () => occupancyOf(days, sellable.map((r) => r.id), held),
     [days, sellable, held],
   );
 

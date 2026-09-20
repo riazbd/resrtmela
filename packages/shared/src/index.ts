@@ -31,6 +31,7 @@ export * from "./console-access";
 export * from "./agency-calendar";
 export * from "./calendar-month";
 export * from "./calendar-bars";
+export * from "./calendar-nights";
 export * from "./booking-handoff";
 export * from "./password-reset";
 export * from "./resort-dates";
