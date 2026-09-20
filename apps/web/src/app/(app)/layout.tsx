@@ -7,6 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe, KeyRound,
+  Brush, HelpCircle,
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/payroll": Banknote,
   "/reports": BarChart3,
   "/rooms": Building2,
+  "/housekeeping": Brush,
   "/activities": Compass,
   "/import": Upload,
   "/profile": User,
@@ -65,9 +67,19 @@ const NAV: { href: string; labelKey?: DictKey; label?: string; icon: LucideIcon;
   CONSOLE_NAV.map((entry) => ({
     ...entry,
     labelKey: entry.labelKey as DictKey | undefined,
-    // a destination with no icon would render a hole in the sidebar; Compass
-    // is the fallback so a new screen is visible before anybody picks one
-    icon: ICONS[entry.href] ?? Compass,
+    /**
+     * A destination with no icon would leave a hole, so there is a
+     * fallback — and it is a question mark rather than a compass.
+     *
+     * It was Compass until 2026-09-21, which is also Activities' own
+     * icon, so when Housekeeping arrived without one the menu drew the
+     * two screens one under the other behind the same picture and
+     * neither the code nor the eye could tell the borrowed one from the
+     * chosen one. The phone had the identical fault, from the identical
+     * cause, and `every-destination-has-its-own-picture` now fails on
+     * either side.
+     */
+    icon: ICONS[entry.href] ?? HelpCircle,
   }));
 
 /**
