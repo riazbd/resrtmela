@@ -1315,3 +1315,23 @@ export interface AgencySite {
   /** how much of the agency's upload quota its photographs take */
   storage: { used: number; quota: number };
 }
+
+/**
+ * A resort an agency may sell, on the discover screen.
+ *
+ * `access` is the whole point of the row. An agency the platform has not
+ * verified sees every resort and can book none of them, and `reason` is
+ * the platform's own words for why — so the screen says what is wrong
+ * rather than showing a list that quietly does nothing when tapped.
+ */
+export interface DiscoverResort {
+  id: number;
+  name: string;
+  location: string | null;
+  roomCount: number;
+  roomTypeCount: number;
+  /** the cheapest active room's base rate, or null where a resort has none */
+  priceFrom: number | null;
+  access: "OPEN" | "WAITING";
+  reason: string | null;
+}

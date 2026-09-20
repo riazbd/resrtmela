@@ -16,6 +16,7 @@
  */
 import type {
   AgencyApiKey,
+  DiscoverResort,
   AgencyRole,
   AgencySite,
   AgencyStaff,
@@ -694,6 +695,13 @@ export function createApiClient(http: Fetcher) {
        * not hunt for `/agent/staff` in agent.controller.ts, where it
        * is not.
        */
+      /**
+       * The resorts open to this agency. Served by the *engage*
+       * controller, not the agent one — the third of three that answer
+       * under `/agent`.
+       */
+      discover: () => http<DiscoverResort[]>("/agent/discover"),
+
       staff: () => http<AgencyStaff[]>("/agent/staff"),
       roles: () => http<AgencyRole[]>("/agent/roles"),
 

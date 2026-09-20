@@ -1,11 +1,15 @@
 # Phase 3 — the agent's own panel
 
-An agency sells rooms it does not own. Four of its twelve screens are on
-the phone already — discover, search, calendar, quotes — because they are
-the ones a booking passes through. The other eight are the business
-*behind* the booking: what it sold, who bought, what it spent, who it
-pays, what it is owed, who works there, and the two things it sells
-through.
+An agency sells rooms it does not own. **All twelve of its screens are
+placeholders.** The plan opened saying four were built, because four
+route files exist — and all four are `NotBuiltYet`. An agent signing in
+lands on `/agent/discover`, which is the first of them, so the app as it
+stands is a sign-in screen and a wall.
+
+Four are the booking itself — discover, search, calendar, quotes — and
+eight are the business behind it: what it sold, who bought, what it
+spent, who it pays, what it is owed, who works there, and the two
+things it sells through.
 
 `CONSOLE_NAV` has carried all twelve since phase 0, and
 `every-door-opens.spec.ts` has named the eight as `phase 3` ever since,
@@ -43,23 +47,29 @@ balance and this month's wages are better.
 
 ## Order
 
-Money first — wallet, then expenses and payroll, because an agency owner
-away from the desk is usually asking one of those three. Then what it
-sells: tours and guests. Then the three administrative ones.
+The booking first, because the landing screen is one of them and an
+agent cannot do the thing the app is for. Discover, search, calendar,
+quotes. Then money — wallet, expenses, payroll — which is what an owner
+away from the desk asks about. Then what it sells: tours and guests.
+Then the three administrative ones.
 
 ## Tasks
 
 | task | state |
 |---|---|
-| 1 — the agent slice, checked against the controllers, console call sites ported | not started |
-| 2 — wallet | not started |
-| 3 — expenses | not started |
-| 4 — payroll | not started |
-| 5 — tours | not started |
-| 6 — guests | not started |
-| 7 — team | not started |
-| 8 — website and api | not started |
-| 9 — the whole panel, on the owner's phone | not started |
+| 1 — the agent slice, checked against the controllers, console call sites ported | **done** — `6e4e02d`; nine routes answered `unknown`, four were missing, two defects found by typing |
+| 2 — discover, the screen an agent lands on | not started |
+| 3 — search, and the room it finds | not started |
+| 4 — calendar | not started |
+| 5 — quotes and invoices | not started |
+| 6 — wallet | not started |
+| 7 — expenses | not started |
+| 8 — payroll | not started |
+| 9 — tours | not started |
+| 10 — guests | not started |
+| 11 — team | not started |
+| 12 — website and api | not started |
+| 13 — the whole panel, on the owner's phone | not started |
 
 ## How it is verified
 

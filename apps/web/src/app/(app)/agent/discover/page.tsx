@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
 import { Card, Empty, Spinner } from "@/components/ui";
 import { Building2, MapPin, Check, Clock } from "lucide-react";
 
@@ -31,7 +31,7 @@ export default function AgentDiscoverPage() {
   const [rows, setRows] = useState<DiscoverRow[] | null>(null);
 
   useEffect(() => {
-    api<DiscoverRow[]>("/agent/discover").then(setRows).catch(() => setRows([]));
+    client.agent.discover().then(setRows).catch(() => setRows([]));
   }, []);
 
   if (!rows) return <Spinner />;
