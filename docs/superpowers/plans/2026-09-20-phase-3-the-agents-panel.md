@@ -69,7 +69,7 @@ Then the three administrative ones.
 | 10 — guests | **done** |
 | 11 — team | **done** |
 | 12 — website and api | **done** — revoking a key is the one write |
-| 13 — the whole panel, on the owner's phone | in progress |
+| 13 — the whole panel, on the owner's phone | **done** — 12 agent screens swept, 12 ok, 0 failed, no JS errors; 24 resort screens re-swept after the `(desk)` move, 24 ok |
 
 ## How it is verified
 
