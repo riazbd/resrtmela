@@ -180,6 +180,13 @@ export function setMoneyFormat(format: MoneyFormat) {
 export const money = (n: number | string | null | undefined) =>
   n === null || n === undefined ? "—" : formatMoney(n, moneyFormat);
 
+/**
+ * The resort's format itself, for the shared rules that format their own
+ * strings — `quoteBill` writes "2 nights × ৳5,000.00" and cannot reach a
+ * module-level variable in the console.
+ */
+export const currentMoneyFormat = (): MoneyFormat => moneyFormat;
+
 /** The active resort's currency symbol, for input labels. */
 export const cur = () => currencySymbol(moneyFormat);
 

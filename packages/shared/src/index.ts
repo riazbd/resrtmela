@@ -40,6 +40,8 @@ export * from "./domain";
 export * from "./webhook";
 export * from "./room-order";
 export * from "./booking-sort";
+export * from "./new-booking";
+export * from "./quote-bill";
 
 /** Cross-app constants shared by the API and the console. */
 

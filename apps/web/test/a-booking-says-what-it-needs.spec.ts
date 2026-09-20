@@ -9,7 +9,7 @@
  * The button stays pressable; pressing it names what is missing.
  */
 import { describe, expect, it } from "vitest";
-import { whatTheBookingNeeds } from "@/lib/booking-form";
+import { whatTheBookingNeeds } from "@rh/shared";
 
 describe("what a booking still needs", () => {
   it("nothing, when there is a room and a guest", () => {

@@ -92,3 +92,38 @@ export function dayLabel(
   const short = `${padded} ${MONTHS_SHORT[month]}`;
   return style === "full" ? `${short} ${String(year).slice(-2)}` : short;
 }
+
+/**
+ * A stay as one phrase: `22–24 Sep`.
+ *
+ * Two full dates take a line each on a phone and read as two separate
+ * facts. A stay is one fact, and the last screen before a booking exists
+ * has to fit the guest, the dates and the head count above the button.
+ *
+ * The month and the year are printed only where they are actually in
+ * question, which is how a person writes a date range by hand. The dash is
+ * spaced when the parts have spaces in them and closed up when they do not
+ * — the ordinary typesetting rule, and the reason `30 Sep–2 Oct` reads as
+ * one mangled word.
+ */
+export function stayRange(
+  from: string | Date | null | undefined,
+  to: string | Date | null | undefined,
+): string {
+  if (!from || !to) return "—";
+  const a = atUtcNoon(from);
+  const b = atUtcNoon(to);
+  if (!a || !b) return "—";
+
+  const day = (at: Date) => at.getUTCDate();
+  const month = (at: Date) => MONTHS_SHORT[at.getUTCMonth()];
+  const year = (at: Date) => at.getUTCFullYear();
+
+  if (year(a) !== year(b)) {
+    return `${day(a)} ${month(a)} ${year(a)} – ${day(b)} ${month(b)} ${year(b)}`;
+  }
+  if (a.getUTCMonth() !== b.getUTCMonth()) {
+    return `${day(a)} ${month(a)} – ${day(b)} ${month(b)}`;
+  }
+  return `${day(a)}–${day(b)} ${month(a)}`;
+}

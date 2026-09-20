@@ -18,7 +18,7 @@
  * person looking at it is in New York, so the formatting is pinned to UTC.
  */
 import { describe, expect, it } from "vitest";
-import { dayLabel } from "../src/index";
+import { dayLabel, stayRange } from "../src/index";
 
 describe("the two shapes the API sends", () => {
   it("reads a bare civil date, as the day sheet sends it", () => {
@@ -76,5 +76,42 @@ describe("what it does with nothing", () => {
   it("draws an em dash rather than the words Invalid Date", () => {
     expect(dayLabel("not a date")).toBe("—");
     expect(dayLabel("2026-13-45")).toBe("—");
+  });
+});
+
+/**
+ * A stay as one phrase (2026-09-20).
+ *
+ * Added when the phone's last booking step turned out to say the room and
+ * the nights and nothing about who or when — read back off a screenshot,
+ * not off a test. Two full dates take a line each on a phone and are read
+ * as two separate facts; a stay is one fact.
+ */
+describe("a stay, from one day to another", () => {
+  it("names the month once when both days are in it", () => {
+    expect(stayRange("2026-09-22", "2026-09-24")).toBe("22–24 Sep");
+  });
+
+  /**
+   * Spaced when the parts have spaces in them, closed up when they do not
+   * — the ordinary typesetting rule, and the reason "30 Sep–2 Oct" reads
+   * as one mangled word.
+   */
+  it("names both months when the stay crosses one", () => {
+    expect(stayRange("2026-09-30", "2026-10-02")).toBe("30 Sep – 2 Oct");
+  });
+
+  it("names the year only when the stay crosses one", () => {
+    expect(stayRange("2026-12-30", "2027-01-02")).toBe("30 Dec 2026 – 2 Jan 2027");
+  });
+
+  /** A booking row sends full ISO; a day sheet sends a bare civil date. */
+  it("takes either shape the API sends", () => {
+    expect(stayRange("2026-09-22T00:00:00.000Z", "2026-09-24T00:00:00.000Z")).toBe("22–24 Sep");
+  });
+
+  it("says nothing it cannot say", () => {
+    expect(stayRange(null, "2026-09-24")).toBe("—");
+    expect(stayRange("2026-09-22", undefined)).toBe("—");
   });
 });

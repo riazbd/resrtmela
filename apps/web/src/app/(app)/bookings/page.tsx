@@ -22,12 +22,12 @@ import { usePaymentMethods, useResortOptions } from "@/lib/resort-options";
 import { useDebounced } from "@/lib/use-debounced";
 import { StayBill } from "./stay-bill";
 import { EditBookingModal } from "./edit-booking";
-import { whatTheBookingNeeds, BOOKING_GAP_MESSAGES } from "@/lib/booking-form";
 import { ArrivalModal, DepartureModal } from "./stay-desk";
 import { DiscountInput } from "@/components/discount-input";
 import {
   type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
   BOOKING_STATES, bookingStateLabel, billLines,
+  whatTheBookingNeeds, BOOKING_GAP_MESSAGES, extraPersonRoom,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -132,12 +132,8 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
    * count.
    */
   const pickedRooms = grid.filter((r) => picked.includes(r.roomId));
-  const extraSlots = pickedRooms.flatMap((r) =>
-    r.extraPersonAllowed ? Array.from({ length: r.extraPersonMax ?? 0 }, () => Number(r.extraPersonRate ?? 0)) : [],
-  );
-  const extraAllowed = extraSlots.length > 0;
-  const extraMax = extraSlots.length;
-  const extraCost = extraSlots.slice(0, extraPersons).reduce((sum, rate) => sum + rate, 0);
+  const extra = extraPersonRoom(pickedRooms);
+  const extraCost = extra.costPerNight(extraPersons);
 
   /**
    * The bill, asked of the server rather than added up here.
@@ -303,21 +299,21 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
             {!walkIn && <Field label="NID / Passport"><Input value={nid} onChange={(e) => setNid(e.target.value)} placeholder="optional" /></Field>}
           <Field label="Adults"><Input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} /></Field>
           <Field label="Children"><Input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} /></Field>
-          {extraAllowed && (
+          {extra.allowed && (
             <Field
               label="Extra persons"
               hint={
                 extraPersons > 0
-                  ? `+${money(extraCost)} / night — room for ${extraMax} extra person${extraMax === 1 ? "" : "s"}`
-                  : `These rooms take ${extraMax} extra person${extraMax === 1 ? "" : "s"}`
+                  ? `+${money(extraCost)} / night — room for ${extra.max} extra person${extra.max === 1 ? "" : "s"}`
+                  : `These rooms take ${extra.max} extra person${extra.max === 1 ? "" : "s"}`
               }
             >
               <Input
                 type="number"
                 min={0}
-                max={extraMax}
+                max={extra.max}
                 value={extraPersons}
-                onChange={(e) => setExtraPersons(Math.min(extraMax, Math.max(0, Number(e.target.value))))}
+                onChange={(e) => setExtraPersons(Math.min(extra.max, Math.max(0, Number(e.target.value))))}
               />
             </Field>
           )}

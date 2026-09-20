@@ -8,7 +8,10 @@
  * order, so the order it is given is the order it draws.
  *
  * Three states share one row on a phone, where the console has five columns:
- * out of service, free, and taken. Only the third goes anywhere.
+ * out of service, free, and taken. Two of them go somewhere: a taken room
+ * opens its booking, a free one starts a new booking for that room on that
+ * night, and a room out of service is inert because nothing can be done
+ * with it here.
  */
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type { DaySheet } from "@rh/shared";
@@ -273,10 +276,29 @@ describe("the register", () => {
     expect(r.getByText("Out of service")).toBeTruthy();
   });
 
-  it("goes nowhere when a free room is tapped", async () => {
+  /**
+   * The two-tap path. A clerk with the register open and somebody at the
+   * counter has already decided which room and which night; making them
+   * open a blank form and choose both again is the work this screen exists
+   * to save.
+   */
+  it("starts a booking for the room and the night that were tapped", async () => {
     const r = await render(<Harness><DaySheetScreen /></Harness>);
     await waitFor(() => expect(r.getByText("Free")).toBeTruthy());
     await fireEvent.press(r.getByLabelText("Room 1 Camellia, free"));
+    expect(mockPush).toHaveBeenCalledWith("/new-booking?roomId=11&checkIn=2026-09-20");
+  });
+
+  /** A room nobody can sell is not a room to start a booking in. */
+  it("goes nowhere when a room out of service is tapped", async () => {
+    mockDaySheet.mockResolvedValue(
+      sheet({
+        rooms: [room({ roomId: 12, name: "2 Lotus", status: "OUT_OF_SERVICE", cell: { mode: "oos" } })],
+      }),
+    );
+    const r = await render(<Harness><DaySheetScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Out of service")).toBeTruthy());
+    await fireEvent.press(r.getByLabelText("Room 2 Lotus, out of service"));
     expect(mockPush).not.toHaveBeenCalled();
   });
 });

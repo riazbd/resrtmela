@@ -48,6 +48,22 @@ export function addDaysIso(iso: string, days: number): string {
 }
 
 /**
+ * How many nights from one civil date to another.
+ *
+ * The same UTC-noon anchor as `addDaysIso`, and for the same reason: these
+ * are civil dates with no time in them, and any anchor nearer a midnight
+ * can be pushed across a day by an offset. Negative when the departure is
+ * before the arrival — a caller that wants to refuse that should refuse it
+ * rather than be handed a zero that looks like a same-day stay.
+ */
+export function nightsBetweenIso(from: string, to: string): number {
+  const a = Date.parse(`${from}T12:00:00Z`);
+  const b = Date.parse(`${to}T12:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
  * `YYYY-MM` plus or minus whole months.
  *
  * The platform screen did this with `new Date(y, m - 1 + delta, 1).toISOString()`,

@@ -20,8 +20,8 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <SessionProvider>
         {/*
-          A header by default, and off for the four screens that are their
-          own world. Everything else is pushed from somewhere — the More
+          A header by default, and off for the screens that are their own
+          world. Everything else is pushed from somewhere — the More
           list, a row on the day sheet — and a pushed screen with no header
           is a screen with no way back. The tab group draws its own bar, the
           front door and the login screen are not pushed from anywhere, and
@@ -43,6 +43,8 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+          {/* a stack of its own, three steps deep, with its own headers */}
+          <Stack.Screen name="new-booking" options={{ headerShown: false }} />
         </Stack>
       </SessionProvider>
     </SafeAreaProvider>

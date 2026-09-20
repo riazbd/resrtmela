@@ -1,22 +1,7 @@
 "use client";
 
-import { money } from "@/lib/api";
-import type { BookingQuote, QuoteLine } from "@rh/shared";
-
-/**
- * The arithmetic behind a line, in words.
- *
- * Phrased here rather than sent down as a string: the amounts have to be
- * formatted in the resort's own currency and grouping (en-IN groups in lakh),
- * and the console has a Bangla toggle. A server-built sentence can do neither.
- */
-function workingOut(line: QuoteLine): string {
-  const nights = `${line.nights} night${line.nights === 1 ? "" : "s"}`;
-  if (line.kind === "EXTRA_PERSON" && line.persons) {
-    return `${line.persons} × ${nights} × ${money(line.unitPrice)}`;
-  }
-  return `${nights} × ${money(line.unitPrice)}`;
-}
+import { money, currentMoneyFormat } from "@/lib/api";
+import { quoteBill, type BookingQuote } from "@rh/shared";
 
 /**
  * What the stay comes to, above the Advance box.
@@ -31,6 +16,11 @@ function workingOut(line: QuoteLine): string {
  * tax was added, and only then the number. "Still due" is the last line for the
  * same reason it is on a restaurant bill — it is the one the conversation is
  * actually about once an advance has been agreed.
+ *
+ * Which rows those are, and in what order, is `quoteBill` in `@rh/shared`:
+ * the phone's third booking step reads the same bill to the same guest, and
+ * two clients that disagree about a total have overcharged somebody. What is
+ * left here is the table.
  */
 export function StayBill({ quote, advance, loading }: {
   quote: BookingQuote | null;
@@ -44,7 +34,9 @@ export function StayBill({ quote, advance, loading }: {
       </div>
     );
   }
-  const due = Math.max(0, quote.total - (advance || 0));
+
+  const rows = quoteBill(quote, { advance, money: currentMoneyFormat() });
+
   return (
     <div
       className={`rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 transition-opacity ${loading ? "opacity-50" : ""}`}
@@ -61,64 +53,37 @@ export function StayBill({ quote, advance, loading }: {
 
       <table className="w-full text-sm">
         <tbody>
-          {quote.lines.map((line, i) => (
-            <tr key={`${line.kind}-${line.label}-${i}`} className="align-baseline">
-              <td className="py-0.5 pr-2 text-slate-700">
-                {line.label}
-                <span className="ml-1.5 text-[11px] text-slate-400">{workingOut(line)}</span>
-              </td>
-              <td className="py-0.5 text-right tabular-nums text-slate-700">{money(line.amount)}</td>
-            </tr>
-          ))}
-
-          {quote.discount > 0 && (
-            <tr className="align-baseline">
-              <td className="py-0.5 pr-2 text-slate-700">
-                Discount
-                {/* a discount nobody typed needs saying so, or it reads as a mistake */}
-                {quote.discountIsAutomatic && (
-                  <span className="ml-1.5 text-[11px] text-slate-400">standing offer</span>
+          {rows.map((row) => (
+            <tr
+              key={row.id}
+              className={`align-baseline ${row.kind === "total" ? "border-t border-slate-200" : ""}`}
+            >
+              <td
+                className={`pr-2 ${row.kind === "total" || row.kind === "due" ? "pt-1.5 font-semibold text-slate-900" : row.kind === "advance" ? "py-0.5 text-slate-500" : "py-0.5 text-slate-700"}`}
+              >
+                {row.label}
+                {row.detail && (
+                  <span className="ml-1.5 text-[11px] text-slate-400">{row.detail}</span>
                 )}
               </td>
-              <td className="py-0.5 text-right tabular-nums text-emerald-700">−{money(quote.discount)}</td>
-            </tr>
-          )}
-
-          {/*
-            * A rule that adds nothing to this bill does not belong on it. The
-            * resort's set includes a rate for the restaurant, and printing
-            * "VAT on food 5% ৳0.00" under a room-only stay invites the clerk
-            * to explain a charge that was never made.
-            */}
-          {quote.taxLines.filter((t) => t.amount > 0).map((t) => (
-            <tr key={t.code} className="align-baseline">
-              <td className="py-0.5 pr-2 text-slate-700">
-                {t.label}
-                <span className="ml-1.5 text-[11px] text-slate-400">{t.ratePct}%</span>
+              <td
+                className={`text-right tabular-nums ${
+                  row.kind === "total"
+                    ? "pt-1.5 text-base font-bold text-slate-900"
+                    : row.kind === "due"
+                      ? "font-bold text-red-700"
+                      : row.kind === "discount"
+                        ? "py-0.5 text-emerald-700"
+                        : row.kind === "advance"
+                          ? "py-0.5 text-slate-600"
+                          : "py-0.5 text-slate-700"
+                }`}
+              >
+                {row.deduction ? "−" : ""}
+                {money(row.amount)}
               </td>
-              <td className="py-0.5 text-right tabular-nums text-slate-700">{money(t.amount)}</td>
             </tr>
           ))}
-
-          <tr className="border-t border-slate-200">
-            <td className="pt-1.5 pr-2 font-semibold text-slate-900">Total</td>
-            <td className="pt-1.5 text-right text-base font-bold tabular-nums text-slate-900">
-              {money(quote.total)}
-            </td>
-          </tr>
-
-          {advance > 0 && (
-            <>
-              <tr>
-                <td className="py-0.5 pr-2 text-slate-500">Advance now</td>
-                <td className="py-0.5 text-right tabular-nums text-slate-600">−{money(advance)}</td>
-              </tr>
-              <tr>
-                <td className="pr-2 font-semibold text-slate-900">Still due</td>
-                <td className="text-right font-bold tabular-nums text-red-700">{money(due)}</td>
-              </tr>
-            </>
-          )}
         </tbody>
       </table>
     </div>

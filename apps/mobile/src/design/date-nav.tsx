@@ -43,26 +43,43 @@ export function DateNav({
   value,
   onChange,
   timezone,
+  what,
+  home = true,
   /** Injected so a test can fix the instant; production never passes it. */
   now,
 }: {
   value: string;
   onChange: (iso: string) => void;
   timezone?: string;
+  /**
+   * Which date this is, when a screen has two of them. Without it the
+   * booking form announces "Previous day" twice and a screen reader user
+   * cannot tell the arrival from the departure.
+   */
+  what?: string;
+  /**
+   * The "Back to today" link. Off for a check-out box, where today is not
+   * a place anybody wants to go.
+   */
+  home?: boolean;
   now?: Date;
 }) {
   const today = todayIn(timezone, now ?? new Date());
   const isToday = value === today;
+  // named only when the screen has two of these; "Previous day" on its own
+  // is what every other screen's arrow has always announced
+  const back = what ? `${what}, previous day` : "Previous day";
+  const on = what ? `${what}, next day` : "Next day";
 
-  return (
+  const bar = (
     <View style={styles.bar}>
-      <Arrow icon="chevron-left" label="Previous day" onPress={() => onChange(addDaysIso(value, -1))} />
+      <Arrow icon="chevron-left" label={back} onPress={() => onChange(addDaysIso(value, -1))} />
 
       <View style={styles.middle}>
         <Text step="body" weight="medium" tone="title" numberOfLines={1}>
           {dayLabel(value, { style: "long" })}
         </Text>
-        {isToday ? (
+        {!home ? null : isToday ? (
           <Text step="caption" tone="ok" weight="medium">
             Today
           </Text>
@@ -80,7 +97,17 @@ export function DateNav({
         )}
       </View>
 
-      <Arrow icon="chevron-right" label="Next day" onPress={() => onChange(addDaysIso(value, 1))} />
+      <Arrow icon="chevron-right" label={on} onPress={() => onChange(addDaysIso(value, 1))} />
+    </View>
+  );
+
+  if (!what) return bar;
+  return (
+    <View style={styles.titled}>
+      <Text step="small" tone="muted" weight="medium">
+        {what}
+      </Text>
+      {bar}
     </View>
   );
 }
@@ -105,6 +132,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.md,
   },
+  titled: { gap: space.xs },
   middle: { flex: 1, alignItems: "center", gap: 2 },
   pressed: { backgroundColor: color.ink[100] },
 });

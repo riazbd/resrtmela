@@ -140,7 +140,15 @@ export default function DaySheetScreen() {
               />
             </View>
           ) : (
-            rooms.map((room, i) => <RoomRow key={room.roomId} room={room} last={i === rooms.length - 1} whole={whole} />)
+            rooms.map((room, i) => (
+              <RoomRow
+                key={room.roomId}
+                room={room}
+                date={date}
+                last={i === rooms.length - 1}
+                whole={whole}
+              />
+            ))
           )}
         </Card>
       </ScrollView>
@@ -150,16 +158,35 @@ export default function DaySheetScreen() {
 
 function RoomRow({
   room,
+  date,
   last,
   whole,
 }: {
   room: DaySheetRoom;
+  /** The night on screen — what a new booking here would be for. */
+  date: string;
   last: boolean;
   whole: (amount: number) => string;
 }) {
   const cell = room.cell;
   const booked = cell.mode === "booked";
   const owes = cell.due ?? null;
+
+  /**
+   * Two of the three states go somewhere.
+   *
+   * A taken room opens its booking. A free one starts a booking for that
+   * room on that night — the clerk with somebody at the counter has
+   * already decided both, and making them open a blank form and choose
+   * again is the work this screen exists to save. A room out of service is
+   * inert, because there is nothing to do with it from here.
+   */
+  const go =
+    booked && cell.bookingId
+      ? () => router.push(`/bookings/${cell.bookingId}` as never)
+      : cell.mode === "available"
+        ? () => router.push(`/new-booking?roomId=${room.roomId}&checkIn=${date}` as never)
+        : undefined;
 
   /**
    * The whole row as one sentence. A register announced field by field —
@@ -177,7 +204,7 @@ function RoomRow({
       meta={booked ? cell.code : `${room.capacity ?? "—"} pax`}
       last={last}
       accessibilityLabel={spoken}
-      onPress={booked && cell.bookingId ? () => router.push(`/bookings/${cell.bookingId}` as never) : undefined}
+      onPress={go}
       right={
         <View style={styles.right}>
           {cell.arrives ? <Tag text="Arrives" tone="ok" /> : null}

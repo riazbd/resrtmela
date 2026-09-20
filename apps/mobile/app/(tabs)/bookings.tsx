@@ -135,6 +135,13 @@ export default function BookingsScreen() {
             block={false}
             onPress={() => setFiltering((open) => !open)}
           />
+          {/* the way into the three-step form; the day sheet has the other,
+              where a clerk taps the free room they have already chosen */}
+          <Button
+            label="New"
+            block={false}
+            onPress={() => router.push("/new-booking" as never)}
+          />
         </View>
 
         {filtering ? (

@@ -18,7 +18,7 @@ emulator.
 | 3 — the bookings list | **done** — and it drew "Invalid Date" over every row while nineteen tests passed |
 | 4 — the booking detail and its stay bill | **done** (read-only; the write actions arrive with task 7) — and `BookingDetail` was lying about two things |
 | 5 — the calendar and month availability | **done** — two lenses on one screen, as the console has it |
-| 6 — making a booking (single, group, walk-in) | not started |
+| 6 — making a booking (single, group, walk-in) | **done** — three steps, a draft above them, and BK-00009 taken on production through it. Looking at it found two things twenty tests did not |
 | 7 — arrival, departure, payment | not started |
 | 8 — editing a booking | not started |
 | 9 — the APK, on a phone | not started |

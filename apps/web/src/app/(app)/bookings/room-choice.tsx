@@ -1,40 +1,36 @@
 "use client";
 
 import { money } from "@/lib/api";
-import type { RoomAvail } from "@rh/shared";
+import { roomOffer, type RoomAvail } from "@rh/shared";
 
 /**
  * One room on the booking form's grid.
  *
- * There are two reasons a room cannot be sold for these dates and the grid
- * used to know only one of them. It greyed out a room whose nights were taken;
- * a room out of service has no taken nights, so it looked like any other free
- * room. Picking it cost the clerk the whole form — guest name, phone, NID,
- * advance — and then failed on submit with "One or more rooms missing/inactive
- * for this resort", which names no room and tells them nothing to do about it.
+ * Why a room cannot be picked is `roomOffer` in `@rh/shared` — there are two
+ * reasons and they are not the same reason, the phone's booking form draws
+ * the same grid, and the words have to match. What is left here is the part
+ * that is genuinely the console's: which Tailwind classes say "booked" and
+ * which say "shut".
  *
- * So both reasons are drawn, and they are not drawn the same. Booked is red
- * and temporary: those nights are gone, the room is fine. Out of service is
- * amber and is about the room, not the dates — the same distinction the rooms
- * screen already makes, for the same reason.
+ * Booked is red and temporary: those nights are gone, the room is fine. Out
+ * of service is amber and is about the room, not the dates — the same
+ * distinction the rooms screen already makes, for the same reason.
  */
 export function RoomChoice({ room, checked, onToggle }: {
   room: RoomAvail;
   checked: boolean;
   onToggle: (roomId: number) => void;
 }) {
-  const booked = room.busyNights.length > 0;
-  const closed = room.status !== "ACTIVE";
-  const sellable = !booked && !closed;
+  const offer = roomOffer(room);
 
   return (
     <button
-      disabled={!sellable}
+      disabled={!offer.sellable}
       onClick={() => onToggle(room.roomId)}
       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
-        booked
+        offer.why === "busy"
           ? "cursor-not-allowed border-red-200 bg-red-50 text-red-400"
-          : closed
+          : offer.why === "closed"
             ? "cursor-not-allowed border-amber-200 bg-amber-50 text-amber-600"
             : checked
               ? "border-brand-500 bg-brand-50 text-brand-900 ring-1 ring-brand-500"
@@ -56,9 +52,7 @@ export function RoomChoice({ room, checked, onToggle }: {
         ) : (
           <>{money(Number(room.baseRate))}</>
         )}
-        {/* booked wins the label: if a closed room somehow also has nights on
-            it, the nights are the thing standing in the way today */}
-        {booked ? ` · busy (${room.busyNights.length}n)` : closed ? " · out of service" : ""}
+        {offer.note ? ` · ${offer.note}` : ""}
       </div>
     </button>
   );
