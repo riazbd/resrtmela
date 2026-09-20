@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, money, dmy, cur } from "@/lib/api";
+import { client, money, dmy, cur } from "@/lib/api";
+import type { Activity as SharedActivity, ActivitySchedule, ActivitySlot } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
@@ -14,38 +15,18 @@ import { useResortOptions } from "@/lib/resort-options";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-interface Schedule {
-  id?: number;
-  weekday: number;
-  startTime: string;
-  endTime: string;
-  capacity: number;
-  active?: boolean;
-}
+/**
+ * These three lived here as local interfaces beside hand-written
+ * `api<...>` calls, because the typed client had no activities group at
+ * all. It has one now, written from the controller — which is where
+ * `setSchedules`' body key turned out to be `rows` and not `schedules`,
+ * the same mistake `transition` shipped with for months.
+ */
+type Schedule = ActivitySchedule;
 
-interface Activity {
-  id: number;
-  name: string;
-  category: string;
-  basePrice: number;
-  durationMin: number;
-  minPerSlot: number;
-  maxPerSlot: number;
-  description: string | null;
-  active: boolean;
-  schedules: Schedule[];
-  upcomingSlots: number;
-  nextSlot: string | null;
-}
+type Activity = SharedActivity;
 
-interface Slot {
-  id: number;
-  startsAt: string;
-  endsAt: string;
-  capacity: number;
-  bookedCount: number;
-  remaining: number;
-}
+type Slot = ActivitySlot;
 
 
 export default function ActivitiesPage() {
@@ -65,7 +46,7 @@ export default function ActivitiesPage() {
   const qc = useQueryClient();
   const catalogQ = useApi(
     keys.activities(activeResort?.id),
-    () => api<Activity[]>(`/resorts/${activeResort!.id}/activities`),
+    () => client.activities.list(activeResort!.id),
     { enabled: !!activeResort },
   );
   const rows: Activity[] | null = catalogQ.data ?? null;
@@ -77,9 +58,10 @@ export default function ActivitiesPage() {
   const slotsQ = useApi(
     ["activity-slots", activeResort?.id, selected?.id] as const,
     () =>
-      api<Slot[]>(
-        `/resorts/${activeResort!.id}/activities/${selected!.id}/slots?from=${slotRange.from}&to=${slotRange.to}&futureOnly=true`,
-      ),
+      client.activities.slots(activeResort!.id, selected!.id, {
+        ...slotRange,
+        futureOnly: true,
+      }),
     { enabled: !!activeResort && !!selected },
   );
   const slots: Slot[] | null = slotsQ.data ?? null;
@@ -98,11 +80,22 @@ export default function ActivitiesPage() {
 
   async function saveActivity() {
     if (!activeResort || !editing) return;
+    /**
+     * Both of these are required by the controller's DTO, and this used
+     * to send `category: editing.category || null` — which `@IsEnum`
+     * refuses, so saving an activity with no category was a guaranteed
+     * 400 with a validation message nobody reads. Typing the client
+     * surfaced it; saying so here is better than sending it.
+     */
+    if (!editing.name?.trim() || !editing.category) {
+      push("An activity needs a name and a category.", "err");
+      return;
+    }
     setBusy(true);
     try {
       const body = {
-        name: editing.name,
-        category: editing.category || null,
+        name: editing.name.trim(),
+        category: editing.category,
         basePrice: Number(editing.basePrice ?? 0),
         durationMin: Number(editing.durationMin ?? 60),
         minPerSlot: Number(editing.minPerSlot ?? 1),
@@ -110,18 +103,22 @@ export default function ActivitiesPage() {
         description: editing.description ?? undefined,
       };
       if (editing.id) {
-        await api(`/activities/${editing.id}`, { method: "PATCH", body });
-        await api(`/activities/${editing.id}/schedules`, {
-          method: "PUT",
-          body: { rows: editing.schedules.map(({ weekday, startTime, endTime, capacity, active }) => ({ weekday, startTime, endTime, capacity, active: active ?? true })) },
-        });
+        await client.activities.update(editing.id, body);
+        await client.activities.setSchedules(
+          editing.id,
+          editing.schedules.map(({ weekday, startTime, endTime, capacity, active }) => ({
+            weekday, startTime, endTime, capacity, active: active ?? true,
+          })),
+        );
       } else {
-        const created = await api<{ id: number }>(`/resorts/${activeResort.id}/activities`, { method: "POST", body });
+        const created = await client.activities.create(activeResort.id, body);
         if (editing.schedules.length) {
-          await api(`/activities/${created.id}/schedules`, {
-            method: "PUT",
-            body: { rows: editing.schedules.map(({ weekday, startTime, endTime, capacity, active }) => ({ weekday, startTime, endTime, capacity, active: active ?? true })) },
-          });
+          await client.activities.setSchedules(
+            created.id,
+            editing.schedules.map(({ weekday, startTime, endTime, capacity, active }) => ({
+              weekday, startTime, endTime, capacity, active: active ?? true,
+            })),
+          );
         }
       }
       push("Activity saved");
@@ -138,10 +135,7 @@ export default function ActivitiesPage() {
     if (!selected) return;
     setBusy(true);
     try {
-      const r = await api<{ created: number; matched: number; totalSlots: number }>(
-        `/activities/${selected.id}/generate`,
-        { method: "POST", body: { from: genFrom, to: genTo } },
-      );
+      const r = await client.activities.generate(selected.id, genFrom, genTo);
       push(`Generated ${r.created} slots (${r.matched} schedule matches, ${r.totalSlots} total)`);
       await load();
       await loadSlots(selected);
@@ -154,7 +148,7 @@ export default function ActivitiesPage() {
 
   async function toggleActive(a: Activity) {
     try {
-      await api(`/activities/${a.id}`, { method: "PATCH", body: { active: !a.active } });
+      await client.activities.update(a.id, { active: !a.active });
       await load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -164,7 +158,7 @@ export default function ActivitiesPage() {
   async function deleteSlot(slot: Slot) {
     if (!window.confirm("Delete this empty future slot?")) return;
     try {
-      await api(`/activity-slots/${slot.id}`, { method: "DELETE" });
+      await client.activities.removeSlot(slot.id);
       if (selected) await loadSlots(selected);
     } catch (ex) {
       push((ex as Error).message, "err");

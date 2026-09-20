@@ -248,6 +248,10 @@ describe("every desk route the client knows exists on the server", () => {
     "apps/api/src/bookings/bookings.controller.ts",
     "apps/api/src/payments/payments.controller.ts",
     "apps/api/src/platform/platform.controller.ts",
+    // phase 2's slices, added the day each group was typed
+    "apps/api/src/fb/fb.controller.ts",
+    "apps/api/src/activities/activities.controller.ts",
+    "apps/api/src/payroll/payroll.controller.ts",
   ];
 
   /** `@Post("bookings/:id/charges")` becomes a test for `/bookings/41/charges`. */
@@ -298,6 +302,41 @@ describe("every desk route the client knows exists on the server", () => {
     await client.bookings.requestCancel(41, "plans changed");
     await client.bookings.decideCancel(41, true);
     await client.today(3);
+
+    /**
+     * Phase 2's three slices. Activities had no group at all until
+     * 2026-09-20 and the console reached all of it by hand, which is
+     * exactly the state `checkout` rotted in.
+     */
+    await client.fb.inHouse(3);
+    await client.fb.bills(3, { from: "2026-09-01", to: "2026-09-21" });
+    await client.fb.createBill(3, { date: "2026-09-20", items: [] });
+    await client.fb.payBill(7, { amount: 100, method: "CASH" });
+    await client.fb.removeBill(7);
+    await client.fb.packages(3);
+    await client.fb.createPackage(3, {});
+    await client.fb.updatePackage(5, {});
+    await client.fb.removePackage(5);
+
+    await client.activities.list(3);
+    await client.activities.create(3, {
+      name: "Sunset cruise", category: "TOUR", basePrice: 1200, durationMin: 90,
+    });
+    await client.activities.update(8, { basePrice: 1400 });
+    await client.activities.setSchedules(8, []);
+    await client.activities.generate(8, "2026-10-01", "2026-10-31");
+    await client.activities.slots(3, 8, { from: "2026-10-01", to: "2026-10-31" });
+    await client.activities.removeSlot(99);
+    await client.activities.addToBooking(41, { slotId: 99, persons: 2 });
+    await client.activities.removeFromBooking(41, 907);
+
+    await client.payroll.employees(3);
+    await client.payroll.addEmployee(3, {});
+    await client.payroll.updateEmployee(3, 4, {});
+    await client.payroll.removeEmployee(3, 4);
+    await client.payroll.sheet(3, "2026-09");
+    await client.payroll.pay(3, 4, {});
+    await client.payroll.unpay(77);
     await client.daySheet(3, "2026-10-01");
     await client.calendar(3, "2026-10-01", "2026-10-31");
     await client.dues(3);

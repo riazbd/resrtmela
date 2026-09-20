@@ -1,8 +1,9 @@
 "use client";
 
+import type { FbBill, FbBillItem, FbInHouse } from "@rh/shared";
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, client, money, type FoodPackage, cur } from "@/lib/api";
+import { client, money, type FoodPackage, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
@@ -12,31 +13,15 @@ import { Package as PackageIcon, Trash2 } from "lucide-react";
 import { usePaymentMethods } from "@/lib/resort-options";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
-interface BillItem {
-  name: string;
-  qty: number;
-  unitPrice: number;
-  total: number;
-}
-interface Bill {
-  id: number;
-  code: string;
-  billDate: string;
-  guestName: string | null;
-  bookingId: number | null;
-  method: string | null;
-  items: BillItem[];
-  total: number;
-  paid: number;
-  due: number;
-  status: string;
-}
-interface InHouse {
-  bookingId: number;
-  code: string;
-  guestName: string;
-  rooms: (string | null)[];
-}
+/**
+ * These three lived here as local interfaces beside hand-written
+ * `api<...>` calls. The client's `fb` group answered `unknown` for all
+ * of them until 2026-09-20; it is typed from the controller now, and
+ * the phone's restaurant screens read the same shapes.
+ */
+type BillItem = FbBillItem;
+type Bill = FbBill;
+type InHouse = FbInHouse;
 
 /**
  * A blank line, not a guess.
@@ -74,12 +59,12 @@ export default function FbPage() {
 
   const billsQ = useApi(
     keys.fbBills(activeResort?.id, `${from}:${to}`),
-    () => api<{ rows: Bill[]; total: number; truncated: boolean }>(`/resorts/${activeResort!.id}/fb/bills?from=${from}&to=${to}`),
+    () => client.fb.bills(activeResort!.id, { from, to }),
     { enabled, placeholderData: (prev) => prev },
   );
   // the in-house list is what the kitchen charges a room against, so it is
   // read on every ticket — and it changes only at check-in and check-out
-  const inHouseQ = useApi(keys.fbInHouse(activeResort?.id), () => api<InHouse[]>(`/resorts/${activeResort!.id}/fb/in-house`), { enabled });
+  const inHouseQ = useApi(keys.fbInHouse(activeResort?.id), () => client.fb.inHouse(activeResort!.id), { enabled });
   const packagesQ = useApi(keys.fbPackages(activeResort?.id), () => client.fb.packages(activeResort!.id), { enabled, staleTime: 3_600_000 });
 
   const bills: Bill[] = billsQ.data?.rows ?? [];
@@ -116,16 +101,13 @@ export default function FbPage() {
     if (!activeResort || !target) return;
     setBusy(true);
     try {
-      const created = await api<Bill>(`/resorts/${activeResort.id}/fb/bills`, {
-        method: "POST",
-        body: {
-          date,
-          items: ticket.filter((i) => i.name && i.qty > 0).map(({ name, qty, unitPrice }) => ({ name, qty, unitPrice })),
-          bookingId: target.bookingId ?? undefined,
-          guestName: target.bookingId ? undefined : target.label,
-          paidAmount,
-          method: paidAmount > 0 ? method : undefined,
-        },
+      const created = await client.fb.createBill(activeResort.id, {
+        date,
+        items: ticket.filter((i) => i.name && i.qty > 0).map(({ name, qty, unitPrice }) => ({ name, qty, unitPrice })),
+        bookingId: target.bookingId ?? undefined,
+        guestName: target.bookingId ? undefined : target.label,
+        paidAmount,
+        method: paidAmount > 0 ? method : undefined,
       });
       push(`${created.code} — ${money(created.total)}${target.bookingId ? " charged to room" : ""}`);
       setTarget(null);
@@ -143,7 +125,7 @@ export default function FbPage() {
     if (!payFor) return;
     setBusy(true);
     try {
-      await api(`/fb/bills/${payFor.id}/pay`, { method: "POST", body: { amount: payAmt, method: "CASH" } });
+      await client.fb.payBill(payFor.id, { amount: payAmt, method: "CASH" });
       push(`${money(payAmt)} collected on ${payFor.code}`);
       setPayFor(null);
       await load();
@@ -158,9 +140,10 @@ export default function FbPage() {
     if (!activeResort) return;
     setBusy(true);
     try {
-      await api(`/resorts/${activeResort.id}/fb/packages`, {
-        method: "POST",
-        body: { name: pkgForm.name, price: Number(pkgForm.price), items: pkgForm.items || undefined },
+      await client.fb.createPackage(activeResort.id, {
+        name: pkgForm.name,
+        price: Number(pkgForm.price),
+        items: pkgForm.items || undefined,
       });
       push("Food package created");
       setPkgForm({ name: "", price: "", items: "" });
@@ -175,7 +158,7 @@ export default function FbPage() {
   async function removePackage(id: number) {
     if (!window.confirm("Delete this package?")) return;
     try {
-      await api(`/fb/packages/${id}`, { method: "DELETE" });
+      await client.fb.removePackage(id);
       await load();
     } catch (ex) {
       push((ex as Error).message, "err");

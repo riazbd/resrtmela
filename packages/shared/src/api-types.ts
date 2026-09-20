@@ -726,6 +726,92 @@ export interface PLReport {
   combined: { billed: number; income: number; stillDue: number; expenses: number; net: number };
 }
 
+// ───────────────────────── the restaurant ─────────────────────────
+
+export interface FbBillItem {
+  name: string;
+  qty: number;
+  unitPrice: number;
+  /** `unitPrice × qty`, rounded by the server. */
+  total: number;
+}
+
+/**
+ * One restaurant bill, from `GET /resorts/:id/fb/bills`.
+ *
+ * The totals are the server's. `fbBillTotals` is one arithmetic in one
+ * place because it used to be written out by hand here four times and in
+ * five other files, with inconsistent rounding and no tax anywhere — so
+ * a resort charging VAT charged it on the room and not on the food.
+ */
+export interface FbBill {
+  id: number;
+  code: string;
+  billDate: string;
+  guestName: string | null;
+  roomId: number | null;
+  bookingId: number | null;
+  method: string | null;
+  note: string | null;
+  items: FbBillItem[];
+  /** Before tax. */
+  net: number;
+  tax: number;
+  taxLines: { code: string; label: string; ratePct: number; amount: number }[];
+  total: number;
+  paid: number;
+  due: number;
+  status: string;
+}
+
+/** A stay that can have food put on its room, for the POS room picker. */
+export interface FbInHouse {
+  bookingId: number;
+  code: string;
+  guestName: string;
+  /** A room deleted after the booking was taken comes back null. */
+  rooms: (string | null)[];
+}
+
+// ───────────────────────── activities ─────────────────────────
+
+export interface ActivitySchedule {
+  /** Absent on one being proposed; present on one the server holds. */
+  id?: number;
+  /** 0 is Sunday, as `Date.getUTCDay()` counts. */
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  capacity: number;
+  active?: boolean;
+}
+
+export interface Activity {
+  id: number;
+  name: string;
+  /** A code from the resort's own `ACTIVITY_CATEGORY` list. */
+  category: string;
+  basePrice: number;
+  durationMin: number;
+  minPerSlot: number;
+  maxPerSlot: number;
+  description: string | null;
+  active: boolean;
+  schedules: ActivitySchedule[];
+  /** Slots from now on, which is what says whether it is really running. */
+  upcomingSlots: number;
+  nextSlot: string | null;
+}
+
+export interface ActivitySlot {
+  id: number;
+  startsAt: string;
+  endsAt: string;
+  capacity: number;
+  bookedCount: number;
+  remaining: number;
+}
+
 export interface ExpenseRow {
   id: number;
   date: string;

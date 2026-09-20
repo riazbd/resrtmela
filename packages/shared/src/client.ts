@@ -40,6 +40,11 @@ import type {
   PaymentReceipt,
   PayrollSheet,
   PermRole,
+  Activity,
+  ActivitySchedule,
+  ActivitySlot,
+  FbBill,
+  FbInHouse,
   PLReport,
   ResortMetrics,
   ResortSettings,
@@ -216,6 +221,50 @@ export interface BookingEdit {
  * sends the same one it generated offline, and the server answers a repeat
  * with the original receipt instead of taking the money twice.
  */
+/** A line on a restaurant bill, as the POS sends it. */
+export interface NewFbBillItem {
+  name: string;
+  qty: number;
+  unitPrice: number;
+}
+
+/**
+ * A restaurant bill being written.
+ *
+ * `bookingId` is what puts it on a room rather than taking cash: a bill
+ * with one is owed by the stay, and `paidAmount` is what was handed over
+ * at the counter instead.
+ */
+export interface NewFbBill {
+  date: string;
+  items: NewFbBillItem[];
+  guestName?: string;
+  bookingId?: number;
+  roomId?: number;
+  paidAmount?: number;
+  method?: string;
+  note?: string;
+}
+
+/**
+ * An activity in the catalogue.
+ *
+ * `category` is checked against a list hardcoded in the controller's
+ * DTO, which is in tension with `ACTIVITY_CATEGORY` being one of the
+ * lists a resort owns — a resort can add a category to its list and the
+ * API will still refuse it here. The type follows the DTO, because the
+ * DTO is what actually answers; reconciling the two is the API's to do.
+ */
+export interface NewActivity {
+  name: string;
+  category: string;
+  basePrice: number;
+  durationMin: number;
+  minPerSlot?: number;
+  maxPerSlot?: number;
+  description?: string;
+}
+
 export interface PaymentEntry {
   amount: number;
   method: string;
@@ -475,12 +524,14 @@ export function createApiClient(http: Fetcher) {
     },
 
     fb: {
-      inHouse: (resortId: number) => http<unknown[]>(`/resorts/${resortId}/fb/in-house`),
+      inHouse: (resortId: number) => http<FbInHouse[]>(`/resorts/${resortId}/fb/in-house`),
       bills: (resortId: number, q: DateRange & { skip?: number; take?: number } = {}) =>
-        http<unknown>(`/resorts/${resortId}/fb/bills${qs(q)}`),
-      createBill: (resortId: number, body: unknown) =>
-        http<unknown>(`/resorts/${resortId}/fb/bills`, { method: "POST", body }),
-      payBill: (id: number, body: unknown) => http<unknown>(`/fb/bills/${id}/pay`, { method: "POST", body }),
+        http<Page<FbBill>>(`/resorts/${resortId}/fb/bills${qs(q)}`),
+      createBill: (resortId: number, body: NewFbBill) =>
+        http<FbBill>(`/resorts/${resortId}/fb/bills`, { method: "POST", body }),
+      /** The server refuses more than the bill comes to, and says the two figures. */
+      payBill: (id: number, body: { amount: number; method: string }) =>
+        http<FbBill>(`/fb/bills/${id}/pay`, { method: "POST", body }),
       removeBill: (id: number) => http<{ deleted: boolean }>(`/fb/bills/${id}`, { method: "DELETE" }),
       packages: (resortId: number) => http<FoodPackage[]>(`/resorts/${resortId}/fb/packages`),
       createPackage: (resortId: number, body: unknown) =>
@@ -490,14 +541,74 @@ export function createApiClient(http: Fetcher) {
       removePackage: (id: number) => http<{ deleted: boolean }>(`/fb/packages/${id}`, { method: "DELETE" }),
     },
 
+    /**
+     * Activities: the catalogue, its weekly pattern, and the slots that
+     * pattern generates.
+     *
+     * There was no group here at all until 2026-09-20 — the console
+     * reached all four of these through hand-written paths, which is the
+     * arrangement §0.3 exists to end.
+     */
+    activities: {
+      list: (resortId: number) => http<Activity[]>(`/resorts/${resortId}/activities`),
+      create: (resortId: number, body: NewActivity) =>
+        http<Activity>(`/resorts/${resortId}/activities`, { method: "POST", body }),
+      update: (id: number, body: Partial<NewActivity> & { active?: boolean }) =>
+        http<Activity>(`/activities/${id}`, { method: "PATCH", body }),
+      /**
+       * The whole week at once: a PUT, because it replaces rather than adds.
+       *
+       * The body key is `rows`. It was written as `schedules` here first,
+       * which is precisely how `transition` sent `state` where the
+       * controller read `to` and never worked — caught this time by
+       * reading `SetSchedulesDto` before shipping rather than after.
+       */
+      setSchedules: (id: number, rows: ActivitySchedule[]) =>
+        http<Activity>(`/activities/${id}/schedules`, { method: "PUT", body: { rows } }),
+      /**
+       * Turns the weekly pattern into real slots between two dates.
+       *
+       * `matched` is how many the pattern hit and `created` how many were
+       * new — the difference is the ones that already existed, which is
+       * what makes running it twice safe.
+       */
+      generate: (id: number, from: string, to: string) =>
+        http<{ created: number; matched: number; totalSlots: number }>(
+          `/activities/${id}/generate`,
+          { method: "POST", body: { from, to } },
+        ),
+      /** `futureOnly` drops slots that have already run; the API defaults it off. */
+      slots: (
+        resortId: number,
+        catalogId: number,
+        q: DateRange & { futureOnly?: boolean } = {},
+      ) => http<ActivitySlot[]>(`/resorts/${resortId}/activities/${catalogId}/slots${qs(q)}`),
+      removeSlot: (id: number) =>
+        http<{ deleted: boolean }>(`/activity-slots/${id}`, { method: "DELETE" }),
+      addToBooking: (bookingId: number, body: { slotId: number; persons: number }) =>
+        http<BookingDetail>(`/bookings/${bookingId}/activities`, { method: "POST", body }),
+      removeFromBooking: (bookingId: number, itemId: number) =>
+        http<BookingDetail>(`/bookings/${bookingId}/activities/${itemId}`, { method: "DELETE" }),
+    },
+
     payroll: {
       employees: (resortId: number) => http<Employee[]>(`/resorts/${resortId}/payroll/employees`),
       addEmployee: (resortId: number, body: unknown) =>
         http<Employee>(`/resorts/${resortId}/payroll/employees`, { method: "POST", body }),
       updateEmployee: (resortId: number, employeeId: number, body: unknown) =>
         http<Employee>(`/resorts/${resortId}/payroll/employees/${employeeId}`, { method: "PATCH", body }),
+      /**
+       * Deleted, or deactivated — and which of the two is the server's
+       * decision, not the caller's. An employee with payroll history is
+       * kept and switched off, because a payslip that already exists has
+       * to keep naming somebody. Typed `{ deleted: boolean }` until
+       * 2026-09-20, so the one field that matters was missing.
+       */
       removeEmployee: (resortId: number, employeeId: number) =>
-        http<{ deleted: boolean }>(`/resorts/${resortId}/payroll/employees/${employeeId}`, { method: "DELETE" }),
+        http<{ deleted?: boolean; deactivated?: boolean }>(
+          `/resorts/${resortId}/payroll/employees/${employeeId}`,
+          { method: "DELETE" },
+        ),
       sheet: (resortId: number, month: string) => http<PayrollSheet>(`/resorts/${resortId}/payroll${qs({ month })}`),
       pay: (resortId: number, employeeId: number, body: unknown) =>
         http<unknown>(`/resorts/${resortId}/payroll/employees/${employeeId}/pay`, { method: "POST", body }),

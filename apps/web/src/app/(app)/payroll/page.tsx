@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { api, client, money, type Employee, cur } from "@/lib/api";
+import { client, money, type Employee, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
@@ -66,11 +66,11 @@ export default function PayrollPage() {
         salary: Number(editing ? editing.salary : form.salary) || 0,
       };
       if (editing) {
-        await api(`/resorts/${rid}/payroll/employees/${editing.id}`, { method: "PATCH", body });
+        await client.payroll.updateEmployee(rid!, editing.id, body);
         push("Staff updated");
         setEditing(null);
       } else {
-        await api(`/resorts/${rid}/payroll/employees`, { method: "POST", body });
+        await client.payroll.addEmployee(rid!, body);
         push("Staff added");
         setForm({ name: "", phone: "", designation: "", salary: "" });
       }
@@ -86,7 +86,7 @@ export default function PayrollPage() {
     if (!rid) return;
     if (!window.confirm(`Remove ${emp.name} from payroll? Their payment history is kept.`)) return;
     try {
-      const r = await api<{ deactivated?: boolean; deleted?: boolean }>(`/resorts/${rid}/payroll/employees/${emp.id}`, { method: "DELETE" });
+      const r = await client.payroll.removeEmployee(rid!, emp.id);
       push(r.deactivated ? "Staff deactivated (history kept)" : "Staff removed");
       load();
     } catch (ex) {
