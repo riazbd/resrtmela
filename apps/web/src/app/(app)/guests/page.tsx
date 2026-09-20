@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { client, dmy } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
@@ -9,12 +10,17 @@ import { Badge, Card, Empty, Input, Spinner, Td, Th } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
 import { Pagination, Table } from "@/components/patterns";
 import { useDebounced } from "@/lib/use-debounced";
+import type { GuestRow } from "@rh/shared";
+import { GuestStays } from "./guest-stays";
 
 export default function GuestsPage() {
   const { activeResort, isStaff } = useAuth();
   const t = useT();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [skip, setSkip] = useState(0);
+  /** Whose stays are open. The drawer reads them off the bookings list. */
+  const [open, setOpen] = useState<GuestRow | null>(null);
   const take = 50;
   // typing "rahman" used to be six requests; the last one is the only answer
   const debounced = useDebounced(search, 300);
@@ -58,7 +64,11 @@ export default function GuestsPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {rows.map((g) => (
-                <tr key={g.id} className="hover:bg-slate-50/50">
+                <tr
+                  key={g.id}
+                  className="cursor-pointer hover:bg-slate-50/50"
+                  onClick={() => setOpen(g)}
+                >
                   <Td className="font-medium">{g.fullName}</Td>
                   <Td className="text-xs">{g.phone}</Td>
                   <Td className="text-xs text-slate-400">{g.nidPassportNo ?? "—"}</Td>
@@ -80,6 +90,20 @@ export default function GuestsPage() {
         <Pagination skip={skip} take={take} total={total} onChange={setSkip} />
         </>
       )}
+
+      {/*
+        "Have they been before, and did they pay?" is the question the
+        counter asks, and this page could answer only the first half.
+        No new route: a guest is found by their phone, which is what the
+        bookings list matches on — the same two routes the phone's guest
+        screen is assembled from.
+      */}
+      <GuestStays
+        guest={open}
+        resortId={activeResort?.id}
+        onClose={() => setOpen(null)}
+        onOpenBooking={(id) => router.push(`/bookings?id=${id}`)}
+      />
     </Card>
   );
 }

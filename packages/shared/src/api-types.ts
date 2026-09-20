@@ -167,9 +167,33 @@ export interface BookingRow {
   children: number;
   discount: number;
   nights: number;
+  /** The rooms and extra persons, before discount and before tax. */
   rent: number;
   paid: number;
   due: number;
+
+  /**
+   * The rest of what `computeTotals` sends, which this type did not say
+   * it sent until 2026-09-20.
+   *
+   * The list route spreads `BookingsService.computeTotals(b, taxRules)`
+   * into every row, so all of this has always been on the wire — and the
+   * type stopped at `due`, so a screen wanting the invoice total had to
+   * cast or do without. `BookingDetail` was wrong in exactly this way
+   * about `rooms` and it cost a crash; here it cost a column.
+   *
+   * Optional rather than required because the agent projection of a
+   * booking omits money the resort has chosen not to show.
+   */
+  roomRent?: number;
+  taxable?: number;
+  /** The single rate when there is exactly one, for a screen showing "+15%". */
+  taxRatePct?: number;
+  tax?: number;
+  taxLines?: { code: string; label: string; ratePct: number; amount: number }[];
+  /** taxable + tax: what the invoice comes to. */
+  total?: number;
+  refunded?: number;
 }
 
 /** One printable line of a quoted bill: what it is, and what it comes to. */
