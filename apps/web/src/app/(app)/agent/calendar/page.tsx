@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Table } from "@/components/patterns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { OCCUPIED, DUE_STRIPE, FREE_CELL, type OccupiedState } from "@/lib/calendar-colors";
 import { useApi, keys } from "@/lib/query";
@@ -83,7 +83,7 @@ export default function AgencyCalendarPage() {
 
   const { data, isLoading, error } = useApi<AgencyCalendar>(
     keys.agentCalendar(start, end),
-    () => api<AgencyCalendar>(`/agent/calendar?from=${start}&to=${end}`),
+    () => client.agent.calendar({ from: start, to: end }),
     { placeholderData: (prev) => prev },
   );
 

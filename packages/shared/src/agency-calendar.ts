@@ -7,6 +7,8 @@
  * the rule that decides what a square means can be tested on its own.
  */
 
+import type { AgencyResortMonth } from "./api-types";
+
 /** One occupied span, exactly as `/agent/calendar` sends it. */
 export interface CalendarStay {
   roomId: number;
@@ -107,4 +109,66 @@ export function freeSpan(
     if (cells.has(`${roomId}|${iso(new Date(t))}`)) return null;
   }
   return { from: first, to: iso(new Date(end + DAY_MS)) };
+}
+
+/**
+ * How many rooms an agency could sell at one resort, on one night.
+ *
+ * The console draws this month as a grid — a row per room, a column per
+ * night, across every resort. A phone has four inches and an agent with
+ * somebody in front of them asking about a date, so it asks the grid one
+ * question per night and shows the number.
+ *
+ * Three things decide the answer, and getting any of them wrong costs a
+ * sale or promises one that does not exist:
+ *
+ *   - a stay holds check-in up to but **not including** check-out, so
+ *     the room a guest leaves on the 24th is free the night of the 24th;
+ *   - a room out of service is not booked and is not free — it is simply
+ *     not for sale, and counting it offers a room nobody can sleep in;
+ *   - `bookableUntil` is the last check-out this agency may book. Past
+ *     it nothing is free *to them*, however empty the resort is.
+ */
+export function freeRoomsOn(month: AgencyResortMonth, night: string): number {
+  if (month.bookableUntil && night > month.bookableUntil) return 0;
+  const taken = occupancyCells(month.stays);
+  return month.rooms.filter(
+    (r) => r.status === "ACTIVE" && !taken.has(`${r.id}|${night}`),
+  ).length;
+}
+
+/**
+ * The same question for every night in a range, across every resort.
+ *
+ * Inclusive of both ends, because a person asking "the 21st to the 24th"
+ * means all four. A range that runs backwards is not a range and gets an
+ * empty answer rather than a guess at what was meant.
+ */
+export function freeRoomsByNight(
+  months: AgencyResortMonth[],
+  from: string,
+  to: string,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return out;
+  if (end.getTime() < start.getTime()) return out;
+
+  // the occupancy map is built once per resort rather than once per night,
+  // which is the difference between thirty passes and one over a month
+  const withTaken = months.map((m) => ({ month: m, taken: occupancyCells(m.stays) }));
+
+  for (let t = start.getTime(); t <= end.getTime(); t += DAY_MS) {
+    const night = iso(new Date(t));
+    let free = 0;
+    for (const { month, taken } of withTaken) {
+      if (month.bookableUntil && night > month.bookableUntil) continue;
+      for (const r of month.rooms) {
+        if (r.status === "ACTIVE" && !taken.has(`${r.id}|${night}`)) free++;
+      }
+    }
+    out.set(night, free);
+  }
+  return out;
 }
