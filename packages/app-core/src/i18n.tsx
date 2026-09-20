@@ -42,13 +42,14 @@ export const DICTS = {
     "ds.booked": "বুকড",
     "ds.oos": "বন্ধ",
     "ds.arrives": "আজ আসছে",
-    "ds.departs": "আজ ছাড়ছে",
     "ds.balanceDue": "আজকের মোট বাকি",
     "ds.nightRevenue": "আজকের আয়",
     "ds.expenses": "আজকের খরচ",
     "ds.occupancy": "ভর্তি রুম",
     "ds.arrivals": "আগমন",
     "ds.departures": "বিদায়",
+    // last nights of a stay, not check-outs dated today
+    "ds.lastNights": "শেষ রাত",
     "ds.pax": "জন",
     "ds.empty": "কোনো বুকিং নেই",
 
@@ -171,13 +172,14 @@ export const DICTS = {
     "ds.booked": "Booked",
     "ds.oos": "Out of service",
     "ds.arrives": "Arrives today",
-    "ds.departs": "Departs today",
     "ds.balanceDue": "Balance due (today)",
     "ds.nightRevenue": "Revenue (today)",
     "ds.expenses": "Expenses (today)",
     "ds.occupancy": "Rooms occupied",
     "ds.arrivals": "Arrivals",
     "ds.departures": "Departures",
+    // last nights of a stay, not check-outs dated today
+    "ds.lastNights": "Last nights",
     "ds.pax": "pax",
     "ds.empty": "No booking",
 

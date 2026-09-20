@@ -14,7 +14,7 @@
  * with it here.
  */
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
-import type { DaySheet } from "@rh/shared";
+import { addDaysIso, lastNightLabel, todayIn, type DaySheet } from "@rh/shared";
 
 const mockDaySheet = jest.fn();
 const mockPush = jest.fn();
@@ -201,7 +201,7 @@ describe("the day's figures", () => {
     await waitFor(() => expect(r.getByLabelText("Balance due: ৳27,000")).toBeTruthy());
     expect(r.getByLabelText("Night revenue: ৳9,000")).toBeTruthy();
     expect(r.getByLabelText("Occupancy: 3/10")).toBeTruthy();
-    expect(r.getByLabelText("Arrivals / departures: 1 / 0")).toBeTruthy();
+    expect(r.getByLabelText("Arrivals / last nights: 1 / 0")).toBeTruthy();
   });
 });
 
@@ -241,12 +241,27 @@ describe("the register", () => {
     await waitFor(() => expect(r.getByText("Arrives")).toBeTruthy());
   });
 
-  it("marks the room somebody leaves today", async () => {
+  /**
+   * This test asserted the word "Departs" and was named "leaves today",
+   * and both were wrong in the same way the screen was. The register is a
+   * grid of nights: the last cell of a stay is the night *before* the
+   * guest goes. The server agrees — `/day-sheet` sets `departs` when
+   * `checkOut` is the next day, while `/today` counts a departure only
+   * when `checkOut` is today, which is why the dashboard said none while
+   * this screen marked three.
+   *
+   * Found on the owner's phone on 2026-09-20: BK-00001 and BK-00004 were
+   * both out on the 21st. A clerk reading "Departs today" counts those
+   * rooms free this afternoon and sells a night that is taken.
+   */
+  it("names the morning the guest goes, which is not the night on screen", async () => {
     mockDaySheet.mockResolvedValue(
       sheet({ rooms: [taken({ arrives: false, departs: true })] }),
     );
     const r = await render(<Harness><DaySheetScreen /></Harness>);
-    await waitFor(() => expect(r.getByText("Departs")).toBeTruthy());
+    const out = lastNightLabel(addDaysIso(todayIn("Asia/Dhaka"), 1), todayIn("Asia/Dhaka"));
+    await waitFor(() => expect(r.getByText(out!)).toBeTruthy());
+    expect(r.queryByText("Departs")).toBeNull();
   });
 
   it("opens the booking behind a taken room", async () => {

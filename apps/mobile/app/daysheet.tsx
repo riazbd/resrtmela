@@ -15,7 +15,7 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
-import { formatMoney, todayIn, type DaySheetRoom } from "@rh/shared";
+import { addDaysIso, formatMoney, lastNightLabel, todayIn, type DaySheetRoom } from "@rh/shared";
 import { client, useAuth } from "../src/api/session";
 import { WhichResort } from "../src/screens/which-resort";
 import { DateNav } from "../src/design/date-nav";
@@ -123,9 +123,18 @@ export default function DaySheetScreen() {
           <Stat label="Night revenue" value={whole(strip.revenue)} tone="ok" />
           <Stat label="Expenses" value={whole(strip.expenses)} />
           <Stat label="Occupancy" value={`${strip.occupancy}/${strip.totalRooms}`} sub="rooms taken" />
+          {/*
+            "Departures" here would be the same lie the room chips told.
+            The strip counts first nights and last nights of the night on
+            screen, so the second figure is people whose stay ends the
+            next morning — which is why the dashboard, which counts
+            check-outs dated today, can honestly say none while this says
+            three.
+          */}
           <Stat
-            label="Arrivals / departures"
+            label="Arrivals / last nights"
             value={`${strip.arrivals} / ${strip.departures}`}
+            sub="in tonight / out tomorrow"
           />
         </View>
 
@@ -206,7 +215,15 @@ function RoomRow({
       right={
         <View style={styles.right}>
           {cell.arrives ? <Tag text="Arrives" tone="ok" /> : null}
-          {cell.departs ? <Tag text="Departs" tone="warn" /> : null}
+          {/*
+            Not "Departs" and certainly not "Departs today": this is a
+            register of nights, and the last cell of a stay is the night
+            before they go. The chip names that morning, because a room
+            read as free this afternoon gets sold twice.
+          */}
+          {cell.departs ? (
+            <Tag text={lastNightLabel(addDaysIso(date, 1), date) ?? "Last night"} tone="warn" />
+          ) : null}
           {owes !== null ? (
             <Text step="body" weight="medium" tone={owes > 0 ? "danger" : "muted"} tabular>
               {whole(owes)}

@@ -50,8 +50,18 @@ export type DayStyle =
   /** `Sunday, 20 September 2026` — a screen that is about one day. */
   | "long";
 
-/** Whatever it was, as a `Date` at UTC noon — or null if it was not a date. */
-function atUtcNoon(value: string | Date): Date | null {
+/**
+ * Whatever it was, as a `Date` at UTC noon — or null if it was not a date.
+ *
+ * Null and undefined are dates it was not. Every caller here already
+ * guarded before calling, so the signature said `string | Date` and the
+ * body assumed it; the first caller that forgot got `Cannot read
+ * properties of null (reading 'slice')` instead of the null this returns
+ * for every other kind of non-date. An imported booking with no checkout
+ * is an ordinary thing in this database, not a programming error.
+ */
+function atUtcNoon(value: string | Date | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }
@@ -126,4 +136,37 @@ export function stayRange(
     return `${day(a)} ${month(a)} – ${day(b)} ${month(b)}`;
   }
   return `${day(a)}–${day(b)} ${month(a)}`;
+}
+
+/**
+ * "Out 21 Sep" — the morning a guest leaves, for a register of nights.
+ *
+ * A day sheet is a grid of nights: the column is a night and a cell is
+ * somebody sleeping in that room that night. The last such cell is not
+ * the day they leave, it is the night before, and a chip there saying
+ * "Departs today" is a room sold twice.
+ *
+ * Found on a phone on 2026-09-20, where the dashboard said no departures
+ * and the day sheet marked three — both right, about two different days.
+ * Asking the question in the label is what keeps the two screens honest:
+ * the dashboard answers "who leaves today", this answers "when does this
+ * stay end", and neither can now be mistaken for the other.
+ *
+ * The year appears only when it is not the year of the date being shown,
+ * following `stayRange`: a person writing this by hand would not repeat it.
+ */
+export function lastNightLabel(
+  checkOut: string | Date | null | undefined,
+  /** The date the sheet is open on, for deciding whether to print a year. */
+  sheetDate?: string | Date | null,
+): string | null {
+  const out = atUtcNoon(checkOut);
+  if (!out) return null;
+  // no sheet date means no year to compare against, so none is printed —
+  // the caller that has one passes it and gets the year where it matters
+  const here = sheetDate ? atUtcNoon(sheetDate) : null;
+  const sameYear = here ? here.getUTCFullYear() === out.getUTCFullYear() : true;
+  const day = out.getUTCDate();
+  const month = MONTHS_SHORT[out.getUTCMonth()];
+  return sameYear ? `Out ${day} ${month}` : `Out ${day} ${month} ${out.getUTCFullYear()}`;
 }

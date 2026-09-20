@@ -10,6 +10,7 @@ import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { DateNav, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
+import { lastNightLabel } from "@rh/shared";
 
 export default function DaySheetPage() {
   const { activeResort, isStaff } = useAuth();
@@ -47,7 +48,8 @@ export default function DaySheetPage() {
         <Stat label={t("ds.nightRevenue")} value={money(strip.revenue)} tone="green" />
         <Stat label={t("ds.expenses")} value={money(strip.expenses)} tone="amber" />
         <Stat label={t("ds.occupancy")} value={`${strip.occupancy}/${strip.totalRooms}`} />
-        <Stat label={`${t("ds.arrivals")} / ${t("ds.departures")}`} value={`${strip.arrivals} / ${strip.departures}`} />
+        {/* last nights, not departures — see the room chips below */}
+        <Stat label={`${t("ds.arrivals")} / ${t("ds.lastNights")}`} value={`${strip.arrivals} / ${strip.departures}`} />
       </div>
 
       {/* the register */}
@@ -117,9 +119,18 @@ export default function DaySheetPage() {
                                 {t("ds.arrives")}
                               </span>
                             )}
+                            {/*
+                              This said "Departs today" for a guest leaving
+                              the next morning — the register is a grid of
+                              nights and the last one is the night before.
+                              A clerk who reads it as today sells the room
+                              twice. `lastNightLabel` names the morning, and
+                              the phone draws the same words from the same
+                              function.
+                            */}
                             {c.departs && (
                               <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">
-                                {t("ds.departs")}
+                                {lastNightLabel(addDaysIso(date, 1), date)}
                               </span>
                             )}
                           </div>
