@@ -191,9 +191,9 @@ describe("one guest", () => {
   });
 
   /** Summed from the rows on the page, and the label says so. */
-  it("adds up what is still owed across them", async () => {
+  it("adds up what is still due across them", async () => {
     const r = await open(GuestScreen);
-    await waitFor(() => expect(r.getByLabelText("Owed on these: ৳12,500")).toBeTruthy());
+    await waitFor(() => expect(r.getByLabelText("Due on these: ৳12,500")).toBeTruthy());
   });
 
   /**

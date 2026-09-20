@@ -66,14 +66,14 @@ beforeEach(() => {
 });
 
 describe("what the agency quoted and billed", () => {
-  it("names the document, who it is for, and what is still owed", async () => {
+  it("names the document, who it is for, and what is still due", async () => {
     const r = await open();
     await waitFor(() => expect(r.getByText("INV-0007")).toBeTruthy());
     expect(r.getByText(/Mahmud Travels/)).toBeTruthy();
     // the figure is on the row and in the total above it, so the row is
     // asked for by its own name rather than by a number they share
     expect(
-      r.getByLabelText(/INV-0007.*Mahmud Travels.*৳25,000 still owed/),
+      r.getByLabelText(/INV-0007.*Mahmud Travels.*৳25,000 due/),
     ).toBeTruthy();
   });
 
@@ -109,14 +109,14 @@ describe("what the agency quoted and billed", () => {
     expect(r.queryByText(/৳25,000/)).toBeNull();
   });
 
-  it("filters to the ones still owing money", async () => {
+  it("filters to the ones still unpaid", async () => {
     mockList.mockResolvedValue([
       doc(),
       doc({ id: 42, number: "INV-0008", status: "PAID", totals: { subtotal: 1, discount: 0, tax: 0, total: 1, paid: 1, due: 0 } }),
     ]);
     const r = await open();
     await waitFor(() => expect(r.getByText("INV-0008")).toBeTruthy());
-    fireEvent.press(r.getByText("Owing"));
+    fireEvent.press(r.getByText("Unpaid"));
     await waitFor(() => expect(r.queryByText("INV-0008")).toBeNull());
     expect(r.getByText("INV-0007")).toBeTruthy();
   });

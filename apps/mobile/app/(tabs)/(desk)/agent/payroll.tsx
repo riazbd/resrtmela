@@ -121,7 +121,7 @@ export default function AgentPayrollScreen() {
         </View>
 
         <View style={styles.figures}>
-          <Stat label="Owed" value={whole(totals.expected)} />
+          <Stat label="Due" value={whole(totals.expected)} />
           <Stat label="Paid" value={whole(totals.paid)} tone="ok" />
           <Stat
             label="Left"

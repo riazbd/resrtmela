@@ -159,7 +159,7 @@ describe("the states it owes", () => {
       () => new Promise((resolve) => (answer = resolve as (d: DuesReport) => void)),
     );
     const r = await render(<Harness><DuesScreen /></Harness>);
-    expect(r.getByText("Loading what is owed…")).toBeTruthy();
+    expect(r.getByText("Loading what is due…")).toBeTruthy();
     const { act } = require("@testing-library/react-native");
     await act(async () => {
       answer(report());

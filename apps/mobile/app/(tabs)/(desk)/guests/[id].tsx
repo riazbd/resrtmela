@@ -163,7 +163,7 @@ export default function GuestScreen() {
           />
           {/* summed from the rows on this page, and said to be, because the
               bookings route sends no total of what a guest owes */}
-          <Stat label="Owed on these" value={whole(owed)} tone={owed > 0 ? "danger" : "title"} />
+          <Stat label="Due on these" value={whole(owed)} tone={owed > 0 ? "danger" : "title"} />
         </View>
 
         <Card title="Stays">

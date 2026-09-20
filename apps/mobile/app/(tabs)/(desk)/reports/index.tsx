@@ -189,10 +189,10 @@ export default function ReportsScreen() {
             />
           ) : null}
           <Row
-            title="Who still owes"
+            title="Still due"
             subtitle="Every unpaid stay, guest and agency"
             last
-            accessibilityLabel="Who still owes"
+            accessibilityLabel="Still due"
             onPress={() => router.push("/payments" as never)}
           />
         </Card>

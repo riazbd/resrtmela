@@ -354,7 +354,7 @@ describe("the month's wages", () => {
     const r = await open(PayrollScreen);
     await waitFor(() => expect(r.getByText("September 2026")).toBeTruthy());
     expect(mockSheet).toHaveBeenCalledWith(3, "2026-09");
-    expect(r.getByLabelText("Owed: ৳32,000")).toBeTruthy();
+    expect(r.getByLabelText("Due: ৳32,000")).toBeTruthy();
     expect(r.getByLabelText("Left: ৳12,000")).toBeTruthy();
   });
 
@@ -369,7 +369,7 @@ describe("the month's wages", () => {
    * Settled is the salary handed over in full, however many payments it
    * took — not a flag on one payment row.
    */
-  it("tells somebody settled from somebody still owed", async () => {
+  it("tells somebody settled from somebody still due", async () => {
     const r = await open(PayrollScreen);
     await waitFor(() => expect(r.getByLabelText(/^Jamal Uddin, salary ৳18,000, ৳12,000 left/)).toBeTruthy());
     expect(r.getByLabelText(/^Shefali Begum, salary ৳14,000, settled/)).toBeTruthy();

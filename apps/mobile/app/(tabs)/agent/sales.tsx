@@ -38,7 +38,7 @@ const SETTLED: SalesDocStatus[] = ["PAID", "VOID", "DECLINED", "EXPIRED"];
 
 const owing = (d: SalesDocRow) => !SETTLED.includes(d.status) && d.totals.due > 0;
 
-const LENSES = ["All", "Owing"] as const;
+const LENSES = ["All", "Unpaid"] as const;
 
 export default function AgentSalesScreen() {
   const { me } = useAuth();
@@ -55,7 +55,7 @@ export default function AgentSalesScreen() {
     () => all.filter(owing).reduce((s, d) => s + d.totals.due, 0),
     [all],
   );
-  const shown = lens === "Owing" ? all.filter(owing) : all;
+  const shown = lens === "Unpaid" ? all.filter(owing) : all;
 
   /**
    * No `title` here. A tab is named by the bar, which runs the
@@ -95,7 +95,7 @@ export default function AgentSalesScreen() {
       >
         <View style={styles.figures}>
           <Stat
-            label="Still owed"
+            label="Outstanding"
             value={whole(outstanding)}
             sub={`${all.filter(owing).length} document${all.filter(owing).length === 1 ? "" : "s"}`}
             tone={outstanding > 0 ? "danger" : "title"}
@@ -109,13 +109,13 @@ export default function AgentSalesScreen() {
           ))}
         </View>
 
-        <Card title={lens === "Owing" ? "Still owing" : "Everything"}>
+        <Card title={lens === "Unpaid" ? "Unpaid" : "Everything"}>
           {shown.length === 0 ? (
             <View style={styles.emptyBox}>
               <Empty
-                message={lens === "Owing" ? "Nothing outstanding" : "Nothing quoted yet"}
+                message={lens === "Unpaid" ? "Nothing outstanding" : "Nothing quoted yet"}
                 hint={
-                  lens === "Owing"
+                  lens === "Unpaid"
                     ? "Every document on the books is settled."
                     : "Quotes are written at the desk and appear here."
                 }
@@ -131,7 +131,7 @@ export default function AgentSalesScreen() {
                 last={i === shown.length - 1}
                 accessibilityLabel={`${d.number}, ${kindOf(d)} for ${d.clientName}, ${statusOf(
                   d.status,
-                )}, ${owing(d) ? `${whole(d.totals.due)} still owed` : "settled"}`}
+                )}, ${owing(d) ? `${whole(d.totals.due)} due` : "settled"}`}
                 onPress={() => router.push(`/agent/sales/${d.id}` as never)}
                 right={
                   owing(d) ? (

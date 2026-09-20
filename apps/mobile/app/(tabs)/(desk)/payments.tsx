@@ -46,7 +46,7 @@ export default function DuesScreen() {
     return (
       <>
         {header}
-        <WhichResort what="what is owed" />
+        <WhichResort what="what is due" />
       </>
     );
   }
@@ -62,7 +62,7 @@ export default function DuesScreen() {
     return (
       <>
         {header}
-        <Loading what="what is owed" />
+        <Loading what="what is due" />
       </>
     );
   }
