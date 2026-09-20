@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { api, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
 import { Button, Card, Empty, Field, Input, Spinner, Td, Th } from "@/components/ui";
@@ -53,7 +53,7 @@ export default function RoomSearchPage() {
 
   const { data, isLoading, error, stale } = useApi<AgencyRoomOffer[]>(
     keys.agentRooms(range?.from ?? "", range?.to ?? ""),
-    () => api<AgencyRoomOffer[]>(`/agent/rooms?from=${range!.from}&to=${range!.to}`),
+    () => client.agent.rooms({ from: range!.from, to: range!.to }),
     { enabled: !!range },
   );
 

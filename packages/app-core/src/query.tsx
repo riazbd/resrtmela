@@ -207,7 +207,10 @@ export const keys = {
   agentSales: (q?: unknown) => ["agent", "sales", q] as const,
   agentSalesDoc: (id: number) => ["agent", "sales", "doc", id] as const,
   agentGuests: (q?: unknown) => ["agent", "guests", q] as const,
-  agentRooms: (from: string, to: string) => ["agent", "rooms", from, to] as const,
+  // the resort is part of the question: a search narrowed to one resort
+  // and a search across all of them are different answers
+  agentRooms: (from: string, to: string, resortId?: number) =>
+    ["agent", "rooms", from, to, resortId ?? "all"] as const,
   agentCalendar: (from: string, to: string, resortId?: number) =>
     ["agent", "calendar", from, to, resortId ?? null] as const,
   agentWallet: () => ["agent", "wallet"] as const,
