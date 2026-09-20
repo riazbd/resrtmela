@@ -18,7 +18,7 @@
  * person looking at it is in New York, so the formatting is pinned to UTC.
  */
 import { describe, expect, it } from "vitest";
-import { dayLabel, stayRange } from "../src/index";
+import { MONTHS_LONG, MONTHS_SHORT, WEEKDAYS_LONG, dayLabel, stayRange } from "../src/index";
 
 describe("the two shapes the API sends", () => {
   it("reads a bare civil date, as the day sheet sends it", () => {
@@ -113,5 +113,32 @@ describe("a stay, from one day to another", () => {
   it("says nothing it cannot say", () => {
     expect(stayRange(null, "2026-09-24")).toBe("—");
     expect(stayRange("2026-09-22", undefined)).toBe("—");
+  });
+});
+
+/**
+ * The tables themselves (2026-09-20).
+ *
+ * They were private, and a payroll screen needing "September 2026" for
+ * a `YYYY-MM` had no way to reach them — the near-miss is that it would
+ * have written a thirteenth copy of the month names, which is the thing
+ * this file exists to prevent. Exported, so there is one list.
+ */
+describe("the written-down names", () => {
+  it("has twelve months, twice, and seven weekdays", () => {
+    expect(MONTHS_SHORT).toHaveLength(12);
+    expect(MONTHS_LONG).toHaveLength(12);
+    expect(WEEKDAYS_LONG).toHaveLength(7);
+  });
+
+  /** Node's en-GB says "Sept" for September, which is why these exist. */
+  it("says Sep and September, not Sept", () => {
+    expect(MONTHS_SHORT[8]).toBe("Sep");
+    expect(MONTHS_LONG[8]).toBe("September");
+  });
+
+  /** Index 0 is Sunday, as `Date.getUTCDay()` counts. */
+  it("starts the week on Sunday, as the engine does", () => {
+    expect(WEEKDAYS_LONG[0]).toBe("Sunday");
   });
 });

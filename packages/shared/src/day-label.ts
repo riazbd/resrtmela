@@ -28,17 +28,17 @@
  * cheaper than that failure, and they are the same twelve on every engine.
  */
 
-const MONTHS_SHORT = [
+export const MONTHS_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
-const MONTHS_LONG = [
+export const MONTHS_LONG = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
-const WEEKDAYS_LONG = [
+export const WEEKDAYS_LONG = [
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 ] as const;
 

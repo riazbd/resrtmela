@@ -33,9 +33,6 @@ const APP = join(__dirname, "..", "app");
  */
 const NOT_YET: Record<string, string> = {
   // phase 2 — the rest of the resort
-  "/fb": "phase 2",
-  "/payroll": "phase 2",
-  "/activities": "phase 2",
   "/import": "phase 2",
   "/mailbox": "phase 2",
   // phase 3 — the agent's own panel
