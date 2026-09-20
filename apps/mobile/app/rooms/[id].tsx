@@ -22,6 +22,7 @@ import {
   type Room,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Counter } from "../../src/design/counter";
 import { Field, Input } from "../../src/design/input";
@@ -55,6 +56,15 @@ export default function RoomScreen() {
   const room = list.data?.find((r) => r.id === roomId);
 
   const header = <Stack.Screen options={{ title: room?.name ?? "Room" }} />;
+
+  if (resortId === undefined) {
+    return (
+      <>
+        {header}
+        <WhichResort what="the room" />
+      </>
+    );
+  }
 
   if (list.error && !list.data) {
     return (

@@ -26,6 +26,7 @@ import {
   type BookingRow,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { useMoneyFormat } from "../../src/design/money";
 import { Empty, Loading, Problem } from "../../src/design/states";
@@ -57,6 +58,15 @@ export default function GuestScreen() {
     () => client.bookings.list({ resortId: resortId!, search: phone!, take: 50 }),
     { enabled: resortId !== undefined && Boolean(phone) },
   );
+
+  if (resortId === undefined) {
+    return (
+      <>
+        {header}
+        <WhichResort what="the guest" />
+      </>
+    );
+  }
 
   if (!phone) {
     return (

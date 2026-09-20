@@ -23,6 +23,7 @@ import {
 } from "@rh/shared";
 import { useDraft } from "../../src/booking/draft";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { DateNav } from "../../src/design/date-nav";
 import { useMoneyFormat } from "../../src/design/money";
@@ -96,6 +97,8 @@ export default function WhenAndWhereScreen() {
     }
     router.push("/new-booking/guest");
   }
+
+  if (resortId === undefined) return <WhichResort what="which rooms are free" />;
 
   return (
     <ScrollView

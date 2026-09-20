@@ -17,6 +17,7 @@ import { Stack } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import { formatMoney, type RoomType } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { useMoneyFormat } from "../../src/design/money";
 import { Empty, Loading, Problem } from "../../src/design/states";
 import { Card, Row } from "../../src/design/surface";
@@ -33,6 +34,15 @@ export default function RoomTypesScreen() {
   });
 
   const header = <Stack.Screen options={{ title: "Room types" }} />;
+
+  if (resortId === undefined) {
+    return (
+      <>
+        {header}
+        <WhichResort what="the room types" />
+      </>
+    );
+  }
 
   if (types.error && !types.data) {
     return (

@@ -27,6 +27,7 @@ import {
 } from "@rh/shared";
 import { useDraft } from "../../src/booking/draft";
 import { client, useAuth } from "../../src/api/session";
+import { WhichResort } from "../../src/screens/which-resort";
 import { Button } from "../../src/design/button";
 import { Chip } from "../../src/design/chip";
 import { Field, Input } from "../../src/design/input";
@@ -171,6 +172,8 @@ export default function WhatItCostsScreen() {
     .filter(Boolean)
     .join(", ");
   const bill = priced.data ? quoteBill(priced.data, { advance: draft.advance, money: whole }) : null;
+
+  if (resortId === undefined) return <WhichResort what="what the stay comes to" />;
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
