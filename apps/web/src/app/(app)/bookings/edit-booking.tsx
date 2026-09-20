@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { client, type BookingDetail } from "@/lib/api";
 import { Button, Field, Input, Modal, useToast } from "@/components/ui";
 import { DiscountInput } from "@/components/discount-input";
-import type { DiscountKind } from "@rh/shared";
+import { bookingChanges, canEditStay, type DiscountKind } from "@rh/shared";
+import { useAuth } from "@/lib/auth";
 
 /**
  * Changing a booking after it was made.
@@ -14,9 +15,18 @@ import type { DiscountKind } from "@rh/shared";
  * longer meant cancelling and booking again, and losing the payment ledger
  * with it.
  *
- * Only what changed is sent. The API re-checks availability when the dates
- * move and answers a clash with the room and the night, which is shown here as
- * it came.
+ * Only what changed is sent, and working out what that is belongs to
+ * `bookingChanges` in `@rh/shared` — two of its comparisons have a wrong
+ * answer that looks right, and the phone's edit screen makes the same two.
+ * The API re-checks availability when the dates move and answers a clash
+ * with the room and the night, which is shown here as it came.
+ *
+ * Who may open this at all is `canEditStay`. It was nobody's rule until
+ * 2026-09-20: `bookings.service.ts` refuses a front desk once the guest is
+ * in the room, and this modal was offered on a checked-in booking to
+ * anybody with `bookings.edit` — so a clerk could change the dates, press
+ * Save, and be told "Front desk can edit only Pending/Confirmed" with the
+ * form still full.
  */
 export function EditBookingModal({ booking, open, onClose, onSaved }: {
   booking: BookingDetail;
@@ -37,6 +47,8 @@ export function EditBookingModal({ booking, open, onClose, onSaved }: {
   const [remarks, setRemarks] = useState(booking.remarks ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const { role } = useAuth();
+  const verdict = canEditStay({ role: role ?? "", state: booking.state });
 
   // opening it again starts from the booking as it is now, not from a draft
   useEffect(() => {
@@ -51,16 +63,11 @@ export function EditBookingModal({ booking, open, onClose, onSaved }: {
   }, [open, booking]);
 
   async function save() {
-    const body: Record<string, unknown> = {};
-    if (checkIn !== day(booking.checkIn)) body.checkIn = checkIn;
-    if (checkOut !== day(booking.checkOut)) body.checkOut = checkOut;
-    if (adults !== booking.adults) body.adults = adults;
-    if (children !== booking.children) body.children = children;
-    if (discount.kind !== booking.discountKind || discount.value !== (booking.discountValue ?? booking.discount)) {
-      body.discount = discount.value;
-      body.discountKind = discount.kind;
-    }
-    if (remarks !== (booking.remarks ?? "")) body.remarks = remarks;
+    const body = bookingChanges(
+      booking,
+      { checkIn, checkOut, adults, children, discount: discount.value, discountKind: discount.kind, remarks },
+      { mayChangeDiscount: verdict.mayChangeDiscount },
+    );
     if (Object.keys(body).length === 0) {
       onClose();
       return;
@@ -88,8 +95,10 @@ export function EditBookingModal({ booking, open, onClose, onSaved }: {
           <Field label="Adults"><Input type="number" min={1} value={adults} onChange={(e) => setAdults(Number(e.target.value))} /></Field>
           <Field label="Children"><Input type="number" min={0} value={children} onChange={(e) => setChildren(Number(e.target.value))} /></Field>
         </div>
-        <DiscountInput kind={discount.kind} value={discount.value} onChange={setDiscount} />
-        {discount.kind === "PERCENT" && (
+        {verdict.mayChangeDiscount && (
+          <DiscountInput kind={discount.kind} value={discount.value} onChange={setDiscount} />
+        )}
+        {verdict.mayChangeDiscount && discount.kind === "PERCENT" && (
           <p className="-mt-2 text-[11px] text-slate-400">
             A percentage of the rooms and extra persons, worked out again if the dates change.
           </p>

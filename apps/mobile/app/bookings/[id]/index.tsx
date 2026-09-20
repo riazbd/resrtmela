@@ -27,6 +27,7 @@ import {
   dayLabel,
   formatMoney,
   methodLabel,
+  canEditStay,
   roomNames,
   type BookingDetail,
   type NextState,
@@ -243,6 +244,7 @@ export default function BookingScreen() {
  */
 function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void }) {
   const desk = useStayDesk();
+  const { role } = useAuth();
   const [refused, setRefused] = useState<string | null>(null);
   const [asking, setAsking] = useState<NextState | null>(null);
 
@@ -260,7 +262,14 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
   });
 
   const ahead = nextStates(booking.state);
-  if (ahead.length === 0 && booking.due <= 0) return null;
+  /**
+   * `canEditStay`, not a list of states. The API refuses a front desk
+   * once the guest is in the room, and the console offers the form
+   * anyway — so a clerk changes the dates, presses Save, and is told
+   * "Front desk can edit only Pending/Confirmed" with the form still up.
+   */
+  const mayChange = canEditStay({ role: role ?? "", state: booking.state }).allowed;
+  if (ahead.length === 0 && booking.due <= 0 && !mayChange) return null;
 
   return (
     <View style={styles.desk}>
@@ -306,6 +315,14 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
               kind={ahead.length > 0 ? "ghost" : "primary"}
               block={false}
               onPress={() => router.push(`/bookings/${booking.id}/pay` as never)}
+            />
+          ) : null}
+          {mayChange ? (
+            <Button
+              label="Change"
+              kind="ghost"
+              block={false}
+              onPress={() => router.push(`/bookings/${booking.id}/edit` as never)}
             />
           ) : null}
         </View>

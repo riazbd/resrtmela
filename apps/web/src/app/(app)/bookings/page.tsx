@@ -28,7 +28,7 @@ import {
   type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
   BOOKING_STATES, bookingStateLabel, billLines,
   whatTheBookingNeeds, BOOKING_GAP_MESSAGES, extraPersonRoom,
-  nextStates, transitionCanWait, paths,
+  nextStates, transitionCanWait, paths, canEditStay,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -380,7 +380,7 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
 }
 
 function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
-  const { isStaff, isAgent, isManagement, activeResort, can } = useAuth();
+  const { isStaff, isAgent, isManagement, activeResort, can, role } = useAuth();
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -796,7 +796,9 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
             </Button>
           </>
         )}
-        {isStaff && can("bookings.edit") && ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state) && (
+        {/* `canEditStay`, not a list of states: the API refuses a front desk
+            once the guest is in the room, and this offered the form anyway */}
+        {isStaff && can("bookings.edit") && canEditStay({ role: role ?? "", state: b.state }).allowed && (
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
         )}
         {isStaff && ["PENDING", "CONFIRMED", "CHECKED_IN"].includes(b.state) && (
