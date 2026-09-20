@@ -84,7 +84,13 @@ export default function BookingsScreen() {
     },
   );
 
-  const header = <Stack.Screen options={{ title: "Bookings" }} />;
+  /**
+   * No `title` here. A tab is named by the bar, which runs the
+   * console's label through `barLabel` so it fits; a title set on the
+   * screen overrides that from underneath and the bar goes back to
+   * an ellipsis. `a-tab-does-not-name-itself.spec.ts` is the rule.
+   */
+  const header = null;
 
   if (resortId === undefined) {
     return (

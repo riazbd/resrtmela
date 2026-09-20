@@ -35,7 +35,7 @@ export default function AgentApiScreen() {
     setRefused(null);
     setBusy(k.id);
     try {
-      await client.agent.apiKeys.revoke(Number(k.id));
+      await client.agent.apiKeys.revoke(k.id);
       await keys.refetch();
     } catch (error) {
       setRefused(error instanceof Error ? error.message : "That did not go through.");

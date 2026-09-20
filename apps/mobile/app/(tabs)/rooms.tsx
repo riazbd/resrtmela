@@ -49,7 +49,13 @@ export default function RoomsScreen() {
   // the server's order, kept — see the note at the top of this file
   const rooms = list.data ?? [];
 
-  const header = <Stack.Screen options={{ title: "Rooms & rates" }} />;
+  /**
+   * No `title` here. A tab is named by the bar, which runs the
+   * console's label through `barLabel` so it fits; a title set on the
+   * screen overrides that from underneath and the bar goes back to
+   * an ellipsis. `a-tab-does-not-name-itself.spec.ts` is the rule.
+   */
+  const header = null;
 
   if (resortId === undefined) {
     return (

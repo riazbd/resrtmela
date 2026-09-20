@@ -61,7 +61,13 @@ export default function AgentCalendarScreen() {
     [feed.data, from, to],
   );
 
-  const header = <Stack.Screen options={{ title: "Calendar" }} />;
+  /**
+   * No `title` here. A tab is named by the bar, which runs the
+   * console's label through `barLabel` so it fits; a title set on the
+   * screen overrides that from underneath and the bar goes back to
+   * an ellipsis. `a-tab-does-not-name-itself.spec.ts` is the rule.
+   */
+  const header = null;
 
   if (feed.error && !feed.data) {
     return (

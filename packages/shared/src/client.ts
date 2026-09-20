@@ -713,7 +713,11 @@ export function createApiClient(http: Fetcher) {
         // the secret is returned once and never again
         create: (name: string, scopes?: string[]) =>
           http<{ secret: string }>("/agent/api-keys", { method: "POST", body: { name, scopes } }),
-        revoke: (id: number) => http<{ ok: true }>(`/agent/api-keys/${id}`, { method: "DELETE" }),
+        // the id is a string because the row is a BigInt, which is what
+        // `AgencyApiKey.id` says and what the list hands a caller — taking
+        // a number here made every call site convert, and the console's
+        // did not
+        revoke: (id: string) => http<{ ok: true }>(`/agent/api-keys/${id}`, { method: "DELETE" }),
       },
       activity: (q: { q?: string; take?: number } = {}) =>
         http<AgencyActivity[]>(`/agent/activity${qs(q)}`),

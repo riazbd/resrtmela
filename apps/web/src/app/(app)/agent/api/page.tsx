@@ -73,7 +73,7 @@ export default function AgencyApiPage() {
     if (!window.confirm("Revoke this key? Anything using it stops working at once.")) return;
     setBusy(id);
     try {
-      await api(`/agent/api-keys/${id}`, { method: "DELETE" });
+      await client.agent.apiKeys.revoke(id);
       push("Key revoked");
       load();
     } catch (ex) {
