@@ -13,8 +13,21 @@
  */
 export type ConsoleGate = "loading" | "login" | "no-resort" | "ready";
 
-/** Roles whose work is not inside a single resort. */
-const RESORTLESS = new Set(["SUPER_ADMIN", "AGENT"]);
+/**
+ * Roles whose work is not inside a single resort.
+ *
+ * Exported since 2026-09-21. It was private, so the console's header
+ * wrote its own half of it — `role !== "SUPER_ADMIN"` — and an agency
+ * got a switcher labelled "Resort" listing the four resorts it is
+ * approved to sell, as if it worked at the first of them. The phone had
+ * the same fault in the same words at the top of its More menu.
+ */
+export const RESORTLESS: ReadonlySet<string> = new Set(["SUPER_ADMIN", "AGENT"]);
+
+/** Whether this person's work sits inside one resort. */
+export function isResortless(role: string): boolean {
+  return RESORTLESS.has(role);
+}
 
 export function consoleGate(state: {
   loading: boolean;

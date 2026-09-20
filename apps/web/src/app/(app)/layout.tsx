@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { consoleGate, navVisible, missingFeature } from "@/lib/console-access";
-import { CONSOLE_NAV, planFeatureLabel } from "@rh/shared";
+import { CONSOLE_NAV, isResortless, planFeatureLabel } from "@rh/shared";
 import { DICTS, LangProvider, useLang, type DictKey, type Lang } from "@/lib/i18n";
 import { api, type Resort } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -119,6 +119,14 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, [loading, me, router]);
 
   const gate = consoleGate({ loading, me, activeResort });
+  /** The name to put on the test-account strip, or nothing. */
+  const demoAccount = isResortless(role)
+    ? me?.account?.demo
+      ? me.account.name
+      : null
+    : activeResort?.tenant?.demo
+      ? activeResort.name
+      : null;
 
   useEffect(() => {
     // nobody is signed in — `consoleGate` says so before it says anything else
@@ -180,9 +188,18 @@ function Shell({ children }: { children: React.ReactNode }) {
         Above the impersonation bar because it is true for longer: you can
         stop impersonating, you cannot stop this being a test account.
       */}
-      {activeResort?.tenant?.demo && (
+      {/*
+        Whoever is signed in, and whichever flag is actually theirs.
+
+        This read the resort's flag only, so the demo *agency* carried no
+        warning at all while people clicked around in it — and a real
+        agency whose first sellable resort happened to be a demo one
+        would have been told its own console was a test account, naming
+        somebody else's business.
+      */}
+      {demoAccount && (
         <div className="flex items-center justify-center gap-2 bg-slate-800 px-4 py-1.5 text-xs font-semibold text-slate-100">
-          Test account — <b>{activeResort.name}</b> is for trying things out. Nothing here is a real booking.
+          Test account — <b>{demoAccount}</b> is for trying things out. Nothing here is a real booking.
         </div>
       )}
       {isImpersonating && (
@@ -277,9 +294,18 @@ function Shell({ children }: { children: React.ReactNode }) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            {/* the platform owner's sidebar has no resort screens in it, so a
-                switcher here would change nothing they can see */}
-            {activeResort && role !== "SUPER_ADMIN" && (
+            {/*
+              Only for somebody whose work is inside one resort.
+
+              It read `role !== "SUPER_ADMIN"`, which is half of a rule
+              `@rh/shared` states whole: the platform owner sells to
+              resorts and an agency sells across them, and neither has
+              one of their own. An agency got this switcher labelled
+              "Resort", listing the four it is approved to sell, above a
+              page headed "Discover resorts" — and switching changed
+              nothing, because an agency's screens are agency-wide.
+            */}
+            {activeResort && !isResortless(role) && (
               <>
             <span className="hidden text-xs text-slate-400 sm:inline">Resort</span>
             <Select
@@ -298,6 +324,13 @@ function Shell({ children }: { children: React.ReactNode }) {
             </Select>
               </>
             )}
+            {/* an agency has no resort to name, so it is named itself */}
+            {isResortless(role) && me?.account ? (
+              <>
+                <span className="hidden text-xs text-slate-400 sm:inline">Agency</span>
+                <span className="text-sm font-medium text-slate-700">{me.account.name}</span>
+              </>
+            ) : null}
             {role === "RESORT_ADMIN" && <AddResortButton />}
           </div>
           <div className="flex items-center gap-2">

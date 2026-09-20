@@ -96,7 +96,10 @@ export class AuthService {
         status: true,
         // an agency's standing with the platform: pending until verified,
         // suspended when behind on its bill — the console says so
-        account: { select: { id: true, name: true, kind: true, status: true, suspendedReason: true } },
+        // `demo` because an agency is a Tenant too, and its console had no
+        // test-account strip: the strip read the *resort's* flag, which an
+        // agency does not have one of
+        account: { select: { id: true, name: true, kind: true, status: true, suspendedReason: true, demo: true } },
         resorts: {
           select: {
             resort: {

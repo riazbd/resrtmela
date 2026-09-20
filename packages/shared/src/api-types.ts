@@ -127,7 +127,15 @@ export interface Me {
    * status is the agency's standing with the platform: pending until verified,
    * suspended when behind on its bill.
    */
-  account?: { id: number; name: string; kind: string; status: string; suspendedReason: string | null } | null;
+  account?: {
+    id: number;
+    name: string;
+    kind: string;
+    status: string;
+    suspendedReason: string | null;
+    /** An agency the platform opened to try things with, rather than a customer. */
+    demo?: boolean;
+  } | null;
   resorts: { resort: Resort }[];
 }
 
