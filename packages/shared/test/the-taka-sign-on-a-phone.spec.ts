@@ -46,6 +46,22 @@ describe("the symbol is ours, not the engine's", () => {
     expect(formatMoney(1000, { currency: "AED", locale: "en-US", decimals: 0 })).toContain("1,000");
   });
 
+  /**
+   * The sign goes outside the symbol. Placing the symbol ourselves put it
+   * first — "৳-4,000" — which reads as a typo, and at a glance the minus
+   * disappears into the currency mark. A loss that does not look like a
+   * loss is the worst possible rounding of this screen.
+   */
+  it("puts a minus in front of the symbol, not behind it", () => {
+    expect(formatMoney(-4000, { currency: "BDT", decimals: 0 })).toBe("-৳4,000");
+    expect(formatMoney(-0.5, { currency: "USD", locale: "en-US" })).toBe("-$0.50");
+  });
+
+  it("does not sign a zero", () => {
+    expect(formatMoney(0, { currency: "BDT", decimals: 0 })).toBe("৳0");
+    expect(formatMoney(-0, { currency: "BDT", decimals: 0 })).toBe("৳0");
+  });
+
   it("says the symbol on its own, for a field label", () => {
     expect(currencySymbol({ currency: "BDT" })).toBe("৳");
     expect(currencySymbol({ currency: "USD" })).toBe("$");

@@ -582,6 +582,37 @@ export interface FoodPackage {
   active: boolean;
 }
 
+/**
+ * The headline figures for a period, from `GET /resorts/:id/metrics`.
+ *
+ * Typed `unknown` on the client until 2026-09-20, so the console kept a
+ * local `interface Metrics` and cast to it — which is the arrangement
+ * where the server changes a field and nobody finds out. Written here
+ * from `reports.service.ts`'s own return.
+ *
+ * The three that are easy to misread carry their own note. `billed` is
+ * not income, `stillDue` is never profit, and `taxCollected` is money
+ * held for the government rather than earned.
+ */
+export interface ResortMetrics {
+  /** the stays' rent before discount */
+  resortRevenue: number;
+  discount: number;
+  /** billed for the period's stays, after discount — not income */
+  netRoomRevenue: number;
+  /** restaurant sales, net of tax */
+  restaurantRevenue: number;
+  /** received in the period, net of refunds and of the tax inside it */
+  grossIncome: number;
+  /** what the period's stays and bills have not paid yet — shown, never profit */
+  stillDue: number;
+  /** the tax inside what was received, collected for the government */
+  taxCollected: number;
+  expenses: number;
+  netProfit: number;
+  bookings: number;
+}
+
 export interface PLReport {
   from: string;
   to: string;

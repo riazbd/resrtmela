@@ -41,6 +41,7 @@ import type {
   PayrollSheet,
   PermRole,
   PLReport,
+  ResortMetrics,
   PlatformSettings,
   BillingSweepResult,
   RatePlan,
@@ -450,7 +451,22 @@ export function createApiClient(http: Fetcher) {
     expenses: {
       list: (resortId: number, q: DateRange & { category?: string; scope?: string; skip?: number; take?: number } = {}) =>
         http<ExpensePage>(`/resorts/${resortId}/expenses${qs(q)}`),
-      categories: (resortId: number) => http<string[]>(`/resorts/${resortId}/expenses/categories`),
+      /**
+       * What has *been* spent on, with a count — not what may be.
+       *
+       * Typed `string[]` until 2026-09-20; the route is a `groupBy` and
+       * has always answered `{ category, uses }[]`. Nobody found out
+       * because nobody called it: the console reads the resort's own
+       * `EXPENSE_CATEGORY` list instead, deliberately, because a groupBy
+       * cannot offer a category nothing has been spent on yet and keeps
+       * "Salaries", "salary" and "Salery" as three categories for ever.
+       *
+       * Kept because a report that asks "what did this resort actually
+       * spend on" wants exactly this. A form offering choices wants
+       * `options.list(resortId, "EXPENSE_CATEGORY")`.
+       */
+      categories: (resortId: number) =>
+        http<{ category: string; uses: number }[]>(`/resorts/${resortId}/expenses/categories`),
       create: (resortId: number, body: unknown) =>
         http<unknown>(`/resorts/${resortId}/expenses`, { method: "POST", body }),
       remove: (id: number) => http<{ deleted: boolean }>(`/expenses/${id}`, { method: "DELETE" }),
@@ -488,7 +504,8 @@ export function createApiClient(http: Fetcher) {
 
     // ── what the numbers say ──
     reports: {
-      metrics: (resortId: number, r: DateRange = {}) => http<unknown>(`/resorts/${resortId}/metrics${qs(r)}`),
+      metrics: (resortId: number, r: DateRange = {}) =>
+        http<ResortMetrics>(`/resorts/${resortId}/metrics${qs(r)}`),
       daily: (resortId: number, from: string, to: string) =>
         http<unknown>(`/resorts/${resortId}/reports/daily${qs({ from, to })}`),
       agents: (resortId: number, r: DateRange = {}) => http<unknown>(`/resorts/${resortId}/reports/agents${qs(r)}`),

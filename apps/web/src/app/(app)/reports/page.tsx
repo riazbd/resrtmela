@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
 import { Tabs, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
-import { methodLabel } from "@rh/shared";
+import { methodLabel, type ResortMetrics } from "@rh/shared";
 
 interface AgentRow {
   agentId: number; name: string; commissionRate: number; commissionKind: string;
@@ -49,13 +49,12 @@ interface Collectors {
   recent: { id: number; at: string; amount: number; method: string | null; bookingCode: string; guest: string; type: string; receivedBy: string | null; fromSheet?: boolean }[];
 }
 interface FiscalYear { label: string; from: string; to: string }
-interface Metrics {
-  resortRevenue: number; discount: number; netRoomRevenue: number;
-  restaurantRevenue: number; grossIncome: number; expenses: number; netProfit: number;
-  /** what the period's stays and bills have not paid — never part of profit */
-  stillDue: number; taxCollected: number;
-  bookings: number;
-}
+/**
+ * `Metrics` lived here as a local interface with a cast beside it, which
+ * is the arrangement where the server changes a field and nobody finds
+ * out. It is `ResortMetrics` in `@rh/shared` now, written from the
+ * service's own return, and the phone's reports read the same one.
+ */
 interface DailyRow { date: string; roomRevenue: number; fbRevenue: number; expenses: number; net: number }
 interface AuditRow {
   id: string; actor: string; role: string | null; action: string;
@@ -143,7 +142,7 @@ export default function ReportsPage() {
     () => client.reports.collectors(rid!, moneyRange) as Promise<Collectors>,
     { enabled, placeholderData: (prev) => prev },
   );
-  const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range) as Promise<Metrics>, { enabled, placeholderData: (prev) => prev });
+  const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range), { enabled, placeholderData: (prev) => prev });
   // the three heavy reads wait until their tab is open; the four light ones
   // stay eager because the page's own loading and error states read them
   const dailyQ = useApi(
@@ -168,7 +167,7 @@ export default function ReportsPage() {
   const agents: AgentRow[] | null = agentsQ.data?.rows ?? null;
   const sources: SourceRow[] | null = sourcesQ.data?.rows ?? null;
   const collectors: Collectors | null = collectorsQ.data ?? null;
-  const metrics: Metrics | null = metricsQ.data ?? null;
+  const metrics: ResortMetrics | null = metricsQ.data ?? null;
   const daily: DailyRow[] | null = dailyQ.data ?? null;
   const pl: PLReport | null = plQ.data ?? null;
   const audit: AuditRow[] | null = auditQ.data ?? null;

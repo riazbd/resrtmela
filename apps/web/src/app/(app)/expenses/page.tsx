@@ -43,10 +43,7 @@ export default function ExpensesPage() {
    */
   const categoriesQ = useApi(
     keys.expenseCategories(activeResort?.id),
-    () =>
-      api<{ code: string; label: string; active: boolean }[]>(
-        `/resorts/${activeResort!.id}/options/EXPENSE_CATEGORY`,
-      ),
+    () => client.options.list(activeResort!.id, "EXPENSE_CATEGORY"),
     { enabled: !!activeResort, staleTime: 3_600_000 },
   );
 

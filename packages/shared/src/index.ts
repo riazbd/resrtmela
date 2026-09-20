@@ -40,6 +40,7 @@ export * from "./site";
 export * from "./domain";
 export * from "./webhook";
 export * from "./room-order";
+export * from "./room-status";
 export * from "./booking-sort";
 export * from "./new-booking";
 export * from "./quote-bill";
@@ -379,17 +380,28 @@ export function formatMoney(
 
   const known = CURRENCY_SYMBOLS[currency.toUpperCase()];
   if (known) {
-    // the digits and their grouping are the engine's — every engine gets
-    // en-IN's lakh right — and the symbol is ours
+    /**
+     * The digits and their grouping are the engine's — every engine gets
+     * en-IN's lakh right — and the symbol is ours.
+     *
+     * The sign is formatted separately and put in front of the symbol.
+     * Prefixing a formatted negative gives "৳-4,000", which reads as a
+     * typo and hides the minus inside the currency mark; a loss that does
+     * not look like a loss is the worst way for this to be wrong. Rounded
+     * first, so a value that formats as zero is not given a sign.
+     */
+    const fixed = Number(value.toFixed(decimals));
+    const size = Math.abs(fixed);
+    const sign = fixed < 0 ? "-" : "";
     try {
       const digits = new Intl.NumberFormat(locale, {
         style: "decimal",
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
-      }).format(value);
-      return `${known}${digits}`;
+      }).format(size);
+      return `${sign}${known}${digits}`;
     } catch {
-      return `${known}${value.toFixed(decimals)}`;
+      return `${sign}${known}${size.toFixed(decimals)}`;
     }
   }
 

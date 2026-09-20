@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, client, money, dmy, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
+import { api, client, money, dmy, currentMoneyFormat, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
+import { extraPersonNote, nextRoomStatus, roomStatusLabel } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -56,9 +57,9 @@ export default function RoomsPage() {
     try {
       await api(`/rooms/${room.id}`, {
         method: "PATCH",
-        body: { status: room.status === "ACTIVE" ? "OUT_OF_SERVICE" : "ACTIVE" },
+        body: { status: nextRoomStatus(room.status).to },
       });
-      push(`${room.name} → ${room.status === "ACTIVE" ? "Out of service" : "Active"}`);
+      push(`${room.name} → ${roomStatusLabel(nextRoomStatus(room.status).to)}`);
       void load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -113,10 +114,8 @@ This cannot be undone.`;
                   {/* the room's own answer: one type covers rooms of different
                       sizes, which is why this is not on the type any more */}
                   <Td className="text-xs">
-                    {r.extraPersonAllowed && (r.extraPersonMax ?? 0) > 0 ? (
-                      <span className="text-slate-600">
-                        {r.extraPersonMax} × {money(r.extraPersonRate ?? 0)}/night
-                      </span>
+                    {extraPersonNote(r, currentMoneyFormat()) ? (
+                      <span className="text-slate-600">{extraPersonNote(r, currentMoneyFormat())}</span>
                     ) : (
                       <span className="text-slate-300">none</span>
                     )}
@@ -128,7 +127,7 @@ This cannot be undone.`;
                           persons included — it used to be two chained prompts */}
                       <Button size="sm" variant="ghost" onClick={() => setEditRoom(r)}>Edit</Button>{" "}
                       <Button size="sm" variant={r.status === "ACTIVE" ? "subtle" : "primary"} onClick={() => toggleRoom(r)}>
-                        {r.status === "ACTIVE" ? "Out of service" : "Activate"}
+                        {nextRoomStatus(r.status).label}
                       </Button>
                       {canDelete && (
                         <>
