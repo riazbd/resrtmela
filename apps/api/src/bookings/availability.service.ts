@@ -18,6 +18,14 @@ export interface RoomAvailability {
   status: string;
   busyNights: string[]; // ISO yyyy-mm-dd within requested range
   /**
+   * Where housekeeping has got to with this room, right now.
+   *
+   * Sent for every date because the grid does not know which range it is
+   * drawing; `roomOffer` in @rh/shared is the one place that decides it
+   * only matters for a guest arriving today.
+   */
+  housekeeping: string;
+  /**
    * What this room takes, so the booking form can offer the box for the rooms
    * that take an extra person and price it at the room's own rate. It used to ask the
    * room *type*, which one type covering nine rooms of different sizes could
@@ -107,6 +115,7 @@ export class AvailabilityService {
         extraPersonRate: Number(r.extraPersonRate),
         extraPersonMax: r.extraPersonMax,
         busyNights: busyByRoom.get(r.id) ?? [],
+        housekeeping: r.housekeeping,
       };
     });
   }

@@ -10,13 +10,15 @@ import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { DateNav, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
-import { lastNightLabel } from "@rh/shared";
+import { housekeepingLabel, lastNightLabel } from "@rh/shared";
 
 export default function DaySheetPage() {
   const { activeResort, isStaff } = useAuth();
   const t = useT();
   const router = useRouter();
   const [date, setDate] = useState(() => todayIn(activeResort?.timezone));
+  // the register scrolls to any date; housekeeping is only about this one
+  const onToday = date === todayIn(activeResort?.timezone);
 
   const { data: sheet, isPending, error } = useApi(
     keys.daySheet(activeResort?.id, date),
@@ -67,6 +69,20 @@ export default function DaySheetPage() {
             <tbody>
               {sheet.rooms.map((r) => {
                 const c = r.cell;
+                /**
+                 * "Free" is about the bookings and stays true; whether a
+                 * guest can be shown in is another question. The
+                 * housekeeping design asked for this mark here and task 5
+                 * shipped without it, so the register said Free beside a
+                 * room its last guest left at nine.
+                 *
+                 * Today only. The state is now, and a register scrolled to
+                 * December has no opinion about this morning's beds.
+                 */
+                const unclean =
+                  onToday && r.housekeeping && r.housekeeping !== "CLEAN"
+                    ? housekeepingLabel(r.housekeeping)
+                    : null;
                 return (
                   <tr
                     key={r.roomId}
@@ -107,7 +123,14 @@ export default function DaySheetPage() {
                         <span className="text-xs italic">{t("ds.oos")}</span>
                       ) : c.mode === "available" ? (
                         // no longer only a label: the row is a way to sell it
-                        <span className="text-xs text-emerald-600">{t("ds.available")}</span>
+                        <span className="text-xs">
+                          <span className="text-emerald-600">{t("ds.available")}</span>
+                          {unclean ? (
+                            <span className="ml-1.5 whitespace-nowrap rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                              {unclean}
+                            </span>
+                          ) : null}
+                        </span>
                       ) : (
                         <div>
                           <div className="font-medium text-slate-800">{c.guestName}</div>

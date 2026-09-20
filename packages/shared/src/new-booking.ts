@@ -66,14 +66,19 @@ export function extraPersonRoom(rooms: RoomAvail[]): ExtraPersonRoom {
 
 /** Why a room is or is not on offer for these dates. */
 export interface RoomOffer {
+  /**
+   * Whether the desk may put a guest in it. `dirty` is the one reason
+   * that warns without refusing — see the note on `roomOffer`.
+   */
   sellable: boolean;
-  why: "free" | "busy" | "closed";
+  why: "free" | "busy" | "closed" | "dirty";
   /** What to draw beside the rate, or null when there is nothing to say. */
   note: string | null;
 }
 
 /**
- * Two reasons a room cannot be sold, and they are not the same reason.
+ * Three reasons to say something about a room, and they are not the same
+ * reason.
  *
  * Busy is about the dates and is temporary: those nights are gone, the room
  * is fine. Out of service is about the room. The console's grid knew only
@@ -82,12 +87,34 @@ export interface RoomOffer {
  * with "One or more rooms missing/inactive for this resort", which names no
  * room and suggests nothing to do about it.
  *
- * Busy wins when a room is both, because the nights are what stands in the
- * way today.
+ * Needing cleaning arrived on 2026-09-21 and is the odd one out: it warns
+ * and it still sells. Housekeeping had shipped the day before and stopped
+ * at its own screen, so the grid offered a room the guest had walked out of
+ * that morning with nothing said. A lock would have been worse than the
+ * silence — a clerk who cannot give a waiting guest a room because of a
+ * checkbox goes round the app, and then the app knows nothing at all. The
+ * same reasoning already governs check-in.
+ *
+ * Busy wins when a room is several of these, because the nights are what
+ * stands in the way today; closed beats dirty because one is a decision
+ * about the room and the other is twenty minutes of work.
+ *
+ * `arrivingToday` is not a convenience. The housekeeping state is *now*, and
+ * a room dirty this morning says nothing about a stay beginning in October.
+ * Without it an agent searching December would be told half the resort needs
+ * cleaning, and everyone would learn to read past the words.
  */
-export function roomOffer(room: Pick<RoomAvail, "status" | "busyNights">): RoomOffer {
+export function roomOffer(
+  room: Pick<RoomAvail, "status" | "busyNights"> & { housekeeping?: string },
+  when?: { arrivingToday?: boolean },
+): RoomOffer {
   const nights = room.busyNights?.length ?? 0;
   if (nights > 0) return { sellable: false, why: "busy", note: `busy (${nights}n)` };
   if (room.status !== "ACTIVE") return { sellable: false, why: "closed", note: "out of service" };
+  if (when?.arrivingToday && room.housekeeping && room.housekeeping !== "CLEAN") {
+    // the housekeeper's own words for the state, shortened to fit beside a rate
+    const note = room.housekeeping === "CLEANING" ? "being cleaned" : "needs cleaning";
+    return { sellable: true, why: "dirty", note };
+  }
   return { sellable: true, why: "free", note: null };
 }

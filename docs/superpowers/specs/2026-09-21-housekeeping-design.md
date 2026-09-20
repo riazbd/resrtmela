@@ -117,9 +117,39 @@ The rules both clients obey:
 
 | task | state |
 |---|---|
-| 1 — the rules, in `@rh/shared` | not started |
-| 2 — the column, the permissions, the routes | not started |
-| 3 — check-out makes the room dirty | not started |
-| 4 — the phone screen | not started |
-| 5 — the console page, and the day sheet's "ready" mark | not started |
-| 6 — on the owner's phone | not started |
+| 1 — the rules, in `@rh/shared` | done 2026-09-20 |
+| 2 — the column, the permissions, the routes | done 2026-09-20 |
+| 3 — check-out makes the room dirty | done 2026-09-20 |
+| 4 — the phone screen | done 2026-09-20 |
+| 5 — the console page | done 2026-09-20 |
+| 5b — the day sheet's "ready" mark | done 2026-09-21 |
+| 5c — the room list and the booking grid | done 2026-09-21 |
+| 6 — on the owner's phone | done 2026-09-21 |
+
+## What the first pass missed
+
+Tasks 1–4 and the console page shipped on the 20th and the feature was
+called done. It was not: **every screen that sells a room still said
+nothing.** The room list named the room, its type and its rate; the
+new-booking grid offered it at ৳4,500; the register said **Free** — all
+three about a room whose guest had walked out at nine, while the
+housekeeping list two taps away called it DIRTY. A walk-in gets that
+room and the desk finds out when the guest comes back down.
+
+The day sheet mark was in this document from the first draft and was
+simply not built. The other two were not, and should have been: a
+feature that only exists on its own screen is a feature nobody meets.
+
+Closed on 2026-09-21 with one rule and three readers:
+
+- `roomOffer(room, { arrivingToday })` gains a fourth answer, `dirty`,
+  which is the only one that **warns without refusing** — the same call
+  check-in already made, and for the same reason.
+- `arrivingToday` is not decoration. The state is *now*; a room dirty
+  this morning says nothing about a stay starting in December, and a
+  warning on every future date is one everybody learns to read past.
+- Busy beats closed beats dirty: the nights are gone, the room is shut,
+  the room is twenty minutes of work — in that order.
+- The inventory list and the register do not ask `roomOffer` at all.
+  They have no date to weigh, so they show `housekeepingLabel` directly,
+  and only when it is not CLEAN. Ten badges on ten rows is no badge.

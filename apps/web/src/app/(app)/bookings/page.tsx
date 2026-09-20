@@ -28,7 +28,7 @@ import {
   type DiscountKind, BOOKING_SORTS, DEFAULT_BOOKING_SORT,
   BOOKING_STATES, bookingStateLabel, billLines,
   whatTheBookingNeeds, BOOKING_GAP_MESSAGES, extraPersonRoom,
-  nextStates, transitionCanWait, paths, canEditStay,
+  nextStates, transitionCanWait, paths, canEditStay, todayIn,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
 
@@ -261,6 +261,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
               <RoomChoice
                 key={r.roomId}
                 room={r}
+                arrivingToday={checkIn === todayIn(activeResort?.timezone)}
                 checked={picked.includes(r.roomId)}
                 onToggle={(id) =>
                   setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))

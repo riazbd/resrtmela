@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
 import { api, client, money, dmy, currentMoneyFormat, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
-import { extraPersonNote, nextRoomStatus, roomStatusLabel } from "@rh/shared";
+import { extraPersonNote, housekeepingLabel, nextRoomStatus, roomStatusLabel } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -120,7 +120,20 @@ This cannot be undone.`;
                       <span className="text-slate-300">none</span>
                     )}
                   </Td>
-                  <Td><Badge value={r.status} /></Td>
+                  <Td>
+                    <Badge value={r.status} />
+                    {/* Only when there is something to do about it. A badge on
+                        ten rows out of ten is a badge nobody reads — the
+                        housekeeping screen made that mistake on its first
+                        afternoon. Beside the status rather than in a column of
+                        its own: this table is already six columns wide and the
+                        answer is empty most of the time. */}
+                    {r.housekeeping && r.housekeeping !== "CLEAN" ? (
+                      <span className="ml-1.5 whitespace-nowrap rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                        {housekeepingLabel(r.housekeeping)}
+                      </span>
+                    ) : null}
+                  </Td>
                   {canEdit && (
                     <Td className="text-right">
                       {/* one dialog for everything about a room, extra

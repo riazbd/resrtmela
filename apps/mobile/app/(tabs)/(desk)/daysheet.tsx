@@ -15,7 +15,14 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
-import { addDaysIso, formatMoney, lastNightLabel, todayIn, type DaySheetRoom } from "@rh/shared";
+import {
+  addDaysIso,
+  formatMoney,
+  housekeepingLabel,
+  lastNightLabel,
+  todayIn,
+  type DaySheetRoom,
+} from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { WhichResort } from "../../../src/screens/which-resort";
 import { DateNav } from "../../../src/design/date-nav";
@@ -25,10 +32,27 @@ import { Card, Row, Stat } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { color, radius, space } from "../../../src/design/tokens";
 
-/** The three things a room can be tonight, in the words a clerk uses. */
-function saying(room: DaySheetRoom): string {
+/**
+ * The three things a room can be tonight, in the words a clerk uses.
+ *
+ * `today` is whether this register is today's. A free room that nobody
+ * has cleaned is not one a guest can be shown into, and saying only
+ * "Free" is how a walk-in ends up in the bed somebody left at nine —
+ * the housekeeping design asked for this mark on the day it was written
+ * and task 5 shipped without it. On any other date the state means
+ * nothing: the room will have been cleaned forty times by December, and
+ * a mark that shows on every date is one nobody reads.
+ */
+function saying(room: DaySheetRoom, today: boolean): string {
   if (room.cell.mode === "oos") return "Out of service";
-  if (room.cell.mode === "available") return "Free";
+  if (room.cell.mode === "available") {
+    if (today && room.housekeeping && room.housekeeping !== "CLEAN") {
+      // the housekeeper's own words, so the register and the
+      // housekeeping list cannot drift apart
+      return `Free · ${housekeepingLabel(room.housekeeping).toLowerCase()}`;
+    }
+    return "Free";
+  }
   return room.cell.guestName ?? "—";
 }
 
@@ -152,6 +176,7 @@ export default function DaySheetScreen() {
                 key={room.roomId}
                 room={room}
                 date={date}
+                today={date === todayIn(activeResort?.timezone)}
                 last={i === rooms.length - 1}
                 whole={whole}
               />
@@ -166,12 +191,15 @@ export default function DaySheetScreen() {
 function RoomRow({
   room,
   date,
+  today,
   last,
   whole,
 }: {
   room: DaySheetRoom;
   /** The night on screen — what a new booking here would be for. */
   date: string;
+  /** Whether that night is tonight, which is the only day cleaning bears on. */
+  today: boolean;
   last: boolean;
   whole: (amount: number) => string;
 }) {
@@ -202,12 +230,12 @@ function RoomRow({
    */
   const spoken = booked
     ? `Room ${room.name}, ${cell.guestName ?? "no guest"}${owes !== null ? `, ${whole(owes)} due` : ""}`
-    : `Room ${room.name}, ${cell.mode === "oos" ? "out of service" : "free"}`;
+    : `Room ${room.name}, ${cell.mode === "oos" ? "out of service" : saying(room, today).toLowerCase()}`;
 
   return (
     <Row
       title={room.name}
-      subtitle={saying(room)}
+      subtitle={saying(room, today)}
       meta={booked ? cell.code : `${room.capacity ?? "—"} pax`}
       last={last}
       accessibilityLabel={spoken}

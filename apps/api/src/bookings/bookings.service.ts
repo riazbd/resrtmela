@@ -1849,6 +1849,9 @@ export class BookingsService {
         name: room.name,
         capacity: room.roomType ? room.roomType.maxAdults + room.roomType.maxChildren : null,
         status: room.status,
+        // "Free" is about the bookings and stays true; whether anybody can
+        // be shown into the room is a different question, and this is it
+        housekeeping: room.housekeeping,
         cell,
       };
     });

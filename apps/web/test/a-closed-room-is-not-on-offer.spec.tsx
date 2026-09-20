@@ -22,33 +22,44 @@ const FREE: RoomAvail = {
 
 const noop = () => {};
 
+/**
+ * `arrivingToday={false}` throughout, and deliberately.
+ *
+ * Every case below is about the dates or the room itself — busy, closed,
+ * an agent's rate — and none of them is about housekeeping, which only
+ * bears on a guest walking in today. Saying so here keeps these cases
+ * answering the question they were written for;
+ * `the-console-says-which-rooms-need-cleaning` is where the other day is
+ * checked.
+ */
+
 describe("the room grid on the booking form", () => {
   it("offers a room that is free", () => {
-    render(<RoomChoice room={FREE} checked={false} onToggle={noop} />);
+    render(<RoomChoice arrivingToday={false} room={FREE} checked={false} onToggle={noop} />);
     expect(screen.getByRole("button").hasAttribute("disabled")).toBe(false);
   });
 
   it("refuses a room whose nights are taken, and says how many", () => {
     render(
-      <RoomChoice room={{ ...FREE, busyNights: ["2026-11-05", "2026-11-06"] }} checked={false} onToggle={noop} />,
+      <RoomChoice arrivingToday={false} room={{ ...FREE, busyNights: ["2026-11-05", "2026-11-06"] }} checked={false} onToggle={noop} />,
     );
     expect(screen.getByRole("button").hasAttribute("disabled")).toBe(true);
     expect(screen.getByText(/busy \(2n\)/i)).toBeTruthy();
   });
 
   it("refuses a room that is out of service", () => {
-    render(<RoomChoice room={{ ...FREE, status: "OUT_OF_SERVICE" }} checked={false} onToggle={noop} />);
+    render(<RoomChoice arrivingToday={false} room={{ ...FREE, status: "OUT_OF_SERVICE" }} checked={false} onToggle={noop} />);
     expect(screen.getByRole("button").hasAttribute("disabled")).toBe(true);
   });
 
   it("does not call a closed room busy — it is shut, not booked", () => {
-    render(<RoomChoice room={{ ...FREE, status: "OUT_OF_SERVICE" }} checked={false} onToggle={noop} />);
+    render(<RoomChoice arrivingToday={false} room={{ ...FREE, status: "OUT_OF_SERVICE" }} checked={false} onToggle={noop} />);
     expect(screen.queryByText(/busy/i)).toBeNull();
     expect(screen.getByText(/out of service/i)).toBeTruthy();
   });
 
   it("shows the agent their own price rather than the rack rate", () => {
-    render(<RoomChoice room={{ ...FREE, agentRate: 4500 }} checked={false} onToggle={noop} />);
+    render(<RoomChoice arrivingToday={false} room={{ ...FREE, agentRate: 4500 }} checked={false} onToggle={noop} />);
     expect(screen.getByText(/your price/i)).toBeTruthy();
   });
 });

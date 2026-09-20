@@ -412,6 +412,9 @@ export interface Room {
   name: string;
   baseRate: string | number;
   status: "ACTIVE" | "OUT_OF_SERVICE";
+  /** DIRTY, CLEANING or CLEAN — the inventory list is about today, so it shows it. */
+  housekeeping?: string;
+  housekeepingAt?: string | null;
   /**
    * What THIS room takes. Seeded from its type when the room is created and
    * the room's own answer after that, because rooms of one type are not one
@@ -442,6 +445,12 @@ export interface RoomAvail {
   agentRate?: number;
   status: string;
   busyNights: string[];
+  /**
+   * Where the room stands with housekeeping *now*. Only meaningful when
+   * the guest arrives today — `roomOffer` is where that is decided, and
+   * it ignores this for any other date.
+   */
+  housekeeping?: string;
   /**
    * What this room takes, so the booking form can offer the box for the rooms
    * that have a bed and price it at the room's own rate. It used to ask the
@@ -495,6 +504,11 @@ export interface DaySheetRoom {
   name: string;
   capacity: number | null;
   status: string;
+  /**
+   * Where housekeeping stands with the room *now* — which is only about
+   * today's register, and the screens ignore it on any other date.
+   */
+  housekeeping?: string;
   cell: DaySheetCell;
 }
 

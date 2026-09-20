@@ -19,6 +19,7 @@ import {
   formatMoney,
   nightsBetweenIso,
   roomOffer,
+  todayIn,
   type RoomAvail,
 } from "@rh/shared";
 import { useDraft } from "../../src/booking/draft";
@@ -51,6 +52,17 @@ export default function WhenAndWhereScreen() {
     },
   );
   const offered: RoomAvail[] = grid.data ?? [];
+
+  /**
+   * Whether the guest walks in today.
+   *
+   * A room's housekeeping state is *now*, so it only bears on a stay that
+   * starts now. Without this, every clerk taking a booking for next month
+   * would be told half the resort needs cleaning — true this morning, and
+   * nothing to do with the guest in front of them. The resort's clock, not
+   * the machine's: in Dhaka the two disagree for six hours of every day.
+   */
+  const arrivingToday = checkIn === todayIn(activeResort?.timezone);
 
   /**
    * Opened from the day sheet, where a clerk tapped a room that was free.
@@ -145,6 +157,7 @@ export default function WhenAndWhereScreen() {
               <RoomPick
                 key={room.roomId}
                 room={room}
+                arrivingToday={arrivingToday}
                 picked={roomIds.includes(room.roomId)}
                 money={money}
                 onPress={() => toggle(room)}
@@ -182,16 +195,18 @@ export default function WhenAndWhereScreen() {
  */
 function RoomPick({
   room,
+  arrivingToday,
   picked,
   money,
   onPress,
 }: {
   room: RoomAvail;
+  arrivingToday: boolean;
   picked: boolean;
   money: Parameters<typeof formatMoney>[1];
   onPress: () => void;
 }) {
-  const offer = roomOffer(room);
+  const offer = roomOffer(room, { arrivingToday });
   const rate = room.agentRate ?? Number(room.baseRate);
 
   return (
@@ -209,7 +224,11 @@ function RoomPick({
             ? styles.closed
             : picked
               ? styles.picked
-              : null,
+              : // a warning, not a refusal: it keeps the tile sellable and
+                // only tints it, so the clerk sees it without being stopped
+                offer.why === "dirty"
+                ? styles.unclean
+                : null,
         pressed && offer.sellable && !picked ? styles.pressed : null,
       ]}
     >
@@ -223,7 +242,15 @@ function RoomPick({
       </Text>
       <Text
         step="caption"
-        tone={picked ? "onBrand" : offer.why === "busy" ? "danger" : offer.why === "closed" ? "warn" : "muted"}
+        tone={
+          picked
+            ? "onBrand"
+            : offer.why === "busy"
+              ? "danger"
+              : offer.why === "closed" || offer.why === "dirty"
+                ? "warn"
+                : "muted"
+        }
         numberOfLines={1}
       >
         {formatMoney(rate, { ...money, decimals: 0 })}
@@ -253,5 +280,8 @@ const styles = StyleSheet.create({
   picked: { backgroundColor: color.brand[600], borderColor: color.brand[600] },
   busy: { backgroundColor: color.danger.bg, borderColor: color.danger.line },
   closed: { backgroundColor: color.warn.bg, borderColor: color.warn.line },
+  // the same amber as out of service, and a line rather than a fill, because
+  // this room can still be sold and should not read as one that cannot
+  unclean: { borderColor: color.warn.line },
   pressed: { backgroundColor: color.ink[100] },
 });

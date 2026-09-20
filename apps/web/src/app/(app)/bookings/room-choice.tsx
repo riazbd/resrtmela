@@ -15,13 +15,20 @@ import { roomOffer, type RoomAvail } from "@rh/shared";
  * Booked is red and temporary: those nights are gone, the room is fine. Out
  * of service is amber and is about the room, not the dates — the same
  * distinction the rooms screen already makes, for the same reason.
+ *
+ * Needing cleaning is amber too, and is the one that still sells: the
+ * border changes and nothing else, so a clerk sees it without being
+ * stopped. `arrivingToday` is not optional — the state is about now, and
+ * without it a booking taken for December would be told half the resort
+ * needs cleaning.
  */
-export function RoomChoice({ room, checked, onToggle }: {
+export function RoomChoice({ room, arrivingToday, checked, onToggle }: {
   room: RoomAvail;
+  arrivingToday: boolean;
   checked: boolean;
   onToggle: (roomId: number) => void;
 }) {
-  const offer = roomOffer(room);
+  const offer = roomOffer(room, { arrivingToday });
 
   return (
     <button
@@ -34,7 +41,9 @@ export function RoomChoice({ room, checked, onToggle }: {
             ? "cursor-not-allowed border-amber-200 bg-amber-50 text-amber-600"
             : checked
               ? "border-brand-500 bg-brand-50 text-brand-900 ring-1 ring-brand-500"
-              : "border-slate-200 bg-white hover:border-brand-300"
+              : offer.why === "dirty"
+                ? "border-amber-300 bg-white text-slate-900 hover:border-amber-400"
+                : "border-slate-200 bg-white hover:border-brand-300"
       }`}
     >
       <div className="font-medium">{room.roomName}</div>

@@ -26,6 +26,7 @@ import { keys, useApi } from "@rh/app-core";
 import {
   extraPersonNote,
   formatMoney,
+  housekeepingLabel,
   roomStatusLabel,
   type Room,
 } from "@rh/shared";
@@ -150,11 +151,23 @@ function RoomRow({
   const shut = room.status !== "ACTIVE";
   const extra = extraPersonNote(room, money);
   const rate = formatMoney(room.baseRate, { ...money, decimals: 0 });
+  /**
+   * Only when there is something to do about it.
+   *
+   * A clean room says nothing, because a badge on ten rows out of ten is
+   * a badge nobody reads — the housekeeping screen made exactly that
+   * mistake on its first afternoon. And out of service wins when a room
+   * is both: one is a decision about the room, the other is twenty
+   * minutes of work.
+   */
+  const unclean = !shut && room.housekeeping && room.housekeeping !== "CLEAN"
+    ? housekeepingLabel(room.housekeeping)
+    : null;
 
   /** The row as one sentence — see `Stat` for why. */
   const spoken = `${room.name}, ${rate} a night, ${roomStatusLabel(room.status).toLowerCase()}${
-    extra ? `, takes ${extra}` : ""
-  }`;
+    unclean ? `, ${unclean.toLowerCase()}` : ""
+  }${extra ? `, takes ${extra}` : ""}`;
 
   return (
     <Row
@@ -174,6 +187,12 @@ function RoomRow({
                 Out of service
               </Text>
             </View>
+          ) : unclean ? (
+            <View style={styles.unclean}>
+              <Text step="caption" weight="medium" tone="warn">
+                {unclean}
+              </Text>
+            </View>
           ) : null}
         </View>
       }
@@ -186,6 +205,16 @@ const styles = StyleSheet.create({
   count: { paddingBottom: space.sm },
   right: { alignItems: "flex-end", gap: space.xs },
   emptyBox: { paddingVertical: space.lg },
+  // the same chip as out of service: both are "you cannot just hand over
+  // the key", and a second colour here would imply a second kind of thing
+  unclean: {
+    backgroundColor: color.warn.bg,
+    borderWidth: 1,
+    borderColor: color.warn.line,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+  },
   shut: {
     backgroundColor: color.warn.bg,
     borderWidth: 1,
