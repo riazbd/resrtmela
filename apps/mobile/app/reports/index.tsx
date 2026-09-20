@@ -147,7 +147,9 @@ export default function ReportsScreen() {
           />
           <Row
             title="Discounts given"
-            meta={`−${whole(m.discount)}`}
+            // no minus on nothing: "−৳0" reads as a mistake, and a period
+            // where nobody discounted anything is the common case
+            meta={m.discount > 0 ? `−${whole(m.discount)}` : whole(0)}
             last
             accessibilityLabel={`Discounts given: ${whole(m.discount)}`}
           />

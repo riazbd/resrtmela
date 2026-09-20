@@ -105,7 +105,7 @@ export default function ProfitAndLossScreen() {
           <Row
             title="Discounts"
             subtitle="Never charged, so never income"
-            meta={`−${whole(resort.discounts)}`}
+            meta={resort.discounts > 0 ? `−${whole(resort.discounts)}` : whole(0)}
             accessibilityLabel={`Discounts, never charged: ${whole(resort.discounts)}`}
           />
           <Row

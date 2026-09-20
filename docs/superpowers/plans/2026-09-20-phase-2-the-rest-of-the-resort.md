@@ -27,6 +27,10 @@ user.
 | 12 — import, and bulk email | not started |
 | 13 — the APK, on a device | not started |
 
+Twenty-five screens. The order is by what is most visibly missing rather than
+by the section order in §5: **Rooms is a tab on the bar** and it said "Not
+built yet" on every phone that installed 0.2.1, which no other gap did.
+
 ## What the remaining tasks actually cost
 
 Written down after tasks 1–7, because the second half of this phase is
@@ -56,9 +60,6 @@ paragraph somebody wants to re-read before sending to four hundred
 people. They stay last, and may end up where the subscription and the
 permission matrix are — named on the settings hub as deliberately absent.
 
-Twenty-five screens. The order is by what is most visibly missing rather than
-by the section order in §5: **Rooms is a tab on the bar** and it says "Not
-built yet" on every phone that installs 0.2.1, which no other gap does.
 
 ## What phase 1 established, that this plan assumes
 
