@@ -216,7 +216,27 @@ export default function ActivitiesPage() {
                         ? <span className="text-slate-400">none</span>
                         : a.schedules.map((s) => `${DAYS[s.weekday]} ${s.startTime}`).join(", ")}
                     </Td>
-                    <Td className="text-xs">{a.upcomingSlots}{a.nextSlot ? <div className="text-[11px] text-slate-400">next {dmy(a.nextSlot)}</div> : null}</Td>
+                    {/*
+                      On offer with nothing generated is the failure worth
+                      naming. It reads as available on every screen that
+                      offers it and sells nothing — and a "0" in a column of
+                      numbers is not a warning, which is how it sat here
+                      until the phone's activities screen drew it.
+                    */}
+                    <Td className="text-xs">
+                      {a.active && a.upcomingSlots === 0 ? (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                          no slots — nobody can book it
+                        </span>
+                      ) : (
+                        <>
+                          {a.upcomingSlots}
+                          {a.nextSlot ? (
+                            <div className="text-[11px] text-slate-400">next {dmy(a.nextSlot)}</div>
+                          ) : null}
+                        </>
+                      )}
+                    </Td>
                     <Td><Badge value={a.active ? "ACTIVE" : "OUT_OF_SERVICE"} /></Td>
                     <Td className="text-right">
                       {canManage && (

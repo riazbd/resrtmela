@@ -2,7 +2,7 @@
 
 import { useT, isStateKey, type DictKey } from "@/lib/i18n";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 
 // ── primitives ──
 
@@ -238,18 +238,53 @@ export function Modal({
   wide?: boolean;
   children: React.ReactNode;
 }) {
+  /**
+   * Every form in this console is one of these — new booking, edit,
+   * arrival, departure, new activity, add user, food package — so what
+   * is missing here is missing seven times over.
+   *
+   * It had no role, so opening one told an assistive technology that
+   * nothing had changed; no name, so there was nothing to announce; and
+   * no focus move, so the next Tab walked the page the dialog was
+   * covering. Found by pointing a browser tool at `[role=dialog]` and
+   * getting nothing back — what a tool cannot find, a screen reader
+   * cannot announce either.
+   */
+  const titleId = useId();
+  const box = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useEffect(() => {
+    if (open) box.current?.focus();
+  }, [open]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-10">
-      <div className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} rounded-xl bg-white shadow-xl`}>
+      <div
+        ref={box}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        // focusable so the dialog itself can hold focus on open; -1 keeps
+        // it out of the Tab order, where it is not a stop of its own
+        tabIndex={-1}
+        className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} rounded-xl bg-white shadow-xl outline-none`}
+      >
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+          <h3 id={titleId} className="text-sm font-semibold text-slate-800">
+            {title}
+          </h3>
+          <button
+            onClick={onClose}
+            aria-label={`Close ${title}`}
+            className="rounded p-1 text-slate-400 hover:bg-slate-100"
+          >
             ✕
           </button>
         </div>

@@ -73,9 +73,28 @@ export default function DaySheetPage() {
                         ? "bg-slate-100/60 text-slate-400"
                         : c.mode === "booked"
                           ? "cursor-pointer hover:bg-brand-50/40"
-                          : "hover:bg-slate-50/50"
+                          : "cursor-pointer hover:bg-emerald-50/40"
                     }`}
-                    onClick={() => c.mode === "booked" && c.bookingId && router.push(`/bookings?id=${c.bookingId}`)}
+                    /**
+                     * Two of the three states go somewhere.
+                     *
+                     * A taken room opens its booking. A free one opens the
+                     * new-booking form already filled in with that room and
+                     * that night — `bookingHandoff` has expected this page
+                     * as a caller since it was written, and its own comment
+                     * said so, but nothing here ever sent it: a clerk with
+                     * somebody at the counter had already decided the room
+                     * and the night and was made to choose both again.
+                     */
+                    onClick={() => {
+                      if (c.mode === "booked" && c.bookingId) {
+                        router.push(`/bookings?id=${c.bookingId}`);
+                      } else if (c.mode === "available") {
+                        router.push(
+                          `/bookings?roomId=${r.roomId}&checkIn=${date}&checkOut=${addDaysIso(date, 1)}`,
+                        );
+                      }
+                    }}
                   >
                     <Td className="!py-3">
                       <div className="font-semibold text-slate-800">{r.name}</div>
@@ -85,7 +104,8 @@ export default function DaySheetPage() {
                       {c.mode === "oos" ? (
                         <span className="text-xs italic">{t("ds.oos")}</span>
                       ) : c.mode === "available" ? (
-                        <span className="text-xs text-slate-300">{t("ds.available")}</span>
+                        // no longer only a label: the row is a way to sell it
+                        <span className="text-xs text-emerald-600">{t("ds.available")}</span>
                       ) : (
                         <div>
                           <div className="font-medium text-slate-800">{c.guestName}</div>
