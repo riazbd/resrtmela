@@ -307,6 +307,13 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
             {/* the platform's other customer, which the nav did not mention at
                 all — an agency arriving here had no way to reach its own door */}
             <a href="/signup/agency" className="hover:text-brand-700">For agencies</a>
+            {/*
+              The app is not on Play, so this page is its only door. It
+              existed for an hour with nothing linking to it, reachable
+              only by typing the address — which is the same as not
+              existing, and is what the owner asked about first.
+            */}
+            <Link href="/app" className="hover:text-brand-700">Get the app</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link href="/login" className="hidden rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">
@@ -326,7 +333,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
         {menuOpen && (
           <div className="border-t border-slate-100 bg-white px-4 py-3 lg:hidden">
             <div className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["/signup/agency", "For agencies"], ["/login", "Log in"]].map(([h, l]) => (
+              {[["#features", "Functionalities"], ["#solutions", "Solutions"], ["#pricing", "Pricing"], ["/signup/agency", "For agencies"], ["/app", "Get the app"], ["/login", "Log in"]].map(([h, l]) => (
                 <a key={h} href={h} onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50">
                   {l}
                 </a>
@@ -796,6 +803,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
             <div className="mt-4 flex flex-col gap-2.5 text-sm text-slate-600">
               <Link href="/signup" className="hover:text-brand-700">Register</Link>
               <Link href="/login" className="hover:text-brand-700">Log in</Link>
+              <Link href="/app" className="hover:text-brand-700">Android app</Link>
             </div>
           </div>
         </div>

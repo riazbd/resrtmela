@@ -258,6 +258,16 @@ function Shell({ children }: { children: React.ReactNode }) {
               Account
             </Link>
             <span aria-hidden className="text-brand-400">·</span>
+            {/*
+              The app is not on Play, so somebody has to be able to send
+              a colleague to the download page — and the person doing
+              that is a manager at this desk, not a visitor on the
+              marketing site.
+            */}
+            <Link href="/app" className="underline-offset-2 hover:text-white hover:underline">
+              App
+            </Link>
+            <span aria-hidden className="text-brand-400">·</span>
             <button
               onClick={() => {
                 logout();
