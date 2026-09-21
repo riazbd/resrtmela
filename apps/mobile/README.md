@@ -146,17 +146,38 @@ against 0.7.0's native modules must never land on a 0.6.0 phone.
 
 A new native module, an Expo SDK bump, a permission, the icon:
 
-1. Bump `version` in `app.json`, then
-   `npx eas-cli build -p android --profile production`
-2. Put the APK where the download page points, and set **Platform →
-   Billing policy → Latest app version** to the new number.
-3. *Only once it is actually downloadable*, raise **Oldest app
-   allowed**.
+```
+# 1. bump `version` in app.json, then build
+npx eas-cli build -p android --profile production
 
-Step 3 is the force. Every phone below that number is refused on every
+# 2. publish it — one command, nothing to type into a form
+RM_PLATFORM_PASSWORD=... pnpm -F @rh/mobile publish:release --notes "what changed"
+```
+
+`publish:release` reads the version from `app.json`, finds the finished
+EAS build for it, has *the server* fetch the artifact under a readable
+name, checks nginx really serves it, and only then points the download
+page at it. Doing this by hand was six steps, and the one everybody
+forgets is the last — so the page goes on offering the old build while
+the new one sits on the server. `--dry-run` prints what it would do.
+
+The file lands at `/var/lib/resortmela/downloads/resort-mela-<version>.apk`
+and is served by nginx at `resortmela.com/downloads/…`. Linking Expo's
+artifact directly worked but named the saved file after its hash, so a
+person's Downloads folder filled with `I3IVk-OuDQEdHesq….apk` and
+nothing said which build was which.
+
+### Forcing the ones who do not update
+
+`publish:release` never touches the floor. Raising it is one field —
+**Platform → Billing policy → Oldest app allowed** — and it is the
+owner's, because it is the only thing here that takes the app away from
+somebody mid-shift. Every phone below that number is refused on every
 request with a 426 and shown a screen it cannot get past, carrying a
-Download button. The floor is `apps/api/src/common/app-release.ts`; the
-rule both sides run is `packages/shared/src/app-version.ts`.
+Download button. They stay signed in.
+
+The floor is `apps/api/src/common/app-release.ts`; the rule both sides
+run is `packages/shared/src/app-version.ts`.
 
 **Raise it last, and only to a version people can actually reach.**
 Raising it to a build that is not on the download page yet locks the

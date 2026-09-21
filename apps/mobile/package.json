@@ -14,7 +14,8 @@
     "start:dev-client": "expo start --dev-client",
     "device": "node scripts/device.mjs",
     "web": "expo start --web --port 8082",
-    "look": "node scripts/look.mjs"
+    "look": "node scripts/look.mjs",
+    "publish:release": "node scripts/publish-release.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
