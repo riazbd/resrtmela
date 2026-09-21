@@ -3,7 +3,7 @@
     "name": "Resort Mela",
     "slug": "resort-mela",
     "scheme": "resortmela",
-    "version": "0.7.1",
+    "version": "0.8.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     ],
     "android": {
       "package": "com.resortmela.app",
-      "versionCode": 11,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#15803d"
