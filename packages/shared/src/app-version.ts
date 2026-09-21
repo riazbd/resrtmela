@@ -42,8 +42,23 @@ export interface AppRelease {
   latest: string;
   /** The oldest the server will still serve. Everything below it stops. */
   minimum: string;
-  /** Where the APK is. A stable address, so an old build's button still works. */
+  /**
+   * Where to send a *person* — the download page, not the file.
+   *
+   * A blocked phone opens this, and it must land on the page rather
+   * than start a download, because sideloading needs the "allow from
+   * this source" step explained. The first draft sent them straight at
+   * the file and the page's own button inherited the same value, so the
+   * button pointed at the page it was already on. Found by opening it.
+   */
   downloadUrl: string;
+  /**
+   * The APK itself. What the download page's button links to.
+   *
+   * Empty until somebody uploads a build, and the page says so rather
+   * than offering a button that goes nowhere.
+   */
+  apkUrl: string;
   /** What changed, shown on the update screen. Empty is fine; a lie is not. */
   notes: string;
 }

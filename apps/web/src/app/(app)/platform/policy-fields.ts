@@ -87,9 +87,15 @@ export const POLICY_FIELDS: PolicyField[] = [
     placeholder: "e.g. 0.6.0",
   },
   {
+    key: "app.apkUrl",
+    label: "The APK file",
+    hint: "what the download page's button links to. Paste the address of the build itself — until there is one, the page says the download is unavailable rather than offering a button that goes nowhere.",
+    placeholder: "e.g. https://expo.dev/artifacts/eas/....apk",
+  },
+  {
     key: "app.downloadUrl",
-    label: "Where the APK is",
-    hint: "left empty, the console's own /app page. Set it only to point somewhere else — the blocked phones open whatever is here.",
+    label: "Where a blocked phone is sent",
+    hint: "left empty, the console's own /app page — which is almost always right, because installing a file Android did not get from Play needs that page's instructions. This is a page for a person, not the file.",
     placeholder: "leave empty for /app",
   },
   {

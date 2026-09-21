@@ -55,16 +55,18 @@ export class AppReleaseService {
    * and it would break for exactly the people who cannot update.
    */
   async current(): Promise<AppRelease> {
-    const [latest, minimum, downloadUrl, notes] = await Promise.all([
+    const [latest, minimum, downloadUrl, apkUrl, notes] = await Promise.all([
       this.settings.str("app.latestVersion"),
       this.settings.str("app.minimumVersion"),
       this.settings.str("app.downloadUrl"),
+      this.settings.str("app.apkUrl"),
       this.settings.str("app.updateNotes"),
     ]);
     return {
       latest,
       minimum,
       downloadUrl: downloadUrl.trim() || `${webUrl()}/app`,
+      apkUrl: apkUrl.trim(),
       notes,
     };
   }

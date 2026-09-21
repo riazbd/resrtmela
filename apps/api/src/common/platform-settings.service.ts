@@ -82,8 +82,14 @@ export const SETTING_DEFAULTS: Record<string, string> = {
    */
   "app.latestVersion": "0.6.0",
   "app.minimumVersion": "0.0.0",
-  /** Empty means the console's own /app page, wherever this deployment is. */
+  /**
+   * Where a blocked phone is sent. Empty means the console's own /app
+   * page, wherever this deployment is — and that is almost always
+   * right, because sideloading needs the page's instructions.
+   */
   "app.downloadUrl": "",
+  /** The APK itself, which the download page's button links to. */
+  "app.apkUrl": "",
   "app.updateNotes": "",
   "email.creditPacks": JSON.stringify([
     { credits: 500, price: 500 },

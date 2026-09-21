@@ -168,6 +168,29 @@ describe("the floor is the owner's to move", () => {
     expect(now.downloadUrl).toMatch(/\/app$/);
   });
 
+  /**
+   * The file and the page are two addresses.
+   *
+   * Conflating them made the download page's own button link to the
+   * page it was already on — found by opening it in a browser, which
+   * a 200 would never have shown.
+   */
+  it("keeps the APK apart from the page that explains it", async () => {
+    await prisma.platformSetting.upsert({
+      where: { key: "app.apkUrl" },
+      create: { key: "app.apkUrl", value: "https://cdn.example.com/rm-0.7.0.apk" },
+      update: { value: "https://cdn.example.com/rm-0.7.0.apk" },
+    });
+    const now = await guard().release.current();
+    expect(now.apkUrl).toBe("https://cdn.example.com/rm-0.7.0.apk");
+    // the phone is still sent to the page, which carries the install steps
+    expect(now.downloadUrl).toMatch(/\/app$/);
+  });
+
+  it("has no APK address until somebody uploads one", async () => {
+    expect((await guard().release.current()).apkUrl).toBe("");
+  });
+
   it("uses an address the owner set instead", async () => {
     await prisma.platformSetting.upsert({
       where: { key: "app.downloadUrl" },

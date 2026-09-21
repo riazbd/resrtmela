@@ -72,18 +72,24 @@ export default async function DownloadPage() {
       </p>
 
       <div className="mt-8 rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200">
-        {release?.downloadUrl ? (
+        {release?.apkUrl ? (
+          /*
+           * `apkUrl`, not `downloadUrl`. The two are different
+           * addresses and conflating them made this button link to the
+           * page it is on — which is what opening it in a browser
+           * found, and what a 200 would never have shown.
+           */
           <a
-            href={release.downloadUrl}
+            href={release.apkUrl}
             className="inline-flex items-center justify-center rounded-xl bg-brand-600 px-6 py-3 text-base font-bold text-white transition hover:bg-brand-700"
           >
             Download version {release.latest}
           </a>
         ) : (
           /*
-           * The API is quiet. Saying so is better than a dead button:
-           * a person who presses nothing and gets nothing assumes the
-           * app is gone.
+           * No build uploaded yet, or the API is quiet. Saying so is
+           * better than a dead button: somebody who presses nothing and
+           * gets nothing assumes the app is gone.
            */
           <p className="text-sm font-semibold text-slate-700">
             The download is briefly unavailable. Please try again in a minute.
