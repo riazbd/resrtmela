@@ -3,7 +3,7 @@
     "name": "Resort Mela",
     "slug": "resort-mela",
     "scheme": "resortmela",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -19,6 +19,10 @@
         "backgroundColor": "#15803d"
       },
       "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
@@ -68,6 +72,9 @@
     },
     "updates": {
       "url": "https://u.expo.dev/e3df03f7-f176-4c28-a47a-248a2bc70d97"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }

@@ -133,10 +133,20 @@ ships over the air:
 npx eas-cli update --branch production -m "what changed"
 ```
 
-Phones fetch it in the background and run it on the next launch. Nobody
-presses anything and nothing is reinstalled. Deliberately *not* applied
-mid-session: reloading the app under somebody halfway through a
-check-in is worse than waiting for them to close it.
+Phones fetch it in the background. Once the bundle is on the device a
+green bar appears — *A new version is ready · Restart* — and the person
+picks the moment; `src/screens/update-ready.tsx`.
+
+Not applied the instant it lands, because that restarts the app under
+somebody halfway through taking a booking. And not blocking the launch
+on the network either (`fallbackToCacheTimeout`), because this is used
+on hill-resort connections where that means seconds of nothing before
+the day sheet.
+
+It went out once without the bar, and the only honest instruction that
+follows is "install it, open it, close it, open it again" — which is
+also what a phone left open at a desk all week never does, so it would
+run last week's code all week and never be told.
 
 `runtimeVersion` follows `version` in `app.json`, so an update only
 reaches builds of the same version. That is the point — a bundle built

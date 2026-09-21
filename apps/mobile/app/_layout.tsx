@@ -10,6 +10,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/api/session";
+import { UpdateReady } from "../src/screens/update-ready";
 import { lensMetrics } from "../src/design/lens-insets";
 import { color, text } from "../src/design/tokens";
 
@@ -28,6 +29,14 @@ export default function RootLayout() {
           screen, and a light status bar over it is invisible */}
       <StatusBar style="dark" />
       <SessionProvider>
+        {/*
+          Above every screen, because an update that has been
+          downloaded and never mentioned is a person running last
+          week's code all week. It is one line and a button rather
+          than a reload, so nobody is restarted mid-booking — see
+          update-ready.tsx.
+        */}
+        <UpdateReady />
         {/*
           A header by default, and off for the screens that are their own
           world. Everything else is pushed from somewhere — the More
