@@ -1,11 +1,21 @@
 /**
- * The month, as a chart of stays — on a screen four inches wide.
+ * The calendar, on a screen four inches wide.
  *
- * The console draws thirty columns at once. A phone cannot, so the days
- * scroll sideways under a pinned column of room names, and a stay is one bar
- * across the nights it holds rather than a square per night. That was worth
- * doing on the desktop too: a three-night booking used to be three
- * disconnected blocks with the guest's name crammed into each at 9px.
+ * The console draws thirty columns at once. A phone cannot, and the
+ * first attempt at this pretended otherwise: thirty 44-pixel columns
+ * scrolling sideways under a pinned column of room names. The owner
+ * looked at it and asked why it was full of `…`, which it was — a
+ * one-night stay got 36 usable pixels and no name fits in that, so the
+ * grid drew an ellipsis and nothing else.
+ *
+ * It is a week now, seven nights across the full width, with the room's
+ * name on its own line above its strip. Nothing scrolls sideways,
+ * nothing is truncated, and a bar too narrow to hold a name does not
+ * try — see `room-week.tsx`.
+ *
+ * Both lenses move by month from a picker rather than by `‹ ›` alone.
+ * Six presses to reach March was the other half of what the owner
+ * asked about.
  *
  * The rule the colours obey is `@rh/shared`'s and not this screen's:
  *
@@ -25,9 +35,6 @@ import {
   NIGHT_MEANING,
   addDaysIso,
   dayLabel,
-  isHeldState,
-  isWeekend,
-  mergeRuns,
   monthGrid,
   monthLength,
   monthOf,
@@ -35,21 +42,19 @@ import {
   nightLoad,
   nightsHeld,
   occupancyOf,
+  stepMonth,
   todayIn,
   type CalendarBooking,
   type NightLoadState,
-  type Room,
 } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
 import { WhichResort } from "../../src/screens/which-resort";
-import { DateNav } from "../../src/design/date-nav";
+import { MonthBar } from "../../src/design/month-bar";
 import { Lenses } from "../../src/design/lenses";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Text } from "../../src/design/text";
+import { RoomWeek, WeekHead, WEEK } from "../../src/screens/room-week";
 import { TOUCH_TARGET, color, radius, space } from "../../src/design/tokens";
-
-/** A month at a time, which is what a resort's calendar is mostly asked. */
-const SPAN = 30;
 
 /**
  * Two questions, one screen — as the console has it.
@@ -74,11 +79,6 @@ const LOAD_LOOK: Record<
   full: { bg: color.danger.bg, line: color.danger.line, tone: "danger" },
   none: { bg: color.surface, line: color.line, tone: "muted" },
 };
-
-/** Wide enough for a date above it and a thumb on it. */
-const DAY_WIDTH = 44;
-const NAME_WIDTH = 104;
-const ROW_HEIGHT = TOUCH_TARGET;
 
 /**
  * Red, by how firmly the night is held — the console's own ramp, in this
@@ -109,14 +109,14 @@ export default function CalendarScreen() {
   /**
    * The window follows the lens.
    *
-   * The room grid reads thirty days from wherever you are. The month grid
-   * draws a calendar month, and asking for thirty days from the 20th would
-   * leave the first nineteen squares with no data — which the grid would
-   * then cheerfully draw as "3 left" on nights that are sold out.
+   * Rooms reads a week from wherever you are. Month draws a calendar
+   * month — asking for a week from the 20th would leave nineteen
+   * squares with no data, which the grid would cheerfully draw as
+   * "3 left" on nights that are sold out.
    */
   const month = monthOf(anchor);
   const start = view === "Month" ? (monthStart(month) ?? anchor) : anchor;
-  const span = view === "Month" ? monthLength(month) : SPAN;
+  const span = view === "Month" ? monthLength(month) : WEEK;
   const end = addDaysIso(start, span);
 
   const days = useMemo(
@@ -209,61 +209,91 @@ export default function CalendarScreen() {
       <Stale age={calQ.stale} />
       <View style={styles.nav}>
         {/*
-          The day arrows belong to the room grid, which can start anywhere.
-          In the month lens the window is a calendar month, so a control that
-          says "Tuesday, 1 September — Back to today" is describing the edge
-          of the window rather than where the reader is. The month range and
-          its own arrows say that better, and say it once.
+          One row, and it does both jobs.
+
+          The arrows step whatever the lens is showing — a week in
+          Rooms, a month in Month — and the label between them opens a
+          year and twelve months, which is the part that was missing:
+          March used to be six presses away and last season was
+          unreachable in practice.
+
+          It was two rows for an hour, a month bar above a week bar,
+          and between them and the lens toggle the controls took two
+          fifths of the screen before a single room appeared.
+
+          Picking a month lands on its first day; in Rooms that is the
+          week the month opens with.
         */}
-        {view === "Rooms" ? (
-          <DateNav value={start} onChange={setStart} timezone={activeResort?.timezone} />
-        ) : null}
-        <View style={styles.months}>
-          <MonthStep label="Previous month" onPress={() => setStart(addDaysIso(start, -span))} />
-          <Text step="caption" tone="muted">
-            {dayLabel(start)} — {dayLabel(addDaysIso(start, span - 1))}
-          </Text>
-          <MonthStep label="Next month" onPress={() => setStart(addDaysIso(start, span))} />
-        </View>
+        <MonthBar
+          month={month}
+          today={today}
+          onChange={(m) => setStart(monthStart(m) ?? today)}
+          label={
+            view === "Rooms"
+              ? `${dayLabel(start)} — ${dayLabel(addDaysIso(start, WEEK - 1))}`
+              : undefined
+          }
+          onStep={view === "Rooms" ? (by) => setStart(addDaysIso(start, by * WEEK)) : undefined}
+          stepLabels={
+            view === "Rooms"
+              ? { back: "Previous week", forward: "Next week" }
+              : { back: "Previous month", forward: "Next month" }
+          }
+        />
+
         <Lenses options={VIEWS} value={view} onChange={setView} />
       </View>
 
-      {/*
-        The names stay put and the days scroll under them. Two columns rather
-        than one scroller: a grid whose row labels slide off the left is a
-        grid where the fifth room down is anonymous by the time you have
-        scrolled to next week.
-      */}
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={calQ.isRefetching} onRefresh={() => void calQ.refetch()} />
         }
       >
         {view === "Month" ? (
-          <MonthOfNights
-            month={month}
-            today={today}
-            sellable={sellable.length}
-            occupancy={occupancy}
-          />
+          <>
+            <MonthOfNights
+              month={month}
+              today={today}
+              sellable={sellable.length}
+              occupancy={occupancy}
+            />
+            {/*
+              Under the grid rather than over it: the squares are what
+              somebody came for, and a summary above them would push the
+              first week off a short screen. It also fills what was six
+              hundred pixels of nothing — a month has four or five rows
+              and the screen has room for eight.
+            */}
+            <MonthTotals days={days} sellable={sellable.length} occupancy={occupancy} />
+          </>
         ) : (
-        <View style={styles.sheet}>
-          <View>
-            <View style={[styles.name, styles.head]} />
+          <View style={styles.sheet}>
+            <WeekHead
+              days={days}
+              taken={new Map(occupancy.map((o) => [o.day, o.taken]))}
+              sellable={sellable.length}
+              today={today}
+            />
             {rooms.map((room) => (
-              <RoomName key={room.id} room={room} />
+              <RoomWeek
+                key={room.id}
+                room={room}
+                days={days}
+                held={held}
+                onOpenBooking={(id) => router.push(`/bookings/${id}` as never)}
+                /*
+                 * A free night is where a booking starts. Somebody who
+                 * has just found a gap is about to fill it, and making
+                 * them go to another screen and re-enter the room and
+                 * the date is the kind of small tax that stops a tool
+                 * being used at the desk.
+                 */
+                onTakeNight={(roomId, day) =>
+                  router.push(`/new-booking?roomId=${roomId}&checkIn=${day}` as never)
+                }
+              />
             ))}
           </View>
-
-          <ScrollView horizontal showsHorizontalScrollIndicator>
-            <View>
-              <DayHeads days={days} occupancy={occupancy} sellable={sellable.length} />
-              {rooms.map((room) => (
-                <RoomNights key={room.id} room={room} days={days} held={held} />
-              ))}
-            </View>
-          </ScrollView>
-        </View>
         )}
 
         {/*
@@ -359,55 +389,6 @@ function MonthOfNights({
   );
 }
 
-function MonthStep({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      style={({ pressed }) => [styles.monthStep, pressed ? styles.pressed : null]}
-    >
-      <Text step="caption" weight="medium" tone="body">
-        {label === "Next month" ? "Next ›" : "‹ Prev"}
-      </Text>
-    </Pressable>
-  );
-}
-
-function DayHeads({
-  days,
-  occupancy,
-  sellable,
-}: {
-  days: string[];
-  occupancy: { day: string; taken: number }[];
-  sellable: number;
-}) {
-  const takenOn = new Map(occupancy.map((o) => [o.day, o.taken]));
-  return (
-    <View style={styles.row}>
-      {days.map((day) => {
-        const taken = takenOn.get(day) ?? 0;
-        return (
-          <View
-            key={day}
-            accessible
-            accessibilityLabel={`${dayLabel(day)}: ${taken} of ${sellable} rooms taken`}
-            style={[styles.dayHead, isWeekend(day) ? styles.weekend : null]}
-          >
-            <Text step="caption" tone="muted">
-              {day.slice(8, 10)}
-            </Text>
-            <Text step="caption" weight="medium" tone={taken >= sellable && sellable > 0 ? "danger" : "muted"} tabular>
-              {taken}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 /**
  * The key to the grid above it.
  *
@@ -415,6 +396,76 @@ function DayHeads({
  * changes firmness changes its swatch too. "Free" and "Out of service"
  * are not held states and are named here because the grid draws them.
  */
+/**
+ * What the month came to.
+ *
+ * The grid says which nights are gone; this says how the month did,
+ * which is the question an owner opens a month to ask and which
+ * counting thirty squares by eye does not answer.
+ *
+ * Room-nights rather than bookings: a resort with ten rooms has three
+ * hundred of them in September, and "186 of 300" is a sentence about
+ * capacity. A count of bookings is a sentence about paperwork.
+ */
+function MonthTotals({
+  days,
+  sellable,
+  occupancy,
+}: {
+  days: string[];
+  sellable: number;
+  occupancy: { day: string; taken: number }[];
+}) {
+  if (sellable === 0) return null;
+  const possible = sellable * days.length;
+  const sold = occupancy.reduce((n, o) => n + o.taken, 0);
+  const full = occupancy.filter((o) => o.taken >= sellable).length;
+  const empty = occupancy.filter((o) => o.taken === 0).length;
+  const pct = possible > 0 ? Math.round((sold / possible) * 100) : 0;
+
+  return (
+    <View style={styles.totals}>
+      <View style={styles.totalsRow}>
+        <Figure value={`${pct}%`} label="full this month" tone={pct >= 70 ? "ok" : "title"} />
+        <Figure value={`${sold}`} label={`of ${possible} room-nights`} tone="title" />
+      </View>
+      <View style={styles.totalsRow}>
+        <Figure
+          value={`${full}`}
+          label={full === 1 ? "night sold out" : "nights sold out"}
+          tone={full > 0 ? "danger" : "muted"}
+        />
+        <Figure
+          value={`${empty}`}
+          label={empty === 1 ? "night with nobody" : "nights with nobody"}
+          tone={empty > 0 ? "warn" : "muted"}
+        />
+      </View>
+    </View>
+  );
+}
+
+function Figure({
+  value,
+  label,
+  tone,
+}: {
+  value: string;
+  label: string;
+  tone: "ok" | "warn" | "danger" | "muted" | "title";
+}) {
+  return (
+    <View style={styles.figure}>
+      <Text step="title" weight="bold" tone={tone} tabular numberOfLines={1}>
+        {value}
+      </Text>
+      <Text step="caption" tone="muted" numberOfLines={2}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function NightKey() {
   const held = (["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] as const).map((state) => {
     const m = NIGHT_MEANING[state];
@@ -439,84 +490,6 @@ function NightKey() {
   );
 }
 
-function RoomName({ room }: { room: Room }) {
-  const outOfService = room.status !== "ACTIVE";
-  return (
-    <View
-      style={[styles.name, outOfService ? styles.nameOff : null]}
-      accessible
-      accessibilityLabel={`Room ${room.name}${outOfService ? ", out of service" : ""}`}
-    >
-      <Text step="small" weight="medium" tone={outOfService ? "muted" : "title"} numberOfLines={1}>
-        {room.name}
-      </Text>
-    </View>
-  );
-}
-
-function RoomNights({
-  room,
-  days,
-  held,
-}: {
-  room: Room;
-  days: string[];
-  held: Map<string, CalendarBooking>;
-}) {
-  const outOfService = room.status !== "ACTIVE";
-  const runs = mergeRuns(
-    days,
-    (day) => held.get(`${room.id}|${day}`) ?? null,
-    (booking) => booking.id,
-  );
-
-  return (
-    <View style={styles.row}>
-      {runs.map((run) => {
-        const width = run.nights * DAY_WIDTH;
-        if (!run.value) {
-          return (
-            <View
-              key={run.from}
-              style={[styles.cell, styles.free, outOfService ? styles.offService : null, { width }]}
-            />
-          );
-        }
-        const booking = run.value;
-        const meaning = isHeldState(booking.state) ? NIGHT_MEANING[booking.state] : null;
-        const who = booking.guestName || booking.agentName || booking.code;
-        return (
-          <Pressable
-            key={run.from}
-            accessibilityRole="button"
-            accessibilityLabel={`${who}, ${meaning?.label ?? booking.state}, ${dayLabel(run.from)} for ${run.nights} night${run.nights === 1 ? "" : "s"}, ${room.name}`}
-            onPress={() => router.push(`/bookings/${booking.id}` as never)}
-            style={[
-              styles.cell,
-              {
-                width,
-                backgroundColor: meaning?.gone
-                  ? color.ink[200]
-                  : HELD_FILL[meaning?.firmness ?? 2],
-              },
-            ]}
-          >
-            <Text
-              step="caption"
-              weight="medium"
-              numberOfLines={1}
-              // the deepest red needs light text on it; the two paler ones do not
-              tone={meaning && !meaning.gone && meaning.firmness === 3 ? "onBrand" : "body"}
-            >
-              {who}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   key: {
     flexDirection: "row",
@@ -528,18 +501,20 @@ const styles = StyleSheet.create({
   keyItem: { flexDirection: "row", alignItems: "center", gap: space.xs },
   swatch: { width: 14, height: 14, borderRadius: 3, borderWidth: 1, borderColor: color.line },
   nav: { padding: space.lg, gap: space.sm, backgroundColor: color.screen },
-  months: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  monthStep: {
-    minHeight: TOUCH_TARGET - space.md,
-    justifyContent: "center",
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
+  sheet: { paddingHorizontal: space.lg, paddingBottom: space.xl, gap: space.xs },
+  month: { padding: space.lg, gap: space.sm },
+  totals: {
+    marginHorizontal: space.lg,
+    marginBottom: space.xl,
+    padding: space.lg,
+    gap: space.lg,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: color.line,
-    backgroundColor: color.surface,
   },
-  sheet: { flexDirection: "row", paddingBottom: space.xl },
-  month: { padding: space.lg, gap: space.sm },
+  totalsRow: { flexDirection: "row", gap: space.lg },
+  figure: { flex: 1, gap: 2 },
   week: { flexDirection: "row", gap: space.xs },
   weekday: { flex: 1, textAlign: "center" },
   square: { flex: 1, aspectRatio: 0.82 },
@@ -553,44 +528,5 @@ const styles = StyleSheet.create({
   todayRing: { borderColor: color.brand[600], borderWidth: 2 },
   /** Dimmed, not dropped. */
   past: { opacity: 0.45 },
-  row: { flexDirection: "row", alignItems: "stretch" },
-  name: {
-    width: NAME_WIDTH,
-    height: ROW_HEIGHT,
-    justifyContent: "center",
-    paddingHorizontal: space.sm,
-    borderRightWidth: 1,
-    borderRightColor: color.line,
-    borderBottomWidth: 1,
-    borderBottomColor: color.line,
-    backgroundColor: color.surface,
-  },
-  nameOff: { backgroundColor: color.ink[100] },
-  head: { height: ROW_HEIGHT },
-  dayHead: {
-    width: DAY_WIDTH,
-    height: ROW_HEIGHT,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: color.line,
-    borderBottomWidth: 1,
-    borderBottomColor: color.line,
-    backgroundColor: color.surface,
-  },
-  weekend: { backgroundColor: color.ink[100] },
-  cell: {
-    height: ROW_HEIGHT,
-    justifyContent: "center",
-    paddingHorizontal: space.xs,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: color.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: color.line,
-    borderRadius: radius.sm,
-  },
-  /** Green is free, and nothing else on this grid is green. */
-  free: { backgroundColor: color.ok.bg },
-  offService: { backgroundColor: color.ink[100] },
   pressed: { backgroundColor: color.ink[100] },
 });

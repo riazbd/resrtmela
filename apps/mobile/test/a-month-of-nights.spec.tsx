@@ -1,10 +1,16 @@
 /**
  * The calendar, on a screen four inches wide.
  *
- * The console draws a room × day grid thirty columns across. A phone cannot,
- * so the axes swap: one row per room, the days scrolling sideways under a
- * pinned room name, and a stay drawn as one bar across the nights it holds
- * rather than as a square per night.
+ * The console draws a room × day grid thirty columns across. A phone
+ * cannot. The first attempt scrolled thirty 44-pixel columns sideways
+ * under a pinned column of names, and the owner's verdict on it was
+ * that it was full of `…` — which it was: a one-night stay had 36
+ * usable pixels, no name fits in that, and the grid drew an ellipsis
+ * and nothing else.
+ *
+ * It is a week now — seven nights across the full width, the room's
+ * name on its own line above its strip, nothing scrolling sideways.
+ * The rules that follow are what that has to keep true.
  *
  * The rule the bars obey is `@rh/shared`'s, not this screen's: green is free
  * and nothing else is green, red is held and the shade says how firmly, grey
@@ -138,13 +144,15 @@ describe("the bars", () => {
   });
 
   /**
-   * The rule, at the one point it is easiest to get wrong. A stay leaving on
-   * the 21st does not hold the 21st.
+   * The rule, at the one point it is easiest to get wrong. A stay
+   * leaving on the 21st does not hold the 21st — and the week view can
+   * say so positively, which the old grid could not: the 21st is
+   * offered as a night somebody may book.
    */
   it("leaves checkout morning free to sell", async () => {
     const r = await render(<Harness><CalendarScreen /></Harness>);
     await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
-    expect(r.queryByLabelText(/21 Sep for/)).toBeNull();
+    expect(r.getByLabelText(/1 Camellia free on 21 Sep/)).toBeTruthy();
   });
 
   it("opens the booking behind a bar", async () => {
@@ -183,16 +191,137 @@ describe("how full it is", () => {
   });
 });
 
+/**
+ * What replaced thirty columns of ellipsis.
+ *
+ * A bar has to be wide enough to hold a name before it is given one.
+ * The old grid gave every bar a name regardless, which is why the
+ * screen's entire content was dots.
+ */
+describe("a name only where a name fits", () => {
+  it("writes the guest across a stay that has room for them", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    // two nights wide: enough
+    await waitFor(() => expect(r.getByText("Rafiq Hasan")).toBeTruthy());
+  });
+
+  it("draws a one-night stay as colour alone, and still says who on a tap", async () => {
+    mockCalendar.mockResolvedValue({
+      bookings: [
+        stay({ checkIn: "2026-09-19T00:00:00.000Z", checkOut: "2026-09-20T00:00:00.000Z" }),
+      ],
+      rooms: [],
+    });
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    await waitFor(() =>
+      expect(
+        r.getByLabelText("Rafiq Hasan, Confirmed, 19 Sep for 1 night, 1 Camellia"),
+      ).toBeTruthy(),
+    );
+    // the name is not painted into 36 pixels — that is what produced `…`
+    expect(r.queryByText("Rafiq Hasan")).toBeNull();
+  });
+});
+
+/**
+ * A free night is where a booking starts. Somebody who has just found
+ * a gap is about to fill it, and sending them to another screen to
+ * retype the room and the date is the tax that stops a tool being used
+ * at a desk.
+ */
+describe("a gap you can act on", () => {
+  it("starts a booking for the room and the night that was pressed", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
+    await fireEvent.press(r.getByLabelText(/1 Camellia free on 21 Sep/));
+    expect(mockPush).toHaveBeenCalledWith("/new-booking?roomId=11&checkIn=2026-09-21");
+  });
+
+  /** A room nobody can sell is not an invitation to sell it. */
+  it("offers nothing on a room that is out of service", async () => {
+    mockRooms.mockResolvedValue([room({ id: 12, name: "2 Lotus", status: "OUT_OF_SERVICE" })]);
+    mockCalendar.mockResolvedValue({ bookings: [], rooms: [] });
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("2 Lotus")).toBeTruthy());
+    expect(r.queryByLabelText(/2 Lotus free on/)).toBeNull();
+  });
+});
+
 describe("moving through the year", () => {
-  it("steps a month at a time", async () => {
+  it("steps a week at a time in the room lens", async () => {
     const r = await render(<Harness><CalendarScreen /></Harness>);
     await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(1));
     const firstFrom = mockCalendar.mock.calls[0]![1] as string;
 
-    await fireEvent.press(r.getByRole("button", { name: "Next month" }));
+    await fireEvent.press(r.getByRole("button", { name: "Next week" }));
     await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
     const nextFrom = mockCalendar.mock.calls[1]![1] as string;
     expect(nextFrom > firstFrom).toBe(true);
+  });
+
+  /**
+   * The arrows step whatever the lens shows — a week in Rooms, a month
+   * in Month — so this asks the Month lens, which is the one whose
+   * unit is a month.
+   */
+  it("steps a month from the bar, in the lens whose unit is a month", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
+
+    await fireEvent.press(r.getByRole("button", { name: "Month" }));
+    await waitFor(() => expect(r.getByRole("button", { name: "Next month" })).toBeTruthy());
+    const before = mockCalendar.mock.calls.length;
+
+    await fireEvent.press(r.getByRole("button", { name: "Next month" }));
+    await waitFor(() => expect(mockCalendar.mock.calls.length).toBeGreaterThan(before));
+    expect(mockCalendar.mock.calls.at(-1)![1]).toBe("2026-10-01");
+  });
+
+  /**
+   * The thing the arrows could not do. Reaching next March was six
+   * presses and last season was not reachable in practice, which is
+   * what the owner asked about.
+   */
+  it("goes to any month in the year in one press", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    // the month bar only exists once the calendar has drawn; waiting on
+    // the call alone presses while the spinner is still up
+    await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
+
+    await fireEvent.press(r.getByLabelText(/September 2026\. Choose another month/));
+    await fireEvent.press(r.getByLabelText("December 2026"));
+
+    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
+    expect(mockCalendar.mock.calls[1]![1]).toBe("2026-12-01");
+  });
+
+  /** And any year, which no number of month presses was going to reach. */
+  it("goes to another year", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    // the month bar only exists once the calendar has drawn; waiting on
+    // the call alone presses while the spinner is still up
+    await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
+
+    await fireEvent.press(r.getByLabelText(/September 2026\. Choose another month/));
+    await fireEvent.press(r.getByRole("button", { name: "Previous year" }));
+    await fireEvent.press(r.getByLabelText("March 2025"));
+
+    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
+    expect(mockCalendar.mock.calls[1]![1]).toBe("2025-03-01");
+  });
+
+  it("comes back to this month in one press", async () => {
+    const r = await render(<Harness><CalendarScreen /></Harness>);
+    // the month bar only exists once the calendar has drawn; waiting on
+    // the call alone presses while the spinner is still up
+    await waitFor(() => expect(r.getByText("1 Camellia")).toBeTruthy());
+
+    await fireEvent.press(r.getByLabelText(/September 2026\. Choose another month/));
+    await fireEvent.press(r.getByRole("button", { name: "Next year" }));
+    await fireEvent.press(r.getByRole("button", { name: "Go to this month" }));
+
+    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
+    expect(mockCalendar.mock.calls[1]![1]).toBe("2026-09-01");
   });
 });
 

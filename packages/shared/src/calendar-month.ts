@@ -10,6 +10,19 @@
  * a month is not thirty days, February is not twenty-eight every year, and a
  * jump that lands on the 2nd looks like it worked.
  */
+import { MONTHS_LONG, WEEKDAYS_LONG } from "./day-label";
+
+/**
+ * "Sun", "Mon" — the heading above a column of dates.
+ *
+ * Here rather than `WEEKDAYS_LONG[weekdayOf(d)].slice(0, 3)` at each
+ * call site: three characters is a decision about how much room a
+ * column header has, and two screens slicing to different lengths is
+ * how one calendar says "Wed" while the next says "Wednes".
+ */
+export function weekdayShort(iso: string): string {
+  return WEEKDAYS_LONG[weekdayOf(iso)]?.slice(0, 3) ?? "";
+}
 
 /** Which day of the week a date falls on, read at noon so no zone can shift it. */
 export const weekdayOf = (iso: string): number => new Date(`${iso}T12:00:00Z`).getUTCDay();
@@ -79,4 +92,44 @@ export function monthLength(value: string): number {
   const month = Number(m[2]);
   if (month < 1 || month > 12) return 30;
   return new Date(Date.UTC(Number(m[1]), month, 0)).getUTCDate();
+}
+
+
+/**
+ * The month `by` months away — December after November, and the year
+ * with it (2026-09-21).
+ *
+ * Both calendars stepped a month by adding or subtracting a *day* and
+ * asking `monthOf` what month that landed in. That works, and it is
+ * the reason neither could do anything else: stepping a year meant
+ * twelve of them, so in practice the calendar could see the month it
+ * opened on and the two beside it. This is the arithmetic a month
+ * picker needs.
+ *
+ * Done on a month index rather than on a `Date`, because
+ * `setMonth(getMonth() + n)` overflows — 31 January plus a month is
+ * 3 March — and this file already carries one comment about that.
+ */
+export function stepMonth(month: string, by: number): string {
+  const m = /^(\d{4})-(\d{2})/.exec(month);
+  if (!m) return month;
+  const mm = Number(m[2]);
+  if (mm < 1 || mm > 12) return month;
+  const zero = Number(m[1]) * 12 + (mm - 1) + by;
+  if (zero < 0) return month;
+  return `${String(Math.floor(zero / 12)).padStart(4, "0")}-${String((zero % 12) + 1).padStart(2, "0")}`;
+}
+
+/**
+ * "2026-09" as a person says it.
+ *
+ * Written out by hand in five places — two payroll screens, two
+ * calendars and a picker — which is five chances for one of them to
+ * say "Sep" while the others say "September".
+ */
+export function monthTitle(month: string): string {
+  const m = /^(\d{4})-(\d{2})/.exec(month);
+  if (!m) return month;
+  const name = MONTHS_LONG[Number(m[2]) - 1];
+  return name ? `${name} ${m[1]}` : month;
 }

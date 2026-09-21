@@ -23,7 +23,6 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-n
 import { Stack, router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import {
-  MONTHS_LONG,
   addDaysIso,
   freeRoomsByNight,
   isWeekend,
@@ -33,8 +32,10 @@ import {
   monthStart,
   todayIn,
   type AgencyCalendar,
+  type AgencyResortMonth,
   PLATFORM_TIMEZONE,
 } from "@rh/shared";
+import { MonthBar } from "../../../src/design/month-bar";
 import { client, useAuth } from "../../../src/api/session";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
 import { Card } from "../../../src/design/surface";
@@ -89,8 +90,6 @@ export default function AgentCalendarScreen() {
   }
 
   const weeks = monthGrid(month);
-  const [year, mm] = month.split("-");
-  const title = `${MONTHS_LONG[Number(mm) - 1]} ${year}`;
   const resorts = feed.data.resorts;
 
   return (
@@ -103,31 +102,14 @@ export default function AgentCalendarScreen() {
           <RefreshControl refreshing={feed.isRefetching} onRefresh={() => void feed.refetch()} />
         }
       >
-        <View style={styles.months}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Previous month"
-            style={styles.arrow}
-            onPress={() => setMonth(monthOf(addDaysIso(from, -1)))}
-          >
-            <Text step="body" tone="ok">
-              ‹
-            </Text>
-          </Pressable>
-          <Text step="strong" weight="medium" tone="title">
-            {title}
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Next month"
-            style={styles.arrow}
-            onPress={() => setMonth(monthOf(addDaysIso(to, 1)))}
-          >
-            <Text step="body" tone="ok">
-              ›
-            </Text>
-          </Pressable>
-        </View>
+        {/*
+          Two arrows and a label was the whole of it, so an agent quoting
+          for next March pressed `›` six times and one quoting for last
+          season could not get there at all. The month's own name opens
+          a year and twelve months now — the same control the resort's
+          calendar uses, because it is the same question.
+        */}
+        <MonthBar month={month} today={todayIn(PLATFORM_TIMEZONE)} onChange={setMonth} />
 
         {resorts.length === 0 ? (
           <View style={styles.middle}>
@@ -166,12 +148,84 @@ export default function AgentCalendarScreen() {
 
             <Text step="caption" tone="muted" style={styles.footnote}>
               The number is rooms free across every resort you sell. Tap a
-              night to see which ones.
+              night to open the search for it.
             </Text>
+
+            {/*
+              Which resort the free rooms are in.
+
+              The grid gives one number a night across everything, which
+              answers "is there anything" and not "where". The footnote
+              used to say "tap a night to see which ones" — a whole
+              screen away, for a question the data already on this page
+              can answer. Under the grid, where nine hundred pixels of
+              nothing used to be.
+            */}
+            <WhereTheRoomsAre resorts={resorts} from={from} to={to} />
           </>
         )}
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * A line per resort: how much of it is free across the month.
+ *
+ * Room-nights rather than rooms, because a resort with four rooms open
+ * every night of September has more to sell than one with twelve rooms
+ * open on a Tuesday, and an agent choosing where to place a group
+ * needs the first number.
+ *
+ * Sorted by what is most available, which is the order somebody
+ * looking for space reads in.
+ */
+function WhereTheRoomsAre({
+  resorts,
+  from,
+  to,
+}: {
+  resorts: AgencyResortMonth[];
+  from: string;
+  to: string;
+}) {
+  const nights = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
+
+  const rows = resorts
+    .map((r) => {
+      const sellable = r.rooms.filter((room) => room.status === "ACTIVE").length;
+      // `freeRoomsByNight` is the counting rule; asked of one resort at a
+      // time it gives this resort's share, so the lines add to the grid
+      const free = freeRoomsByNight([r], from, to);
+      const spare = [...free.values()].reduce((n, v) => n + v, 0);
+      return { id: r.resort.id, name: r.resort.name, sellable, spare, possible: sellable * nights };
+    })
+    .filter((r) => r.sellable > 0)
+    .sort((a, b) => b.spare - a.spare);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <Card title="Where the space is">
+      {rows.map((r) => (
+        <View
+          key={r.id}
+          style={styles.whereRow}
+          accessible
+          accessibilityLabel={`${r.name}: ${r.spare} room-nights free of ${r.possible} this month`}
+        >
+          <Text step="body" tone="title" style={styles.whereName} numberOfLines={1}>
+            {r.name}
+          </Text>
+          <Text step="body" weight="medium" tone={r.spare > 0 ? "ok" : "muted"} tabular>
+            {r.spare}
+          </Text>
+          <Text step="caption" tone="muted" tabular>
+            / {r.possible}
+          </Text>
+        </View>
+      ))}
+    </Card>
   );
 }
 
@@ -247,5 +301,12 @@ const styles = StyleSheet.create({
   },
   weekendCell: { backgroundColor: color.ink[50] },
   middle: { paddingVertical: space.xl },
+  whereRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    minHeight: TOUCH_TARGET - space.md,
+  },
+  whereName: { flex: 1 },
   footnote: { textAlign: "center" },
 });

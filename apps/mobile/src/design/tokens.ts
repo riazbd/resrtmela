@@ -91,6 +91,16 @@ export const color = {
 
   /** A control nobody may use. Never `muted`: unavailable is not quiet. */
   disabled: ink[300],
+
+  /**
+   * What a sheet is laid over.
+   *
+   * `ink[900]` at 45%, written out because a token cannot carry an
+   * alpha any other way. Here rather than in the one component that
+   * needed it first: the next modal will want the same dimming, and
+   * two scrims at different opacities read as a bug in the animation.
+   */
+  scrim: "rgba(15, 23, 42, 0.45)",
 } as const;
 
 /**
