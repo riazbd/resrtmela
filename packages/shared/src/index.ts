@@ -12,6 +12,7 @@ export * from "./import-samples";
  * permission rule with two implementations will eventually have two answers.
  */
 export * from "./api-error";
+export * from "./app-version";
 export * from "./placeholders";
 export * from "./payment-method";
 export * from "./imported-receipt";

@@ -21,6 +21,7 @@ import { Text } from "../../src/design/text";
 import { TOUCH_TARGET, color, radius, space } from "../../src/design/tokens";
 import { iconFor } from "../../src/nav/icons";
 import { moreFor } from "../../src/nav/tabs";
+import { UpdateOnOffer } from "../../src/screens/update-on-offer";
 
 function Row({ href, label }: { href: string; label: string }) {
   return (
@@ -133,6 +134,14 @@ export default function More() {
           router.replace("/login");
         }}
       />
+
+      {/*
+        Which build this is, and whether there is a newer one. Here
+        rather than over the day sheet: a release announced to somebody
+        with a queue at the desk is a release they dismiss. It is also
+        the answer to the first question of every support call.
+      */}
+      <UpdateOnOffer />
     </ScrollView>
   );
 }

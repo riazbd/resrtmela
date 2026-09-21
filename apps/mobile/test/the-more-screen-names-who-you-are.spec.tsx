@@ -49,6 +49,13 @@ jest.mock("../src/api/session", () => ({
     features: [],
     logout: jest.fn(),
   }),
+  /*
+   * The footer asks the platform which build is current. Answering
+   * "never" rather than leaving it undefined: this screen's subject is
+   * who you are, and an update line appearing in the middle of it would
+   * make these assertions about something else.
+   */
+  client: { appRelease: () => new Promise(() => {}) },
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */

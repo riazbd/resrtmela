@@ -68,4 +68,34 @@ export const POLICY_FIELDS: PolicyField[] = [
     hint: "same, for the ones who would rather call.",
     placeholder: "e.g. 01XXXXXXXXX, or +8801XXXXXXXXX",
   },
+  /*
+   * The app is not on Play or the App Store, so nothing updates anybody
+   * and no store enforces a floor. These four are the floor, and they
+   * are here rather than in the source because raising it is a decision
+   * made on the Tuesday a bug is found.
+   */
+  {
+    key: "app.latestVersion",
+    label: "Latest app version",
+    hint: "what the download page offers, and what an older phone is told to update to. Must match the version in the build.",
+    placeholder: "e.g. 0.7.0",
+  },
+  {
+    key: "app.minimumVersion",
+    label: "Oldest app allowed",
+    hint: "anything below this is refused on every request and shown a download screen it cannot get past. Raise it only once the new build is actually downloadable — every phone below it stops working the moment you save.",
+    placeholder: "e.g. 0.6.0",
+  },
+  {
+    key: "app.downloadUrl",
+    label: "Where the APK is",
+    hint: "left empty, the console's own /app page. Set it only to point somewhere else — the blocked phones open whatever is here.",
+    placeholder: "leave empty for /app",
+  },
+  {
+    key: "app.updateNotes",
+    label: "What is new",
+    hint: "one or two lines, shown on the download page and on the update screen. Empty is fine; a stale one is not.",
+    placeholder: "e.g. Faster day sheet, and the invoice now prints in Bangla.",
+  },
 ];

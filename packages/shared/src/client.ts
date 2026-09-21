@@ -175,6 +175,7 @@ import type {
   TaxRuleRow,
   TodayFeed,
 } from "./api-types";
+import type { AppRelease } from "./app-version";
 import type { DiscountKind } from "./discount";
 import type { HousekeepingState } from "./housekeeping";
 import type { PlanAudience, PlanOnSale } from "./plans-on-sale";
@@ -1227,6 +1228,13 @@ export function createApiClient(http: Fetcher) {
       calendar: (q: { from: string; to: string; resortId?: number }) =>
         http<AgencyCalendar>(`/agent/calendar${qs(q)}`),
     },
+
+    /**
+     * Which build the platform is offering, and which it will still
+     * serve. Open: the caller may be a phone that has just been refused
+     * with a 426 and needs to know where the new one lives.
+     */
+    appRelease: () => http<AppRelease>("/app/release"),
 
     // ── running the platform ──
     platform: {

@@ -3,7 +3,7 @@
     "name": "Resort Mela",
     "slug": "resort-mela",
     "scheme": "resortmela",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     ],
     "android": {
       "package": "com.resortmela.app",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#15803d"
@@ -24,7 +24,10 @@
         "android.permission.INTERNET",
         "android.permission.ACCESS_NETWORK_STATE"
       ],
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "ios": {
       "bundleIdentifier": "com.resortmela.app",
@@ -62,6 +65,9 @@
       "bundler": "metro",
       "output": "single",
       "favicon": "./assets/favicon.png"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e3df03f7-f176-4c28-a47a-248a2bc70d97"
     }
   }
 }

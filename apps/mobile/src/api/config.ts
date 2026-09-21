@@ -30,6 +30,21 @@ const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
 export const API_URL = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL || extra.apiUrl);
 
 /**
+ * What this build calls itself, sent on every request.
+ *
+ * From `app.json`'s `version`, never a literal: the whole point is
+ * that the server can tell an old build apart from a new one, and a
+ * number typed in a second place is a number that will one day disagree
+ * with the one in the manifest.
+ *
+ * Empty when the manifest has no version — a development client, or a
+ * bundle loaded outside Expo. `appStanding` treats an unknown version
+ * as "no verdict" rather than "too old", so a developer is never
+ * locked out by their own floor.
+ */
+export const APP_VERSION = Constants.expoConfig?.version ?? "";
+
+/**
  * The console's address.
  *
  * It carried the WebView until phase 4 deleted it — releases 0.1.0

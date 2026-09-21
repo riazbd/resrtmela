@@ -6,7 +6,7 @@
  * for the phone, so it is where those concerns are: which address, whose
  * session, and what a refusal means.
  */
-import { ApiError } from "@rh/shared";
+import { APP_PLATFORM_HEADER, APP_VERSION_HEADER, ApiError } from "@rh/shared";
 import { memoryStorage } from "@rh/app-core";
 import { makeApi } from "../src/api/transport";
 
@@ -111,5 +111,125 @@ describe("a body", () => {
     await api("/bookings");
     expect(calls[0]!.init.body).toBe('{"adults":2}');
     expect(calls[1]!.init.body).toBeUndefined();
+  });
+});
+
+
+/**
+ * What the build calls itself, and what happens when the server says no
+ * (2026-09-21).
+ *
+ * Resort Mela is not on Play or the App Store, so nothing updates
+ * anybody and no store enforces a floor. The server's floor is applied
+ * to a header this transport sets, and the refusal it answers with is
+ * the one thing standing between an old build and quietly doing the
+ * wrong thing with somebody's money.
+ */
+describe("what the build says it is", () => {
+  it("names its version and platform on every call", async () => {
+    const { fetcher, calls } = answering(200, {});
+    const api = makeApi({
+      baseUrl: BASE,
+      storage: memoryStorage(),
+      fetch: fetcher,
+      appVersion: "0.7.0",
+      appPlatform: "android",
+    });
+    await api("/auth/me");
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers[APP_VERSION_HEADER]).toBe("0.7.0");
+    expect(headers[APP_PLATFORM_HEADER]).toBe("android");
+  });
+
+  /**
+   * On every request, not at sign-in. A phone signs in once and runs
+   * for weeks; a floor raised on Tuesday can only reach the person who
+   * signed in on Monday through the next call they make.
+   */
+  it("says it again on the second call, not only the first", async () => {
+    const { fetcher, calls } = answering(200, {});
+    const api = makeApi({
+      baseUrl: BASE,
+      storage: memoryStorage(),
+      fetch: fetcher,
+      appVersion: "0.7.0",
+    });
+    await api("/auth/me");
+    await api("/bookings");
+    for (const c of calls) {
+      expect((c.init.headers as Record<string, string>)[APP_VERSION_HEADER]).toBe("0.7.0");
+    }
+  });
+
+  /**
+   * The console shares this client through its own transport and sends
+   * no version; a development bundle has none either. Sending the
+   * header empty would make them look like a build claiming to be
+   * nothing, and `appStanding` would have to guess.
+   */
+  it("sends no version header when the build has no version", async () => {
+    const { fetcher, calls } = answering(200, {});
+    await makeApi({ baseUrl: BASE, storage: memoryStorage(), fetch: fetcher })("/auth/me");
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(APP_VERSION_HEADER in headers).toBe(false);
+    expect(APP_PLATFORM_HEADER in headers).toBe(false);
+  });
+});
+
+describe("when the server refuses the build", () => {
+  it("tells the shell to show the update screen", async () => {
+    const onUpdateRequired = jest.fn();
+    const { fetcher } = answering(426, { message: "too old" });
+    const api = makeApi({
+      baseUrl: BASE,
+      storage: memoryStorage(),
+      fetch: fetcher,
+      appVersion: "0.1.0",
+      onUpdateRequired,
+    });
+    await expect(api("/bookings")).rejects.toBeInstanceOf(ApiError);
+    expect(onUpdateRequired).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The token stays exactly where it is. This is the server refusing
+   * the *build*, not the person — clearing it would cost them their
+   * password after installing the update, a second problem we caused
+   * on top of the first.
+   */
+  it("leaves the session alone, and does not sign anybody out", async () => {
+    const storage = memoryStorage();
+    storage.setItem("rh.token", "a-token");
+    const onSignedOut = jest.fn();
+    const { fetcher } = answering(426, { message: "too old" });
+    const api = makeApi({
+      baseUrl: BASE,
+      storage,
+      fetch: fetcher,
+      appVersion: "0.1.0",
+      onSignedOut,
+      onUpdateRequired: jest.fn(),
+    });
+    await expect(api("/bookings")).rejects.toBeInstanceOf(ApiError);
+    expect(storage.getItem("rh.token")).toBe("a-token");
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  /** A 401 is still a 401: the two refusals must not be confused. */
+  it("does not mistake an ordinary refusal for an old build", async () => {
+    const storage = memoryStorage();
+    storage.setItem("rh.token", "a-token");
+    const onUpdateRequired = jest.fn();
+    const { fetcher } = answering(401, { message: "nope" });
+    const api = makeApi({
+      baseUrl: BASE,
+      storage,
+      fetch: fetcher,
+      appVersion: "0.7.0",
+      onUpdateRequired,
+      onSignedOut: jest.fn(),
+    });
+    await expect(api("/bookings")).rejects.toBeInstanceOf(ApiError);
+    expect(onUpdateRequired).not.toHaveBeenCalled();
   });
 });

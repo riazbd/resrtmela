@@ -78,6 +78,20 @@ const PUBLIC: RegExp[] = [
   // the website's renderer asking for either kind of page (200 with page: null when not live)
   /^GET \/site\/render\/[^/]+$/,
   /^GET \/site\/agency\/render\/[^/]+$/,
+  /*
+   * Which app build is current, and where the APK is (2026-09-21).
+   *
+   * Open because of who asks: a phone the version floor has just
+   * refused with a 426, which needs to know where the new build lives.
+   * Asking it to sign in first would be asking the locked-out to
+   * produce a key — and `AppVersionGuard` keeps this path outside the
+   * floor for the same reason, because a gate that also blocks the
+   * route explaining the gate is a gate nobody gets past.
+   *
+   * It carries four facts the download page already prints in public:
+   * two version numbers, a URL and a release note.
+   */
+  /^GET \/app\/release$/,
 ];
 
 /** Path parameters get a value nothing can match, so a bad guard cannot hide behind a 404. */

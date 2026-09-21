@@ -22,11 +22,12 @@
  *
  * So the shared bottom of the graph lives here, and both import downwards.
  */
+import { Platform } from "react-native";
 import { router } from "expo-router";
 import { CacheStore, guardedStorage } from "@rh/app-core";
 import { createApiClient } from "@rh/shared";
 import { deviceStorage } from "../device/storage";
-import { API_URL } from "./config";
+import { API_URL, APP_VERSION } from "./config";
 import { makeApi } from "./transport";
 
 /**
@@ -57,7 +58,23 @@ export const goTo = (path: string) => router.replace(path as never);
 
 const onSignedOut = () => router.replace("/login");
 
-export const api = makeApi({ baseUrl: API_URL, storage: session, onSignedOut });
+/**
+ * The server has refused this build. There is no way past it and no
+ * point offering one, so the screen replaces whatever was showing.
+ *
+ * `replace`, never `push`: a back gesture out of "you must update"
+ * would land on a screen whose every call is about to 426 again.
+ */
+const onUpdateRequired = () => router.replace("/update-required");
+
+export const api = makeApi({
+  baseUrl: API_URL,
+  storage: session,
+  onSignedOut,
+  appVersion: APP_VERSION,
+  appPlatform: Platform.OS,
+  onUpdateRequired,
+});
 export const client = createApiClient(api);
 
 /** Two answers in one request: what this person may do, and what the plan includes. */

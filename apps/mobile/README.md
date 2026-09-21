@@ -116,11 +116,69 @@ The other half of that trade is the screen: the emulator falls back to
 SwiftShader when it cannot reach the host GPU, so every pixel is rasterised on
 the CPU. 720x1520 is about a third of the work of 1080x2400.
 
+## Shipping an update
+
+There is no Play Store and no App Store. Staff download the APK from
+[resortmela.com/app](https://resortmela.com/app), so nothing updates
+anybody automatically and nothing stops a build from September calling
+this API for years. Two mechanisms cover that, and the first covers
+most of it.
+
+### Most changes need no APK at all
+
+Anything living in JavaScript — a screen, a rule, a fix, a new route —
+ships over the air:
+
+```
+npx eas-cli update --branch production -m "what changed"
+```
+
+Phones fetch it in the background and run it on the next launch. Nobody
+presses anything and nothing is reinstalled. Deliberately *not* applied
+mid-session: reloading the app under somebody halfway through a
+check-in is worse than waiting for them to close it.
+
+`runtimeVersion` follows `version` in `app.json`, so an update only
+reaches builds of the same version. That is the point — a bundle built
+against 0.7.0's native modules must never land on a 0.6.0 phone.
+
+### A new APK, when native code changed
+
+A new native module, an Expo SDK bump, a permission, the icon:
+
+1. Bump `version` in `app.json`, then
+   `npx eas-cli build -p android --profile production`
+2. Put the APK where the download page points, and set **Platform →
+   Billing policy → Latest app version** to the new number.
+3. *Only once it is actually downloadable*, raise **Oldest app
+   allowed**.
+
+Step 3 is the force. Every phone below that number is refused on every
+request with a 426 and shown a screen it cannot get past, carrying a
+Download button. The floor is `apps/api/src/common/app-release.ts`; the
+rule both sides run is `packages/shared/src/app-version.ts`.
+
+**Raise it last, and only to a version people can actually reach.**
+Raising it to a build that is not on the download page yet locks the
+whole business out with no way back in — a phone cannot update to
+something that is not there.
+
+### Why `production` builds an APK, not an app bundle
+
+It used to build `app-bundle` with `distribution: "store"` — the right
+answer for a Play release and useless here, because an `.aab` cannot be
+sideloaded. Every APK this project has actually shipped was built with
+`--profile preview`. So the profile named *production* produced
+something nobody could install, and the one named *preview* was
+production. Once channels existed that would have become worse: an
+update published to the `production` channel would never have reached
+the shipped app, because the shipped app was on `preview`.
+
 ## Building
 
 ```
 pnpm -F @rh/mobile build:apk      # local, Linux/macOS
-npx eas-cli build -p android --profile preview   # cloud, and the only path on Windows
+npx eas-cli build -p android --profile production   # cloud, and the only path on Windows
 ```
 
 ### Why the cloud build is not optional on Windows

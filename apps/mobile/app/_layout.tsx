@@ -63,6 +63,15 @@ export default function RootLayout() {
           */}
           <Stack.Screen name="plans" options={{ headerShown: true, title: "What it costs" }} />
           <Stack.Screen name="signup" options={{ headerShown: false }} />
+          {/*
+            No header and no back gesture: the server has refused this
+            build, so every screen behind this one would 426 on its
+            first call.
+          */}
+          <Stack.Screen
+            name="update-required"
+            options={{ headerShown: false, gestureEnabled: false }}
+          />
         </Stack>
       </SessionProvider>
     </SafeAreaProvider>

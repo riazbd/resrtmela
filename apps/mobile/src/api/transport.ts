@@ -6,7 +6,13 @@
  * address, whose session, and what a refusal means — and nothing else. Every
  * path in the app comes from the typed client, never from here.
  */
-import { ApiError, normalizeApiUrl } from "@rh/shared";
+import {
+  APP_PLATFORM_HEADER,
+  APP_VERSION_HEADER,
+  ApiError,
+  normalizeApiUrl,
+  UPGRADE_REQUIRED,
+} from "@rh/shared";
 import type { Storage } from "@rh/app-core";
 
 /** Where the session token is kept. The same key `@rh/app-core` uses. */
@@ -23,6 +29,19 @@ export interface TransportPorts {
    * sends the person to the sign-in screen; a test counts it.
    */
   onSignedOut?: () => void;
+  /** What this build calls itself. The server's floor is applied to it. */
+  appVersion?: string;
+  /** "android" | "ios", for the log line the server writes when it refuses. */
+  appPlatform?: string;
+  /**
+   * Called when the server says this build is too old to serve.
+   *
+   * The shell shows a screen with a Download button and no way past it.
+   * Separate from `onSignedOut` on purpose: signing in again is the one
+   * thing that will not help, and sending somebody to the login screen
+   * to solve this would be a loop.
+   */
+  onUpdateRequired?: () => void;
 }
 
 export type Api = <T>(
@@ -35,6 +54,9 @@ export function makeApi({
   storage,
   fetch: doFetch = fetch,
   onSignedOut,
+  appVersion,
+  appPlatform,
+  onUpdateRequired,
 }: TransportPorts): Api {
   const base = normalizeApiUrl(baseUrl);
 
@@ -48,6 +70,15 @@ export function makeApi({
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        /*
+         * What is calling, on every request rather than at sign-in.
+         *
+         * A phone signs in once and then runs for weeks; a floor raised
+         * on Tuesday has to reach the person who signed in on Monday,
+         * and the only moment it can is the next call they make.
+         */
+        ...(appVersion ? { [APP_VERSION_HEADER]: appVersion } : {}),
+        ...(appPlatform ? { [APP_PLATFORM_HEADER]: appPlatform } : {}),
       },
       // `undefined`, not `null`: a GET with a body is refused by some proxies
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
@@ -76,6 +107,15 @@ export function makeApi({
         storage.removeItem(TOKEN_KEY);
         onSignedOut?.();
       }
+      /*
+       * 426 is the server refusing the *build*, not the person.
+       *
+       * The token is left exactly where it is: this is not a sign-out,
+       * and clearing it would mean the person has to find their password
+       * again after installing the update — a second problem, caused by
+       * us, on top of the first.
+       */
+      if (res.status === UPGRADE_REQUIRED) onUpdateRequired?.();
       throw new ApiError(res.status, String(message), payload);
     }
 

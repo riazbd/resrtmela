@@ -65,6 +65,26 @@ export const SETTING_DEFAULTS: Record<string, string> = {
    * *and* the service, which meant the platform could not change what it sells
    * without a deploy, and the three copies could disagree in the meantime.
    */
+  /**
+   * Which app builds are on offer, and which are too old to serve.
+   *
+   * Resort Mela is not on Play or the App Store — staff download the
+   * APK from the website — so nothing updates anybody and no store
+   * enforces a floor. These four are that floor, and they are settings
+   * rather than constants because raising it is a decision the owner
+   * makes on the Tuesday a bug is found, not one that waits for a
+   * deploy.
+   *
+   * `minimumVersion` starts at 0.0.0 on purpose: a floor that turns
+   * itself on the moment this ships would lock out every phone already
+   * in somebody's hand. The owner raises it when there is a build to
+   * raise it to.
+   */
+  "app.latestVersion": "0.6.0",
+  "app.minimumVersion": "0.0.0",
+  /** Empty means the console's own /app page, wherever this deployment is. */
+  "app.downloadUrl": "",
+  "app.updateNotes": "",
   "email.creditPacks": JSON.stringify([
     { credits: 500, price: 500 },
     { credits: 2000, price: 1800 },
