@@ -15,11 +15,24 @@
  *
  *   node scripts/publish-release.mjs --notes "what changed"
  *
- * **It never raises the floor.** `app.minimumVersion` is what locks
- * every older phone out, and it is the owner's to raise from the panel
- * once people have actually had a chance to update — not something a
- * publish script does on their behalf, at the moment the build appears,
- * before a single person has downloaded it.
+ * **It raises the floor to the version it just published**, so every
+ * older build is refused from the moment the release lands.
+ *
+ * This reverses what the script did until 2026-09-22, and the old
+ * reasoning is worth keeping because it is still true: raising the
+ * floor the instant a build appears locks out phones that have not had
+ * a chance to download it, and somebody mid-check-in has to pull a
+ * hundred-odd megabytes before they can take another booking. The owner
+ * was shown that and chose the lockout as a standing rule — *"always
+ * lockout when new app release"* — so it is no longer a decision to
+ * re-make each time, and no longer one to leave half-done in a panel
+ * nobody remembers to open.
+ *
+ * The ordering is the safety property, and it is unchanged: the APK is
+ * on the server and proven to be *served* — a HEAD that matches the
+ * bytes written — before any setting is touched. The floor goes up in
+ * the same write that advertises the download, so there is never a
+ * moment where phones are locked out and there is nothing to fetch.
  *
  * `--dry-run` prints what it would do and writes nothing.
  */
@@ -93,10 +106,10 @@ async function main() {
     say("\n-- dry run, nothing written --");
     say(`would fetch  ${build.artifacts.buildUrl}`);
     say(`          to ${HOST}:${SERVED_FROM}/${name}`);
-    say(`would set    app.apkUrl        = ${apkUrl}`);
-    say(`             app.latestVersion = ${version}`);
-    if (notes) say(`             app.updateNotes   = ${notes}`);
-    say("would NOT touch app.minimumVersion — the floor is the owner's to raise");
+    say(`would set    app.apkUrl         = ${apkUrl}`);
+    say(`             app.latestVersion  = ${version}`);
+    say(`             app.minimumVersion = ${version}  — everything older is refused`);
+    if (notes) say(`             app.updateNotes    = ${notes}`);
     return;
   }
 
@@ -137,7 +150,18 @@ async function main() {
   if (!login.ok) throw new Error(`login ${login.status}`);
   const { accessToken } = await login.json();
 
-  const patch = { "app.apkUrl": apkUrl, "app.latestVersion": version };
+  /*
+   * One write. The floor and the download it points at have to move
+   * together — advertising the new APK first would leave a window where
+   * a phone is told to update and refused the old build in two separate
+   * requests, and raising the floor first would refuse it before the
+   * page offered anything to install.
+   */
+  const patch = {
+    "app.apkUrl": apkUrl,
+    "app.latestVersion": version,
+    "app.minimumVersion": version,
+  };
   if (notes) patch["app.updateNotes"] = notes;
   const saved = await fetch(`${API}/platform/settings`, {
     method: "PATCH",
@@ -156,8 +180,12 @@ async function main() {
       ? "  floor     off — nobody is locked out"
       : `  floor     ${now.minimum} — phones below this are refused`,
   );
-  say("\nThe floor is unchanged. Raise it in Platform → Billing policy once");
-  say("people have had a chance to update, and only to a version on the page.");
+  if (now.minimum !== version) {
+    say(`\nWARNING: the floor reads ${now.minimum}, not ${version}. Older phones are`);
+    say("still being let in. Check Platform → Billing policy.");
+  } else {
+    say("\nEvery build older than this one is now refused.");
+  }
 }
 
 main().catch((e) => {
