@@ -19,7 +19,7 @@
 
 import { useState } from "react";
 import { newPasswordError } from "@rh/shared";
-import { api, client } from "@/lib/api";
+import { client } from "@/lib/api";
 import { Button, Card, Field, Input, useToast } from "@/components/ui";
 
 /** Your own, from inside the console. */
@@ -86,18 +86,18 @@ export function ChangeMyPassword() {
 /**
  * Somebody else's, from a team screen.
  *
- * `endpoint` is the caller's, because the two panels post to different routes
+ * `save` is the caller's, because the two panels post to different routes
  * behind different permissions — the resort's staff and an agency's own — and
  * a component that worked out which was which from a prop would be a third
  * place for that rule to live.
  */
 export function SetSomeonesPassword({
   name,
-  endpoint,
+  save: setIt,
   onDone,
 }: {
   name: string;
-  endpoint: string;
+  save: (password: string) => Promise<unknown>;
   onDone?: () => void;
 }) {
   const { push } = useToast();
@@ -122,7 +122,7 @@ export function SetSomeonesPassword({
     }
     setBusy(true);
     try {
-      await api(endpoint, { method: "POST", body: { password: next } });
+      await setIt(next);
       push(`${name} can sign in with the new password`);
       close();
       onDone?.();

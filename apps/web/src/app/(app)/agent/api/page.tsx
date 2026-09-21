@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Plus, Trash2 } from "lucide-react";
-import { api, client, API_URL } from "@/lib/api";
+import { client, API_URL } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
@@ -54,10 +54,7 @@ export default function AgencyApiPage() {
   async function create() {
     setBusy("create");
     try {
-      const made = await api<{ secret: string }>("/agent/api-keys", {
-        method: "POST",
-        body: { name, scopes: may === "write" ? ["read", "write"] : ["read"] },
-      });
+      const made = await client.agent.apiKeys.create(name, may === "write" ? ["read", "write"] : ["read"]);
       setMinted({ name, secret: made.secret });
       setName("");
       push("Key created — copy it now");

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, client, money, dmy, currentMoneyFormat, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
+import { client, money, dmy, currentMoneyFormat, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
 import { extraPersonNote, housekeepingLabel, nextRoomStatus, roomStatusLabel } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
@@ -55,10 +55,7 @@ export default function RoomsPage() {
 
   async function toggleRoom(room: Room) {
     try {
-      await api(`/rooms/${room.id}`, {
-        method: "PATCH",
-        body: { status: nextRoomStatus(room.status).to },
-      });
+      await client.rooms.update(room.id, { status: nextRoomStatus(room.status).to });
       push(`${room.name} → ${roomStatusLabel(nextRoomStatus(room.status).to)}`);
       void load();
     } catch (ex) {
@@ -83,9 +80,7 @@ export default function RoomsPage() {
 This cannot be undone.`;
     if (!window.confirm(ask)) return;
     try {
-      const r = await api<{ removed: "deleted" | "retired"; name: string }>(`/rooms/${room.id}`, {
-        method: "DELETE",
-      });
+      const r = await client.rooms.remove(room.id);
       push(r.removed === "deleted" ? `${r.name} deleted` : `${r.name} retired — its history is kept`);
       void load();
     } catch (ex) {
@@ -230,7 +225,7 @@ function AddRoomModal({ open, onClose, onDone, types }: {
     if (!activeResort || !typeId) return;
     setBusy(true);
     try {
-      await api(`/resorts/${activeResort.id}/rooms`, { method: "POST", body: { name, roomTypeId: typeId, baseRate: rate } });
+      await client.rooms.create(activeResort.id, { name, roomTypeId: typeId, baseRate: rate });
       push("Room added");
       onDone();
       onClose();
@@ -315,16 +310,13 @@ function EditRoomModal({
     }
     setBusy(true);
     try {
-      await api(`/rooms/${room.id}`, {
-        method: "PATCH",
-        body: {
-          name: name.trim(),
-          roomTypeId: typeId === "" ? undefined : Number(typeId),
-          baseRate: rate,
-          extraPersonAllowed: extraMax > 0,
-          extraPersonMax: extraMax,
-          extraPersonRate: extraMax > 0 ? extraRate : 0,
-        },
+      await client.rooms.update(room.id, {
+        name: name.trim(),
+        roomTypeId: typeId === "" ? undefined : Number(typeId),
+        baseRate: rate,
+        extraPersonAllowed: extraMax > 0,
+        extraPersonMax: extraMax,
+        extraPersonRate: extraMax > 0 ? extraRate : 0,
       });
       push(`${name.trim()} updated`);
       onDone();
@@ -416,10 +408,7 @@ function EditRoomTypeModal({ t, onClose, onDone }: { t: RoomType | null; onClose
     if (!t) return;
     setBusy(true);
     try {
-      await api(`/room-types/${t.id}`, {
-        method: "PATCH",
-        body: { name, maxAdults: a, maxChildren: c },
-      });
+      await client.rooms.updateType(t.id, { name, maxAdults: a, maxChildren: c });
       push("Room type updated");
       onDone();
       onClose();
@@ -459,12 +448,11 @@ function AddRoomTypeModal({ open, onClose, onDone }: { open: boolean; onClose: (
     if (!activeResort) return;
     setBusy(true);
     try {
-      await api(`/resorts/${activeResort.id}/room-types`, {
-        method: "POST",
-        body: {
-          name, maxAdults: a, maxChildren: c,
-          amenities: amen ? amen.split(",").map((s) => s.trim()) : undefined,
-        },
+      await client.rooms.createType(activeResort.id, {
+        name,
+        maxAdults: a,
+        maxChildren: c,
+        amenities: amen ? amen.split(",").map((s) => s.trim()) : undefined,
       });
       push("Room type added");
       onDone();
@@ -509,9 +497,11 @@ function AddPlanModal({ open, onClose, onDone, types }: {
     if (!activeResort || !typeId) return;
     setBusy(true);
     try {
-      await api(`/resorts/${activeResort.id}/rate-plans`, {
-        method: "POST",
-        body: { roomTypeId: typeId, dateFrom: from, dateTo: to, price },
+      await client.rooms.createRatePlan(activeResort.id, {
+        roomTypeId: typeId,
+        dateFrom: from,
+        dateTo: to,
+        price,
       });
       push("Rate plan added");
       onDone();

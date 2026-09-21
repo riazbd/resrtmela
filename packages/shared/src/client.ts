@@ -15,7 +15,101 @@
  * where a token lives is not this file's concern.
  */
 import type {
+  AccountStatusSaved,
+  AgencySiteEdit,
+  AgencyMoneyReceived,
+  CampaignSent,
+  NewCampaign,
+  ExpenseImportReport,
+  FbImportReport,
+  PlanChangeResult,
+  SubscriptionDetail,
+  ActivityRow,
+  AgencyInvited,
+  AgencyRoleSaved,
+  ApiKeyCreated,
+  ApiKeyRow,
+  CommissionTermsRow,
+  CreditPack,
+  DiscountOfferEdit,
+  DiscountOfferListRow,
+  DiscountOfferRow,
+  DomainRow,
+  ImportReport,
+  ImportRequest,
+  MessageTemplateReset,
+  MessageTemplateRow,
+  MessageTemplateSaved,
+  MyEmailCredits,
+  NewDiscountOffer,
+  NotificationFeed,
+  ReconcileReport,
+  ResortAgencyTerms,
+  ResortAgencyTermsSaved,
+  SiteDraft,
+  SiteEdit,
+  WebhookDeliveryRow,
+  WebhookEndpointCreated,
+  WebhookEndpointRow,
+  PlatformWallet,
+  PlatformWalletTxn,
   AgencyApiKey,
+  EmailCreditOrderRow,
+  NewOffer,
+  NewPlan,
+  OfferRow,
+  PlanScheduleInput,
+  PlatformAgencyRow,
+  PlatformChargeRow,
+  PlatformMoneyReceived,
+  PlatformSubscriptionRow,
+  SubscriptionCalendarCell,
+  EmployeeEdit,
+  FoodPackageEdit,
+  NewAgencyExpense,
+  NewEmployee,
+  NewFoodPackage,
+  NewPermRole,
+  NewRatePlan,
+  NewRoom,
+  NewRoomType,
+  NewSalesDoc,
+  NewTourPackage,
+  PermRoleEdit,
+  RoomEdit,
+  RoomTypeEdit,
+  SalesDocEdit,
+  TaxRuleEdit,
+  TourCategoryEdit,
+  TourPackageEdit,
+  AgentOwnReport,
+  AgentPerformanceReport,
+  AuditRow,
+  CancelDecided,
+  CancelRequested,
+  CollectorsReport,
+  DailyRevenueRow,
+  ExpenseSaved,
+  FiscalYears,
+  IdleInventoryReport,
+  NewExpense,
+  NewResortUser,
+  PayrollPay,
+  PayrollPaymentSaved,
+  PlanDefinition,
+  PlanEdit,
+  PlatformAgentRow,
+  PlatformChargeSaved,
+  PlatformOverview,
+  PlatformResortRow,
+  ResortStatusSaved,
+  ResortUserEdit,
+  ResortUserSaved,
+  SetSubscription,
+  SourceReport,
+  SubscriptionDueRow,
+  SubscriptionSaved,
+  TenantUsage,
   HousekeepingRow,
   DiscoverResort,
   AgencyRole,
@@ -84,6 +178,7 @@ import type {
 import type { DiscountKind } from "./discount";
 import type { HousekeepingState } from "./housekeeping";
 import type { PlanAudience, PlanOnSale } from "./plans-on-sale";
+import type { AgencyPublished, PublishedResort } from "./site";
 import type { StayChargeKind } from "./stay-charges";
 
 /** What the host app must provide: one authenticated JSON call. */
@@ -427,8 +522,17 @@ export function createApiClient(http: Fetcher) {
       // transition has never worked and the console hand-rolls the call
       transition: (id: number, to: string) =>
         http<BookingDetail>(paths.bookingTransition(id), { method: "POST", body: { to } }),
-      cancel: (id: number, reason?: string) =>
-        http<BookingDetail>(`/bookings/${id}/cancel`, { method: "POST", body: { reason } }),
+      /*
+       * There is no `cancel` here.
+       *
+       * One used to be, posting to `/bookings/:id/cancel` — a route the
+       * API has never declared. It answered 404 to anybody who called
+       * it, and nobody ever did: cancelling is
+       * `transition(id, "CANCELLED")`, which is what every screen uses.
+       * A dead method on the one description of this API is worse than
+       * a missing one, because the next person writes a screen against
+       * it. Found by `every-route-the-client-calls-exists` (2026-09-21).
+       */
       remove: (id: number) => http<{ deleted: boolean }>(`/bookings/${id}`, { method: "DELETE" }),
       /**
        * A selection, deleted together and all-or-nothing.
@@ -470,20 +574,27 @@ export function createApiClient(http: Fetcher) {
       emailInvoice: (id: number) => http<{ sent: boolean }>(`/bookings/${id}/email-invoice`, { method: "POST", body: {} }),
       cancelRequests: (resortId: number) => http<BookingRow[]>(`/bookings/cancel-requests${qs({ resortId })}`),
       requestCancel: (id: number, reason?: string) =>
-        http<unknown>(`/bookings/${id}/cancel-request`, { method: "POST", body: { reason } }),
+        http<CancelRequested>(`/bookings/${id}/cancel-request`, { method: "POST", body: { reason } }),
       decideCancel: (id: number, approve: boolean) =>
-        http<unknown>(`/bookings/${id}/cancel-decision`, { method: "POST", body: { approve } }),
+        http<CancelDecided>(`/bookings/${id}/cancel-decision`, { method: "POST", body: { approve } }),
     },
 
     // ── inventory ──
     rooms: {
       list: (resortId: number) => http<Room[]>(`/resorts/${resortId}/rooms`),
-      create: (resortId: number, body: unknown) => http<Room>(`/resorts/${resortId}/rooms`, { method: "POST", body }),
-      update: (id: number, body: unknown) => http<Room>(`/rooms/${id}`, { method: "PATCH", body }),
+      create: (resortId: number, body: NewRoom) => http<Room>(`/resorts/${resortId}/rooms`, { method: "POST", body }),
+      update: (id: number, body: RoomEdit) => http<Room>(`/rooms/${id}`, { method: "PATCH", body }),
+      /**
+       * Deleted, or retired — the server decides which, not the caller.
+       * A room with bookings against it is kept and taken off sale,
+       * because a stay that happened has to keep naming somewhere.
+       */
+      remove: (id: number) =>
+        http<{ removed: "deleted" | "retired"; name: string }>(`/rooms/${id}`, { method: "DELETE" }),
       types: (resortId: number) => http<RoomType[]>(`/resorts/${resortId}/room-types`),
-      createType: (resortId: number, body: unknown) =>
+      createType: (resortId: number, body: NewRoomType) =>
         http<RoomType>(`/resorts/${resortId}/room-types`, { method: "POST", body }),
-      updateType: (id: number, body: unknown) => http<RoomType>(`/room-types/${id}`, { method: "PATCH", body }),
+      updateType: (id: number, body: RoomTypeEdit) => http<RoomType>(`/room-types/${id}`, { method: "PATCH", body }),
       /**
        * Which rooms are ready. Its own permission, not `rooms.view`: a
        * housekeeper may read this and nothing else about the inventory.
@@ -497,7 +608,7 @@ export function createApiClient(http: Fetcher) {
         ),
 
       ratePlans: (resortId: number) => http<RatePlan[]>(`/resorts/${resortId}/rate-plans`),
-      createRatePlan: (resortId: number, body: unknown) =>
+      createRatePlan: (resortId: number, body: NewRatePlan) =>
         http<RatePlan>(`/resorts/${resortId}/rate-plans`, { method: "POST", body }),
       availability: (resortId: number, from: string, to: string) =>
         http<RoomAvail[]>(`/resorts/${resortId}/availability${qs({ from, to })}`),
@@ -532,7 +643,7 @@ export function createApiClient(http: Fetcher) {
       list: (resortId: number) => http<TaxRuleRow[]>(`/resorts/${resortId}/tax-rules`),
       create: (resortId: number, body: { code: string; label: string; ratePct: number; appliesTo?: string; inclusive?: boolean; compound?: boolean }) =>
         http<TaxRuleRow>(`/resorts/${resortId}/tax-rules`, { method: "POST", body }),
-      update: (resortId: number, id: number, body: Record<string, unknown>) =>
+      update: (resortId: number, id: number, body: TaxRuleEdit) =>
         http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "PATCH", body }),
       deactivate: (resortId: number, id: number) =>
         http<TaxRuleRow>(`/resorts/${resortId}/tax-rules/${id}`, { method: "DELETE" }),
@@ -570,8 +681,8 @@ export function createApiClient(http: Fetcher) {
        */
       categories: (resortId: number) =>
         http<{ category: string; uses: number }[]>(`/resorts/${resortId}/expenses/categories`),
-      create: (resortId: number, body: unknown) =>
-        http<unknown>(`/resorts/${resortId}/expenses`, { method: "POST", body }),
+      create: (resortId: number, body: NewExpense) =>
+        http<ExpenseSaved>(`/resorts/${resortId}/expenses`, { method: "POST", body }),
       remove: (id: number) => http<{ deleted: boolean }>(`/expenses/${id}`, { method: "DELETE" }),
     },
 
@@ -586,9 +697,9 @@ export function createApiClient(http: Fetcher) {
         http<FbBill>(`/fb/bills/${id}/pay`, { method: "POST", body }),
       removeBill: (id: number) => http<{ deleted: boolean }>(`/fb/bills/${id}`, { method: "DELETE" }),
       packages: (resortId: number) => http<FoodPackage[]>(`/resorts/${resortId}/fb/packages`),
-      createPackage: (resortId: number, body: unknown) =>
+      createPackage: (resortId: number, body: NewFoodPackage) =>
         http<FoodPackage>(`/resorts/${resortId}/fb/packages`, { method: "POST", body }),
-      updatePackage: (id: number, body: unknown) =>
+      updatePackage: (id: number, body: FoodPackageEdit) =>
         http<FoodPackage>(`/fb/packages/${id}`, { method: "PATCH", body }),
       removePackage: (id: number) => http<{ deleted: boolean }>(`/fb/packages/${id}`, { method: "DELETE" }),
     },
@@ -612,6 +723,27 @@ export function createApiClient(http: Fetcher) {
     engage: {
       credits: () => http<EmailCredits>("/email-credits"),
       campaigns: () => http<EmailCampaign[]>("/email-campaigns"),
+      sendCampaign: (body: NewCampaign) =>
+        http<CampaignSent>("/email-campaigns", { method: "POST", body }),
+      /** What the platform is selling today — the console draws its buttons from this. */
+      creditPacks: () => http<CreditPack[]>("/email-credits/packs"),
+      myCredits: () => http<MyEmailCredits>("/email-credits"),
+      /**
+       * Asking for a pack. Nothing is granted and nothing is charged until
+       * the platform approves it: a pack used to be granted the moment a
+       * resort clicked it, raising a bill nobody here had agreed to.
+       */
+      requestCredits: (credits: number, clientRef?: string) =>
+        http<EmailCreditOrderRow>("/email-credits/purchase", {
+          method: "POST",
+          body: { credits, clientRef },
+        }),
+      myCreditOrders: () => http<EmailCreditOrderRow[]>("/email-credits/orders"),
+
+      /** The bell. */
+      notifications: (take?: number) => http<NotificationFeed>(`/notifications${qs({ take })}`),
+      markAllRead: () => http<{ ok: true }>("/notifications/read", { method: "POST", body: { all: true } }),
+      markRead: (id: string) => http<{ ok: true }>(`/notifications/${id}/read`, { method: "POST" }),
     },
 
     activities: {
@@ -658,9 +790,9 @@ export function createApiClient(http: Fetcher) {
 
     payroll: {
       employees: (resortId: number) => http<Employee[]>(`/resorts/${resortId}/payroll/employees`),
-      addEmployee: (resortId: number, body: unknown) =>
+      addEmployee: (resortId: number, body: NewEmployee) =>
         http<Employee>(`/resorts/${resortId}/payroll/employees`, { method: "POST", body }),
-      updateEmployee: (resortId: number, employeeId: number, body: unknown) =>
+      updateEmployee: (resortId: number, employeeId: number, body: EmployeeEdit) =>
         http<Employee>(`/resorts/${resortId}/payroll/employees/${employeeId}`, { method: "PATCH", body }),
       /**
        * Deleted, or deactivated — and which of the two is the server's
@@ -675,8 +807,11 @@ export function createApiClient(http: Fetcher) {
           { method: "DELETE" },
         ),
       sheet: (resortId: number, month: string) => http<PayrollSheet>(`/resorts/${resortId}/payroll${qs({ month })}`),
-      pay: (resortId: number, employeeId: number, body: unknown) =>
-        http<unknown>(`/resorts/${resortId}/payroll/employees/${employeeId}/pay`, { method: "POST", body }),
+      pay: (resortId: number, employeeId: number, body: PayrollPay) =>
+        http<PayrollPaymentSaved>(
+          `/resorts/${resortId}/payroll/employees/${employeeId}/pay`,
+          { method: "POST", body },
+        ),
       unpay: (paymentId: number) => http<{ deleted: boolean }>(`/payroll/payments/${paymentId}`, { method: "DELETE" }),
     },
 
@@ -685,16 +820,29 @@ export function createApiClient(http: Fetcher) {
       metrics: (resortId: number, r: DateRange = {}) =>
         http<ResortMetrics>(`/resorts/${resortId}/metrics${qs(r)}`),
       daily: (resortId: number, from: string, to: string) =>
-        http<unknown>(`/resorts/${resortId}/reports/daily${qs({ from, to })}`),
-      agents: (resortId: number, r: DateRange = {}) => http<unknown>(`/resorts/${resortId}/reports/agents${qs(r)}`),
-      sources: (resortId: number, r: DateRange = {}) => http<unknown>(`/resorts/${resortId}/reports/sources${qs(r)}`),
+        http<DailyRevenueRow[]>(`/resorts/${resortId}/reports/daily${qs({ from, to })}`),
+      agents: (resortId: number, r: DateRange = {}) =>
+        http<AgentPerformanceReport>(`/resorts/${resortId}/reports/agents${qs(r)}`),
+      sources: (resortId: number, r: DateRange = {}) =>
+        http<SourceReport>(`/resorts/${resortId}/reports/sources${qs(r)}`),
       collectors: (resortId: number, r: DateRange = {}) =>
-        http<unknown>(`/resorts/${resortId}/reports/collectors${qs(r)}`),
+        http<CollectorsReport>(`/resorts/${resortId}/reports/collectors${qs(r)}`),
       idleInventory: (resortId: number, from: string, to: string) =>
-        http<unknown>(`/resorts/${resortId}/reports/idle-inventory${qs({ from, to })}`),
+        http<IdleInventoryReport>(`/resorts/${resortId}/reports/idle-inventory${qs({ from, to })}`),
       pl: (resortId: number, from: string, to: string) =>
         http<PLReport>(`/resorts/${resortId}/reports/pl${qs({ from, to })}`),
-      audit: (resortId: number, take?: number) => http<unknown>(`/resorts/${resortId}/audit${qs({ take })}`),
+      audit: (resortId: number, take?: number) => http<AuditRow[]>(`/resorts/${resortId}/audit${qs({ take })}`),
+      /**
+       * An agency's own commission, over its own bookings.
+       *
+       * The one report on this list an agency may read, and the only one
+       * that needs no selling access: like the bookings it counts, it stays
+       * readable after a resort closes its door. The console reached it by
+       * hand-writing the URL, which is why it was the last route here with
+       * no entry at all.
+       */
+      mine: (resortId: number, r: DateRange = {}) =>
+        http<AgentOwnReport>(`/agents/me/report${qs({ resortId, ...r })}`),
     },
 
     // ── the resort itself ──
@@ -703,15 +851,185 @@ export function createApiClient(http: Fetcher) {
       update: (id: number, body: Partial<ResortSettings>) =>
         http<ResortSettings>(`/resorts/${id}`, { method: "PATCH", body }),
       users: (id: number) => http<ResortUser[]>(`/resorts/${id}/users`),
-      addUser: (id: number, body: unknown) => http<unknown>(`/resorts/${id}/users`, { method: "POST", body }),
-      updateUser: (id: number, userId: number, body: unknown) =>
-        http<unknown>(`/resorts/${id}/users/${userId}`, { method: "PATCH", body }),
+      addUser: (id: number, body: NewResortUser) =>
+        http<ResortUserSaved>(`/resorts/${id}/users`, { method: "POST", body }),
+      updateUser: (id: number, userId: number, body: ResortUserEdit) =>
+        http<ResortUserSaved>(`/resorts/${id}/users/${userId}`, { method: "PATCH", body }),
+      /** Its own route on its own permission: setting a password is not editing a user. */
+      setUserPassword: (id: number, userId: number, password: string) =>
+        http<{ ok: true }>(`/resorts/${id}/users/${userId}/password`, { method: "POST", body: { password } }),
       roles: (id: number) => http<PermRole[]>(`/resorts/${id}/roles`),
-      createRole: (id: number, body: unknown) => http<PermRole>(`/resorts/${id}/roles`, { method: "POST", body }),
-      updateRole: (roleId: number, body: unknown) => http<PermRole>(`/roles/${roleId}`, { method: "PATCH", body }),
+      createRole: (id: number, body: NewPermRole) => http<PermRole>(`/resorts/${id}/roles`, { method: "POST", body }),
+      updateRole: (roleId: number, body: PermRoleEdit) => http<PermRole>(`/roles/${roleId}`, { method: "PATCH", body }),
       removeRole: (roleId: number) => http<{ deleted: boolean }>(`/roles/${roleId}`, { method: "DELETE" }),
-      usage: (tenantId: number) => http<unknown>(`/tenants/${tenantId}/usage`),
-      fiscalYears: (id: number) => http<unknown>(`/resorts/${id}/fiscal-years`),
+      usage: (tenantId: number) => http<TenantUsage>(`/tenants/${tenantId}/usage`),
+      fiscalYears: (id: number) => http<FiscalYears>(`/resorts/${id}/fiscal-years`),
+
+      /**
+       * What the resort pays every agent.
+       *
+       * One rate for the resort, replacing a field that used to sit on
+       * every agent's row — which is how two agents selling the same room
+       * once earned differently on it. Reading it needs only resort
+       * access, because an agent has to be able to see their own terms.
+       */
+      commission: (id: number) => http<CommissionTermsRow>(`/resorts/${id}/commission`),
+      setCommission: (id: number, body: CommissionTermsRow) =>
+        http<CommissionTermsRow>(`/resorts/${id}/commission`, { method: "POST", body }),
+
+      /**
+       * The agencies, and this resort's standing with each.
+       *
+       * The plan is the door now, not a per-resort approval queue; what
+       * is left here is what was always the resort's to decide — which
+       * agency it refuses, and on what commission.
+       */
+      agencies: (id: number) => http<ResortAgencyTerms[]>(`/resorts/${id}/agencies`),
+      setAgencyTerms: (
+        id: number,
+        accountId: number,
+        body: { blocked?: boolean; commissionKind?: string | null; commissionRate?: number | null },
+      ) =>
+        http<ResortAgencyTermsSaved>(`/resorts/${id}/agencies/${accountId}`, { method: "PATCH", body }),
+      inviteAgency: (id: number, body: { email: string; name?: string }) =>
+        http<AgencyInvited>(`/resorts/${id}/invite-agency`, { method: "POST", body }),
+
+      /** What happened here, and who did it. */
+      activity: (id: number, q: { take?: number; q?: string } = {}) =>
+        http<ActivityRow[]>(`/resorts/${id}/activity${qs(q)}`),
+      deleteActivity: (activityId: string) =>
+        http<{ deleted: boolean }>(`/activity/${activityId}`, { method: "DELETE" }),
+
+      /**
+       * The owner's own subscription — what they are on, what is owed,
+       * and what else is for sale.
+       *
+       * Gated on `billing.view` / `billing.manage` rather than on being
+       * platform staff, and distinct from the super admin's
+       * `platform.subscribe`, which moves an account from the outside.
+       */
+      subscription: (id: number) => http<SubscriptionDetail>(`/resorts/${id}/subscription`),
+      changePlan: (id: number, plan: string, scheduleId?: number) =>
+        http<PlanChangeResult>(`/resorts/${id}/subscription/plan`, {
+          method: "POST",
+          body: { plan, scheduleId },
+        }),
+
+      /** A second resort on the same account, if the plan allows one. */
+      addResort: (tenantId: number, body: { name: string; location?: string }) =>
+        http<Resort>(`/tenants/${tenantId}/resorts`, { method: "POST", body }),
+    },
+
+    /**
+     * Standing offers: a rate off every room, off one category, or off the
+     * one room facing the generator.
+     */
+    discounts: {
+      list: (resortId: number) => http<DiscountOfferListRow[]>(`/resorts/${resortId}/discounts`),
+      create: (resortId: number, body: NewDiscountOffer) =>
+        http<DiscountOfferRow>(`/resorts/${resortId}/discounts`, { method: "POST", body }),
+      update: (id: number, body: DiscountOfferEdit) =>
+        http<DiscountOfferRow>(`/discounts/${id}`, { method: "PATCH", body }),
+    },
+
+    /**
+     * What the resort says to a guest.
+     *
+     * The platform's own notices about an unpaid subscription are not on
+     * this list: they are not the tenant's to rewrite.
+     */
+    templates: {
+      list: (resortId: number) => http<MessageTemplateRow[]>(`/resorts/${resortId}/message-templates`),
+      save: (resortId: number, name: string, body: string) =>
+        http<MessageTemplateSaved>(`/resorts/${resortId}/message-templates/${encodeURIComponent(name)}`, {
+          method: "PUT",
+          body: { body },
+        }),
+      reset: (resortId: number, name: string) =>
+        http<MessageTemplateReset>(`/resorts/${resortId}/message-templates/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+        }),
+    },
+
+    /** Keys for a resort's own website. The secret is returned once, at creation. */
+    apiKeys: {
+      list: (resortId: number) => http<ApiKeyRow[]>(`/resorts/${resortId}/api-keys`),
+      create: (resortId: number, name: string, scopes?: string[]) =>
+        http<ApiKeyCreated>(`/resorts/${resortId}/api-keys`, { method: "POST", body: { name, scopes } }),
+      revoke: (id: string) => http<{ ok: true }>(`/api-keys/${id}`, { method: "DELETE" }),
+    },
+
+    /** Where a resort's own website is told things, and what happened to each call. */
+    webhooks: {
+      list: (resortId: number) => http<WebhookEndpointRow[]>(`/resorts/${resortId}/webhooks`),
+      add: (resortId: number, url: string) =>
+        http<WebhookEndpointCreated>(`/resorts/${resortId}/webhooks`, { method: "POST", body: { url } }),
+      remove: (resortId: number, endpointId: number) =>
+        http<{ removed: true }>(`/resorts/${resortId}/webhooks/${endpointId}`, { method: "DELETE" }),
+      deliveries: (resortId: number) =>
+        http<WebhookDeliveryRow[]>(`/resorts/${resortId}/webhooks/deliveries`),
+      retry: (resortId: number, deliveryId: string) =>
+        http<{ queued: boolean }>(`/resorts/${resortId}/webhooks/deliveries/${deliveryId}/retry`, {
+          method: "POST",
+        }),
+    },
+
+    /** The resort's own page on the public site. */
+    site: {
+      get: (resortId: number) => http<SiteDraft>(`/resorts/${resortId}/site`),
+      save: (resortId: number, body: SiteEdit) =>
+        http<SiteDraft>(`/resorts/${resortId}/site`, { method: "PATCH", body }),
+      publish: (resortId: number, published: boolean) =>
+        http<SiteDraft>(`/resorts/${resortId}/site/publish`, { method: "POST", body: { published } }),
+      setAddress: (resortId: number, slug: string) =>
+        http<{ slug: string }>(`/resorts/${resortId}/site/address`, { method: "POST", body: { slug } }),
+      movePhoto: (resortId: number, photoId: number, sortOrder: number) =>
+        http<SiteDraft>(`/resorts/${resortId}/site/photos/${photoId}`, {
+          method: "PATCH",
+          body: { sortOrder },
+        }),
+      removePhoto: (resortId: number, photoId: number) =>
+        http<{ removed: true }>(`/resorts/${resortId}/site/photos/${photoId}`, { method: "DELETE" }),
+      /** A picture goes up as raw bytes with headers, so the host app posts it itself. */
+      photoPath: (resortId: number) => `/resorts/${resortId}/site/photos`,
+      /** The draft as the public page would render it — only the owner may ask. */
+      preview: (resortId: number) => http<PublishedResort>(`/resorts/${resortId}/site/preview`),
+    },
+
+    /**
+     * A name of your own — the same four steps for a resort and an agency,
+     * which is why the screen takes these as functions rather than a path.
+     */
+    domains: {
+      list: (resortId: number) => http<DomainRow[]>(`/resorts/${resortId}/domains`),
+      claim: (resortId: number, host: string) =>
+        http<DomainRow>(`/resorts/${resortId}/domains`, { method: "POST", body: { host } }),
+      verify: (resortId: number, domainId: number) =>
+        http<DomainRow>(`/resorts/${resortId}/domains/${domainId}/verify`, { method: "POST" }),
+      setCanonical: (resortId: number, domainId: number) =>
+        http<DomainRow[]>(`/resorts/${resortId}/domains/${domainId}/canonical`, { method: "POST" }),
+      remove: (resortId: number, domainId: number) =>
+        http<{ removed: true }>(`/resorts/${resortId}/domains/${domainId}`, { method: "DELETE" }),
+    },
+
+    /** Moving a spreadsheet in, and checking it landed. */
+    importer: {
+      bookings: (resortId: number, body: ImportRequest) =>
+        http<ImportReport>(`/resorts/${resortId}/import/bookings`, { method: "POST", body }),
+      expenses: (resortId: number, csv: string) =>
+        http<ExpenseImportReport>(`/resorts/${resortId}/import/expenses`, { method: "POST", body: { csv } }),
+      /**
+       * The sheet's own room names are matched directly; a map is only
+       * for registers that write something else, and one resort's map is
+       * not something to ship to every other resort.
+       */
+      fb: (resortId: number, csv: string, roomMap?: Record<string, string>) =>
+        http<FbImportReport>(`/resorts/${resortId}/import/fb`, { method: "POST", body: { csv, roomMap } }),
+      reconcile: (resortId: number, sheet7: string, sheet11: string) =>
+        http<ReconcileReport>(`/resorts/${resortId}/reconcile`, {
+          method: "POST",
+          body: { sheet7, sheet11 },
+        }),
     },
 
     // ── your data, on your terms ──
@@ -744,10 +1062,63 @@ export function createApiClient(http: Fetcher) {
       discover: () => http<DiscoverResort[]>("/agent/discover"),
 
       staff: () => http<AgencyStaff[]>("/agent/staff"),
+      /** Which of the agency's own roles somebody holds; null takes it away. */
+      setStaffRole: (userId: number, roleId: number | null) =>
+        http<{ assigned: true }>(`/agent/staff/${userId}/role`, { method: "PATCH", body: { roleId } }),
+      createRole: (body: { name: string; permissions: string[] }) =>
+        http<AgencyRoleSaved>("/agent/roles", { method: "POST", body }),
+      updateRole: (id: number, body: { name?: string; permissions?: string[] }) =>
+        http<AgencyRoleSaved>(`/agent/roles/${id}`, { method: "PATCH", body }),
+      deleteRole: (id: number) => http<{ deleted: boolean }>(`/agent/roles/${id}`, { method: "DELETE" }),
+      /** A colleague at the agency, who can sign in and book for guests. */
+      addStaff: (body: { name: string; email: string; phone: string; password: string }) =>
+        http<{ id: number; name: string; email: string; phone: string; status: string }>("/agent/staff", {
+          method: "POST",
+          body,
+        }),
+      /** Its own route on its own act: setting a password is not editing a person. */
+      setStaffPassword: (userId: number, password: string) =>
+        http<{ ok: true }>(`/agent/staff/${userId}/password`, { method: "POST", body: { password } }),
       roles: () => http<AgencyRole[]>("/agent/roles"),
 
       /** The agency's own website, and the keys it signs requests with. */
       site: () => http<AgencySite>("/agent/site"),
+      saveSite: (body: AgencySiteEdit) =>
+        http<AgencySite>("/agent/site", { method: "PATCH", body }),
+      publishSite: (published: boolean) =>
+        http<AgencySite>("/agent/site/publish", { method: "POST", body: { published } }),
+      setSiteAddress: (slug: string) =>
+        http<{ slug: string }>("/agent/site/address", { method: "POST", body: { slug } }),
+      movePhoto: (photoId: number, sortOrder: number) =>
+        http<AgencySite>(`/agent/site/photos/${photoId}`, { method: "PATCH", body: { sortOrder } }),
+      removePhoto: (photoId: number) =>
+        http<{ removed: true }>(`/agent/site/photos/${photoId}`, { method: "DELETE" }),
+      /** A picture goes up as raw bytes with headers, so the host app posts it itself. */
+      photoPath: () => "/agent/site/photos",
+      sitePreview: () => http<AgencyPublished>("/agent/site/preview"),
+
+      /** The agency's own domains: the resort's flow, owned by the account. */
+      domains: {
+        list: () => http<DomainRow[]>("/agent/domains"),
+        claim: (host: string) => http<DomainRow>("/agent/domains", { method: "POST", body: { host } }),
+        verify: (domainId: number) =>
+          http<DomainRow>(`/agent/domains/${domainId}/verify`, { method: "POST" }),
+        setCanonical: (domainId: number) =>
+          http<DomainRow[]>(`/agent/domains/${domainId}/canonical`, { method: "POST" }),
+        remove: (domainId: number) =>
+          http<{ removed: true }>(`/agent/domains/${domainId}`, { method: "DELETE" }),
+      },
+
+      /** Where the agency's own website is told about its bookings. */
+      webhooks: {
+        list: () => http<WebhookEndpointRow[]>("/agent/webhooks"),
+        add: (url: string) =>
+          http<WebhookEndpointCreated>("/agent/webhooks", { method: "POST", body: { url } }),
+        remove: (id: number) => http<{ removed: true }>(`/agent/webhooks/${id}`, { method: "DELETE" }),
+        deliveries: () => http<WebhookDeliveryRow[]>("/agent/webhooks/deliveries"),
+        retry: (deliveryId: string) =>
+          http<{ queued: boolean }>(`/agent/webhooks/deliveries/${deliveryId}/retry`, { method: "POST" }),
+      },
       apiKeys: {
         list: () => http<AgencyApiKey[]>("/agent/api-keys"),
         // the secret is returned once and never again
@@ -766,16 +1137,16 @@ export function createApiClient(http: Fetcher) {
         categories: () => http<TourCategoryNode[]>("/agent/tours/categories"),
         createCategory: (body: { name: string; parentId?: number | null }) =>
           http<TourCategorySaved>("/agent/tours/categories", { method: "POST", body }),
-        updateCategory: (id: number, body: unknown) =>
+        updateCategory: (id: number, body: TourCategoryEdit) =>
           http<TourCategorySaved>(`/agent/tours/categories/${id}`, { method: "PATCH", body }),
         deleteCategory: (id: number) =>
           http<{ deleted: boolean }>(`/agent/tours/categories/${id}`, { method: "DELETE" }),
         packages: (q: { q?: string; active?: boolean } = {}) =>
           http<TourPackageRow[]>(`/agent/tours/packages${qs(q)}`),
         package: (id: number) => http<TourPackageDetail>(`/agent/tours/packages/${id}`),
-        createPackage: (body: unknown) =>
+        createPackage: (body: NewTourPackage) =>
           http<{ id: number }>("/agent/tours/packages", { method: "POST", body }),
-        updatePackage: (id: number, body: unknown) =>
+        updatePackage: (id: number, body: TourPackageEdit) =>
           http<{ id: number }>(`/agent/tours/packages/${id}`, { method: "PATCH", body }),
         deletePackage: (id: number) =>
           http<{ deleted: boolean }>(`/agent/tours/packages/${id}`, { method: "DELETE" }),
@@ -792,14 +1163,14 @@ export function createApiClient(http: Fetcher) {
         deleteHead: (id: number) => http<Removal>(`/agent/expense-heads/${id}`, { method: "DELETE" }),
         expenses: (q: { from?: string; to?: string; headId?: number; skip?: number; take?: number } = {}) =>
           http<AgencyExpensePage>(`/agent/expenses${qs(q)}`),
-        addExpense: (body: unknown) => http<{ id: number }>("/agent/expenses", { method: "POST", body }),
+        addExpense: (body: NewAgencyExpense) => http<{ id: number }>("/agent/expenses", { method: "POST", body }),
         removeExpense: (id: number) => http<{ deleted: boolean }>(`/agent/expenses/${id}`, { method: "DELETE" }),
       },
 
       payroll: {
         employees: () => http<AgencyEmployee[]>("/agent/employees"),
-        addEmployee: (body: unknown) => http<{ id: number }>("/agent/employees", { method: "POST", body }),
-        editEmployee: (id: number, body: unknown) =>
+        addEmployee: (body: NewEmployee) => http<{ id: number }>("/agent/employees", { method: "POST", body }),
+        editEmployee: (id: number, body: EmployeeEdit) =>
           http<{ id: number }>(`/agent/employees/${id}`, { method: "PATCH", body }),
         // same two answers as a head: paid wages keep the person on the books
         removeEmployee: (id: number) => http<Removal>(`/agent/employees/${id}`, { method: "DELETE" }),
@@ -810,10 +1181,8 @@ export function createApiClient(http: Fetcher) {
          * `kind` is checked against `PAYROLL_PAYMENT_KINDS` and defaults
          * to SALARY.
          */
-        pay: (
-          employeeId: number,
-          body: { month: string; amount?: number; method?: string; note?: string; kind?: string },
-        ) => http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
+        pay: (employeeId: number, body: PayrollPay) =>
+          http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
         undoPay: (paymentId: number) =>
           http<{ deleted: boolean }>(`/agent/payroll/payment/${paymentId}`, { method: "DELETE" }),
       },
@@ -822,8 +1191,8 @@ export function createApiClient(http: Fetcher) {
         list: (q: { kind?: SalesDocKind; status?: string; q?: string } = {}) =>
           http<SalesDocRow[]>(`/agent/sales${qs(q)}`),
         get: (id: number) => http<SalesDocDetail>(`/agent/sales/${id}`),
-        create: (body: unknown) => http<{ id: number; number: string }>("/agent/sales", { method: "POST", body }),
-        update: (id: number, body: unknown) => http<{ id: number }>(`/agent/sales/${id}`, { method: "PATCH", body }),
+        create: (body: NewSalesDoc) => http<{ id: number; number: string }>("/agent/sales", { method: "POST", body }),
+        update: (id: number, body: SalesDocEdit) => http<{ id: number }>(`/agent/sales/${id}`, { method: "PATCH", body }),
         convert: (id: number) =>
           http<{ id: number; number: string }>(`/agent/sales/${id}/convert`, { method: "POST", body: {} }),
         send: (id: number, body: { to?: string; message?: string } = {}) =>
@@ -846,6 +1215,9 @@ export function createApiClient(http: Fetcher) {
           http<{ deleted: true } | { voided: true }>(`/agent/sales/${id}`, { method: "DELETE" }),
         /** The printable copy is HTML, fetched by the host app, not JSON. */
         printPath: (id: number) => `/agent/sales/${id}/print`,
+        /** What this agency took against its documents, and who took it. */
+        moneyReceived: (q: { from?: string; to?: string; take?: number } = {}) =>
+          http<AgencyMoneyReceived>(`/agent/sales/money-received${qs(q)}`),
       },
 
       guests: (q: { q?: string; take?: number } = {}) =>
@@ -858,42 +1230,43 @@ export function createApiClient(http: Fetcher) {
 
     // ── running the platform ──
     platform: {
-      overview: () => http<unknown>("/platform/overview"),
-      resorts: () => http<unknown[]>("/platform/resorts"),
-      agents: () => http<unknown[]>("/platform/agents"),
-      plans: () => http<unknown[]>("/platform/plans"),
-      updatePlan: (name: string, body: unknown) => http<unknown>(`/platform/plans/${name}`, { method: "PATCH", body }),
-      dues: (q: { resortId?: number; status?: string } = {}) => http<unknown[]>(`/platform/dues${qs(q)}`),
+      overview: () => http<PlatformOverview>("/platform/overview"),
+      resorts: () => http<PlatformResortRow[]>("/platform/resorts"),
+      agents: () => http<PlatformAgentRow[]>("/platform/agents"),
+      plans: () => http<PlanDefinition[]>("/platform/plans"),
+      updatePlan: (name: string, body: PlanEdit) =>
+        http<PlanDefinition>(`/platform/plans/${name}`, { method: "PATCH", body }),
+      dues: (q: { resortId?: number; status?: string } = {}) =>
+        http<SubscriptionDueRow[]>(`/platform/dues${qs(q)}`),
       /** Subscription dues and one-off charges together, per resort. */
       outstanding: () =>
         http<{ resortId: number; resort: string; subscriptions: number; charges: number; total: number }[]>(
           "/platform/outstanding",
         ),
       charges: (q: { resortId?: number; status?: string } = {}) =>
-        http<
-          {
-            id: number;
-            resort: { id: number; name: string };
-            kind: string;
-            description: string;
-            amount: number;
-            status: string;
-            paidAt: string | null;
-            createdAt: string;
-          }[]
-        >(`/platform/charges${qs(q)}`),
+        http<PlatformChargeRow[]>(`/platform/charges${qs(q)}`),
       payCharge: (id: number, method?: string) =>
-        http<unknown>(`/platform/charges/${id}/pay`, { method: "POST", body: { method } }),
+        http<PlatformChargeSaved>(`/platform/charges/${id}/pay`, { method: "POST", body: { method } }),
       payDue: (id: number, method?: string) =>
-        http<unknown>(`/platform/dues/${id}/pay`, { method: "POST", body: { method } }),
-      subscribe: (resortId: number, body: unknown) =>
-        http<unknown>(`/platform/resorts/${resortId}/subscription`, { method: "POST", body }),
-      renew: (subscriptionId: number, months = 1) =>
-        http<unknown>(`/platform/subscriptions/${subscriptionId}/renew`, { method: "POST", body: { months } }),
+        http<SubscriptionDueRow>(`/platform/dues/${id}/pay`, { method: "POST", body: { method } }),
+      subscribe: (resortId: number, body: SetSubscription) =>
+        http<SubscriptionSaved>(`/platform/resorts/${resortId}/subscription`, { method: "POST", body }),
+      /**
+       * `periods`, not months.
+       *
+       * This took `months` and sent `{ months }`, which the server still
+       * accepts under that name — and then counts as periods of whatever
+       * the account is standing on. Renewing a yearly subscription by one
+       * adds a year and bills a year, so the parameter was out by twelve
+       * for every customer not paying monthly. Only the console called it,
+       * and the console sent `periods`.
+       */
+      renew: (subscriptionId: number, periods = 1) =>
+        http<SubscriptionSaved>(`/platform/subscriptions/${subscriptionId}/renew`, { method: "POST", body: { periods } }),
       cancelSubscription: (subscriptionId: number) =>
-        http<unknown>(`/platform/subscriptions/${subscriptionId}/cancel`, { method: "POST" }),
+        http<SubscriptionSaved>(`/platform/subscriptions/${subscriptionId}/cancel`, { method: "POST" }),
       setResortStatus: (resortId: number, status: string, reason?: string) =>
-        http<unknown>(`/platform/resorts/${resortId}/status`, { method: "PATCH", body: { status, reason } }),
+        http<ResortStatusSaved>(`/platform/resorts/${resortId}/status`, { method: "PATCH", body: { status, reason } }),
       settings: () => http<PlatformSettings>("/platform/settings"),
       updateSettings: (patch: PlatformSettings) =>
         http<PlatformSettings>("/platform/settings", { method: "PATCH", body: patch }),
@@ -901,6 +1274,79 @@ export function createApiClient(http: Fetcher) {
       cms: () => http<CmsRow[]>("/platform/cms"),
       setCms: (key: string, value: string) => http<CmsRow>("/platform/cms", { method: "POST", body: { key, value } }),
       loginAs: (userId: number) => http<{ accessToken: string }>(`/platform/users/${userId}/login-as`, { method: "POST" }),
+
+      /**
+       * The rest of the panel, which reached the API by hand-writing URLs.
+       *
+       * Fifteen routes the platform console called through the web app's
+       * raw `api()` helper, each with a locally hand-written interface
+       * beside it. That is the arrangement `api-types.ts` exists to end,
+       * and it is how the Resorts tab came to print a schedule label the
+       * server had never sent.
+       */
+      moneyReceived: (q: { from?: string; to?: string; take?: number } = {}) =>
+        http<PlatformMoneyReceived>(`/platform/money-received${qs(q)}`),
+      subCalendar: (from: string, to: string) =>
+        http<SubscriptionCalendarCell[]>(`/platform/sub-calendar${qs({ from, to })}`),
+      subscriptions: () => http<PlatformSubscriptionRow[]>("/platform/subscriptions"),
+      offers: () => http<OfferRow[]>("/platform/offers"),
+      createOffer: (body: NewOffer) => http<OfferRow>("/platform/offers", { method: "POST", body }),
+      agencies: (status?: string) => http<PlatformAgencyRow[]>(`/platform/agencies${qs({ status })}`),
+      verifyAgency: (accountId: number) =>
+        http<{ id: number; name: string; status: string }>(`/platform/agencies/${accountId}/verify`, {
+          method: "POST",
+        }),
+      /**
+       * An agency IS its account row — there are no resorts to suspend —
+       * so this was the only customer the platform could not hold by
+       * hand while the billing sweep could hold it automatically.
+       */
+      setAccountStatus: (accountId: number, status: "active" | "suspended", reason?: string) =>
+        http<AccountStatusSaved>(`/platform/accounts/${accountId}/status`, {
+          method: "PATCH",
+          body: { status, reason },
+        }),
+      setAccountDemo: (accountId: number, demo: boolean) =>
+        http<{ id: number; demo: boolean }>(`/platform/accounts/${accountId}/demo`, {
+          method: "PATCH",
+          body: { demo },
+        }),
+      createPlan: (body: NewPlan) => http<PlanDefinition>("/platform/plans", { method: "POST", body }),
+      /** Refused once anybody is on it: retire it instead, and its customers stay. */
+      deletePlan: (name: string) =>
+        http<{ deleted: true; name: string }>(`/platform/plans/${encodeURIComponent(name)}`, { method: "DELETE" }),
+      planSchedules: (name: string) =>
+        http<PlanScheduleInput[]>(`/platform/plans/${encodeURIComponent(name)}/schedules`),
+      setPlanSchedules: (name: string, schedules: PlanScheduleInput[]) =>
+        http<PlanScheduleInput[]>(`/platform/plans/${encodeURIComponent(name)}/schedules`, {
+          method: "PUT",
+          body: { schedules },
+        }),
+      /**
+       * The agency's float, and moving it.
+       *
+       * Only the platform may: `RESORT_ADMIN` was once allowed, so a
+       * resort could fund and drain a float the agency holds with the
+       * platform and spend it on a rival's booking.
+       */
+      wallet: (userId: number) => http<PlatformWallet>(`/wallets/${userId}`),
+      moveWallet: (userId: number, body: { kind: string; amount: number; note?: string }) =>
+        http<PlatformWalletTxn>(`/wallets/${userId}/txns`, { method: "POST", body }),
+      creditOrders: (status?: string) =>
+        http<EmailCreditOrderRow[]>(`/platform/email-credit-orders${qs({ status })}`),
+      /**
+       * Approval is the only moment credits come into being, and it
+       * grants them and raises the charge in one transaction.
+       */
+      decideCreditOrder: (
+        id: string,
+        decision: "APPROVE" | "REJECT",
+        body: { note?: string; paid?: boolean; method?: string } = {},
+      ) =>
+        http<EmailCreditOrderRow>(`/platform/email-credit-orders/${id}/decision`, {
+          method: "POST",
+          body: { decision, ...body },
+        }),
     },
   };
 }

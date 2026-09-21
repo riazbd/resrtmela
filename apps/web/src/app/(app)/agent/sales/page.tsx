@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, money, dmy, API_URL, getToken } from "@/lib/api";
+import { client, money, dmy, API_URL, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -24,7 +24,7 @@ import { Table, Tabs } from "@/components/patterns";
 import { MoneyReceived } from "@/components/money-received";
 import { ErrorState } from "@/components/error-state";
 import { FileText, Plus, Printer, Send, Trash2 } from "lucide-react";
-import type { SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
+import type { AgencyMoneyReceived, SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
 import { todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 
 /**
@@ -40,22 +40,6 @@ import { todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
  */
 
 const TABS = ["Quotations", "Invoices", "Money received"] as const;
-
-/** What the agency's own cash book returns. */
-interface AgencyMoney {
-  total: number;
-  rows: { userId: number | null; name: string; count: number; total: number }[];
-  recent: {
-    id: number;
-    at: string;
-    amount: number;
-    method: string;
-    from: string;
-    document: string;
-    receivedBy: string | null;
-    note: string | null;
-  }[];
-}
 
 const STATUS_TONE: Record<string, string> = {
   DRAFT: "bg-slate-100 text-slate-700",
@@ -80,14 +64,14 @@ export default function SalesPage() {
    * question from "what have we billed", and an owner opening Quotations
    * should not pay for a report they did not ask for.
    */
-  const moneyQ = useApi<AgencyMoney>(
+  const moneyQ = useApi<AgencyMoneyReceived>(
     keys.agentSales("money-received"),
-    () => api<AgencyMoney>("/agent/sales/money-received"),
+    () => client.agent.sales.moneyReceived(),
     { enabled: onMoney },
   );
   const qc = useQueryClient();
   const { data, isLoading, error, stale } = useApi<SalesDocRow[]>(keys.agentSales(kind), () =>
-    api<SalesDocRow[]>(`/agent/sales?kind=${kind}`),
+    client.agent.sales.list({ kind }),
   );
 
   if (role !== "AGENT") return <Empty msg="Agents only" />;
@@ -245,11 +229,11 @@ function DocEditor({
 
   const { data: doc } = useApi<SalesDocDetail>(
     keys.agentSalesDoc(isNew ? 0 : (id as number)),
-    () => api<SalesDocDetail>(`/agent/sales/${id}`),
+    () => client.agent.sales.get(id as number),
     { enabled: !isNew },
   );
   const { data: packages } = useApi<TourPackageRow[]>(keys.agentPackages(), () =>
-    api<TourPackageRow[]>("/agent/tours/packages?active=true"),
+    client.agent.tours.packages({ active: true }),
   );
 
   const [form, setForm] = useState({
@@ -313,9 +297,7 @@ function DocEditor({
     setForm({ ...form, packageId });
     if (!packageId) return;
     try {
-      const pkg = await api<{ items: { label: string; qty: number; unitPrice: number }[] }>(
-        `/agent/tours/packages/${packageId}`,
-      );
+      const pkg = await client.agent.tours.package(Number(packageId));
       setLines(
         pkg.items.map((i) => ({ label: i.label, details: "", qty: i.qty, unitPrice: i.unitPrice })),
       );
@@ -344,7 +326,7 @@ function DocEditor({
         });
         push(queued ? "Saved on this device — it will sync when you are back online" : "Saved");
       } else {
-        await api(`/agent/sales/${id}`, { method: "PATCH", body });
+        await client.agent.sales.update(id as number, body);
         push("Saved");
       }
       onDone();
@@ -359,7 +341,7 @@ function DocEditor({
     if (isNew) return;
     setSending(true);
     try {
-      const result = await api<{ to: string }>(`/agent/sales/${id}/send`, { method: "POST", body: {} });
+      const result = await client.agent.sales.send(id as number);
       push(`Sent to ${result.to}`);
       qc.invalidateQueries({ queryKey: ["agent"] });
     } catch (ex) {
@@ -372,10 +354,7 @@ function DocEditor({
   async function convert() {
     if (isNew) return;
     try {
-      const invoice = await api<{ number: string }>(`/agent/sales/${id}/convert`, {
-        method: "POST",
-        body: {},
-      });
+      const invoice = await client.agent.sales.convert(id as number);
       push(`Invoice ${invoice.number} raised`);
       onDone();
     } catch (ex) {
@@ -388,7 +367,7 @@ function DocEditor({
     const entered = window.prompt(`How much against ${doc.number}?`, String(doc.totals.due));
     if (!entered) return;
     try {
-      await api(`/agent/sales/${id}/payments`, { method: "POST", body: { amount: Number(entered) } });
+      await client.agent.sales.recordPayment(id as number, { amount: Number(entered) });
       push("Recorded");
       onDone();
     } catch (ex) {
@@ -400,8 +379,8 @@ function DocEditor({
     if (isNew || !doc) return;
     if (!window.confirm(`Remove ${doc.number}?`)) return;
     try {
-      const result = await api<{ voided?: boolean }>(`/agent/sales/${id}`, { method: "DELETE" });
-      push(result.voided ? `${doc.number} voided — the client has already seen it` : "Deleted");
+      const result = await client.agent.sales.remove(id as number);
+      push("voided" in result ? `${doc.number} voided — the client has already seen it` : "Deleted");
       onDone();
     } catch (ex) {
       push((ex as Error).message, "err");

@@ -80,19 +80,39 @@ describe("what this package may import", () => {
    * A word on its own: `windowSize` and `documentUrl` are left alone, and so is
    * a module path — `export * from "./agent-window"` tripped this for two days
    * because a hyphen is not a word character (2026-09-19).
+   *
+   * And a field may be *called* one of these. `AgencyMoneyReceived`
+   * carries `document: string` — what a payment was against — and a
+   * property signature is a name being declared, not a global being
+   * reached for. The name comes from the server, so the alternative was
+   * to mistranslate a wire field to get past a guard, which is the tail
+   * wagging the dog (2026-09-21).
    */
-  const BROWSER_ONLY = /(?<![\w.\-/])(window|document|localStorage|navigator)(?![\w-])/;
+  const PROPERTY = /^\s*(window|document|localStorage|navigator)\??:/;
+  const REACH = /(?<![\w.\-/])(window|document|localStorage|navigator)(?![\w-])/;
+  // `String.fromCharCode(10)` for the same reason the comment stripper
+  // below uses it: this file may not contain the character it splits on
+  const LINE_BREAK = String.fromCharCode(10);
+  const reachesForTheBrowser = (code: string) =>
+    code.split(LINE_BREAK).some((line) => REACH.test(line) && !PROPERTY.test(line));
 
   it("catches a real reach for the browser", () => {
-    expect(BROWSER_ONLY.test("const w = window.innerWidth;")).toBe(true);
-    expect(BROWSER_ONLY.test("if (document) {}")).toBe(true);
-    expect(BROWSER_ONLY.test("localStorage.getItem('x')")).toBe(true);
+    expect(reachesForTheBrowser("const w = window.innerWidth;")).toBe(true);
+    expect(reachesForTheBrowser("if (document) {}")).toBe(true);
+    expect(reachesForTheBrowser("localStorage.getItem('x')")).toBe(true);
   });
 
   it("leaves a module path and a longer word alone", () => {
-    expect(BROWSER_ONLY.test('export * from "./agent-window";')).toBe(false);
-    expect(BROWSER_ONLY.test("const windowSize = 3;")).toBe(false);
-    expect(BROWSER_ONLY.test("type BookingWindowDays = number;")).toBe(false);
+    expect(reachesForTheBrowser('export * from "./agent-window";')).toBe(false);
+    expect(reachesForTheBrowser("const windowSize = 3;")).toBe(false);
+    expect(reachesForTheBrowser("type BookingWindowDays = number;")).toBe(false);
+  });
+
+  it("leaves a field that is merely named after one alone", () => {
+    expect(reachesForTheBrowser("  document: string;")).toBe(false);
+    expect(reachesForTheBrowser("  navigator?: string | null;")).toBe(false);
+    // and still catches one being read one line down
+    expect(reachesForTheBrowser(`  document: string;${LINE_BREAK}  const d = document;`)).toBe(true);
   });
 
   it("reaches for nothing that only exists in a browser", () => {
@@ -104,7 +124,7 @@ describe("what this package may import", () => {
       const code = readFileSync(file, "utf8")
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(new RegExp("//[^" + String.fromCharCode(10) + "]*", "g"), "");
-      if (BROWSER_ONLY.test(code)) offenders.push(relative(SRC, file));
+      if (reachesForTheBrowser(code)) offenders.push(relative(SRC, file));
     }
     expect(offenders).toEqual([]);
   });

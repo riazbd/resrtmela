@@ -2,12 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, money, dmy, type CmsRow, cur } from "@/lib/api";
+import { client, money, dmy, type CmsRow, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Tabs, Table } from "@/components/patterns";
 import { MoneyReceived } from "@/components/money-received";
 import { useAuth } from "@/lib/auth";
-import { PLAN_FEATURES, scheduleSentence, type Phase } from "@rh/shared";
+import {
+  PLAN_FEATURES,
+  type BillingSweepResult,
+  scheduleSentence,
+  type NewPlan,
+  type PlanDefinition,
+  type PlanEdit,
+  type PlatformAgentRow,
+  type PlatformResortRow,
+  type PlatformWallet,
+} from "@rh/shared";
 import { PlanLadder } from "./plan-ladder";
 import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
@@ -38,151 +48,21 @@ function DemoBadge() {
   );
 }
 
-interface Overview {
-  resorts: { total: number; active: number; suspended: number };
-  agents: { total: number; pending: number; active: number; suspended: number };
-  subscriptions: { trial: number; active: number; pastDue: number; cancelled: number; mrr: number };
-  duesOutstanding: number;
-  rooms: number;
-  /** How many accounts the figures above left out, because they are ours to test with. */
-  demoExcluded: { resorts: number; agencies: number };
-}
-interface ResortRow {
-  id: number;
-  name: string;
-  location: string | null;
-  status: string;
-  createdAt: string;
-  /** The subscription is the account's — every resort of one owner shows the same one. */
-  tenant: {
-    id: number;
-    name: string;
-    kind: string;
-    /** Ours, opened to try things with — badged, and out of the totals. */
-    demo: boolean;
-    subscriptions: { id: string; plan: string; status: string; fee: string; scheduleLabel: string | null; renewsAt: string | null }[];
-  };
-  _count: { rooms: number; bookings: number; guests: number };
-  userResorts?: { user: { id: number; name: string; phone: string } }[];
-}
-interface AgentRow {
-  id: number;
-  name: string;
-  phone: string;
-  status: string;
-  bookings: number;
-  resorts: { id: number; name: string }[];
-  wallet: { balance: number; active: boolean } | null;
-}
-interface PlanDef {
-  id: string;
-  name: string;
-  label: string;
-  schedules: {
-    id: number;
-    label: string;
-    active: boolean;
-    phases: Phase[];
-    openingFee: number;
-    perMonth: number;
-  }[];
-  maxRooms: number;
-  maxResorts: number;
-  maxStaff: number;
-  trialDays: number;
-  /** Keys from PLAN_FEATURES — what this plan includes, and what it locks. */
-  features: string[];
-  blurb: string | null;
-  active: boolean;
-  sortOrder: number;
-  /** The one plan the pricing page recommends. */
-  highlight: boolean;
-  /** RESORT | AGENCY — the shelf it is sold from. */
-  audience: string;
-}
+/**
+ * No wire shapes written here any more.
+ *
+ * Ten interfaces used to sit in this file — Overview, PlatformResortRow, PlatformAgentRow,
+ * PlanDefinition, SubscriptionRow, DueRow, CreditOrderRow, ChargeRow, CalCell and
+ * PlatformMoney — each next to an `api<That>("/platform/...")` call that
+ * asserted the server agreed. One of them was wrong: `PlatformResortRow` claimed a
+ * `scheduleLabel` on the subscription, `allResorts` never selected it, and
+ * so the badge beside every plan on the Resorts tab was blank and the renew
+ * button offered "one more  period". Nothing could have caught it, because
+ * the interface WAS the check.
+ */
 
-/** Every field the panel can send. `name` is absent on purpose: it is fixed. */
-type PlanEdit = {
-  label: string;
-  maxRooms: number;
-  maxResorts: number;
-  maxStaff: number;
-  trialDays: number;
-  features: string[];
-  blurb: string;
-  active: boolean;
-  sortOrder: number;
-  highlight: boolean;
-  /** RESORT | AGENCY. Fixed once the plan has been sold — the API refuses a move. */
-  audience: string;
-};
-
-interface SubscriptionRow {
-  id: string;
-  account: { id: number; name: string; kind: string; status: string };
-  plan: string;
-  pendingPlan: string | null;
-  status: string;
-  /** MONTHLY | YEARLY — what `fee` covers and how far apart the bills are. */
-  scheduleId: number | null;
-  scheduleLabel: string | null;
-  pendingScheduleId: number | null;
-  pendingScheduleLabel: string | null;
-  fee: number;
-  startedAt: string;
-  trialEndsAt: string | null;
-  renewsAt: string | null;
-  cancelledAt: string | null;
-  note: string | null;
-  outstanding: number;
-}
-interface DueRow {
-  id: string;
-  accountId: number;
-  /** The customer billed — a resort owner or an agency, not a resort. */
-  account: { id: number; name: string; kind: string };
-  subscription: { plan: string };
-  amount: string;
-  periodStart: string;
-  periodEnd: string;
-  dueDate: string;
-  status: string;
-  paidAt: string | null;
-}
-interface CreditOrderRow {
-  id: string;
-  credits: number;
-  price: number;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  note: string | null;
-  createdAt: string;
-  buyer: string;
-  buyerContact: string;
-  /** the customer billed — an agency has no resort to name */
-  accountName: string;
-  accountKind: string;
-  resortName: string | null;
-}
-
-/** A one-off amount a tenant owes, outside the subscription's monthly rhythm. */
-interface ChargeRow {
-  id: number;
-  /** billed to the customer, the same as a due; the resort is context */
-  account: { id: number; name: string; kind: string };
-  resort: { id: number; name: string } | null;
-  kind: string;
-  description: string;
-  amount: number;
-  status: string;
-  paidAt: string | null;
-  createdAt: string;
-}
-interface CalCell {
-  date: string;
-  dues: number;
-  dueCount: number;
-  renewals: number;
-}
+/** Every field the plan form holds — the wire type, with nothing optional. */
+type PlanForm = Required<PlanEdit>;
 
 const TABS = ["Overview", "Resorts", "Agents", "Plans", "Offers", "Subscriptions", "Dues", "Money received", "Email credits", "Calendar", "Billing policy", "Website CMS"] as const;
 
@@ -198,29 +78,13 @@ const KIND_LABEL: Record<string, string> = {
   WALLET_TOPUP: "Wallet top-up",
 };
 
-interface PlatformMoney {
-  total: number;
-  rows: { name: string; count: number; total: number }[];
-  recent: {
-    kind: "SUBSCRIPTION" | "CHARGE" | "WALLET_TOPUP";
-    id: string;
-    at: string | null;
-    amount: number;
-    method: string | null;
-    from: string;
-    what: string;
-    receivedBy: string | null;
-    note: string | null;
-  }[];
-}
-
 export default function PlatformPage() {
   const { impersonate, exitImpersonation, isImpersonating } = useAuth();
   const qc = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [subFor, setSubFor] = useState<ResortRow | null>(null);
-  const [walletFor, setWalletFor] = useState<AgentRow | null>(null);
+  const [subFor, setSubFor] = useState<PlatformResortRow | null>(null);
+  const [walletFor, setWalletFor] = useState<PlatformAgentRow | null>(null);
   const [subPlan, setSubPlan] = useState("");
   /** MONTHLY unless the super admin says otherwise, like every signup. */
   const [subShelf, setSubShelf] = useState<number | null>(null);
@@ -241,27 +105,27 @@ export default function PlatformPage() {
 
   // five independent reads: the overview lands first and the tables fill in
   // behind it, instead of every tab waiting on the slowest query
-  const ovQ = useApi(keys.platform("overview"), () => api<Overview>("/platform/overview"));
-  const resortsQ = useApi(keys.platform("resorts"), () => api<ResortRow[]>("/platform/resorts"));
-  const agentsQ = useApi(keys.platform("agents"), () => api<AgentRow[]>("/platform/agents"));
-  const duesQ = useApi(keys.platform("dues"), () => api<DueRow[]>("/platform/dues"));
+  const ovQ = useApi(keys.platform("overview"), () => client.platform.overview());
+  const resortsQ = useApi(keys.platform("resorts"), () => client.platform.resorts());
+  const agentsQ = useApi(keys.platform("agents"), () => client.platform.agents());
+  const duesQ = useApi(keys.platform("dues"), () => client.platform.dues());
   // the platform's own list, not an array written into this file
-  const settingsQ = useApi(keys.platform("settings"), () => api<Record<string, string>>("/platform/settings"));
+  const settingsQ = useApi(keys.platform("settings"), () => client.platform.settings());
   const payMethods = paymentMethodsFrom(settingsQ.data ?? {});
   /**
    * One-off charges — an email credit pack today; SMS packs and setup fees will
    * be the same shape. They live beside the subscription dues rather than in
    * their own tab, because "what does this tenant owe" is one question.
    */
-  const chargesQ = useApi(keys.platform("charges"), () => api<ChargeRow[]>("/platform/charges"));
+  const chargesQ = useApi(keys.platform("charges"), () => client.platform.charges());
   // only on its own tab: it reads three tables, and an overview should not
   // wait on a report nobody opened
   const moneyQ = useApi(
     keys.platform("money-received"),
-    () => api<PlatformMoney>("/platform/money-received"),
+    () => client.platform.moneyReceived(),
     { enabled: tab === "Money received" },
   );
-  const plansQ = useApi(keys.platform("plans"), () => api<PlanDef[]>("/platform/plans"));
+  const plansQ = useApi(keys.platform("plans"), () => client.platform.plans());
   /**
    * Email credit packs waiting on a decision.
    *
@@ -271,7 +135,7 @@ export default function PlatformPage() {
    */
   const creditOrdersQ = useApi(
     keys.platform("credit-orders"),
-    () => api<CreditOrderRow[]>("/platform/email-credit-orders"),
+    () => client.platform.creditOrders(),
   );
 
   const ov = ovQ.data ?? null;
@@ -300,21 +164,17 @@ export default function PlatformPage() {
   }
 
   const savePlan = (name: string, patch: PlanEdit) =>
-    planAction(() => api(`/platform/plans/${name}`, { method: "PATCH", body: patch }));
+    planAction(() => client.platform.updatePlan(name, patch));
 
-  const createPlan = (body: PlanEdit & { name: string }) =>
-    planAction(() => api("/platform/plans", { method: "POST", body }));
+  const createPlan = (body: NewPlan) => planAction(() => client.platform.createPlan(body));
 
-  const deletePlan = (name: string) =>
-    planAction(() => api(`/platform/plans/${name}`, { method: "DELETE" }));
+  const deletePlan = (name: string) => planAction(() => client.platform.deletePlan(name));
 
   const [calYear, calMonth] = month.split("-").map(Number);
   const calQ = useApi(
     keys.platform("sub-calendar", month),
     () =>
-      api<CalCell[]>(
-        `/platform/sub-calendar?from=${monthOf.firstDay(month)}&to=${monthOf.lastDay(month)}`,
-      ),
+      client.platform.subCalendar(monthOf.firstDay(month), monthOf.lastDay(month)),
     // only fetched once the tab is actually open
     { enabled: tab === "Calendar" },
   );
@@ -322,7 +182,7 @@ export default function PlatformPage() {
 
   const subsQ = useApi(
     keys.platform("subscriptions"),
-    () => api<SubscriptionRow[]>("/platform/subscriptions"),
+    () => client.platform.subscriptions(),
     { enabled: tab === "Subscriptions" },
   );
   const subs = subsQ.data ?? null;
@@ -344,7 +204,7 @@ export default function PlatformPage() {
     setBusy(true);
     setErr("");
     try {
-      const r = await api<{ accessToken: string }>(`/platform/users/${userId}/login-as`, { method: "POST", body: {} });
+      const r = await client.platform.loginAs(userId);
       await impersonate(r.accessToken);
     } catch (e) {
       setErr(String((e as Error).message ?? e));
@@ -361,7 +221,7 @@ export default function PlatformPage() {
 
   if (ov === null && resorts === null) return <Spinner />;
 
-  const sub = (r: ResortRow) => r.tenant.subscriptions[0];
+  const sub = (r: PlatformResortRow) => r.tenant.subscriptions[0];
 
   return (
     <div>
@@ -517,14 +377,14 @@ export default function PlatformPage() {
                           <button
                             // one of this subscription's own periods, whatever
                             // length the rung it is standing on says that is
-                            onClick={() => act(() => api(`/platform/subscriptions/${sub(r)!.id ?? ""}/renew`, { method: "POST", body: { periods: 1 } }))}
+                            onClick={() => act(() => client.platform.renew(Number(sub(r)!.id), 1))}
                             title={`Renew for one more ${sub(r)!.scheduleLabel?.toLowerCase() ?? ""} period`}
                             className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                           >
                             Renew
                           </button>
                           <button
-                            onClick={() => act(() => api(`/platform/subscriptions/${sub(r)!.id}/cancel`, { method: "POST" }))}
+                            onClick={() => act(() => client.platform.cancelSubscription(Number(sub(r)!.id)))}
                             className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                           >
                             Cancel
@@ -532,7 +392,7 @@ export default function PlatformPage() {
                         </>
                       )}
                       <button
-                        onClick={() => act(() => api(`/platform/resorts/${r.id}/status`, { method: "PATCH", body: { status: r.status === "active" ? "suspended" : "active" } }))}
+                        onClick={() => act(() => client.platform.setResortStatus(r.id, r.status === "active" ? "suspended" : "active"))}
                         className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                       >
                         {r.status === "active" ? "Suspend" : "Activate"}
@@ -540,7 +400,7 @@ export default function PlatformPage() {
                       {/* on the account, not the resort: one owner's three
                           resorts are one customer and one switch */}
                       <button
-                        onClick={() => act(() => api(`/platform/accounts/${r.tenant.id}/demo`, { method: "PATCH", body: { demo: !r.tenant.demo } }))}
+                        onClick={() => act(() => client.platform.setAccountDemo(r.tenant.id, !r.tenant.demo))}
                         title={r.tenant.demo
                           ? "Count this account in the platform's figures again"
                           : "Mark as an account opened to test with, and leave it out of the figures"}
@@ -848,7 +708,7 @@ export default function PlatformPage() {
                     {d.status !== "PAID" && (
                       <button onClick={() => setCollecting({
                         what: `${d.account.name} · ${d.subscription.plan} — ${money(d.amount)}`,
-                        pay: (m) => act(() => api(`/platform/dues/${d.id}/pay`, { method: "POST", body: { method: m } })),
+                        pay: (m) => act(() => client.platform.payDue(Number(d.id), m)),
                       })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
@@ -891,7 +751,7 @@ export default function PlatformPage() {
                     {c.status !== "PAID" && (
                       <button onClick={() => setCollecting({
                         what: `${c.account.name} · ${c.description} — ${money(c.amount)}`,
-                        pay: (m) => act(() => api(`/platform/charges/${c.id}/pay`, { method: "POST", body: { method: m } })),
+                        pay: (m) => act(() => client.platform.payCharge(c.id, m)),
                       })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
@@ -959,10 +819,7 @@ export default function PlatformPage() {
                                   what: `${o.accountName} · ${o.credits.toLocaleString("en-IN")} credits — ${money(o.price)}`,
                                   pay: (m) =>
                                     act(() =>
-                                      api(`/platform/email-credit-orders/${o.id}/decision`, {
-                                        method: "POST",
-                                        body: { decision: "APPROVE", method: m },
-                                      }),
+                                      client.platform.decideCreditOrder(o.id, "APPROVE", { method: m }),
                                     ),
                                 })
                               }
@@ -975,7 +832,7 @@ export default function PlatformPage() {
                               onClick={() => {
                                 const note = window.prompt(`Decline ${o.credits.toLocaleString("en-IN")} credits for ${o.accountName}. Reason (they will see it):`);
                                 if (note === null) return;
-                                void act(() => api(`/platform/email-credit-orders/${o.id}/decision`, { method: "POST", body: { decision: "REJECT", note: note || undefined } }));
+                                void act(() => client.platform.decideCreditOrder(o.id, "REJECT", { note: note || undefined }));
                               }}
                             >
                               Decline
@@ -1105,14 +962,14 @@ export default function PlatformPage() {
               <Btn variant="ghost" onClick={() => setSubFor(null)}>Cancel</Btn>
               <Btn
                 disabled={busy}
-                onClick={() => act(async () => { await api(`/platform/resorts/${subFor.id}/subscription`, { method: "POST", body: {
+                onClick={() => act(async () => { await client.platform.subscribe(subFor.id, {
                     plan: subPlan,
-                    scheduleId: subShelf,
+                    ...(subShelf == null ? {} : { scheduleId: subShelf }),
                     fee: Number(subFee),
                     // an empty box means "whatever the plan sells", not "none":
                     // Number("") is 0, and 0 is a real answer here
                     ...(subTrial.trim() === "" ? {} : { trialDays: Number(subTrial) }),
-                  } }); setSubFor(null); })}
+                  }); setSubFor(null); })}
               >
                 Start subscription
               </Btn>
@@ -1178,7 +1035,7 @@ function FeaturePicker({ chosen, onToggle, audience }: { chosen: string[]; onTog
 }
 
 
-function toEdit(plan: PlanDef): PlanEdit {
+function toEdit(plan: PlanDefinition): PlanForm {
   return {
     label: plan.label,
     maxRooms: plan.maxRooms,
@@ -1200,16 +1057,16 @@ function PlanCard({
   onSave,
   onDelete,
 }: {
-  plan: PlanDef;
+  plan: PlanDefinition;
   busy: boolean;
   onSave: (name: string, patch: PlanEdit) => void;
   onDelete: (name: string) => void;
 }) {
-  const [form, setForm] = useState<PlanEdit>(() => toEdit(plan));
+  const [form, setForm] = useState<PlanForm>(() => toEdit(plan));
   // a save refetches the list; re-seed the form from whatever came back
   useEffect(() => { setForm(toEdit(plan)); }, [plan]);
 
-  const set = <K extends keyof PlanEdit>(k: K, v: PlanEdit[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof PlanForm>(k: K, v: PlanForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const toggle = (key: string) =>
     setForm((f) => ({
       ...f,
@@ -1327,7 +1184,8 @@ function PlanCard({
   );
 }
 
-const BLANK_PLAN: PlanEdit & { name: string; price: number } = {
+/** Every field the create form holds; assignable to `NewPlan` as it stands. */
+const BLANK_PLAN: Required<NewPlan> = {
   name: "",
   label: "",
   price: 0,
@@ -1349,7 +1207,7 @@ function NewPlanCard({
   taken,
 }: {
   busy: boolean;
-  onCreate: (body: PlanEdit & { name: string }) => void;
+  onCreate: (body: NewPlan) => void;
   taken: string[];
 }) {
   const [open, setOpen] = useState(false);
@@ -1555,19 +1413,20 @@ function WalletDrawer({
   onClose,
   onMoved,
 }: {
-  agent: AgentRow;
+  agent: PlatformAgentRow;
   onClose: () => void;
   onMoved: () => void;
 }) {
   const { push } = useToast();
-  const [view, setView] = useState<WalletView | null>(null);
+  const [view, setView] = useState<PlatformWallet | null>(null);
   const [kind, setKind] = useState("TOPUP");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<WalletView>(`/wallets/${agent.id}`)
+    client.platform
+      .wallet(agent.id)
       .then(setView)
       .catch(() => setView(null));
   }, [agent.id]);
@@ -1580,10 +1439,7 @@ function WalletDrawer({
     if (!window.confirm(`${verb} ${money(Math.abs(value))} — ${agent.name}?\n\n${note || "No note"}`)) return;
     setBusy(true);
     try {
-      await api(`/wallets/${agent.id}/txns`, {
-        method: "POST",
-        body: { kind, amount: value, note: note || undefined },
-      });
+      await client.platform.moveWallet(agent.id, { kind, amount: value, note: note || undefined });
       push(kind === "TOPUP" ? "Money added" : kind === "PAYOUT" ? "Paid out" : "Adjusted");
       setAmount("");
       setNote("");
@@ -1711,19 +1567,6 @@ const WALLET_KIND_LABELS: Record<string, string> = {
   REFUND: "Refund (historic)",
 };
 
-interface WalletView {
-  balance: number;
-  active: boolean;
-  txns: {
-    id: string;
-    kind: string;
-    amount: number;
-    balanceAfter: number;
-    note: string | null;
-    createdAt: string;
-  }[];
-}
-
 function PackPricesCard() {
   const { push } = useToast();
   const [packs, setPacks] = useState<{ credits: string; price: string }[]>([]);
@@ -1731,7 +1574,7 @@ function PackPricesCard() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<Record<string, string>>("/platform/settings")
+    client.platform.settings()
       .then((v) => {
         try {
           const parsed = JSON.parse(v["email.creditPacks"] ?? "[]") as { credits: number; price: number }[];
@@ -1755,12 +1598,9 @@ function PackPricesCard() {
     }
     setBusy(true);
     try {
-      await api("/platform/settings", {
-        method: "PATCH",
-        body: {
-          "email.creditPacks": JSON.stringify(rows),
-          "platform.paymentInstructions": payTo,
-        },
+      await client.platform.updateSettings({
+        "email.creditPacks": JSON.stringify(rows),
+        "platform.paymentInstructions": payTo,
       });
       push("Prices saved — buyers see them straight away");
       load();
@@ -1842,10 +1682,10 @@ function PolicyTab() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [sweeping, setSweeping] = useState(false);
-  const [last, setLast] = useState<Record<string, number> | null>(null);
+  const [last, setLast] = useState<BillingSweepResult | null>(null);
 
   const load = useCallback(() => {
-    api<Record<string, string>>("/platform/settings").then(setValues).catch(() => setValues({}));
+    client.platform.settings().then(setValues).catch(() => setValues({}));
   }, []);
   useEffect(() => load(), [load]);
 
@@ -1853,7 +1693,7 @@ function PolicyTab() {
     setBusy(true);
     try {
       const patch = Object.fromEntries(POLICY_FIELDS.map((f) => [f.key, values[f.key] ?? ""]));
-      setValues(await api<Record<string, string>>("/platform/settings", { method: "PATCH", body: patch }));
+      setValues(await client.platform.updateSettings(patch));
       push("Policy saved — it applies on the next sweep");
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -1865,7 +1705,7 @@ function PolicyTab() {
   async function sweep() {
     setSweeping(true);
     try {
-      const r = await api<Record<string, number>>("/platform/billing/sweep", { method: "POST" });
+      const r = await client.platform.runBillingSweep();
       setLast(r);
       push(`Swept: ${r.duesRaised} billed, ${r.suspended} suspended, ${r.resumed} resumed`);
     } catch (ex) {
@@ -1932,7 +1772,7 @@ function BrandCard() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<CmsRow[]>("/platform/cms")
+    client.platform.cms()
       .then((rows) => {
         const m = Object.fromEntries(rows.map((r) => [r.key, r.value]));
         setName(m["brand.name"] ?? "");
@@ -1946,7 +1786,7 @@ function BrandCard() {
   async function save(key: string, value: string, ok: string) {
     setBusy(key);
     try {
-      await api("/platform/cms", { method: "POST", body: { key, value } });
+      await client.platform.setCms(key, value);
       push(ok);
       load();
     } catch (ex) {
@@ -2079,7 +1919,7 @@ function CmsTab() {
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<CmsRow[]>("/platform/cms").then((r) => {
+    client.platform.cms().then((r) => {
       setRows(r);
       setValues(Object.fromEntries(r.map((x) => [x.key, x.value])));
     }).catch(() => setRows([]));
@@ -2089,7 +1929,7 @@ function CmsTab() {
   async function save(key: string) {
     setBusy(key);
     try {
-      await api("/platform/cms", { method: "POST", body: { key, value: values[key] ?? "" } });
+      await client.platform.setCms(key, values[key] ?? "");
       push("Saved — refresh the homepage to see it");
       load();
     } catch (ex) {

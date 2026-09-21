@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, client, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -72,8 +72,8 @@ function SheetTab() {
         sheet={isLoading && !data ? null : (data ?? null)}
         month={month}
         canManage
-        payUrl={(employeeId) => `/agent/payroll/${employeeId}`}
-        undoUrl={(paymentId) => `/agent/payroll/payment/${paymentId}`}
+        pay={(employeeId, body) => client.agent.payroll.pay(employeeId, body)}
+        undoPay={(paymentId) => client.agent.payroll.undoPay(paymentId)}
         onDone={reload}
       />
 
@@ -186,9 +186,10 @@ function AddPerson({ onClose, onDone }: { onClose: () => void; onDone: () => voi
   async function save() {
     setBusy(true);
     try {
-      await api("/agent/employees", {
-        method: "POST",
-        body: { ...form, salary: Number(form.salary || 0), joinDate: form.joinDate || undefined },
+      await client.agent.payroll.addEmployee({
+        ...form,
+        salary: Number(form.salary || 0),
+        joinDate: form.joinDate || undefined,
       });
       push(`${form.name} added`);
       onDone();

@@ -21,9 +21,15 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, money, cur } from "@/lib/api";
+import { client, money, cur } from "@/lib/api";
 import { Button as Btn, useToast } from "@/components/ui";
-import { PERIOD_UNITS, phasesAreSane, scheduleSentence, type Phase, type PeriodUnit } from "@rh/shared";
+import {
+  PERIOD_UNITS,
+  phasesAreSane,
+  scheduleSentence,
+  type Phase,
+  type PeriodUnit,
+} from "@rh/shared";
 import { Plus, Trash2 } from "lucide-react";
 
 interface Rung {
@@ -39,9 +45,6 @@ interface Shelf {
   active: boolean;
   phases: Rung[];
 }
-
-/** What the API returns and takes — `repeats` absent means forever. */
-type ShelfWire = { label: string; active?: boolean; phases: Rung[] };
 
 const asPhases = (rungs: Rung[]): Phase[] => rungs.map((r, i) => ({ seq: i + 1, ...r }));
 
@@ -61,7 +64,7 @@ export function PlanLadder({ plan, label }: { plan: string; label: string }) {
 
   useEffect(() => {
     let alive = true;
-    api<ShelfWire[]>(`/platform/plans/${encodeURIComponent(plan)}/schedules`)
+    client.platform.planSchedules(plan)
       .then((rows) => {
         if (!alive) return;
         setShelves(
@@ -103,14 +106,13 @@ export function PlanLadder({ plan, label }: { plan: string; label: string }) {
   })();
   const blocked = shelves.length === 0 || dupe || problems.some(Boolean);
 
-  async function save() {
+  // an arrow, not a declaration: `shelves` is narrowed to non-null above,
+  // and a hoisted function would be typed against the wider state
+  const save = async () => {
     setBusy(true);
     setErr("");
     try {
-      const saved = await api<ShelfWire[]>(`/platform/plans/${encodeURIComponent(plan)}/schedules`, {
-        method: "PUT",
-        body: { schedules: shelves },
-      });
+      const saved = await client.platform.setPlanSchedules(plan, shelves);
       setShelves(
         saved.map((r) => ({
           label: r.label,
@@ -125,7 +127,7 @@ export function PlanLadder({ plan, label }: { plan: string; label: string }) {
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-3">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, getToken } from "@/lib/api";
+import { getToken } from "@/lib/api";
 
 /**
  * A page, drawn for its owner before it is published (2026-09-17).
@@ -13,11 +13,11 @@ import { api, getToken } from "@/lib/api";
  * says it is a preview, so nobody shares this address thinking it is the site.
  */
 export function PreviewFrame<T>({
-  path,
+  load,
   back,
   render,
 }: {
-  path: string;
+  load: () => Promise<T>;
   back: string;
   render: (data: T) => React.ReactNode;
 }) {
@@ -30,10 +30,10 @@ export function PreviewFrame<T>({
       setProblem("Sign in to see a preview of your page.");
       return;
     }
-    api<T>(path)
+    load()
       .then(setData)
       .catch((e: Error) => setProblem(e.message || "This preview could not be loaded."));
-  }, [path]);
+  }, [load]);
 
   return (
     <>

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api } from "@/lib/api";
+import { client } from "@/lib/api";
+import type { ImportReport, ReconcileReport } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Spinner, Td, Th, useToast } from "@/components/ui";
 import { IMPORT_OUTCOME, type ImportOutcome } from "@/lib/import-outcomes";
@@ -12,31 +13,6 @@ import {
   SAMPLE_FB_CSV,
   SAMPLE_FILENAMES,
 } from "@rh/shared";
-
-interface ImportReport {
-  dryRun: boolean;
-  totalRows: number;
-  imported: number;
-  skipped: number;
-  outOfService: number;
-  conflictNoHold: number;
-  roomsCreated: string[];
-  guestsCreated: number;
-  paymentsCreated: number;
-  roomTypeCreated: { name: string; assumed: boolean } | null;
-  /** Bookings whose ID was already here but deleted, and which this import replaced. */
-  replacedDeleted: number;
-  /** Names in Booking Source = Agent rows that matched no agent working here. */
-  unmatchedAgents: string[];
-  /** Names in the Received By column that matched nobody on this resort's staff. */
-  unmatchedReceivers: string[];
-  rows: {
-    rowNo: number;
-    code: string;
-    outcome: "imported" | "skipped" | "out_of_service" | "conflict_no_hold";
-    detail?: string;
-  }[];
-}
 
 /** The importer's own words for what happened to a row — see lib/import-outcomes. */
 function OutcomeBadge({ outcome }: { outcome: ImportOutcome }) {
@@ -93,15 +69,6 @@ const TABS: { key: ImportTab; label: string }[] = [
   { key: "reconcile", label: "Reconcile grids" },
 ];
 
-interface RecResult {
-  datesChecked: number;
-  checked: number;
-  matched: number;
-  cancelledExplained: number;
-  unexplainedCount: number;
-  unexplained: { date: string; room: string; kind: string; sheet: string; ours: unknown }[];
-}
-
 export default function ImportPage() {
   const [tab, setTab] = useState<ImportTab>("bookings");
   const { activeResort, isManagement } = useAuth();
@@ -111,7 +78,7 @@ export default function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [fileName2, setFileName2] = useState("");
   const [report, setReport] = useState<ImportReport | null>(null);
-  const [rec, setRec] = useState<RecResult | null>(null);
+  const [rec, setRec] = useState<ReconcileReport | null>(null);
   const [busy, setBusy] = useState(false);
   /**
    * What to call the room type, for a resort that has none yet.
@@ -144,10 +111,7 @@ export default function ImportPage() {
     setBusy(true);
     setRec(null);
     try {
-      const r = await api<RecResult>(`/resorts/${activeResort.id}/reconcile`, {
-        method: "POST",
-        body: { sheet7: csv, sheet11: csv2 },
-      });
+      const r = await client.importer.reconcile(activeResort.id, csv, csv2);
       setRec(r);
       push(
         `Reconciled ${r.checked} checks across ${r.datesChecked} days — ${r.unexplainedCount} unexplained`,
@@ -166,12 +130,7 @@ export default function ImportPage() {
     setReport(null);
     try {
       if (tab === "expenses") {
-        const r = await api<{
-          imported: number;
-          skipped: number;
-          total: number;
-          dailyTotalCheck: { compared: number; mismatches: { date: string; sheet: number; computed: number }[] };
-        }>(`/resorts/${activeResort.id}/import/expenses`, { method: "POST", body: { csv } });
+        const r = await client.importer.expenses(activeResort.id, csv);
         push(
           `Expenses imported: ${r.imported} (total ${r.total}) · daily-total mismatches: ${r.dailyTotalCheck.mismatches.length}/${r.dailyTotalCheck.compared}`,
           r.dailyTotalCheck.mismatches.length ? "err" : "ok",
@@ -179,27 +138,14 @@ export default function ImportPage() {
         return;
       }
       if (tab === "fb") {
-        const r = await api<{
-          imported: number;
-          skipped: number;
-          statusMismatches: { code: string; sheet: string; computed: string }[];
-        }>(`/resorts/${activeResort.id}/import/fb`, {
-          method: "POST",
-          // the sheet's own room names are matched directly; a map is only for
-          // registers that write something else, and one resort's map is not
-          // something to ship to every other resort
-          body: { csv },
-        });
+        const r = await client.importer.fb(activeResort.id, csv);
         push(
           `F&B bills imported: ${r.imported} · status mismatches vs sheet: ${r.statusMismatches.length}`,
           r.statusMismatches.length ? "err" : "ok",
         );
         return;
       }
-      const r = await api<ImportReport>(`/resorts/${activeResort.id}/import/bookings`, {
-        method: "POST",
-        body: { csv, dryRun, roomType },
-      });
+      const r = await client.importer.bookings(activeResort.id, { csv, dryRun, roomType });
       setReport(r);
       push(
         dryRun

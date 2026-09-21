@@ -114,8 +114,8 @@ export default function PayrollPage() {
         sheet={sheet}
         month={month}
         canManage={canManage}
-        payUrl={(employeeId) => `/resorts/${rid}/payroll/employees/${employeeId}/pay`}
-        undoUrl={(paymentId) => `/payroll/payments/${paymentId}`}
+        pay={(employeeId, body) => client.payroll.pay(rid!, employeeId, body)}
+        undoPay={(paymentId) => client.payroll.unpay(paymentId)}
         onDone={load}
       />
 

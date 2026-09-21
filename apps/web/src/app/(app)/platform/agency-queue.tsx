@@ -2,20 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api } from "@/lib/api";
+import { client } from "@/lib/api";
+import type { PlatformAgencyRow } from "@rh/shared";
 import { displayEmail, displayPhone } from "@/lib/contact";
-
-interface AgencyRow {
-  id: number;
-  name: string;
-  status: string;
-  suspendedReason: string | null;
-  createdAt: string;
-  owner: { id: number; name: string; email: string; phone: string } | null;
-  subscription: { plan: string; status: string; trialEndsAt: string | null } | null;
-  /** Ours, opened to try things with — badged here and out of Overview's figures. */
-  demo: boolean;
-}
 
 /**
  * The agencies waiting for the platform.
@@ -25,11 +14,11 @@ interface AgencyRow {
  * one row per agency, verified once — not once per resort.
  */
 export function AgencyQueue() {
-  const [rows, setRows] = useState<AgencyRow[] | null>(null);
+  const [rows, setRows] = useState<PlatformAgencyRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<AgencyRow[]>("/platform/agencies")
+    client.platform.agencies()
       .then((r) => { setRows(r); setErr(null); })
       .catch((e) => setErr((e as Error).message));
   }, []);
@@ -37,7 +26,7 @@ export function AgencyQueue() {
 
   async function verify(id: number) {
     try {
-      await api(`/platform/agencies/${id}/verify`, { method: "POST" });
+      await client.platform.verifyAgency(id);
       load();
     } catch (e) {
       setErr((e as Error).message);
@@ -55,12 +44,12 @@ export function AgencyQueue() {
    * Suspending asks for a reason because "suspended" with no why is a support
    * ticket nobody can answer.
    */
-  async function setStatus(a: AgencyRow, status: "active" | "suspended") {
+  async function setStatus(a: PlatformAgencyRow, status: "active" | "suspended") {
     if (status === "suspended") {
       const reason = window.prompt(`Suspend ${a.name}? Say why — it is shown to whoever asks later.`, "abuse");
       if (reason === null) return;
       try {
-        await api(`/platform/accounts/${a.id}/status`, { method: "PATCH", body: { status, reason: reason.slice(0, 32) } });
+        await client.platform.setAccountStatus(a.id, status, reason.slice(0, 32));
         load();
       } catch (e) {
         setErr((e as Error).message);
@@ -69,7 +58,7 @@ export function AgencyQueue() {
     }
     if (!window.confirm(`Let ${a.name} back in?`)) return;
     try {
-      await api(`/platform/accounts/${a.id}/status`, { method: "PATCH", body: { status } });
+      await client.platform.setAccountStatus(a.id, status);
       load();
     } catch (e) {
       setErr((e as Error).message);

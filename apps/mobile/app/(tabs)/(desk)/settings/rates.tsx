@@ -71,13 +71,9 @@ export default function RatePlansScreen() {
     }
     setRefused(null);
     try {
-      await client.rooms.createRatePlan(resortId!, {
-        roomTypeId: type,
-        dateFrom,
-        dateTo,
-        price,
-        active: true,
-      });
+      // no `active: true` here: the route does not accept it, the column
+      // defaults to it, and the DTO's whitelist was dropping it in silence
+      await client.rooms.createRatePlan(resortId!, { roomTypeId: type, dateFrom, dateTo, price });
       setPrice(0);
       setTried(false);
       setAdding(false);

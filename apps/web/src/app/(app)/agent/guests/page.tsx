@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, money, dmy } from "@/lib/api";
+import { client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
 import { useDebounced } from "@/lib/use-debounced";
@@ -28,7 +28,7 @@ export default function AgencyGuestsPage() {
 
   const { data, isLoading, error, stale } = useApi<{ rows: AgencyGuestRow[]; total: number }>(
     keys.agentGuests(q),
-    () => api<{ rows: AgencyGuestRow[]; total: number }>(`/agent/guests${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    () => client.agent.guests({ q: q || undefined }),
   );
 
   if (role !== "AGENT") return <Empty msg="Agents only" />;

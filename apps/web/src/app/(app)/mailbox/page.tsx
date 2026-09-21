@@ -2,19 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, dmy, money } from "@/lib/api";
+import { client, dmy, money } from "@/lib/api";
+import type { CreditPack, EmailCampaign, EmailCreditOrderRow, NewCampaign } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
 import { Mail, ShoppingCart, Send } from "lucide-react";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
-
-interface CampaignRow {
-  id: string;
-  subject: string;
-  recipients: number;
-  status: string;
-  sentAt: string;
-}
 
 /**
  * What the platform sells is the platform's decision.
@@ -24,44 +17,32 @@ interface CampaignRow {
  * could not change what it sells without a deploy, and the three lists could
  * disagree in the meantime. They come from the super admin's settings now.
  */
-interface CreditOrder {
-  id: string;
-  credits: number;
-  price: number;
-  status: "PENDING" | "APPROVED" | "REJECTED";
-  note: string | null;
-  createdAt: string;
-  decidedAt: string | null;
-}
-
-interface CreditPack {
-  credits: number;
-  price: number;
-}
-
 export default function MailboxPage() {
   // a failed load used to render as an empty campaign history
   const fail = useLoadFailure();
   const { activeResort, isManagement, role } = useAuth();
   const { push } = useToast();
   const [credits, setCredits] = useState<number | null>(null);
-  const [history, setHistory] = useState<CampaignRow[] | null>(null);
+  const [history, setHistory] = useState<EmailCampaign[] | null>(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [audience, setAudience] = useState("RESORT_GUESTS");
+  const [audience, setAudience] = useState<NewCampaign["audience"]>("RESORT_GUESTS");
   const [busy, setBusy] = useState(false);
   const [packs, setPacks] = useState<CreditPack[]>([]);
-  const [orders, setOrders] = useState<CreditOrder[]>([]);
+  const [orders, setOrders] = useState<EmailCreditOrderRow[]>([]);
   const [payTo, setPayTo] = useState("");
   const isAgent = role === "AGENT";
 
   const load = useCallback(async () => {
-    const c = await api<{ credits: number; payTo: string }>("/email-credits").catch(() => null);
+    const c = await client.engage.myCredits().catch(() => null);
     setCredits(c?.credits ?? 0);
     setPayTo(c?.payTo ?? "");
-    api<CreditPack[]>("/email-credits/packs").then(setPacks).catch(() => setPacks([]));
-    api<CreditOrder[]>("/email-credits/orders").then(setOrders).catch(() => setOrders([]));
-    api<CampaignRow[]>("/email-campaigns").then((r) => { setHistory(r); fail.clear(); }).catch(fail.onFail(() => setHistory([])));
+    client.engage.creditPacks().then(setPacks).catch(() => setPacks([]));
+    client.engage.myCreditOrders().then(setOrders).catch(() => setOrders([]));
+    client.engage
+      .campaigns()
+      .then((r) => { setHistory(r); fail.clear(); })
+      .catch(fail.onFail(() => setHistory([])));
   }, []);
   useEffect(() => {
     load();
@@ -89,11 +70,11 @@ ${payTo}` : "");
     if (!window.confirm(ask)) return;
     setBusy(true);
     try {
-      const r = await api<CreditOrder>("/email-credits/purchase", {
-        method: "POST",
-        // one order however many times an impatient click resubmits it
-        body: { credits: pack.credits, clientRef: `pack-${pack.credits}-${Date.now()}` },
-      });
+      // one order however many times an impatient click resubmits it
+      const r = await client.engage.requestCredits(
+        pack.credits,
+        `pack-${pack.credits}-${Date.now()}`,
+      );
       push(`Requested ${r.credits.toLocaleString("en-IN")} credits — waiting for platform approval`);
       load();
     } catch (ex) {
@@ -110,14 +91,11 @@ ${payTo}` : "");
     if (!window.confirm(`Send "${subject}" to ${who}? This cannot be undone.`)) return;
     setBusy(true);
     try {
-      const r = await api<{ sent: number; failed: number }>("/email-campaigns", {
-        method: "POST",
-        body: {
-          subject,
-          body,
-          audience,
-          resortId: audience === "RESORT_GUESTS" || audience === "AGENTS" ? activeResort?.id : undefined,
-        },
+      const r = await client.engage.sendCampaign({
+        subject,
+        body,
+        audience,
+        resortId: audience === "RESORT_GUESTS" || audience === "AGENTS" ? activeResort?.id : undefined,
       });
       push(`Sent to ${r.sent} recipient(s)${r.failed ? `, ${r.failed} failed` : ""}`);
       setSubject("");
@@ -142,7 +120,10 @@ ${payTo}` : "");
           <Card title="Compose campaign">
             <div className="space-y-3">
               <Field label="Audience">
-                <Select value={audience} onChange={(e) => setAudience(e.target.value)}>
+                <Select
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value as NewCampaign["audience"])}
+                >
                   {isAgent ? (
                     <option value="MY_GUESTS">My clients (guests on my bookings with email)</option>
                   ) : (

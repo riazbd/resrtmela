@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Trash2, Upload as UploadIcon } from "lucide-react";
-import { api, client, upload } from "@/lib/api";
+import { client, upload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, useToast } from "@/components/ui";
@@ -88,9 +88,9 @@ export default function AgencyWebsitePage() {
     run(
       "save",
       () =>
-        api("/agent/site", {
-          method: "PATCH",
-          body: { ...Object.fromEntries(FIELDS.map((f) => [f, words[f].trim() === "" ? null : words[f]])), hiddenResortIds: hidden },
+        client.agent.saveSite({
+          ...Object.fromEntries(FIELDS.map((f) => [f, words[f].trim() === "" ? null : words[f]])),
+          hiddenResortIds: hidden,
         }),
       "Saved",
     );
@@ -147,7 +147,7 @@ export default function AgencyWebsitePage() {
                 onClick={() =>
                   run(
                     "publish",
-                    () => api("/agent/site/publish", { method: "POST", body: { published: !site.published } }),
+                    () => client.agent.publishSite(!site.published),
                     site.published ? "Your page is off the air" : "Your page is live",
                   )
                 }
@@ -270,7 +270,7 @@ export default function AgencyWebsitePage() {
                     <img src={p.url} alt={p.alt ?? ""} className="h-12 w-16 rounded object-cover" />
                     <span className="min-w-0 flex-1 truncate text-xs text-slate-500">{i === 0 ? "Cover" : p.alt ?? `Picture ${i + 1}`}</span>
                     <button
-                      onClick={() => run(`m${p.id}`, () => api(`/agent/site/photos/${p.id}`, { method: "PATCH", body: { sortOrder: i - 1 } }), "Moved")}
+                      onClick={() => run(`m${p.id}`, () => client.agent.movePhoto(p.id, i - 1), "Moved")}
                       disabled={i === 0 || busy === `m${p.id}`}
                       className="text-slate-400 hover:text-slate-700 disabled:opacity-25"
                       aria-label="Move earlier"
@@ -278,7 +278,7 @@ export default function AgencyWebsitePage() {
                       <ChevronUp className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => run(`m${p.id}`, () => api(`/agent/site/photos/${p.id}`, { method: "PATCH", body: { sortOrder: i + 1 } }), "Moved")}
+                      onClick={() => run(`m${p.id}`, () => client.agent.movePhoto(p.id, i + 1), "Moved")}
                       disabled={i === site.photos.length - 1 || busy === `m${p.id}`}
                       className="text-slate-400 hover:text-slate-700 disabled:opacity-25"
                       aria-label="Move later"
@@ -286,7 +286,7 @@ export default function AgencyWebsitePage() {
                       <ChevronDown className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => run(`d${p.id}`, () => api(`/agent/site/photos/${p.id}`, { method: "DELETE" }), "Picture removed")}
+                      onClick={() => run(`d${p.id}`, () => client.agent.removePhoto(p.id), "Picture removed")}
                       disabled={busy === `d${p.id}`}
                       className="text-red-600 hover:text-red-800"
                       aria-label="Remove"
@@ -304,7 +304,7 @@ export default function AgencyWebsitePage() {
               <Input value={address} onChange={(e) => setAddress(e.target.value)} />
             </Field>
             <Button
-              onClick={() => run("address", () => api("/agent/site/address", { method: "POST", body: { slug: address } }), "Address changed")}
+              onClick={() => run("address", () => client.agent.setSiteAddress(address), "Address changed")}
               loading={busy === "address"}
               disabled={address === site.slug}
               className="mt-3"
@@ -315,7 +315,7 @@ export default function AgencyWebsitePage() {
           </Card>
 
           <OwnDomains
-            base="/agent/domains"
+            calls={client.agent.domains}
             example="youragency.com"
             blurb={
               <>

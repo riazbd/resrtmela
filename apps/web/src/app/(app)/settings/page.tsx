@@ -2,12 +2,27 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AGENT_BOOKING_WINDOW_PRESETS, AGENT_BOOKING_WINDOW_MAX_DAYS } from "@rh/shared";
-import { api, client, download, money, type PermRole, cur, API_URL } from "@/lib/api";
-import type { ResortSettings } from "@rh/shared";
+import { client, download, money, type PermRole, cur, API_URL } from "@/lib/api";
+import type {
+  ActivityRow,
+  ApiKeyRow,
+  DiscountOfferListRow,
+  MessageTemplateRow,
+  NewDiscountOffer,
+  PlanChangeResult,
+  ResortAgencyTerms,
+  ResortOption,
+  ResortSettings,
+  ResortUser,
+  ResortUserEdit,
+  SubscriptionDetail,
+  SubscriptionPlanOption,
+  TenantUsage,
+} from "@rh/shared";
 import { useApi, useQueryClient } from "@/lib/query";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
-import { PERMISSIONS, RESORT_PERMISSION_GROUPS, planFeatureLabel, scheduleSentence, type Phase } from "@rh/shared";
+import { PERMISSIONS, RESORT_PERMISSION_GROUPS, planFeatureLabel, scheduleSentence } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { SetSomeonesPassword } from "@/components/set-password";
 import { Button, Card, Empty, Field, Input, Select, Spinner, useToast, Th, Td } from "@/components/ui";
@@ -26,120 +41,21 @@ import { changedContactFields, displayEmail, displayPhone, emailError, isPlaceho
  */
 type ResortDetail = ResortSettings;
 
-interface PlanOption {
-  name: string;
-  label: string;
-  /** Every way this plan is sold — rows the owner wrote, not two columns. */
-  schedules: {
-    id: number;
-    label: string;
-    phases: Phase[];
-    openingFee: number;
-    perMonth: number;
-  }[];
-  maxRooms: number;
-  maxResorts: number;
-  blurb: string | null;
-  direction: "current" | "upgrade" | "downgrade" | "available";
-}
-
-interface SubscriptionDetail {
-  plan: string | null;
-  planLabel: string | null;
-  blurb: string | null;
-  status: string;
-  /** MONTHLY | YEARLY — what one period is, and what `fee` covers. */
-  scheduleId: number | null;
-  scheduleLabel: string | null;
-  fee: number;
-  feePerMonth: number;
-  startedAt: string | null;
-  trialEndsAt: string | null;
-  renewsAt: string | null;
-  pendingPlan: string | null;
-  pendingPlanLabel: string | null;
-  pendingScheduleId: number | null;
-  pendingScheduleLabel: string | null;
-  limits: { maxRooms: number; maxResorts: number; label: string };
-  usage: { rooms: number; resorts: number };
-  outstanding: { amount: number; count: number };
-  bills: {
-    id: string; amount: number; periodStart: string; periodEnd: string;
-    dueDate: string; status: string; paidAt: string | null; note: string | null;
-  }[];
-  plans: PlanOption[];
-}
-
-interface PlanChange {
-  plan: string;
-  planLabel: string;
-  effective: "now" | "renewal" | "cancelled";
-  effectiveFrom: string | null;
-  charged: number;
-}
-
-interface Usage {
-  tenantId: number;
-  name: string;
-  plan: string;
-  planLabel: string;
-  limits: { maxResorts: number; maxRoomsPerResort: number };
-  resorts: number;
-  rooms: number;
-  staffUsers: number;
-  guests: number;
-}
+/**
+ * Five wire shapes used to be written here — SubscriptionPlanOption,
+ * SubscriptionDetail, PlanChangeResult, Usage and, further down, MessageTemplateRow,
+ * ResortOption, ActivityRow, DiscountOfferListRow, ResortAgencyTerms and ApiKeyRow —
+ * each beside a hand-written `api<That>("/resorts/...")`. One of them
+ * disagreed with the server and nobody could have known: `Usage.plan`
+ * said string where the service sends null for an account with no
+ * subscription.
+ */
 
 interface AccessRow {
   id: string;
   user: { id: number; name: string; phone: string; role: string; status: string };
   status: string;
   note: string | null;
-  createdAt: string;
-}
-
-interface UserRow {
-  id: number;
-  name: string;
-  phone: string;
-  email: string | null;
-  role: string;
-  status: string;
-  createdAt: string;
-  roleId: number | null;
-  roleName: string | null;
-}
-
-interface ActivityRow {
-  id: string;
-  actor: { id: number; name: string; role: string } | null;
-  action: string;
-  entity: string;
-  entityId: string | null;
-  createdAt: string;
-}
-
-interface DiscountRow {
-  id: number;
-  scope: string;
-  roomTypeId: number | null;
-  roomType?: { id: number; name: string } | null;
-  roomId: number | null;
-  room?: { id: number; name: string } | null;
-  name: string;
-  kind: string;
-  value: string;
-  validFrom: string | null;
-  validTo: string | null;
-  active: boolean;
-}
-
-interface ApiKeyRow {
-  id: string;
-  name: string;
-  prefix: string;
-  active: boolean;
-  lastUsedAt: string | null;
   createdAt: string;
 }
 
@@ -154,7 +70,7 @@ export default function SettingsPage() {
   const { push } = useToast();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Resort info");
   const [d, setD] = useState<ResortDetail | null>(null);
-  const [usage, setUsage] = useState<Usage | null>(null);
+  const [usage, setUsage] = useState<TenantUsage | null>(null);
   const [busy, setBusy] = useState(false);
   const rid = activeResort?.id;
   /* the API refuses without `billing.view`; a tab that always errors is worse
@@ -163,7 +79,7 @@ export default function SettingsPage() {
 
   const qc = useQueryClient();
   const infoQ = useApi(["resort", rid], () => client.resort.get(rid!), { enabled: !!rid });
-  const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => api<Usage>(`/tenants/${activeResort!.tenantId}/usage`), {
+  const usageQ = useApi(["tenant-usage", activeResort?.tenantId], () => client.resort.usage(activeResort!.tenantId), {
     enabled: !!activeResort,
   });
 
@@ -188,9 +104,7 @@ export default function SettingsPage() {
     if (!d) return;
     setBusy(true);
     try {
-      await api(`/resorts/${d.id}`, {
-        method: "PATCH",
-        body: {
+      await client.resort.update(d.id, {
           name: d.name,
           location: d.location ?? undefined,
           showRatesToAgents: d.showRatesToAgents,
@@ -207,7 +121,6 @@ export default function SettingsPage() {
           agentPaymentHours: (d as ResortDetail & { agentPaymentHours?: number }).agentPaymentHours ?? undefined,
           // null is sent on purpose: it is how "no limit" is chosen
           agentBookingWindowDays: (d as ResortDetail & { agentBookingWindowDays?: number | null }).agentBookingWindowDays ?? null,
-        },
       });
       push("Settings saved");
     } catch (ex) {
@@ -326,13 +239,6 @@ export default function SettingsPage() {
   );
 }
 
-interface TemplateRow {
-  name: string;
-  body: string;
-  custom: boolean;
-  placeholders: string[];
-}
-
 const TEMPLATE_LABELS: Record<string, string> = {
   booking_confirmed: "Booking confirmed",
   booking_received: "Booking request received",
@@ -348,13 +254,6 @@ const TEMPLATE_LABELS: Record<string, string> = {
  * customer. The message the guest sees is the most visible part of the
  * product, and it was the part the resort had least say over.
  */
-interface OptionRow {
-  id: number;
-  code: string;
-  label: string;
-  active: boolean;
-}
-
 /**
  * The lists a resort owns.
  *
@@ -375,10 +274,10 @@ function ListsTab({ rid }: { rid: number }) {
   const qc = useQueryClient();
   const { push } = useToast();
 
-  const listsQ = useApi(["option-lists"], () => api<{ name: string; label: string }[]>("/option-lists"), {
+  const listsQ = useApi(["option-lists"], () => client.options.lists(), {
     staleTime: 3_600_000,
   });
-  const rowsQ = useApi(["options", rid, list], () => api<OptionRow[]>(`/resorts/${rid}/options/${list}`));
+  const rowsQ = useApi(["options", rid, list], () => client.options.list(rid!, list));
 
   async function act(work: () => Promise<unknown>) {
     setBusy(true);
@@ -397,10 +296,7 @@ function ListsTab({ rid }: { rid: number }) {
 
   const add = () =>
     act(async () => {
-      await api(`/resorts/${rid}/options/${list}`, {
-        method: "POST",
-        body: { code: tidy(code), label: label.trim() },
-      });
+      await client.options.create(rid!, list, { code: tidy(code), label: label.trim() });
       push(`${label.trim()} added`);
       setCode("");
       setLabel("");
@@ -475,7 +371,7 @@ function ListsTab({ rid }: { rid: number }) {
                         onBlur={(e) => {
                           const next = e.target.value.trim();
                           if (next && next !== o.label) {
-                            void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "PATCH", body: { label: next } }));
+                            void act(() => client.options.update(rid!, list, o.id, { label: next }));
                           }
                         }}
                         className="w-full rounded-lg border border-transparent px-2 py-1 hover:border-slate-300 focus:border-brand-400 focus:outline-none"
@@ -484,7 +380,7 @@ function ListsTab({ rid }: { rid: number }) {
                     <Td className="font-mono text-xs text-slate-400">{o.code}</Td>
                     <Td>
                       <button
-                        onClick={() => void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "PATCH", body: { active: !o.active } }))}
+                        onClick={() => void act(() => client.options.update(rid!, list, o.id, { active: !o.active }))}
                         className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${o.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
                       >
                         {o.active ? "shown" : "hidden"}
@@ -494,7 +390,7 @@ function ListsTab({ rid }: { rid: number }) {
                       <button
                         onClick={() => {
                           if (window.confirm(`Remove "${o.label}"? Anything already filed under it keeps the code.`)) {
-                            void act(() => api(`/resorts/${rid}/options/${list}/${o.id}`, { method: "DELETE" }));
+                            void act(() => client.options.remove(rid!, list, o.id));
                           }
                         }}
                         className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
@@ -514,12 +410,13 @@ function ListsTab({ rid }: { rid: number }) {
 
 function MessagesTab({ rid }: { rid: number }) {
   const { push } = useToast();
-  const [rows, setRows] = useState<TemplateRow[]>([]);
+  const [rows, setRows] = useState<MessageTemplateRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<TemplateRow[]>(`/resorts/${rid}/message-templates`)
+    client.templates
+      .list(rid!)
       .then((r) => {
         setRows(r);
         setDrafts(Object.fromEntries(r.map((x) => [x.name, x.body])));
@@ -531,7 +428,7 @@ function MessagesTab({ rid }: { rid: number }) {
   async function save(name: string) {
     setBusy(name);
     try {
-      await api(`/resorts/${rid}/message-templates/${name}`, { method: "PUT", body: { body: drafts[name] ?? "" } });
+      await client.templates.save(rid!, name, drafts[name] ?? "");
       push("Saved — new messages will use your wording");
       load();
     } catch (ex) {
@@ -544,7 +441,7 @@ function MessagesTab({ rid }: { rid: number }) {
   async function reset(name: string) {
     setBusy(name);
     try {
-      await api(`/resorts/${rid}/message-templates/${name}`, { method: "DELETE" });
+      await client.templates.reset(rid!, name);
       push("Back to the standard wording");
       load();
     } catch (ex) {
@@ -685,15 +582,6 @@ function ExportTab({ rid, name }: { rid: number; name: string }) {
   );
 }
 
-interface AgencyTermsRow {
-  accountId: number;
-  name: string;
-  status: string;
-  blocked: boolean;
-  commissionKind: string | null;
-  commissionRate: number | null;
-}
-
 /**
  * Agents: the open door (2026-09-11 design, §8).
  *
@@ -711,14 +599,14 @@ function AccessTab({ rid }: { rid: number }) {
   // screen — the console already knows the plan's features
   const { features } = useAuth();
   const open = features.includes("agents");
-  const [rows, setRows] = useState<AgencyTermsRow[] | null>(null);
+  const [rows, setRows] = useState<ResortAgencyTerms[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deal, setDeal] = useState<Record<number, string>>({});
   const [invite, setInvite] = useState({ email: "", name: "" });
   const [inviting, setInviting] = useState(false);
 
   const load = useCallback(() => {
-    api<AgencyTermsRow[]>(`/resorts/${rid}/agencies`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
+    client.resort.agencies(rid!).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -734,17 +622,21 @@ function AccessTab({ rid }: { rid: number }) {
       setBusy(null);
     }
   }
-  const toggleBlock = (a: AgencyTermsRow) =>
+  const toggleBlock = (a: ResortAgencyTerms) =>
     run(
       `b${a.accountId}`,
-      () => api(`/resorts/${rid}/agencies/${a.accountId}`, { method: "PATCH", body: { blocked: !a.blocked } }),
+      () => client.resort.setAgencyTerms(rid!, a.accountId, { blocked: !a.blocked }),
       a.blocked ? `${a.name} can sell your rooms again` : `${a.name} is blocked from selling your rooms`,
     );
-  const saveDeal = (a: AgencyTermsRow) => {
+  const saveDeal = (a: ResortAgencyTerms) => {
     const v = (deal[a.accountId] ?? "").trim();
     return run(
       `d${a.accountId}`,
-      () => api(`/resorts/${rid}/agencies/${a.accountId}`, { method: "PATCH", body: { commissionKind: "PERCENT", commissionRate: v === "" ? null : Number(v) } }),
+      () =>
+        client.resort.setAgencyTerms(rid!, a.accountId, {
+          commissionKind: "PERCENT",
+          commissionRate: v === "" ? null : Number(v),
+        }),
       v === "" ? `${a.name} is back on your standard rate` : `${a.name} now earns ${v}% with you`,
     );
   };
@@ -752,9 +644,9 @@ function AccessTab({ rid }: { rid: number }) {
   async function sendInvite() {
     setInviting(true);
     try {
-      const r = await api<{ emailed: boolean }>(`/resorts/${rid}/invite-agency`, {
-        method: "POST",
-        body: { email: invite.email, name: invite.name || undefined },
+      const r = await client.resort.inviteAgency(rid!, {
+        email: invite.email,
+        name: invite.name || undefined,
       });
       push(r.emailed ? "Invitation sent — the agency signs itself up from the link" : "Agency told — it is already on the platform");
       setInvite({ email: "", name: "" });
@@ -879,7 +771,7 @@ function CommissionCard({ rid }: { rid: number }) {
   const [busy, setBusy] = useState(false);
   const editable = can("agents.manage");
 
-  const q = useApi(["commission", rid], () => api<{ kind: string; rate: number }>(`/resorts/${rid}/commission`), {
+  const q = useApi(["commission", rid], () => client.resort.commission(rid!), {
     enabled: !!rid,
   });
   useEffect(() => {
@@ -894,7 +786,7 @@ function CommissionCard({ rid }: { rid: number }) {
   async function save() {
     setBusy(true);
     try {
-      await api(`/resorts/${rid}/commission`, { method: "POST", body: { kind, rate: Number(rate) } });
+      await client.resort.setCommission(rid!, { kind, rate: Number(rate) });
       push("Commission saved — it applies to every agent");
       await qc.invalidateQueries({ queryKey: ["commission", rid] });
     } catch (ex) {
@@ -948,7 +840,7 @@ function UsersTab({ rid }: { rid: number }) {
   // one; this route does not ask, and so is never turned on yourself
   const { can, me } = useAuth();
   const { push } = useToast();
-  const [rows, setRows] = useState<UserRow[] | null>(null);
+  const [rows, setRows] = useState<ResortUser[] | null>(null);
   const [roles, setRoles] = useState<PermRole[]>([]);
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
   const [busy, setBusy] = useState(false);
@@ -957,20 +849,21 @@ function UsersTab({ rid }: { rid: number }) {
 
   const load = useCallback(() => {
     // the roles list is shared with the Permissions tab and cached under one key
-    api<UserRow[]>(`/resorts/${rid}/users`).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
-    api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
+    client.resort.users(rid!).then((r) => { setRows(r); fail.clear(); }).catch(fail.onFail(() => setRows([])));
+    client.resort.roles(rid!).then(setRoles).catch(() => setRoles([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
   async function create() {
     setBusy(true);
     try {
-      await api(`/resorts/${rid}/users`, {
-        method: "POST",
-        body: {
-          name: form.name, email: form.email, phone: form.phone, password: form.password, role: form.role,
-          roleId: form.roleId ? Number(form.roleId) : undefined,
-        },
+      await client.resort.addUser(rid!, {
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+        role: form.role,
+        roleId: form.roleId ? Number(form.roleId) : undefined,
       });
       push("Staff account created");
       setForm({ name: "", email: "", phone: "", password: "", role: "FRONT_DESK", roleId: "" });
@@ -982,9 +875,9 @@ function UsersTab({ rid }: { rid: number }) {
     }
   }
 
-  async function patch(userId: number, body: Record<string, unknown>) {
+  async function patch(userId: number, body: ResortUserEdit) {
     try {
-      await api(`/resorts/${rid}/users/${userId}`, { method: "PATCH", body });
+      await client.resort.updateUser(rid!, userId, body);
       load();
       push("Updated");
     } catch (ex) {
@@ -992,21 +885,21 @@ function UsersTab({ rid }: { rid: number }) {
     }
   }
 
-  function startEditContact(u: UserRow) {
+  function startEditContact(u: ResortUser) {
     // a placeholder is shown blank — the person editing types a real value,
     // never sees the fake one, and an untouched blank field stays "no change"
     setContactEdit({
       id: u.id,
       email: isPlaceholderEmail(u.email) ? "" : u.email ?? "",
-      phone: isPlaceholderPhone(u.phone) ? "" : u.phone,
+      phone: isPlaceholderPhone(u.phone) ? "" : u.phone ?? "",
     });
   }
 
-  async function saveContact(u: UserRow) {
+  async function saveContact(u: ResortUser) {
     if (!contactEdit) return;
     const body = changedContactFields(
       { email: contactEdit.email, phone: contactEdit.phone },
-      { email: u.email ?? "", phone: u.phone },
+      { email: u.email ?? "", phone: u.phone ?? "" },
     );
     if (Object.keys(body).length === 0) {
       setContactEdit(null);
@@ -1023,7 +916,7 @@ function UsersTab({ rid }: { rid: number }) {
     }
     setContactBusy(true);
     try {
-      await api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body });
+      await client.resort.updateUser(rid!, u.id, body);
       push("Contact details updated");
       setContactEdit(null);
       load();
@@ -1117,7 +1010,7 @@ function UsersTab({ rid }: { rid: number }) {
                       {can("users.password") && u.id !== me?.id && (
                         <SetSomeonesPassword
                           name={u.name}
-                          endpoint={`/resorts/${rid}/users/${u.id}/password`}
+                          save={(pw) => client.resort.setUserPassword(rid!, u.id, pw)}
                         />
                       )}
                     </div>
@@ -1185,7 +1078,7 @@ function UsersTab({ rid }: { rid: number }) {
  * Administrator impossible to undo, since that account becomes an
  * administrator too.
  */
-function RolePicker({ u, rid, roles, onDone }: { u: UserRow; rid: number; roles: PermRole[]; onDone: () => void }) {
+function RolePicker({ u, rid, roles, onDone }: { u: ResortUser; rid: number; roles: PermRole[]; onDone: () => void }) {
   const { push } = useToast();
   if (roles.length === 0) {
     return <span className="text-xs text-slate-400">No roles yet — make one in Permissions</span>;
@@ -1197,7 +1090,8 @@ function RolePicker({ u, rid, roles, onDone }: { u: UserRow; rid: number; roles:
         value={u.roleId ? String(u.roleId) : ""}
         onChange={(e) => {
           const roleId = e.target.value ? Number(e.target.value) : 0;
-          api(`/resorts/${rid}/users/${u.id}`, { method: "PATCH", body: { roleId } })
+          client.resort
+            .updateUser(rid!, u.id, { roleId })
             .then(() => { push("Permissions set updated"); onDone(); })
             .catch((ex) => push((ex as Error).message, "err"));
         }}
@@ -1223,7 +1117,7 @@ function RolesTab({ rid }: { rid: number }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<PermRole[]>(`/resorts/${rid}/roles`).then(setRoles).catch(() => setRoles([]));
+    client.resort.roles(rid!).then(setRoles).catch(() => setRoles([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -1240,7 +1134,7 @@ function RolesTab({ rid }: { rid: number }) {
     if (!editing) return;
     setBusy(true);
     try {
-      await api(`/roles/${editing.id}`, { method: "PATCH", body: { permissions: selected } });
+      await client.resort.updateRole(editing.id, { permissions: selected });
       push(`Permissions saved for ${editing.name}`);
       setEditing(null);
       load();
@@ -1255,7 +1149,7 @@ function RolesTab({ rid }: { rid: number }) {
   async function createRole() {
     setBusy(true);
     try {
-      await api(`/resorts/${rid}/roles`, { method: "POST", body: { name: newName, permissions: [] } });
+      await client.resort.createRole(rid!, { name: newName, permissions: [] });
       push("Role created — now tick its permissions");
       setNewName("");
       load();
@@ -1269,7 +1163,7 @@ function RolesTab({ rid }: { rid: number }) {
   async function removeRole(r: PermRole) {
     if (!window.confirm(`Delete role "${r.name}"?`)) return;
     try {
-      await api(`/roles/${r.id}`, { method: "DELETE" });
+      await client.resort.removeRole(r.id);
       push("Role deleted");
       load();
     } catch (ex) {
@@ -1357,7 +1251,8 @@ function ActivityTab({ rid }: { rid: number }) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      api<ActivityRow[]>(`/resorts/${rid}/activity?take=150${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)
+      client.resort
+        .activity(rid!, { take: 150, q: q.trim() || undefined })
         .then(setRows)
         .catch(() => setRows([]));
     }, 300);
@@ -1368,7 +1263,7 @@ function ActivityTab({ rid }: { rid: number }) {
     if (!window.confirm("Delete this activity entry?")) return;
     setBusyId(id);
     try {
-      await api(`/activity/${id}`, { method: "DELETE" });
+      await client.resort.deleteActivity(id);
       setRows((r) => r?.filter((x) => x.id !== id) ?? null);
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -1417,16 +1312,26 @@ function ActivityTab({ rid }: { rid: number }) {
 
 function DiscountsTab({ rid }: { rid: number }) {
   const { push } = useToast();
-  const [rows, setRows] = useState<DiscountRow[] | null>(null);
+  const [rows, setRows] = useState<DiscountOfferListRow[] | null>(null);
   const [roomTypes, setRoomTypes] = useState<{ id: number; name: string }[]>([]);
   const [rooms, setRooms] = useState<{ id: number; name: string }[]>([]);
-  const [form, setForm] = useState({ scope: "RESORT", roomTypeId: "", roomId: "", name: "", kind: "PERCENT", value: "5", validFrom: "", validTo: "" });
+  // the two enums are the wire's, so a select that drifts is a build failure
+  const [form, setForm] = useState<{
+    scope: NewDiscountOffer["scope"];
+    roomTypeId: string;
+    roomId: string;
+    name: string;
+    kind: NewDiscountOffer["kind"];
+    value: string;
+    validFrom: string;
+    validTo: string;
+  }>({ scope: "RESORT", roomTypeId: "", roomId: "", name: "", kind: "PERCENT", value: "5", validFrom: "", validTo: "" });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<DiscountRow[]>(`/resorts/${rid}/discounts`).then(setRows).catch(() => setRows([]));
+    client.discounts.list(rid!).then(setRows).catch(() => setRows([]));
     // the room list is what "one particular room" is chosen from
-    api<{ id: number; name: string }[]>(`/resorts/${rid}/rooms`).then(setRooms).catch(() => setRooms([]));
+    client.rooms.list(rid!).then(setRooms).catch(() => setRooms([]));
   }, [rid]);
   useEffect(() => {
     load();
@@ -1436,18 +1341,15 @@ function DiscountsTab({ rid }: { rid: number }) {
   async function create() {
     setBusy(true);
     try {
-      await api(`/resorts/${rid}/discounts`, {
-        method: "POST",
-        body: {
-          scope: form.scope,
-          roomTypeId: form.scope === "ROOM_TYPE" ? Number(form.roomTypeId) : undefined,
-          roomId: form.scope === "ROOM" ? Number(form.roomId) : undefined,
-          name: form.name,
-          kind: form.kind,
-          value: Number(form.value),
-          validFrom: form.validFrom || undefined,
-          validTo: form.validTo || undefined,
-        },
+      await client.discounts.create(rid!, {
+        scope: form.scope,
+        roomTypeId: form.scope === "ROOM_TYPE" ? Number(form.roomTypeId) : undefined,
+        roomId: form.scope === "ROOM" ? Number(form.roomId) : undefined,
+        name: form.name,
+        kind: form.kind,
+        value: Number(form.value),
+        validFrom: form.validFrom || undefined,
+        validTo: form.validTo || undefined,
       });
       push("Discount offer created");
       setForm({ scope: form.scope, roomTypeId: "", roomId: "", name: "", kind: form.kind, value: "5", validFrom: "", validTo: "" });
@@ -1461,7 +1363,7 @@ function DiscountsTab({ rid }: { rid: number }) {
 
   async function toggle(id: number, active: boolean) {
     try {
-      await api(`/discounts/${id}`, { method: "PATCH", body: { active } });
+      await client.discounts.update(id, { active });
       load();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -1508,7 +1410,10 @@ function DiscountsTab({ rid }: { rid: number }) {
       <Card title="New offer">
         <div className="space-y-3">
           <Field label="Applies to">
-            <Select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
+            <Select
+              value={form.scope}
+              onChange={(e) => setForm({ ...form, scope: e.target.value as NewDiscountOffer["scope"] })}
+            >
               <option value="RESORT">Whole resort (all rooms)</option>
               <option value="ROOM_TYPE">One room type</option>
               <option value="ROOM">One particular room</option>
@@ -1537,7 +1442,10 @@ function DiscountsTab({ rid }: { rid: number }) {
           <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Opening offer" /></Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Kind">
-              <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+              <Select
+                value={form.kind}
+                onChange={(e) => setForm({ ...form, kind: e.target.value as NewDiscountOffer["kind"] })}
+              >
                 <option value="PERCENT">Percent</option>
                 <option value="FLAT">Flat {cur()}</option>
               </Select>
@@ -1569,15 +1477,15 @@ function ApiKeysTab({ rid }: { rid: number }) {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api<ApiKeyRow[]>(`/resorts/${rid}/api-keys`).then(setRows).catch(() => setRows([]));
+    client.apiKeys.list(rid!).then(setRows).catch(() => setRows([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
   async function create() {
     setBusy(true);
     try {
-      const r = await api<{ key: string }>(`/resorts/${rid}/api-keys`, { method: "POST", body: { name } });
-      setNewKey(r.key);
+      const r = await client.apiKeys.create(rid!, name);
+      setNewKey(r.secret);
       setName("");
       load();
     } catch (ex) {
@@ -1592,7 +1500,7 @@ function ApiKeysTab({ rid }: { rid: number }) {
     // their booking form offline until they paste a new one in
     if (!window.confirm("Revoke this API key? Anything using it stops working immediately.")) return;
     try {
-      await api(`/api-keys/${id}`, { method: "DELETE" });
+      await client.apiKeys.revoke(id);
       load();
       push("Key revoked");
     } catch (ex) {
@@ -1759,7 +1667,7 @@ function SubscriptionTab({ rid }: { rid: number }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState("");
 
-  const q = useApi(["subscription", rid], () => api<SubscriptionDetail>(`/resorts/${rid}/subscription`), {
+  const q = useApi(["subscription", rid], () => client.resort.subscription(rid!), {
     enabled: !!rid,
   });
   const d = q.data;
@@ -1771,7 +1679,7 @@ function SubscriptionTab({ rid }: { rid: number }) {
    * decisions and rolling them into one "upgrade" would change the size of the
    * bill without saying so.
    */
-  async function change(p: PlanOption) {
+  async function change(p: SubscriptionPlanOption) {
     /**
      * The same shelf on the new plan, by the owner's own label.
      *
@@ -1801,7 +1709,7 @@ function SubscriptionTab({ rid }: { rid: number }) {
     if (!window.confirm(ask)) return;
     setBusy(p.name);
     try {
-      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, { method: "POST", body: { plan: p.name, scheduleId: target.id } });
+      const r = await client.resort.changePlan(rid!, p.name, target.id);
       push(
         r.effective === "now"
           ? r.charged > 0
@@ -1851,10 +1759,7 @@ If it is a shorter term you keep what you have already paid for until ${when(d.r
     if (!window.confirm(ask)) return;
     setBusy(`__shelf${to.id}`);
     try {
-      const r = await api<PlanChange>(`/resorts/${rid}/subscription/plan`, {
-        method: "POST",
-        body: { plan: d.plan, scheduleId: to.id },
-      });
+      const r = await client.resort.changePlan(rid!, d.plan, to.id);
       push(
         r.effective === "now"
           ? r.charged > 0

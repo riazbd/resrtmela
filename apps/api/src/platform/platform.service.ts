@@ -337,7 +337,7 @@ export class PlatformService {
 
   async allResorts(claims: JwtClaims) {
     requireRoles(claims, [ROLE.SUPER_ADMIN]);
-    return this.prisma.resort.findMany({
+    const rows = await this.prisma.resort.findMany({
       select: {
         id: true,
         name: true,
@@ -353,7 +353,30 @@ export class PlatformService {
             // so the row can be badged, and the owner can tell at a glance
             // which of these are the ones they opened to try things with
             demo: true,
-            subscriptions: { orderBy: { id: "desc" }, take: 1, select: { id: true, plan: true, status: true, fee: true, scheduleId: true, renewsAt: true } },
+            subscriptions: {
+              orderBy: { id: "desc" },
+              take: 1,
+              select: {
+                id: true,
+                plan: true,
+                status: true,
+                fee: true,
+                scheduleId: true,
+                renewsAt: true,
+                /**
+                 * The shelf's name, which the Resorts tab has been printing
+                 * beside the plan since it was written — against a field this
+                 * query never sent.
+                 *
+                 * So the badge was blank on every row, and the renew button's
+                 * tooltip read "Renew for one more  period". Nothing caught it
+                 * because the route answered `unknown` and the page cast it to
+                 * a hand-written interface that simply claimed the field
+                 * existed. Typing the route is what found it.
+                 */
+                schedule: { select: { label: true } },
+              },
+            },
           },
         },
         _count: { select: { rooms: true, bookings: true, guests: true } },
@@ -365,6 +388,17 @@ export class PlatformService {
       },
       orderBy: { id: "asc" },
     });
+    // flattened, because a row carries a subscription, not a schedule
+    return rows.map((r) => ({
+      ...r,
+      tenant: {
+        ...r.tenant,
+        subscriptions: r.tenant.subscriptions.map(({ schedule, ...s }) => ({
+          ...s,
+          scheduleLabel: schedule?.label ?? null,
+        })),
+      },
+    }));
   }
 
   /**

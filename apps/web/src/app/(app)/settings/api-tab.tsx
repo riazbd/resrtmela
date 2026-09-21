@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { WEBHOOK_EVENTS } from "@rh/shared";
-import { api, API_URL } from "@/lib/api";
+import { client, API_URL } from "@/lib/api";
+import type { ApiKeyRow, WebhookDeliveryRow, WebhookEndpointRow } from "@rh/shared";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
 
@@ -16,33 +17,7 @@ import { Button, Card, Empty, Field, Input, Select, useToast } from "@/component
  * fails silently is a resort losing bookings and blaming us.
  */
 
-interface ApiKeyRow {
-  id: string;
-  name: string;
-  prefix: string;
-  scopes: string[] | null;
-  active: boolean;
-  lastUsedAt: string | null;
-}
-
-interface Endpoint {
-  id: number;
-  url: string;
-  active: boolean;
-}
-
-interface Delivery {
-  id: string;
-  event: string;
-  attempts: number;
-  lastStatus: number | null;
-  lastError: string | null;
-  state: "delivered" | "trying" | "gave up";
-  createdAt: string;
-  endpoint: { url: string };
-}
-
-const STATE_TONE: Record<Delivery["state"], string> = {
+const STATE_TONE: Record<string, string> = {
   delivered: "bg-emerald-50 text-emerald-800",
   trying: "bg-amber-50 text-amber-800",
   "gave up": "bg-red-50 text-red-700",
@@ -52,8 +27,8 @@ export function ApiTab({ rid }: { rid: number }) {
   const { push } = useToast();
   const fail = useLoadFailure();
   const [keys, setKeys] = useState<ApiKeyRow[] | null>(null);
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [endpoints, setEndpoints] = useState<WebhookEndpointRow[]>([]);
+  const [deliveries, setDeliveries] = useState<WebhookDeliveryRow[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -71,14 +46,15 @@ export function ApiTab({ rid }: { rid: number }) {
   const [justMinted, setJustMinted] = useState<{ what: string; secret: string } | null>(null);
 
   const load = useCallback(() => {
-    api<ApiKeyRow[]>(`/resorts/${rid}/api-keys`)
+    client.apiKeys
+      .list(rid)
       .then((r) => {
         setKeys(r);
         fail.clear();
       })
       .catch(fail.onFail(() => setKeys([])));
-    api<Endpoint[]>(`/resorts/${rid}/webhooks`).then(setEndpoints).catch(() => setEndpoints([]));
-    api<Delivery[]>(`/resorts/${rid}/webhooks/deliveries`).then(setDeliveries).catch(() => setDeliveries([]));
+    client.webhooks.list(rid).then(setEndpoints).catch(() => setEndpoints([]));
+    client.webhooks.deliveries(rid).then(setDeliveries).catch(() => setDeliveries([]));
   }, [rid]);
   useEffect(() => load(), [load]);
 
@@ -104,10 +80,7 @@ export function ApiTab({ rid }: { rid: number }) {
     const made = (await run(
       "key",
       () =>
-        api<{ secret: string }>(`/resorts/${rid}/api-keys`, {
-          method: "POST",
-          body: { name, scopes: canWrite === "write" ? ["read", "write"] : ["read"] },
-        }),
+        client.apiKeys.create(rid, name, canWrite === "write" ? ["read", "write"] : ["read"]),
       "Key created — copy it now",
     )) as { secret: string } | null;
     if (made) {
@@ -119,8 +92,8 @@ export function ApiTab({ rid }: { rid: number }) {
   const addEndpoint = async () => {
     const made = (await run(
       "hook",
-      () => api<{ secret: string }>(`/resorts/${rid}/webhooks`, { method: "POST", body: { url } }),
-      "Endpoint added — copy the signing secret now",
+      () => client.webhooks.add(rid, url),
+      "WebhookEndpointRow added — copy the signing secret now",
     )) as { secret: string } | null;
     if (made) {
       setJustMinted({ what: `Signing secret for ${url}`, secret: made.secret });
@@ -196,7 +169,7 @@ export function ApiTab({ rid }: { rid: number }) {
                     variant="ghost"
                     loading={busy === `r${k.id}`}
                     onClick={() =>
-                      run(`r${k.id}`, () => api(`/resorts/${rid}/api-keys/${k.id}`, { method: "DELETE" }), "Key revoked")
+                      run(`r${k.id}`, () => client.apiKeys.revoke(k.id), "Key revoked")
                     }
                   >
                     <Trash2 className="h-4 w-4 text-red-600" />
@@ -241,7 +214,7 @@ export function ApiTab({ rid }: { rid: number }) {
                   variant="ghost"
                   loading={busy === `e${e.id}`}
                   onClick={() =>
-                    run(`e${e.id}`, () => api(`/resorts/${rid}/webhooks/${e.id}`, { method: "DELETE" }), "Removed")
+                    run(`e${e.id}`, () => client.webhooks.remove(rid, e.id), "Removed")
                   }
                 >
                   <Trash2 className="h-4 w-4 text-red-600" />
@@ -293,7 +266,7 @@ export function ApiTab({ rid }: { rid: number }) {
                     onClick={() =>
                       run(
                         `d${d.id}`,
-                        () => api(`/resorts/${rid}/webhooks/deliveries/${d.id}/retry`, { method: "POST" }),
+                        () => client.webhooks.retry(rid, d.id),
                         "Queued to send again",
                       )
                     }

@@ -2,28 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api, money, dmy, type BookingRow } from "@/lib/api";
+import { client, money, dmy, type BookingRow } from "@/lib/api";
+import type { AgentOwnReport, AgencyStaff } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { displayEmail, displayPhone, emailError, phoneError } from "@/lib/contact";
-
-interface StaffRow {
-  id: number;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  status: string;
-}
-
-/** What `agents/me/report` answers — computed by the server, not here. */
-interface AgentReport {
-  commissionRate: number;
-  commissionKind: string;
-  bookings: number;
-  rent: number;
-  due: number;
-  commission: number;
-}
 
 /** Agent portal home — doc §3 "Agent Portal": profile, commission, my stats, agency staff. */
 export default function ProfilePage() {
@@ -42,27 +25,29 @@ export default function ProfilePage() {
    * `agents/me/report` is the server's answer, over the whole period, through
    * the one commission function.
    */
-  const [report, setReport] = useState<AgentReport | null>(null);
-  const [staff, setStaff] = useState<StaffRow[]>([]);
+  const [report, setReport] = useState<AgentOwnReport | null>(null);
+  const [staff, setStaff] = useState<AgencyStaff[]>([]);
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!activeResort || !isAgent) return;
-    api<{ rows: BookingRow[] }>(`/bookings?resortId=${activeResort.id}&take=200`)
+    client.bookings
+      .list({ resortId: activeResort.id, take: 200 })
       .then((r) => setRows(r.rows))
       .catch(() => setRows([]));
   }, [activeResort, isAgent]);
 
   useEffect(() => {
     if (!activeResort || !isAgent) return;
-    api<AgentReport>(`/agents/me/report?resortId=${activeResort.id}`)
+    client.reports
+      .mine(activeResort.id)
       .then(setReport)
       .catch(() => setReport(null));
   }, [activeResort, isAgent]);
 
   const loadStaff = useCallback(() => {
-    api<StaffRow[]>("/agent/staff").then(setStaff).catch(() => setStaff([]));
+    client.agent.staff().then(setStaff).catch(() => setStaff([]));
   }, []);
   useEffect(() => {
     if (isAgent) loadStaff();
@@ -71,9 +56,11 @@ export default function ProfilePage() {
   async function addStaff() {
     setBusy(true);
     try {
-      await api("/agent/staff", {
-        method: "POST",
-        body: { name: form.name, phone: form.phone, email: form.email, password: form.password },
+      await client.agent.addStaff({
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        password: form.password,
       });
       push("Agency user created — they can log in and book for guests");
       setForm({ name: "", phone: "", email: "", password: "" });

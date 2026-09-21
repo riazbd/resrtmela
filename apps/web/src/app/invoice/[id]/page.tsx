@@ -2,42 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, money, dmy } from "@/lib/api";
+import { client, money, dmy } from "@/lib/api";
 import { Spinner } from "@/components/ui";
 import { invoiceIntent } from "@/lib/invoice-intent";
-import { methodLabel } from "@rh/shared";
+import { methodLabel, type InvoicePayload } from "@rh/shared";
 import { Download, Printer } from "lucide-react";
-
-interface InvoiceData {
-  invoiceNo: string;
-  issuedAt: string;
-  resort: {
-    name: string; location: string | null; address: string | null;
-    phone: string | null; website: string | null; binNumber?: string | null;
-    checkInTime: string; checkOutTime: string;
-  };
-  booking: {
-    code: string; state: string; checkIn: string | null; checkOut: string | null;
-    nights: number; adults: number; children: number; remarks: string | null; agent: string | null;
-  };
-  guest: { fullName: string; phone: string; nidPassportNo: string | null };
-  items: { description: string; nights: number | null; qty: number; unitPrice: number; amount: number }[];
-  payments: { date: string; method: string | null; type: string; amount: number; receivedBy: string | null }[];
-  rent: number; discount: number; paid: number; due: number;
-  taxable: number; taxRatePct: number; tax: number; total: number;
-  taxLines?: { code: string; label: string; ratePct: number; amount: number }[];
-}
 
 /** Bilingual (BN/EN) hotel invoice — print-ready A5/A4. */
 export default function InvoicePage() {
   const params = useParams<{ id: string }>();
-  const [inv, setInv] = useState<InvoiceData | null>(null);
+  const [inv, setInv] = useState<InvoicePayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const paper = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api<InvoiceData>(`/bookings/${params.id}/invoice`)
+    client.bookings
+      .invoice(Number(params.id))
       .then(setInv)
       .catch((e) => setErr((e as Error).message));
   }, [params.id]);

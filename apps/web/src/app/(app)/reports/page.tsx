@@ -8,60 +8,28 @@ import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
 import { Tabs, Table } from "@/components/patterns";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
-import { methodLabel, type ResortMetrics } from "@rh/shared";
+import {
+  methodLabel,
+  type AgentPerformanceRow,
+  type AuditRow,
+  type CollectorsReport,
+  type DailyRevenueRow,
+  type FiscalYears,
+  type ResortMetrics,
+  type SourceReportRow,
+} from "@rh/shared";
 
-interface AgentRow {
-  agentId: number; name: string; commissionRate: number; commissionKind: string;
-  bookings: number; rent: number; due: number; commission: number;
-}
-interface SourceRow { source: string; bookings: number; rent: number; due: number }
-interface CollectorRow {
-  userId: number | null; name: string; count: number; total: number;
-  /**
-   * True when the name came out of an imported spreadsheet rather than an
-   * account. The two are different claims — the app recording who pressed the
-   * button, against the owner writing a name in a column — and a card that
-   * showed them identically would overstate what the report knows.
-   */
-  fromSheet?: boolean;
-  /**
-   * A sample of the bookings behind the total, not all of them.
-   *
-   * This was `codes`, and the report stopped sending it when the totals moved
-   * into the database — so the card below read `undefined.slice()` and the
-   * whole Reports page went to the error boundary. Optional here as well as
-   * present there: no screen should be one renamed field away from showing
-   * nothing at all.
-   */
-  recentCodes?: string[];
-}
-interface Collectors {
-  /** the period's whole take, so the cards never have to be added up by eye */
-  total: number;
-  /**
-   * How the money arrived. With no payment gateway this is half the question:
-   * cash is in a drawer and has to be counted tonight, bKash and a bank
-   * transfer are somebody else's statement and have to be matched against it.
-   */
-  /** `method` is null for receipts imported before a method column existed */
-  byMethod: { method: string | null; count: number; total: number }[];
-  rows: CollectorRow[];
-  recent: { id: number; at: string; amount: number; method: string | null; bookingCode: string; guest: string; type: string; receivedBy: string | null; fromSheet?: boolean }[];
-}
-interface FiscalYear { label: string; from: string; to: string }
 /**
- * `Metrics` lived here as a local interface with a cast beside it, which
- * is the arrangement where the server changes a field and nobody finds
- * out. It is `ResortMetrics` in `@rh/shared` now, written from the
- * service's own return, and the phone's reports read the same one.
+ * Six reports, no local interfaces.
+ *
+ * Every shape below used to be hand-written here and the call beside it
+ * cast to it, because `client.reports.*` answered `unknown`. `CollectorRow`
+ * is why that is not a style question: the report renamed `codes` to
+ * `recentCodes` when its totals moved into the database, the cast went on
+ * type-checking, and the card read `undefined.slice()` — the whole page to
+ * the error boundary. The routes are typed now, so a rename is a build
+ * failure here instead.
  */
-interface DailyRow { date: string; roomRevenue: number; fbRevenue: number; expenses: number; net: number }
-interface AuditRow {
-  id: string; actor: string; role: string | null; action: string;
-  entity: string; entityId: string | null; diff: unknown; at: string;
-}
-
-
 
 function MiniBox({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "green" | "red" }) {
   const tones = { default: "text-slate-900", green: "text-green-700", red: "text-red-700" };
@@ -134,12 +102,12 @@ export default function ReportsPage() {
   const range = { from: from || undefined, to: to || undefined };
   const period = `${from}:${to}`;
 
-  const agentsQ = useApi(keys.reports(rid, "agents", period), () => client.reports.agents(rid!, range) as Promise<{ rows: AgentRow[] }>, { enabled, placeholderData: (prev) => prev });
-  const sourcesQ = useApi(keys.reports(rid, "sources", period), () => client.reports.sources(rid!, range) as Promise<{ rows: SourceRow[] }>, { enabled, placeholderData: (prev) => prev });
+  const agentsQ = useApi(keys.reports(rid, "agents", period), () => client.reports.agents(rid!, range), { enabled, placeholderData: (prev) => prev });
+  const sourcesQ = useApi(keys.reports(rid, "sources", period), () => client.reports.sources(rid!, range), { enabled, placeholderData: (prev) => prev });
   const moneyRange = { from: moneyFrom || undefined, to: moneyTo || undefined };
   const collectorsQ = useApi(
     keys.reports(rid, "collectors", `${moneyFrom}:${moneyTo}`),
-    () => client.reports.collectors(rid!, moneyRange) as Promise<Collectors>,
+    () => client.reports.collectors(rid!, moneyRange),
     { enabled, placeholderData: (prev) => prev },
   );
   const metricsQ = useApi(keys.reports(rid, "metrics", period), () => client.reports.metrics(rid!, range), { enabled, placeholderData: (prev) => prev });
@@ -147,7 +115,7 @@ export default function ReportsPage() {
   // stay eager because the page's own loading and error states read them
   const dailyQ = useApi(
     keys.reports(rid, "daily", period),
-    () => client.reports.daily(rid!, from || addDaysIso(today, -7), to || addDaysIso(today, 1)) as Promise<DailyRow[]>,
+    () => client.reports.daily(rid!, from || addDaysIso(today, -7), to || addDaysIso(today, 1)),
     { enabled: enabled && tab === "Daily", placeholderData: (prev) => prev },
   );
   const plQ = useApi(
@@ -155,23 +123,23 @@ export default function ReportsPage() {
     () => client.reports.pl(rid!, from || addDaysIso(today, -90), to || addDaysIso(today, 1)),
     { enabled: enabled && tab === "Profit & loss", placeholderData: (prev) => prev },
   );
-  const auditQ = useApi(keys.reports(rid, "audit"), () => client.reports.audit(rid!, 60) as Promise<AuditRow[]>, {
+  const auditQ = useApi(keys.reports(rid, "audit"), () => client.reports.audit(rid!, 60), {
     enabled: enabled && isManagement && tab === "Audit trail",
   });
   // the financial-year list is a property of the resort, not of the period
-  const fyQ = useApi(keys.reports(rid, "fiscal-years"), () => client.resort.fiscalYears(rid!) as Promise<{ years: FiscalYear[] }>, {
+  const fyQ = useApi(keys.reports(rid, "fiscal-years"), () => client.resort.fiscalYears(rid!), {
     enabled,
     staleTime: 3_600_000,
   });
 
-  const agents: AgentRow[] | null = agentsQ.data?.rows ?? null;
-  const sources: SourceRow[] | null = sourcesQ.data?.rows ?? null;
-  const collectors: Collectors | null = collectorsQ.data ?? null;
+  const agents: AgentPerformanceRow[] | null = agentsQ.data?.rows ?? null;
+  const sources: SourceReportRow[] | null = sourcesQ.data?.rows ?? null;
+  const collectors: CollectorsReport | null = collectorsQ.data ?? null;
   const metrics: ResortMetrics | null = metricsQ.data ?? null;
-  const daily: DailyRow[] | null = dailyQ.data ?? null;
+  const daily: DailyRevenueRow[] | null = dailyQ.data ?? null;
   const pl: PLReport | null = plQ.data ?? null;
   const audit: AuditRow[] | null = auditQ.data ?? null;
-  const fyList: FiscalYear[] = fyQ.data?.years ?? [];
+  const fyList: FiscalYears["years"] = fyQ.data?.years ?? [];
   const visibleTabs = REPORT_TABS.filter((t) => t !== "Audit trail" || isManagement);
   const loading = agentsQ.isPending || sourcesQ.isPending || metricsQ.isPending;
   const error = agentsQ.error ?? sourcesQ.error ?? metricsQ.error ?? collectorsQ.error;

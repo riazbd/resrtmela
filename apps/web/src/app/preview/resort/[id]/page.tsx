@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import type { PublishedResort } from "@rh/shared";
+import { client } from "@/lib/api";
 import { PreviewFrame } from "@/components/preview-frame";
 import { templateFor } from "@/components/site/templates";
 
@@ -10,7 +11,7 @@ export default function ResortPreviewPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   return (
     <PreviewFrame<PublishedResort>
-      path={`/resorts/${encodeURIComponent(id)}/site/preview`}
+      load={() => client.site.preview(Number(id))}
       back="/settings"
       render={(resort) => {
         const Template = templateFor(resort.template);

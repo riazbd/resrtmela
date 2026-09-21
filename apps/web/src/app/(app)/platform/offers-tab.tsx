@@ -2,29 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
-import { api } from "@/lib/api";
-
-interface OfferRow {
-  id: number;
-  code: string;
-  audience: "RESORT" | "AGENCY";
-  plan: string;
-  trialDays: number | null;
-  discountPct: number | null;
-  note: string | null;
-  email: string | null;
-  expiresAt: string | null;
-  maxUses: number;
-  uses: number;
-  signups: number;
-  createdAt: string;
-}
-
-interface PlanRow {
-  name: string;
-  label: string;
-  audience: "RESORT" | "AGENCY";
-}
+import { client } from "@/lib/api";
+import type { OfferRow, PlanDefinition } from "@rh/shared";
 
 const BLANK = { audience: "RESORT" as "RESORT" | "AGENCY", plan: "", trialDays: "", discountPct: "", maxUses: "100", expiresAt: "", email: "", note: "" };
 
@@ -36,20 +15,20 @@ const BLANK = { audience: "RESORT" as "RESORT" | "AGENCY", plan: "", trialDays: 
  */
 export function OffersTab() {
   const [rows, setRows] = useState<OfferRow[] | null>(null);
-  const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [plans, setPlans] = useState<PlanDefinition[]>([]);
   const [form, setForm] = useState(BLANK);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   const load = useCallback(() => {
-    api<OfferRow[]>("/platform/offers")
+    client.platform.offers()
       .then((r) => { setRows(r); setErr(null); })
       .catch((e) => setErr((e as Error).message));
   }, []);
   useEffect(() => {
     load();
-    api<PlanRow[]>("/platform/plans").then(setPlans).catch(() => setPlans([]));
+    client.platform.plans().then(setPlans).catch(() => setPlans([]));
   }, [load]);
 
   const shelf = plans.filter((p) => (p.audience ?? "RESORT") === form.audience);
@@ -59,18 +38,15 @@ export function OffersTab() {
     setBusy(true);
     setErr(null);
     try {
-      await api("/platform/offers", {
-        method: "POST",
-        body: {
-          audience: form.audience,
-          plan: form.plan || shelf[0]?.name,
-          trialDays: num(form.trialDays),
-          discountPct: num(form.discountPct),
-          maxUses: num(form.maxUses),
-          expiresAt: form.expiresAt ? new Date(`${form.expiresAt}T23:59:59`).toISOString() : undefined,
-          email: form.email.trim() || undefined,
-          note: form.note.trim() || undefined,
-        },
+      await client.platform.createOffer({
+        audience: form.audience,
+        plan: form.plan || shelf[0]?.name || "",
+        trialDays: num(form.trialDays),
+        discountPct: num(form.discountPct),
+        maxUses: num(form.maxUses),
+        expiresAt: form.expiresAt ? new Date(`${form.expiresAt}T23:59:59`).toISOString() : undefined,
+        email: form.email.trim() || undefined,
+        note: form.note.trim() || undefined,
       });
       setForm({ ...BLANK, audience: form.audience });
       load();

@@ -367,9 +367,33 @@ describe("what a room costs in a season", () => {
         dateFrom: "2026-09-20",
         dateTo: "2026-10-20",
         price: 9500,
-        active: true,
       }),
     );
+  });
+
+  /**
+   * `active: true` used to be sent with it, and the route has never
+   * accepted the field: `CreateRatePlanDto` lists four, and Nest's
+   * whitelist drops the rest without a word. The column defaults to true,
+   * so nothing was ever wrong on the server — but the screen was sending
+   * an instruction nobody was carrying out, which is the kind of thing
+   * that gets copied into the next screen and matters there.
+   *
+   * It survived because the route took `body: unknown`. Typing it is what
+   * found it.
+   */
+  it("sends only the four fields the route takes", async () => {
+    const r = await open(RatesScreen);
+    await waitFor(() => expect(r.getByRole("button", { name: "Add" })).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(r.getByRole("button", { name: "Deluxe" })).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Deluxe" }));
+    await fireEvent.changeText(r.getByLabelText("Price a night"), "9500");
+    await fireEvent.press(r.getByRole("button", { name: "Add the season" }));
+
+    await waitFor(() => expect(mockCreateRatePlan).toHaveBeenCalled());
+    const [, body] = mockCreateRatePlan.mock.calls[0]!;
+    expect(Object.keys(body).sort()).toEqual(["dateFrom", "dateTo", "price", "roomTypeId"]);
   });
 
   it("offers no form to somebody who may not manage rooms", async () => {

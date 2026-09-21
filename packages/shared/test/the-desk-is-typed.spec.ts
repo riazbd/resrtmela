@@ -354,13 +354,23 @@ describe("every desk route the client knows exists on the server", () => {
   });
 
   /**
-   * `bookings.cancel` and `bookings.checkout` both point at routes that do not
-   * exist. `cancel` is not phase 1's and stays for now; `checkout` is, and a
+   * `bookings.checkout` posted to `/bookings/:id/checkout`, and a
    * check-out screen built on it would have failed in front of a guest.
+   *
+   * `bookings.cancel` was the same fault and was left in place — "not
+   * phase 1's, stays for now" — which meant it sat in the one
+   * description of this API for months, ready for the next person to
+   * write a screen against. It is gone too (2026-09-21), and
+   * `every-route-the-client-calls-exists` in the API suite now asks the
+   * question of all 260 calls at once rather than one method at a time.
    */
-  it("no longer offers a check-out that posts nowhere", () => {
+  it("offers neither a check-out nor a cancel that posts nowhere", () => {
     const { client } = recording();
-    expect((client.bookings as Record<string, unknown>).checkout).toBeUndefined();
+    const bookings = client.bookings as Record<string, unknown>;
+    expect(bookings.checkout).toBeUndefined();
+    // cancelling is `transition(id, "CANCELLED")`, which every screen uses
+    expect(bookings.cancel).toBeUndefined();
+    expect(typeof bookings.transition).toBe("function");
   });
 });
 

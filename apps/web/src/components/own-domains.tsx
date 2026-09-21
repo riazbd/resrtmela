@@ -1,27 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import type { DomainRow } from "@rh/shared";
 import { Button, Card, Input, useToast } from "@/components/ui";
 
 /**
  * "Your own domain" — one card for a resort and an agency (2026-09-17).
  *
- * The same four steps for both: add the name, put the TXT record in the DNS,
- * press Check, and wait for the certificate. `base` is the owner's endpoint
- * (`/resorts/:id/domains` or `/agent/domains`); nothing else differs.
+ * The same four steps for both: add the name, put the TXT record in the
+ * DNS, press Check, and wait for the certificate.
+ *
+ * It took a `base` path — `/resorts/:id/domains` or `/agent/domains` —
+ * and built five URLs out of it by hand, which is a component holding a
+ * private copy of the API's shape. It takes the four calls now, from
+ * `client.domains` or `client.agent.domains`; nothing else differs, and
+ * a route that moves is a build failure rather than a 404 in front of
+ * somebody halfway through proving a domain.
  */
 
-interface Domain {
-  id: number;
-  host: string;
-  state: "WAITING_FOR_DNS" | "WAITING_FOR_US" | "LIVE";
-  canonical: boolean;
-  record: { type: string; name: string; shortName: string; value: string };
-}
-
 /** What each state means, said to the person who has to act on it. */
-const DOMAIN_STATE: Record<Domain["state"], { label: string; tone: string; what: string }> = {
+const DOMAIN_STATE: Record<string, { label: string; tone: string; what: string }> = {
   WAITING_FOR_DNS: {
     label: "waiting for your DNS",
     tone: "bg-amber-50 text-amber-800",
@@ -35,15 +33,31 @@ const DOMAIN_STATE: Record<Domain["state"], { label: string; tone: string; what:
   LIVE: { label: "live", tone: "bg-emerald-50 text-emerald-800", what: "Your site answers at this address." },
 };
 
-export function OwnDomains({ base, example, blurb }: { base: string; example: string; blurb: React.ReactNode }) {
+export interface DomainCalls {
+  list: () => Promise<DomainRow[]>;
+  claim: (host: string) => Promise<unknown>;
+  verify: (domainId: number) => Promise<unknown>;
+  setCanonical: (domainId: number) => Promise<unknown>;
+  remove: (domainId: number) => Promise<unknown>;
+}
+
+export function OwnDomains({
+  calls,
+  example,
+  blurb,
+}: {
+  calls: DomainCalls;
+  example: string;
+  blurb: React.ReactNode;
+}) {
   const { push } = useToast();
-  const [domains, setDomains] = useState<Domain[]>([]);
+  const [domains, setDomains] = useState<DomainRow[]>([]);
   const [wanted, setWanted] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<Domain[]>(base).then(setDomains).catch(() => setDomains([]));
-  }, [base]);
+    calls.list().then(setDomains).catch(() => setDomains([]));
+  }, [calls]);
   useEffect(() => load(), [load]);
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string) {
@@ -70,7 +84,7 @@ export function OwnDomains({ base, example, blurb }: { base: string; example: st
           loading={busy === "claim"}
           disabled={!wanted.trim()}
           onClick={async () => {
-            if (await run("claim", () => api(base, { method: "POST", body: { host: wanted } }), "Domain added — now add the record")) setWanted("");
+            if (await run("claim", () => calls.claim(wanted), "Domain added — now add the record")) setWanted("");
           }}
         >
           Add
@@ -80,7 +94,7 @@ export function OwnDomains({ base, example, blurb }: { base: string; example: st
       {domains.length > 0 && (
         <ul className="mt-4 space-y-3">
           {domains.map((d) => {
-            const state = DOMAIN_STATE[d.state];
+            const state = DOMAIN_STATE[d.state]!;
             return (
               <li key={d.id} className="rounded-xl p-3 ring-1 ring-slate-200">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -103,16 +117,16 @@ export function OwnDomains({ base, example, blurb }: { base: string; example: st
 
                 <div className="mt-2 flex flex-wrap gap-2">
                   {d.state === "WAITING_FOR_DNS" && (
-                    <Button size="sm" loading={busy === `v${d.id}`} onClick={() => run(`v${d.id}`, () => api(`${base}/${d.id}/verify`, { method: "POST" }), "Proved — we will set it up shortly")}>
+                    <Button size="sm" loading={busy === `v${d.id}`} onClick={() => run(`v${d.id}`, () => calls.verify(d.id), "Proved — we will set it up shortly")}>
                       Check
                     </Button>
                   )}
                   {d.state !== "WAITING_FOR_DNS" && !d.canonical && (
-                    <Button size="sm" variant="ghost" loading={busy === `c${d.id}`} onClick={() => run(`c${d.id}`, () => api(`${base}/${d.id}/canonical`, { method: "POST" }), "That is the main address now")}>
+                    <Button size="sm" variant="ghost" loading={busy === `c${d.id}`} onClick={() => run(`c${d.id}`, () => calls.setCanonical(d.id), "That is the main address now")}>
                       Make it the main one
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" loading={busy === `x${d.id}`} onClick={() => run(`x${d.id}`, () => api(`${base}/${d.id}`, { method: "DELETE" }), "Domain removed")}>
+                  <Button size="sm" variant="ghost" loading={busy === `x${d.id}`} onClick={() => run(`x${d.id}`, () => calls.remove(d.id), "Domain removed")}>
                     Remove
                   </Button>
                 </div>

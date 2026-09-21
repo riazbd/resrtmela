@@ -3,27 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { WEBHOOK_EVENTS } from "@rh/shared";
-import { api } from "@/lib/api";
+import { client } from "@/lib/api";
+import type { WebhookDeliveryRow, WebhookEndpointRow } from "@rh/shared";
 import { Button, Card, Field, Input, useToast } from "@/components/ui";
 
-interface Endpoint {
-  id: number;
-  url: string;
-  active: boolean;
-}
-
-interface Delivery {
-  id: string;
-  event: string;
-  attempts: number;
-  lastStatus: number | null;
-  lastError: string | null;
-  state: "delivered" | "trying" | "gave up";
-  createdAt: string;
-  endpoint: { url: string };
-}
-
-const TONE: Record<Delivery["state"], string> = {
+const TONE: Record<string, string> = {
   delivered: "bg-emerald-50 text-emerald-800",
   trying: "bg-amber-50 text-amber-800",
   "gave up": "bg-red-50 text-red-700",
@@ -39,14 +23,14 @@ const TONE: Record<Delivery["state"], string> = {
  */
 export function AgencyWebhooks({ onSecret }: { onSecret: (what: string, secret: string) => void }) {
   const { push } = useToast();
-  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [endpoints, setEndpoints] = useState<WebhookEndpointRow[]>([]);
+  const [deliveries, setDeliveries] = useState<WebhookDeliveryRow[]>([]);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<Endpoint[]>("/agent/webhooks").then(setEndpoints).catch(() => setEndpoints([]));
-    api<Delivery[]>("/agent/webhooks/deliveries").then(setDeliveries).catch(() => setDeliveries([]));
+    client.agent.webhooks.list().then(setEndpoints).catch(() => setEndpoints([]));
+    client.agent.webhooks.deliveries().then(setDeliveries).catch(() => setDeliveries([]));
   }, []);
   useEffect(() => load(), [load]);
 
@@ -80,7 +64,7 @@ export function AgencyWebhooks({ onSecret }: { onSecret: (what: string, secret: 
             loading={busy === "add"}
             disabled={!url.trim()}
             onClick={async () => {
-              const made = await run("add", () => api<{ secret: string }>("/agent/webhooks", { method: "POST", body: { url } }), "Endpoint added — copy the signing secret now");
+              const made = await run("add", () => client.agent.webhooks.add(url), "WebhookEndpointRow added — copy the signing secret now");
               if (made) {
                 onSecret(`Signing secret for ${url}`, made.secret);
                 setUrl("");
@@ -95,7 +79,7 @@ export function AgencyWebhooks({ onSecret }: { onSecret: (what: string, secret: 
             {endpoints.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-2">
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-700">{e.url}</span>
-                <Button size="sm" variant="ghost" aria-label={`Remove ${e.url}`} loading={busy === `e${e.id}`} onClick={() => run(`e${e.id}`, () => api(`/agent/webhooks/${e.id}`, { method: "DELETE" }), "Removed")}>
+                <Button size="sm" variant="ghost" aria-label={`Remove ${e.url}`} loading={busy === `e${e.id}`} onClick={() => run(`e${e.id}`, () => client.agent.webhooks.remove(e.id), "Removed")}>
                   <Trash2 className="h-4 w-4 text-red-600" />
                 </Button>
               </li>
@@ -136,7 +120,7 @@ export function AgencyWebhooks({ onSecret }: { onSecret: (what: string, secret: 
                   </div>
                 </div>
                 {d.state !== "delivered" && (
-                  <Button size="sm" variant="ghost" aria-label="Send again" loading={busy === `d${d.id}`} onClick={() => run(`d${d.id}`, () => api(`/agent/webhooks/deliveries/${d.id}/retry`, { method: "POST" }), "Queued to send again")}>
+                  <Button size="sm" variant="ghost" aria-label="Send again" loading={busy === `d${d.id}`} onClick={() => run(`d${d.id}`, () => client.agent.webhooks.retry(d.id), "Queued to send again")}>
                     <RefreshCw className="h-4 w-4" />
                   </Button>
                 )}

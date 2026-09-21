@@ -10,7 +10,10 @@
  * already counts a month in one place (`month-of-payroll.ts`); this is the
  * other half of the same argument.
  *
- * What each panel keeps is what actually differs between them: the URLs.
+ * What each panel keeps is what actually differs between them: which two
+ * calls settle and undo a payment. It used to be two URL-building
+ * functions, so a component drew four screens' worth of table and still
+ * held its own copy of two routes.
  *
  * **The two buttons are two different acts, and the screen says so.** "Pay
  * salary" settles the month and needs no amount — the server works out what is
@@ -20,8 +23,13 @@
  */
 
 import { useState } from "react";
-import { PAYROLL_PAYMENT_LABELS, isPayrollPaymentKind, type PayrollSheet } from "@rh/shared";
-import { api, money } from "@/lib/api";
+import {
+  PAYROLL_PAYMENT_LABELS,
+  isPayrollPaymentKind,
+  type PayrollPay,
+  type PayrollSheet,
+} from "@rh/shared";
+import { money } from "@/lib/api";
 import { Card, Empty, Input, Select, Stat, Td, Th, useToast } from "@/components/ui";
 import { Table } from "@/components/patterns";
 import { Check, Undo2, Wallet } from "lucide-react";
@@ -35,17 +43,17 @@ export function PayrollMonth({
   sheet,
   month,
   canManage,
-  payUrl,
-  undoUrl,
+  pay,
+  undoPay,
   onDone,
 }: {
   sheet: PayrollSheet | null;
   month: string;
   canManage: boolean;
-  /** where a payment for this employee is posted */
-  payUrl: (employeeId: number) => string;
-  /** where one payment is taken back */
-  undoUrl: (paymentId: number) => string;
+  /** how a payment for this employee is made */
+  pay: (employeeId: number, body: PayrollPay) => Promise<unknown>;
+  /** how one payment is taken back */
+  undoPay: (paymentId: number) => Promise<unknown>;
   onDone: () => void;
 }) {
   const { push } = useToast();
@@ -68,7 +76,7 @@ export function PayrollMonth({
     if (!window.confirm(`Pay ${name} ${money(remaining)} to settle ${month}?`)) return;
     setBusy(true);
     try {
-      await api(payUrl(employeeId), { method: "POST", body: { month, kind: "SALARY" } });
+      await pay(employeeId, { month, kind: "SALARY" });
       push(`${name}'s salary for ${month} is settled`);
       onDone();
     } catch (ex) {
@@ -86,10 +94,7 @@ export function PayrollMonth({
     }
     setBusy(true);
     try {
-      await api(payUrl(employeeId), {
-        method: "POST",
-        body: { month, kind: "ADVANCE", amount: value, method, note: note || undefined },
-      });
+      await pay(employeeId, { month, kind: "ADVANCE", amount: value, method, note: note || undefined });
       push(`${money(value)} advance recorded for ${name}`);
       closeAdvance();
       onDone();
@@ -103,7 +108,7 @@ export function PayrollMonth({
   async function undo(paymentId: number, label: string) {
     if (!window.confirm(`Undo this ${label.toLowerCase()}?`)) return;
     try {
-      await api(undoUrl(paymentId), { method: "DELETE" });
+      await undoPay(paymentId);
       onDone();
     } catch (ex) {
       push((ex as Error).message, "err");

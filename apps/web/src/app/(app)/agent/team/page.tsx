@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, client } from "@/lib/api";
+import { client } from "@/lib/api";
+import type { AgencyActivity } from "@rh/shared";
 import { AGENT_PERMISSIONS, PERMISSIONS } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Spinner, Td, Th, useToast } from "@/components/ui";
@@ -37,16 +38,6 @@ interface RoleRow {
   staff: number;
 }
 
-interface ActivityRow {
-  id: string;
-  actor: { id: number; name: string } | null;
-  resort: { id: number; name: string } | null;
-  action: string;
-  entity: string;
-  entityId: number | null;
-  at: string;
-}
-
 const TABS = ["People", "Roles", "Activity"] as const;
 
 /** The label an owner reads, taken from the same list the settings screen uses. */
@@ -74,7 +65,7 @@ export default function AgentTeamPage() {
   async function addStaff() {
     setBusy(true);
     try {
-      await api("/agent/staff", { method: "POST", body: form });
+      await client.agent.addStaff(form);
       push(`${form.name} can now sign in`);
       setForm({ name: "", email: "", phone: "", password: "" });
       load();
@@ -87,10 +78,7 @@ export default function AgentTeamPage() {
 
   async function setRole(userId: number, roleId: string) {
     try {
-      await api(`/agent/staff/${userId}/role`, {
-        method: "PATCH",
-        body: { roleId: roleId ? Number(roleId) : null },
-      });
+      await client.agent.setStaffRole(userId, roleId ? Number(roleId) : null);
       push("Role updated");
       load();
     } catch (ex) {
@@ -144,7 +132,7 @@ export default function AgentTeamPage() {
                           junior has to be given it on their role */}
                       <Td>
                         {can("agent.staff.password") && s.id !== me?.id && (
-                          <SetSomeonesPassword name={s.name} endpoint={`/agent/staff/${s.id}/password`} />
+                          <SetSomeonesPassword name={s.name} save={(pw) => client.agent.setStaffPassword(s.id, pw)} />
                         )}
                       </Td>
                     </tr>
@@ -198,7 +186,7 @@ function RolesTab({ roles, reload }: { roles: RoleRow[]; reload: () => void }) {
   async function create() {
     setBusy(true);
     try {
-      await api("/agent/roles", { method: "POST", body: { name, permissions: picked } });
+      await client.agent.createRole({ name, permissions: picked });
       push(`Role "${name}" created`);
       setName("");
       setPicked(["agent.book"]);
@@ -213,7 +201,7 @@ function RolesTab({ roles, reload }: { roles: RoleRow[]; reload: () => void }) {
   async function remove(id: number) {
     if (!window.confirm("Delete this role? Anyone on it goes back to the default.")) return;
     try {
-      await api(`/agent/roles/${id}`, { method: "DELETE" });
+      await client.agent.deleteRole(id);
       reload();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -270,13 +258,14 @@ function RolesTab({ roles, reload }: { roles: RoleRow[]; reload: () => void }) {
 }
 
 function ActivityTab() {
-  const [rows, setRows] = useState<ActivityRow[] | null>(null);
+  const [rows, setRows] = useState<AgencyActivity[] | null>(null);
   const [q, setQ] = useState("");
   const [denied, setDenied] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      api<ActivityRow[]>(`/agent/activity${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`)
+      client.agent
+        .activity({ q: q.trim() || undefined })
         .then((r) => {
           setRows(r);
           setDenied(false);

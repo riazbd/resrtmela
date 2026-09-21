@@ -14,7 +14,8 @@ import { useAuth } from "@/lib/auth";
 import { consoleGate, navVisible, missingFeature } from "@/lib/console-access";
 import { CONSOLE_NAV, isResortless, planFeatureLabel } from "@rh/shared";
 import { DICTS, LangProvider, useLang, type DictKey, type Lang } from "@/lib/i18n";
-import { api, type Resort } from "@/lib/api";
+import { client } from "@/lib/api";
+import type { NotificationFeed, NotificationRow } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { OutboxProvider } from "@/lib/outbox";
 import { Logo } from "@/components/logo";
@@ -380,16 +381,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface NotificationRow {
-  id: string;
-  title: string;
-  body: string | null;
-  kind: string;
-  link: string | null;
-  readAt: string | null;
-  createdAt: string;
-}
-
 function NotificationBell() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
@@ -403,7 +394,7 @@ function NotificationBell() {
    */
   const notifQ = useApi(
     keys.notifications(),
-    () => api<{ unread: number; rows: NotificationRow[] }>("/notifications"),
+    () => client.engage.notifications(),
     { refetchInterval: 60_000, staleTime: 30_000 },
   );
   const rows: NotificationRow[] = notifQ.data?.rows ?? [];
@@ -419,10 +410,10 @@ function NotificationBell() {
       void load();
       if (unread > 0) {
         // clear the badge straight away, then let the refetch confirm it
-        qc.setQueryData(keys.notifications(), (prev: { unread: number; rows: NotificationRow[] } | undefined) =>
+        qc.setQueryData(keys.notifications(), (prev: NotificationFeed | undefined) =>
           prev ? { ...prev, unread: 0 } : prev,
         );
-        await api("/notifications/read", { method: "POST", body: {} }).catch(() => {});
+        await client.engage.markAllRead().catch(() => {});
         void load();
       }
     }
@@ -488,7 +479,7 @@ function AddResortButton() {
   async function create() {
     setBusy(true);
     try {
-      const r = await api<Resort>(`/tenants/${tenantId}/resorts`, { method: "POST", body: { name } });
+      const r = await client.resort.addResort(tenantId, { name });
       // full membership list may lag — add it optimistically from the response
       setActiveResort({ id: r.id, name: r.name, tenantId: r.tenantId, status: (r as unknown as { status?: string }).status ?? "active" });
       window.location.href = "/";

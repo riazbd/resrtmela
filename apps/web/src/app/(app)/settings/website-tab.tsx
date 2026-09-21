@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Trash2, Upload as UploadIcon } from "lucide-react";
-import { api, upload } from "@/lib/api";
+import { client, upload } from "@/lib/api";
+import type { SiteDraft } from "@rh/shared";
 import { useLoadFailure, LoadFailed } from "@/lib/load-state";
 import { Button, Card, Empty, Field, Input, Select, useToast } from "@/components/ui";
 import { OwnDomains } from "@/components/own-domains";
@@ -15,24 +16,6 @@ import { OwnDomains } from "@/components/own-domains";
  * deliberately not editable here — a website that could disagree with the
  * calendar is the whole problem this feature exists to avoid.
  */
-
-interface SiteDraft {
-  slug: string;
-  published: boolean;
-  publishedAt: string | null;
-  template: string;
-  headline: string | null;
-  intro: string | null;
-  amenities: string[];
-  themeColor: string | null;
-  map: { lat: number; lng: number } | null;
-  whatsapp: string | null;
-  facebook: string | null;
-  instagram: string | null;
-  photos: { id: number; url: string; roomTypeId: number | null; alt: string | null; sortOrder: number }[];
-  templates: { key: string; label: string; blurb: string }[];
-  storage: { used: number; quota: number };
-}
 
 interface RoomType {
   id: number;
@@ -60,7 +43,8 @@ export function WebsiteTab({ rid }: { rid: number }) {
   const [address, setAddress] = useState("");
 
   const load = useCallback(() => {
-    api<SiteDraft>(`/resorts/${rid}/site`)
+    client.site
+      .get(rid)
       .then((s) => {
         setSite(s);
         setDraft({
@@ -73,7 +57,8 @@ export function WebsiteTab({ rid }: { rid: number }) {
         fail.clear();
       })
       .catch(fail.onFail(() => setSite(null)));
-    api<RoomType[]>(`/resorts/${rid}/room-types`)
+    client.rooms
+      .types(rid)
       .then(setTypes)
       .catch(() => setTypes([]));
   }, [rid]);
@@ -97,43 +82,49 @@ export function WebsiteTab({ rid }: { rid: number }) {
 
   const publicUrl = `${typeof window === "undefined" ? "" : window.location.origin}/r/${site.slug}`;
 
+  // bound to this resort once, so the card does not rebuild its own URLs
+  const domainCalls = {
+    list: () => client.domains.list(rid),
+    claim: (host: string) => client.domains.claim(rid, host),
+    verify: (domainId: number) => client.domains.verify(rid, domainId),
+    setCanonical: (domainId: number) => client.domains.setCanonical(rid, domainId),
+    remove: (domainId: number) => client.domains.remove(rid, domainId),
+  };
+
   const save = () =>
     run(
       "save",
       () =>
-        api(`/resorts/${rid}/site`, {
-          method: "PATCH",
-          body: {
-            headline: draft.headline,
-            intro: draft.intro,
-            amenities: draft.amenities
-              .split(",")
-              .map((a) => a.trim())
-              .filter(Boolean),
-            themeColor: draft.themeColor,
-          },
+        client.site.save(rid, {
+          headline: draft.headline,
+          intro: draft.intro,
+          amenities: draft.amenities
+            .split(",")
+            .map((a) => a.trim())
+            .filter(Boolean),
+          themeColor: draft.themeColor,
         }),
       "Saved — your site is updated",
     );
 
   const pickTemplate = (template: string) =>
-    run(`t${template}`, () => api(`/resorts/${rid}/site`, { method: "PATCH", body: { template } }), "Design changed");
+    run(`t${template}`, () => client.site.save(rid, { template }), "Design changed");
 
   const togglePublished = () =>
     run(
       "publish",
-      () => api(`/resorts/${rid}/site/publish`, { method: "POST", body: { published: !site.published } }),
+      () => client.site.publish(rid, !site.published),
       site.published ? "Your site is off the air" : "Your site is live",
     );
 
   const saveAddress = () =>
-    run("address", () => api(`/resorts/${rid}/site/address`, { method: "POST", body: { slug: address } }), "Address changed");
+    run("address", () => client.site.setAddress(rid, address), "Address changed");
 
   async function addPhoto(chosen: File) {
     await run(
       "photo",
       () =>
-        upload(`/resorts/${rid}/site/photos`, chosen, {
+        upload(client.site.photoPath(rid), chosen, {
           ...(attachTo != null ? { "x-room-type": String(attachTo) } : {}),
         }),
       "Picture added",
@@ -142,10 +133,10 @@ export function WebsiteTab({ rid }: { rid: number }) {
   }
 
   const move = (id: number, to: number) =>
-    run(`m${id}`, () => api(`/resorts/${rid}/site/photos/${id}`, { method: "PATCH", body: { sortOrder: to } }), "Moved");
+    run(`m${id}`, () => client.site.movePhoto(rid, id, to), "Moved");
 
   const remove = (id: number) =>
-    run(`d${id}`, () => api(`/resorts/${rid}/site/photos/${id}`, { method: "DELETE" }), "Picture removed");
+    run(`d${id}`, () => client.site.removePhoto(rid, id), "Picture removed");
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
@@ -367,7 +358,7 @@ export function WebsiteTab({ rid }: { rid: number }) {
         </Card>
 
         <OwnDomains
-          base={`/resorts/${rid}/domains`}
+          calls={domainCalls}
           example="skyecoresort.com"
           blurb={
             <>
@@ -385,7 +376,7 @@ export function WebsiteTab({ rid }: { rid: number }) {
                 placeholder="8801700000000"
                 onBlur={(e) =>
                   e.target.value !== (site.whatsapp ?? "") &&
-                  run("wa", () => api(`/resorts/${rid}/site`, { method: "PATCH", body: { whatsapp: e.target.value } }), "Saved")
+                  run("wa", () => client.site.save(rid, { whatsapp: e.target.value }), "Saved")
                 }
               />
             </Field>
@@ -395,7 +386,7 @@ export function WebsiteTab({ rid }: { rid: number }) {
                 placeholder="https://facebook.com/…"
                 onBlur={(e) =>
                   e.target.value !== (site.facebook ?? "") &&
-                  run("fb", () => api(`/resorts/${rid}/site`, { method: "PATCH", body: { facebook: e.target.value } }), "Saved")
+                  run("fb", () => client.site.save(rid, { facebook: e.target.value }), "Saved")
                 }
               />
             </Field>
@@ -405,7 +396,7 @@ export function WebsiteTab({ rid }: { rid: number }) {
                 placeholder="https://instagram.com/…"
                 onBlur={(e) =>
                   e.target.value !== (site.instagram ?? "") &&
-                  run("ig", () => api(`/resorts/${rid}/site`, { method: "PATCH", body: { instagram: e.target.value } }), "Saved")
+                  run("ig", () => client.site.save(rid, { instagram: e.target.value }), "Saved")
                 }
               />
             </Field>
@@ -443,12 +434,9 @@ export function WebsiteTab({ rid }: { rid: number }) {
               void run(
                 "map",
                 () =>
-                  api(`/resorts/${rid}/site`, {
-                    method: "PATCH",
-                    body: {
-                      mapLat: lat === "" ? null : Number(lat),
-                      mapLng: lng === "" ? null : Number(lng),
-                    },
+                  client.site.save(rid, {
+                    mapLat: lat === "" ? null : Number(lat),
+                    mapLng: lng === "" ? null : Number(lng),
                   }),
                 "Map point saved",
               );

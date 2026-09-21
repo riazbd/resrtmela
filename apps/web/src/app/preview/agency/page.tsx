@@ -1,6 +1,7 @@
 "use client";
 
 import type { AgencyPublished } from "@rh/shared";
+import { client } from "@/lib/api";
 import { PreviewFrame } from "@/components/preview-frame";
 import { AgencyPage } from "@/components/agency-site/agency-page";
 
@@ -8,7 +9,7 @@ import { AgencyPage } from "@/components/agency-site/agency-page";
 export default function AgencyPreviewPage() {
   return (
     <PreviewFrame<AgencyPublished>
-      path="/agent/site/preview"
+      load={() => client.agent.sitePreview()}
       back="/agent/website"
       render={(page) => <AgencyPage page={page} />}
     />

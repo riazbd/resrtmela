@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { api, client, money } from "@/lib/api";
+import { client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
 import { useOutbox } from "@/lib/outbox";
@@ -66,7 +66,7 @@ function TreeTab() {
   async function remove(node: TourCategoryNode) {
     if (!window.confirm(`Delete "${node.name}"?`)) return;
     try {
-      await api(`/agent/tours/categories/${node.id}`, { method: "DELETE" });
+      await client.agent.tours.deleteCategory(node.id);
       reload();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -182,7 +182,7 @@ function AddCategory({
   async function save() {
     setBusy(true);
     try {
-      await api("/agent/tours/categories", { method: "POST", body: { name, parentId } });
+      await client.agent.tours.createCategory({ name, parentId });
       onDone();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -226,7 +226,7 @@ function PackagesTab() {
   async function remove(id: number) {
     if (!window.confirm("Delete this package?")) return;
     try {
-      await api(`/agent/tours/packages/${id}`, { method: "DELETE" });
+      await client.agent.tours.deletePackage(id);
       reload();
     } catch (ex) {
       push((ex as Error).message, "err");
@@ -339,7 +339,7 @@ function PackageEditor({
   );
   const { data: existing } = useApi<TourPackageDetail>(
     keys.agentPackage(isNew ? 0 : (id as number)),
-    () => api<TourPackageDetail>(`/agent/tours/packages/${id}`),
+    () => client.agent.tours.package(id as number),
     { enabled: !isNew },
   );
 
@@ -402,7 +402,7 @@ function PackageEditor({
         });
         push(queued ? "Saved on this device — it will sync when you are back online" : "Package saved");
       } else {
-        await api(`/agent/tours/packages/${id}`, { method: "PATCH", body });
+        await client.agent.tours.updatePackage(id as number, body);
         push("Package saved");
       }
       onDone();
