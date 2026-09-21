@@ -297,7 +297,24 @@ export class FbService {
       where: {
         resortId,
         deletedAt: null,
-        state: { in: ["CONFIRMED", "CHECKED_IN"] },
+        /**
+         * PENDING as well, which this list left out until 2026-09-21.
+         *
+         * `create()` above accepts a bill charged to a PENDING booking —
+         * its own list is PENDING, CONFIRMED, CHECKED_IN — so the picker
+         * could not offer a stay the writer would have taken. The day
+         * sheet counts PENDING too, which is how the two screens came to
+         * disagree about who is in the building.
+         *
+         * It is not a rare state. A booking made by an agency is created
+         * PENDING (`bookings.service.ts`: `state: isAgent ? "PENDING" :
+         * "CONFIRMED"`), so a resort selling through agents had those
+         * guests missing from the restaurant's list for their whole stay
+         * unless somebody remembered to press Check in — and the bill
+         * then had to be written as a counter sale, off the stay, where
+         * checking out would never collect it.
+         */
+        state: { in: ["PENDING", "CONFIRMED", "CHECKED_IN"] },
         checkIn: { lte: date },
         checkOut: { gt: date },
       },
