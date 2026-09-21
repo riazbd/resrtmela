@@ -35,6 +35,7 @@ jest.mock("../src/api/session", () => ({
     isStaff: true,
     isAgent: false,
     role: mockRole,
+    can: () => true,
   }),
   client: {
     bookings: {

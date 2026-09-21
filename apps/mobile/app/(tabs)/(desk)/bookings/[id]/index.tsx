@@ -224,15 +224,77 @@ export default function BookingScreen() {
           the bill existed and could not show it. A guest at the counter
           asking for their bill is the case this screen exists for.
         */}
-        {activeResort && b.invoiceNo ? (
-          <Button
-            label={`Invoice ${b.invoiceNo}`}
-            kind="ghost"
-            onPress={() => router.push(`/bookings/${b.id}/invoice` as never)}
-          />
+        {activeResort ? (
+          <TheInvoice booking={b} onIssued={() => void booking.refetch()} />
         ) : null}
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * The bill — and issuing one, when the stay does not have one yet.
+ *
+ * The button used to appear only where `invoiceNo` was already set, and
+ * checking out is the only thing that sets it. So a guest asking for
+ * their bill at any point before they leave — which is when guests ask —
+ * could not be given one from the phone, though the API has issued them
+ * on demand all along and the console's own button does exactly this.
+ *
+ * It issues on one press, with no question first, because that is what
+ * the console's button does and the two clients answer to one design.
+ * The consequence is real — an issued invoice freezes the charge, and
+ * `addCharge` then refuses the stay in its own words — but the console
+ * carries that without asking, and a confirmation on one client only
+ * would make the same act feel like two different acts.
+ */
+function TheInvoice({ booking, onIssued }: { booking: BookingDetail; onIssued: () => void }) {
+  const { can } = useAuth();
+  const [refused, setRefused] = useState<string | null>(null);
+
+  const issue = useAction(async () => {
+    setRefused(null);
+    try {
+      await client.bookings.generateInvoice(booking.id);
+      onIssued();
+      router.push(`/bookings/${booking.id}/invoice` as never);
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That did not go through.");
+    }
+  });
+
+  if (booking.invoiceNo) {
+    return (
+      <Button
+        label={`Invoice ${booking.invoiceNo}`}
+        kind="ghost"
+        onPress={() => router.push(`/bookings/${booking.id}/invoice` as never)}
+      />
+    );
+  }
+
+  /**
+   * The API refuses to invoice a stay that was cancelled or never
+   * arrived, and asks for `payments.create` to issue one. Offering a
+   * button that answers 400 or 403 is worse than offering none.
+   */
+  if (booking.state === "CANCELLED" || booking.state === "NO_SHOW") return null;
+  if (!can("payments.create")) return null;
+
+  return (
+    <View style={styles.desk}>
+      <Button
+        label="Issue the invoice"
+        kind="ghost"
+        loading={issue.busy}
+        onPress={issue.go}
+      />
+      {refused ? (
+        <Text step="small" tone="danger" weight="medium">
+          {refused}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

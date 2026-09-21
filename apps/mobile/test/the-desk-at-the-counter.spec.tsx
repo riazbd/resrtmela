@@ -46,6 +46,7 @@ jest.mock("../src/api/session", () => ({
     activeResort: { id: 3, name: "Demo Bay Resort", timezone: "Asia/Dhaka" },
     isStaff: true,
     isAgent: false,
+    can: () => true,
   }),
   client: {
     bookings: {

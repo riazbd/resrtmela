@@ -15,17 +15,28 @@ import type { BookingDetail } from "@rh/shared";
 
 const mockGet = jest.fn();
 const mockBack = jest.fn();
+const mockPush = jest.fn();
+const mockGenerateInvoice = jest.fn();
+let mockCan = (_perm: string) => true;
 
 jest.mock("expo-router", () => ({
-  router: { push: jest.fn(), replace: jest.fn(), back: mockBack },
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: mockBack }),
+  router: { push: (p: string) => mockPush(p), replace: jest.fn(), back: mockBack },
+  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: mockBack }),
   useLocalSearchParams: () => ({ id: "41" }),
   Stack: { Screen: () => null },
 }));
 
 jest.mock("../src/api/session", () => ({
-  useAuth: () => ({ activeResort: { id: 3, name: "Demo Bay Resort" } }),
-  client: { bookings: { get: (...a: unknown[]) => mockGet(...a) } },
+  useAuth: () => ({
+    activeResort: { id: 3, name: "Demo Bay Resort" },
+    can: (perm: string) => mockCan(perm),
+  }),
+  client: {
+    bookings: {
+      get: (...a: unknown[]) => mockGet(...a),
+      generateInvoice: (...a: unknown[]) => mockGenerateInvoice(...a),
+    },
+  },
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -98,6 +109,9 @@ const detail = (over: Partial<BookingDetail> = {}): BookingDetail =>
 beforeEach(() => {
   mockGet.mockReset().mockResolvedValue(detail());
   mockBack.mockReset();
+  mockPush.mockReset();
+  mockGenerateInvoice.mockReset().mockResolvedValue({ invoiceNo: "INV-00012" });
+  mockCan = () => true;
 });
 
 describe("which booking", () => {
@@ -216,6 +230,74 @@ describe("what the desk wrote down", () => {
     const r = await render(<Harness><BookingScreen /></Harness>);
     await waitFor(() => expect(r.getByText("Rafiq Hasan")).toBeTruthy());
     expect(r.queryByText("Note")).toBeNull();
+  });
+});
+
+/**
+ * The bill a guest asks for, before they leave (2026-09-21).
+ *
+ * The invoice button appeared only where `invoiceNo` was already set, and
+ * checking out is the only thing that sets it — so a guest asking for
+ * their bill at any point before departure could not be given one from
+ * the phone. The API has issued them on demand all along; nothing on this
+ * screen called it.
+ */
+describe("the invoice", () => {
+  it("opens the one that has already been issued", async () => {
+    mockGet.mockResolvedValue(detail({ invoiceNo: "INV-00007" }));
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Invoice INV-00007")).toBeTruthy());
+    fireEvent.press(r.getByText("Invoice INV-00007"));
+    expect(mockPush).toHaveBeenCalledWith("/bookings/41/invoice");
+    expect(mockGenerateInvoice).not.toHaveBeenCalled();
+  });
+
+  it("offers to issue one where the stay has none", async () => {
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Issue the invoice")).toBeTruthy());
+  });
+
+  /**
+   * On one press, with nothing asked first.
+   *
+   * There was a confirmation here, on the reasoning that issuing freezes
+   * the charge — `addCharge` refuses a stay that already has an invoice.
+   * True, and the console carries the same consequence without asking,
+   * so the phone does too: one act should not feel like two different
+   * acts depending on which client is open.
+   */
+  it("issues it and opens it, on one press", async () => {
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Issue the invoice")).toBeTruthy());
+    fireEvent.press(r.getByText("Issue the invoice"));
+    await waitFor(() => expect(mockGenerateInvoice).toHaveBeenCalledWith(41));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/bookings/41/invoice"));
+  });
+
+  it("says what the API said when it will not", async () => {
+    mockGenerateInvoice.mockRejectedValue(new Error("Cannot invoice a cancelled/no-show booking"));
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Issue the invoice")).toBeTruthy());
+    fireEvent.press(r.getByText("Issue the invoice"));
+    await waitFor(() => expect(r.getByText(/cancelled\/no-show/)).toBeTruthy());
+  });
+
+  /**
+   * Two doors the API keeps shut. Offering a button that answers 400 or
+   * 403 is worse than offering none.
+   */
+  it("offers nothing on a stay that was cancelled", async () => {
+    mockGet.mockResolvedValue(detail({ state: "CANCELLED" }));
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Rafiq Hasan")).toBeTruthy());
+    expect(r.queryByText("Issue the invoice")).toBeNull();
+  });
+
+  it("offers nothing to somebody who may not take money", async () => {
+    mockCan = (perm) => perm !== "payments.create";
+    const r = await render(<Harness><BookingScreen /></Harness>);
+    await waitFor(() => expect(r.getByText("Rafiq Hasan")).toBeTruthy());
+    expect(r.queryByText("Issue the invoice")).toBeNull();
   });
 });
 

@@ -1,13 +1,18 @@
 /**
  * The resort's own settings, as much of them as belongs on a phone.
  *
- * The console's settings page is 2,144 lines across twelve tabs. Six of
- * those tabs are things an owner genuinely changes away from a desk —
- * the resort's own details, what it charges tax at, the lists its forms
- * offer, who works there, what the rooms cost by season, and how it
- * looks to a guest. The other six are not: a subscription, an API key,
- * a permission matrix, a data export and an activity log are all
+ * The console's settings page is 2,144 lines across twelve tabs. Most of
+ * those are things an owner genuinely changes away from a desk — the
+ * resort's own details, what it charges tax at, the lists its forms
+ * offer, who works there, what each role may do, what the rooms cost by
+ * season, and how it looks to a guest. What is left is not: a
+ * subscription, an API key, a data export and an activity log are all
  * read-across-a-wide-table work, and a phone makes each of them worse.
+ *
+ * The permission matrix was on the second list until 2026-09-21, on the
+ * grounds that nine groups of checkboxes do not fit. They do, a group at
+ * a time — see the note in `roles.tsx` — and the owner met the version
+ * that did not fit as "there is no expense permission to tick".
  *
  * So this is a hub, and what is missing from it is missing on purpose.
  * The line at the bottom says so, because a person who cannot find the
@@ -48,6 +53,12 @@ const SECTIONS: Section[] = [
     title: "Team",
     hint: "Who works here and what each of them may do",
     perm: "users.manage",
+  },
+  {
+    href: "/settings/roles",
+    title: "Permissions",
+    hint: "What each role may do",
+    perm: "roles.manage",
   },
   {
     href: "/settings/rates",
@@ -98,9 +109,9 @@ export default function SettingsScreen() {
 
         {/* said on the screen rather than learned by hunting for it */}
         <Text step="caption" tone="muted" style={styles.footnote}>
-          The subscription, API keys, permissions, the activity log and your data
-          exports stay on the desk — each of them is a wide table, and a phone
-          makes them harder to read rather than easier.
+          The subscription, API keys, the activity log and your data exports stay
+          on the desk — each of them is a wide table, and a phone makes them
+          harder to read rather than easier.
         </Text>
       </ScrollView>
     </>

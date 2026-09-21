@@ -14,7 +14,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useT } from "@rh/app-core";
-import { ACCOUNT_HREF, type NavDestination } from "@rh/shared";
+import { ACCOUNT_HREF, isResortless, type NavDestination, type Resort } from "@rh/shared";
 import { useAuth } from "../../src/api/session";
 import { Button } from "../../src/design/button";
 import { Text } from "../../src/design/text";
@@ -57,7 +57,7 @@ function Row({ href, label }: { href: string; label: string }) {
 }
 
 export default function More() {
-  const { me, role, can, features, activeResort, logout } = useAuth();
+  const { me, role, can, features, activeResort, setActiveResort, logout } = useAuth();
   const t = useT();
 
   const destinations = me ? moreFor({ role, can, features }) : [];
@@ -77,6 +77,25 @@ export default function More() {
   const titleOf = (d: NavDestination) =>
     d.labelKey ? t(d.labelKey as never) : (d.label ?? d.href);
 
+  /**
+   * The resorts this person works at, when that is more than one.
+   *
+   * `WhichResort` has told every empty screen in this app to *choose a
+   * resort from the More tab* since it was written, and the More tab has
+   * never had one: somebody managing two properties got whichever resort
+   * `/auth/me` listed first and no way to reach the other from the phone.
+   * The console has had the switcher in its header all along.
+   *
+   * `isResortless` rather than a role test of this screen's own, because
+   * for an agency `me.resorts` is the list it may *sell*, not the list it
+   * works at — switching between them changes nothing, and offering the
+   * choice says it does.
+   */
+  const switchable: Resort[] =
+    me && !isResortless(role) && me.resorts.length > 1
+      ? me.resorts.map((r) => r.resort)
+      : [];
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       {/*
@@ -88,8 +107,12 @@ export default function More() {
         where they work; for an agency it is who they may sell.
         `consoleGate` has called AGENT resortless since it was written,
         and this screen had not heard.
+
+        It is a heading only while there is nothing to choose. With two
+        resorts the name below is the same sentence with a tap in it,
+        and printing it twice says the top one is something else.
       */}
-      {whose ? (
+      {whose && switchable.length === 0 ? (
         <View style={styles.header}>
           <Text step="caption" tone="muted" weight="medium">
             {whose.kind}
@@ -97,6 +120,41 @@ export default function More() {
           <Text step="strong" weight="medium" tone="title">
             {whose.name}
           </Text>
+        </View>
+      ) : null}
+
+      {switchable.length > 0 ? (
+        <View style={styles.card}>
+          {switchable.map((resort) => {
+            const here = resort.id === activeResort?.id;
+            return (
+              <Pressable
+                key={resort.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: here }}
+                accessibilityLabel={`${resort.name}${here ? ", where you are working" : ""}`}
+                onPress={() => setActiveResort(resort)}
+                style={({ pressed }) => (pressed ? styles.pressed : null)}
+              >
+                <View style={styles.row}>
+                  <MaterialCommunityIcons
+                    name={here ? "check-circle" : "circle-outline"}
+                    size={20}
+                    color={here ? color.brand[600] : color.ink[300]}
+                  />
+                  <Text
+                    step="body"
+                    tone="title"
+                    weight={here ? "medium" : undefined}
+                    style={styles.rowLabel}
+                    numberOfLines={1}
+                  >
+                    {resort.name}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
 

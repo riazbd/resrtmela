@@ -19,7 +19,7 @@
 import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, router } from "expo-router";
-import { useApi } from "@rh/app-core";
+import { useApi, useQueryClient } from "@rh/app-core";
 import { dayLabel, formatMoney, type SalesDocDetail } from "@rh/shared";
 import { client, useAuth } from "../../../../../src/api/session";
 import { Button } from "../../../../../src/design/button";
@@ -153,13 +153,85 @@ export default function SalesDocScreen() {
 
         {d.totals.due > 0 ? <TakePayment doc={d} onDone={() => void doc.refetch()} /> : null}
 
+        <Convert doc={d} />
+
         <Text step="caption" tone="muted" style={styles.footnote}>
-          Lines, the tax rate, terms, sending it and turning a quote into an
-          invoice are all done at the desk. Taking money is here because that
-          is what happens away from one.
+          Editing the lines and the printed copy a client keeps stay on the
+          desk: lines cannot change once money has been paid against them, and
+          a printed page is not a screen.
         </Text>
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * The quote the client said yes to.
+ *
+ * Converting is the moment a quotation becomes an invoice, and it is the
+ * act an agency does the instant they hear "yes" — usually on the phone,
+ * often standing up. Keeping it at the desk meant the number the client
+ * had just agreed to sat as a quotation until somebody got back to a
+ * computer.
+ *
+ * It is safe to offer here because converting twice returns the same
+ * invoice rather than making a second one — the server's rule, which a
+ * double-tap and a replayed offline write both depend on. Where a quote
+ * has already been converted the screen names the invoice and opens it
+ * instead, because "convert" on a document that is already converted is
+ * a button that reads as an error waiting to happen.
+ *
+ * **Converting changes the quote as well as making the invoice**, and
+ * that is what the invalidation below is for. The server sets the
+ * quote's `convertedTo`, but this screen's copy of the quote was read
+ * before the conversion — so going back to it offered to convert an
+ * already-converted quote, with no link to the invoice it became.
+ * Caught on the live demo agency, where the reverse link simply never
+ * appeared; no test saw it, because a test mounts one screen with one
+ * answer and never comes back to a stale one.
+ */
+function Convert({ doc }: { doc: SalesDocDetail }) {
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const [refused, setRefused] = useState<string | null>(null);
+
+  const go = useAction(async () => {
+    setRefused(null);
+    try {
+      const made = await client.agent.sales.convert(doc.id);
+      await Promise.all([
+        // the quote now knows what it became
+        qc.invalidateQueries({ queryKey: ["agent-sale", doc.id] }),
+        // and the list has a document in it that was not there before
+        qc.invalidateQueries({ queryKey: ["agent-sales"] }),
+      ]);
+      router.push(`/agent/sales/${made.id}` as never);
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That did not go through.");
+    }
+  });
+
+  if (doc.convertedTo) {
+    return (
+      <Button
+        label={`Open invoice ${doc.convertedTo.number}`}
+        kind="ghost"
+        onPress={() => router.push(`/agent/sales/${doc.convertedTo!.id}` as never)}
+      />
+    );
+  }
+
+  if (doc.kind !== "QUOTATION" || !can("agent.sales.manage")) return null;
+
+  return (
+    <View style={styles.convert}>
+      <Button label="Turn it into an invoice" loading={go.busy} onPress={go.go} />
+      {refused ? (
+        <Text step="small" tone="danger" weight="medium">
+          {refused}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
@@ -231,6 +303,7 @@ const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   fields: { gap: space.md },
+  convert: { gap: space.sm },
   emptyBox: { paddingVertical: space.lg },
   footnote: { textAlign: "center" },
   refused: {

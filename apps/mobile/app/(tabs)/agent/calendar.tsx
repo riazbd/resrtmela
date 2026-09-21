@@ -37,6 +37,7 @@ import {
 } from "@rh/shared";
 import { MonthBar } from "../../../src/design/month-bar";
 import { client, useAuth } from "../../../src/api/session";
+import { Chip } from "../../../src/design/chip";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
 import { Card } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
@@ -58,10 +59,34 @@ export default function AgentCalendarScreen() {
     { enabled: Boolean(me) },
   );
 
-  const free = useMemo(
-    () => freeRoomsByNight(feed.data?.resorts ?? [], from, to),
-    [feed.data, from, to],
+  /**
+   * One resort, or all of them.
+   *
+   * The grid answers "is there anything free" across everything the
+   * agency sells, which is the right first question and the wrong second
+   * one. An agent whose customer has already picked the resort was being
+   * shown a number that counts four other resorts' rooms — so a month
+   * reading 12 free could be 12 somewhere else and none where they are
+   * being asked about.
+   *
+   * Filtered here rather than re-asked of the server: the month's feed
+   * already carries every resort's rooms and nights, `freeRoomsByNight`
+   * is the counting rule whichever list it is given, and an agent on a
+   * hill road switching resorts should not need a connection to do it.
+   */
+  const [only, setOnly] = useState<number | null>(null);
+  const all = feed.data?.resorts ?? [];
+  const shown = useMemo(
+    // a resort chosen last month may not be in this month's feed at all,
+    // and filtering to nothing would draw an empty month rather than say so
+    () =>
+      only !== null && all.some((r) => r.resort.id === only)
+        ? all.filter((r) => r.resort.id === only)
+        : all,
+    [all, only],
   );
+
+  const free = useMemo(() => freeRoomsByNight(shown, from, to), [shown, from, to]);
 
   /**
    * No `title` here. A tab is named by the bar, which runs the
@@ -91,6 +116,14 @@ export default function AgentCalendarScreen() {
 
   const weeks = monthGrid(month);
   const resorts = feed.data.resorts;
+  /**
+   * The one being counted, when it is one rather than all of them.
+   *
+   * Looked up rather than remembered, so a resort picked last month that
+   * this month's feed does not carry falls back to all of them — the
+   * same rule `shown` applies, asked once.
+   */
+  const chosen = only === null ? null : (resorts.find((r) => r.resort.id === only) ?? null);
 
   return (
     <>
@@ -120,7 +153,32 @@ export default function AgentCalendarScreen() {
           </View>
         ) : (
           <>
-            <Card title={`Rooms free — ${resorts.length} resort${resorts.length === 1 ? "" : "s"}`}>
+            {/*
+              Which resort the grid is counting. One resort needs no
+              chooser — a choice of one is not a choice, and drawing it
+              is a row of nothing to decide.
+            */}
+            {resorts.length > 1 ? (
+              <View style={styles.picker}>
+                <Chip label="All resorts" on={only === null} onPress={() => setOnly(null)} />
+                {resorts.map((r) => (
+                  <Chip
+                    key={r.resort.id}
+                    label={r.resort.name}
+                    on={only === r.resort.id}
+                    onPress={() => setOnly(only === r.resort.id ? null : r.resort.id)}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            <Card
+              title={
+                chosen
+                  ? `Rooms free — ${chosen.resort.name}`
+                  : `Rooms free — ${resorts.length} resort${resorts.length === 1 ? "" : "s"}`
+              }
+            >
               <View style={styles.weekdays}>
                 {WEEKDAY_INITIALS.map((d, i) => (
                   <Text key={i} step="caption" tone="muted" style={styles.weekday}>
@@ -139,6 +197,7 @@ export default function AgentCalendarScreen() {
                         night={night}
                         today={night === todayIn(PLATFORM_TIMEZONE)}
                         count={free.get(night) ?? 0}
+                        resortId={chosen?.resort.id}
                       />
                     ),
                   )}
@@ -147,8 +206,9 @@ export default function AgentCalendarScreen() {
             </Card>
 
             <Text step="caption" tone="muted" style={styles.footnote}>
-              The number is rooms free across every resort you sell. Tap a
-              night to open the search for it.
+              {chosen
+                ? `The number is rooms free at ${chosen.resort.name}. Tap a night to open the search for it.`
+                : "The number is rooms free across every resort you sell. Tap a night to open the search for it."}
             </Text>
 
             {/*
@@ -161,7 +221,7 @@ export default function AgentCalendarScreen() {
               can answer. Under the grid, where nine hundred pixels of
               nothing used to be.
             */}
-            <WhereTheRoomsAre resorts={resorts} from={from} to={to} />
+            <WhereTheRoomsAre resorts={resorts} from={from} to={to} chosen={only} />
           </>
         )}
       </ScrollView>
@@ -184,10 +244,13 @@ function WhereTheRoomsAre({
   resorts,
   from,
   to,
+  chosen,
 }: {
   resorts: AgencyResortMonth[];
   from: string;
   to: string;
+  /** The resort the grid above is counting, or null for all of them. */
+  chosen: number | null;
 }) {
   const nights = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1);
 
@@ -212,9 +275,19 @@ function WhereTheRoomsAre({
           key={r.id}
           style={styles.whereRow}
           accessible
-          accessibilityLabel={`${r.name}: ${r.spare} room-nights free of ${r.possible} this month`}
+          accessibilityLabel={`${r.name}: ${r.spare} room-nights free of ${r.possible} this month${
+            chosen === r.id ? ", the one the month is counting" : ""
+          }`}
         >
-          <Text step="body" tone="title" style={styles.whereName} numberOfLines={1}>
+          <Text
+            step="body"
+            tone="title"
+            // the chooser above decides what the grid counts; this line
+            // says which one that was, so the two cannot read differently
+            weight={chosen === r.id ? "medium" : undefined}
+            style={styles.whereName}
+            numberOfLines={1}
+          >
             {r.name}
           </Text>
           <Text step="body" weight="medium" tone={r.spare > 0 ? "ok" : "muted"} tabular>
@@ -229,7 +302,18 @@ function WhereTheRoomsAre({
   );
 }
 
-function Night({ night, count, today }: { night: string; count: number; today: boolean }) {
+function Night({
+  night,
+  count,
+  today,
+  resortId,
+}: {
+  night: string;
+  count: number;
+  today: boolean;
+  /** Set when the grid is counting one resort, so the search opens on it too. */
+  resortId?: number;
+}) {
   const day = Number(night.slice(8));
   const none = count === 0;
   return (
@@ -247,7 +331,9 @@ function Night({ night, count, today }: { night: string; count: number; today: b
           ? undefined
           : () =>
               router.push(
-                `/agent/search?checkIn=${night}&checkOut=${addDaysIso(night, 1)}` as never,
+                `/agent/search?checkIn=${night}&checkOut=${addDaysIso(night, 1)}${
+                  resortId === undefined ? "" : `&resortId=${resortId}`
+                }` as never,
               )
       }
       /*
@@ -309,4 +395,5 @@ const styles = StyleSheet.create({
   },
   whereName: { flex: 1 },
   footnote: { textAlign: "center" },
+  picker: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
 });

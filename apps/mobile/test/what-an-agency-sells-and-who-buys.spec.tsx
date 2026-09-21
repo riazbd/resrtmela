@@ -182,10 +182,17 @@ describe("what the agency sells", () => {
     await waitFor(() => expect(r.getByText(/not on sale|off/i)).toBeTruthy());
   });
 
-  it("says where a package gets built", async () => {
+  /**
+   * This used to assert the screen said building a package happens on
+   * the desk. It happens here now (2026-09-21) — the agency reported
+   * "can't add any package" — so the sentence to hold is the one the
+   * desk-only note was really protecting: **cost against price, and the
+   * margin drawn rather than worked out.**
+   */
+  it("says the margin is the thing to watch", async () => {
     const r = await open(ToursScreen);
     await waitFor(() => expect(r.getByText("Sajek two nights")).toBeTruthy());
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
+    expect(r.getByText(/cost and a price/i)).toBeTruthy();
   });
 });
 

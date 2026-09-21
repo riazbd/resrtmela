@@ -320,9 +320,16 @@ describe("who works here", () => {
     expect(r.getByText("2 permissions")).toBeTruthy();
   });
 
+  /**
+   * Adding somebody came to the phone on 2026-09-21 and setting their
+   * password did not, so the sentence is now about one thing rather than
+   * three. What has to survive is that the screen says *why* — a person
+   * who cannot find the password field should learn the reason here
+   * rather than conclude the app is broken.
+   */
   it("says what stayed on the desk, and why", async () => {
     const r = await open(TeamScreen);
-    await waitFor(() => expect(r.getByText(/hands you somebody's account/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText(/hands you their account/)).toBeTruthy());
   });
 });
 

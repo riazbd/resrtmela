@@ -134,6 +134,89 @@ describe("can the agency sell that night", () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  /**
+   * One resort, rather than all of them (2026-09-21).
+   *
+   * The grid answered "is there anything free across everything you
+   * sell", which is the right first question and the wrong second one.
+   * An agent whose customer has already named the resort was reading a
+   * number that counts four other resorts' rooms — so a night showing 12
+   * free could be 12 somewhere else and none where they were asked
+   * about.
+   */
+  describe("one resort at a time", () => {
+    const twoResorts = () =>
+      feed({
+        resorts: [
+          {
+            resort: { id: 3, name: "Demo Bay Resort", location: "Cox's Bazar" },
+            bookableUntil: null,
+            rooms: [room(1, "1 Camellia"), room(2, "2 Lotus")],
+            stays: [],
+          },
+          {
+            resort: { id: 5, name: "Hill Top Resort", location: "Sajek" },
+            bookableUntil: null,
+            rooms: [room(8, "8 Orchid")],
+            stays: [],
+          },
+        ],
+      });
+
+    it("counts every resort until one is chosen", async () => {
+      mockCalendar.mockResolvedValue(twoResorts());
+      const r = await open();
+      // two rooms and one room, nothing booked: every night says 3
+      await waitFor(() => expect(r.getAllByText("3").length).toBeGreaterThan(20));
+    });
+
+    it("counts only the resort that was chosen", async () => {
+      mockCalendar.mockResolvedValue(twoResorts());
+      const r = await open();
+      await waitFor(() => expect(r.getAllByText("3").length).toBeGreaterThan(20));
+      fireEvent.press(r.getByRole("button", { name: "Hill Top Resort" }));
+      // one room at Hill Top, so every night now says 1
+      await waitFor(() => expect(r.getAllByText("1").length).toBeGreaterThan(20));
+    });
+
+    it("says which resort the month is counting", async () => {
+      mockCalendar.mockResolvedValue(twoResorts());
+      const r = await open();
+      await waitFor(() => expect(r.getByText(/2 resorts/)).toBeTruthy());
+      fireEvent.press(r.getByRole("button", { name: "Hill Top Resort" }));
+      await waitFor(() => expect(r.getByText(/Rooms free — Hill Top Resort/)).toBeTruthy());
+    });
+
+    /** The search has to open on the same resort, or the answer changes on the way. */
+    it("carries the chosen resort into the search", async () => {
+      mockCalendar.mockResolvedValue(twoResorts());
+      const r = await open();
+      await waitFor(() => expect(r.getAllByText("3").length).toBeGreaterThan(20));
+      fireEvent.press(r.getByRole("button", { name: "Hill Top Resort" }));
+      await waitFor(() => expect(r.getAllByText("1").length).toBeGreaterThan(20));
+      // one room free reads "1 room free", not "rooms"
+      fireEvent.press(r.getAllByLabelText(/\d+ rooms? free/)[0]);
+      expect(String(mockPush.mock.calls.at(-1)?.[0])).toContain("resortId=5");
+    });
+
+    it("goes back to all of them when the same one is pressed again", async () => {
+      mockCalendar.mockResolvedValue(twoResorts());
+      const r = await open();
+      await waitFor(() => expect(r.getAllByText("3").length).toBeGreaterThan(20));
+      fireEvent.press(r.getByRole("button", { name: "Hill Top Resort" }));
+      await waitFor(() => expect(r.getAllByText("1").length).toBeGreaterThan(20));
+      fireEvent.press(r.getByRole("button", { name: "All resorts" }));
+      await waitFor(() => expect(r.getAllByText("3").length).toBeGreaterThan(20));
+    });
+
+    /** A choice of one is not a choice, and a row of it is nothing to decide. */
+    it("offers no chooser to an agency that sells one resort", async () => {
+      const r = await open();
+      await waitFor(() => expect(r.getAllByText("2").length).toBeGreaterThan(20));
+      expect(r.queryByRole("button", { name: "All resorts" })).toBeNull();
+    });
+  });
+
   describe("the states it owes", () => {
     it("says what it is loading", async () => {
       mockCalendar.mockReturnValue(new Promise(() => {}));

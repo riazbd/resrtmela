@@ -17,7 +17,7 @@
  * "Every room, everywhere, forever" is not a question, and a phone on a
  * hill-district connection should not spend a request discovering that.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
@@ -38,9 +38,17 @@ import { Card, Row } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { space } from "../../../src/design/tokens";
 
+/** The shape a handed-over date has to be before it is trusted. */
+const isDay = (value: unknown): value is string =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 export default function RoomSearchScreen() {
   const { me } = useAuth();
-  const { resortId: fromDiscover } = useLocalSearchParams<{ resortId?: string }>();
+  const {
+    resortId: fromDiscover,
+    checkIn,
+    checkOut,
+  } = useLocalSearchParams<{ resortId?: string; checkIn?: string; checkOut?: string }>();
   const resortId = fromDiscover ? Number(fromDiscover) : undefined;
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
@@ -52,6 +60,30 @@ export default function RoomSearchScreen() {
   const [to, setTo] = useState(addDaysIso(today, 1));
   /** What was last asked — not what the pickers currently read. */
   const [asked, setAsked] = useState<{ from: string; to: string } | null>(null);
+
+  /**
+   * The night somebody tapped on the calendar.
+   *
+   * The calendar has always sent `checkIn`/`checkOut` and this screen read
+   * neither, so tapping the 14th opened the search on today with nothing
+   * asked — the agent picked the date twice, and the second time by hand.
+   * It is the defect the console had between its room search and its
+   * booking form, in a second place.
+   *
+   * An effect rather than an initial state, because both screens are tabs:
+   * the search is already mounted by the time a night is tapped, so its
+   * initialisers never run again. Asking as well as filling the pickers is
+   * the promise the calendar makes — *tap a night to open the search for
+   * it* — and a screen that arrives with the dates in and no results is
+   * still asking the agent to press Search for an answer they requested.
+   */
+  useEffect(() => {
+    if (!isDay(checkIn)) return;
+    const leaving = isDay(checkOut) && checkOut > checkIn ? checkOut : addDaysIso(checkIn, 1);
+    setFrom(checkIn);
+    setTo(leaving);
+    setAsked({ from: checkIn, to: leaving });
+  }, [checkIn, checkOut]);
 
   const offers = useApi<AgencyRoomOffer[]>(
     keys.agentRooms(asked?.from ?? "", asked?.to ?? "", resortId),

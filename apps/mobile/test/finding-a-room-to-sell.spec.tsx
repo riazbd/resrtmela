@@ -128,6 +128,44 @@ describe("finding a room to sell", () => {
     expect(mockRooms.mock.calls[0][0].resortId).toBe(3);
   });
 
+  /**
+   * Arriving from the calendar, on the night that was tapped (2026-09-21).
+   *
+   * The agency calendar has sent `checkIn`/`checkOut` since it was
+   * written — its own footnote promises *tap a night to open the search
+   * for it* — and this screen read neither. Tapping the 14th opened the
+   * search on today, with nothing asked, so the agent picked the date a
+   * second time and by hand. It is the defect the console had between
+   * its room search and its booking form, in a second place.
+   */
+  describe("opened from the calendar", () => {
+    it("searches the night that was tapped, without being asked twice", async () => {
+      mockParams = { checkIn: "2026-10-14", checkOut: "2026-10-15" };
+      await open();
+      await waitFor(() => expect(mockRooms).toHaveBeenCalled());
+      expect(mockRooms.mock.calls[0][0]).toMatchObject({ from: "2026-10-14", to: "2026-10-15" });
+    });
+
+    /** A night is one night; the calendar sends both, but a bare date is a stay. */
+    it("takes a single night as one night", async () => {
+      mockParams = { checkIn: "2026-10-14" };
+      await open();
+      await waitFor(() => expect(mockRooms).toHaveBeenCalled());
+      expect(mockRooms.mock.calls[0][0]).toMatchObject({ from: "2026-10-14", to: "2026-10-15" });
+    });
+
+    /**
+     * A URL is somebody else's input even when this app wrote it. A date
+     * that is not one is ignored rather than sent to the server, which
+     * would answer with a five-hundred and no clue why.
+     */
+    it("ignores something that is not a date", async () => {
+      mockParams = { checkIn: "tomorrow" };
+      await open();
+      expect(mockRooms).not.toHaveBeenCalled();
+    });
+  });
+
   describe("the states it owes", () => {
     it("says what it is looking through", async () => {
       mockRooms.mockReturnValue(new Promise(() => {}));
