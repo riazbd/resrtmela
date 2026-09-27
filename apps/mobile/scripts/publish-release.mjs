@@ -34,15 +34,20 @@
  * the same write that advertises the download, so there is never a
  * moment where phones are locked out and there is nothing to fetch.
  *
+ * It also writes the artifact's row into `RELEASES.md`, from the size and
+ * hash the server measured. That was a hand step until 2026-09-28 and
+ * 0.8.0 shipped without a receipt because of it.
+ *
  * `--dry-run` prints what it would do and writes nothing.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_JSON = join(HERE, "..", "app.json");
+const RELEASES = join(HERE, "..", "RELEASES.md");
 
 const API = process.env.RM_API_URL ?? "https://api.resortmela.com";
 const HOST = process.env.RM_SSH ?? "root@194.163.191.50";
@@ -60,6 +65,39 @@ const notes = flag("notes") ?? "";
 const say = (...parts) => console.log(...parts);
 const ssh = (script) =>
   execFileSync("ssh", ["-o", "BatchMode=yes", HOST, script], { encoding: "utf8" }).trim();
+
+/**
+ * Write the artifact's receipt into RELEASES.md.
+ *
+ * 0.8.0 shipped without one: this script printed the size and the hash and
+ * threw them away, leaving the row to `record-apk.mjs` run by hand — the
+ * same "step everybody forgets" this script exists to remove. The receipt
+ * is worth having for exactly one reason, which is being able to say later
+ * that the file on the server is the file that was built.
+ *
+ * `record-apk.mjs` cannot be reused here. It hashes a local file and reads
+ * the version out of it with `aapt2`, and this script deliberately never
+ * downloads the APK. So the row is written from what the server measured,
+ * and the version comes from EAS's record of the build rather than from
+ * `app.json` — the same rule `record-apk.mjs` follows, for the same
+ * reason: a receipt naming a version its file does not contain is worth
+ * less than no receipt.
+ *
+ * Called only once the APK is proven served, so a row never claims a
+ * release that nobody could download.
+ */
+function recordReceipt(build, size, sha) {
+  const named = `${build.appVersion} (${build.appBuildVersion})`;
+  const row =
+    `| ${named} | ${new Date().toISOString().slice(0, 10)} | ` +
+    `${(size / 1024 / 1024).toFixed(1)} MB | EAS ${build.id.slice(0, 8)} | sha256:${sha} |\n`;
+  if (readFileSync(RELEASES, "utf8").includes(sha)) {
+    say(`  already in RELEASES.md`);
+    return;
+  }
+  appendFileSync(RELEASES, row);
+  say(`  recorded in RELEASES.md`);
+}
 
 /** The version is app.json's. Nothing here may disagree with the build. */
 function plannedVersion() {
@@ -110,6 +148,7 @@ async function main() {
     say(`             app.latestVersion  = ${version}`);
     say(`             app.minimumVersion = ${version}  — everything older is refused`);
     if (notes) say(`             app.updateNotes    = ${notes}`);
+    say(`would record ${version} (${build.appBuildVersion}) in RELEASES.md`);
     return;
   }
 
@@ -137,6 +176,7 @@ async function main() {
     throw new Error("what nginx serves is not the size of what was written");
   }
   say(`  served at ${apkUrl}`);
+  recordReceipt(build, size, sha);
 
   const password = process.env.RM_PLATFORM_PASSWORD;
   const email = process.env.RM_PLATFORM_EMAIL ?? "platform@resortmela.com";
