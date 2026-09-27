@@ -35,6 +35,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/platform": Globe,
   "/agent/discover": MapIcon,
   "/agent/search": Search,
+  "/agent/bookings": BedDouble,
   "/agent/calendar": CalendarDays,
   "/agent/tours": Package,
   "/agent/sales": FileText,

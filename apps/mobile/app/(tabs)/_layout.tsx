@@ -62,6 +62,25 @@ export default function TabLayout() {
      */
     <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: color.screen }}>
     <Tabs
+      /**
+       * Back goes back, not home.
+       *
+       * React Navigation's tab router defaults to `backBehavior: "firstRoute"`
+       * — press the phone's Back from anywhere and you are returned to the
+       * *first* tab, whatever tab or screen you were actually on. For resort
+       * staff that lands on the dashboard, which looks enough like home that
+       * nobody questioned it. For an agency the first tab is "Discover
+       * resorts", a screen for finding new resorts to sell: so every time an
+       * agent opened anything from More — their team, their wallet, a tour —
+       * and pressed Back, they were put on a screen they had not asked for
+       * and had to find More again. The owner reported it as every function
+       * showing the same thing on the way out.
+       *
+       * `history` returns to the last screen actually visited, dropping
+       * repeats so that backing out of a tab visited five times is one press
+       * and not five.
+       */
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: color.brand[600],

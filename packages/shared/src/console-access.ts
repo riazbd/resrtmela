@@ -90,6 +90,18 @@ export const CONSOLE_NAV: readonly NavDestination[] = [
   { href: "/platform", label: "Platform", roles: ["SUPER"] },
   { href: "/agent/discover", label: "Discover resorts", roles: ["AGENT"] },
   { href: "/agent/search", label: "Find a room", roles: ["AGENT"], perm: "agent.book" },
+  /**
+   * What this agency has sold.
+   *
+   * Under `agent.book` rather than a permission of its own: the people who
+   * may sell a room are the people who need to see what was sold, and a
+   * thirteenth checkbox on the role form that nobody would ever clear is a
+   * worse answer than the right one already on it. An agency that had made
+   * four hundred bookings had no screen listing them in either client until
+   * 2026-09-28 — the resort's own list is per-resort and an agency sells
+   * across several.
+   */
+  { href: "/agent/bookings", label: "My bookings", roles: ["AGENT"], perm: "agent.book" },
   { href: "/agent/calendar", label: "Calendar", roles: ["AGENT"], perm: "agent.book" },
   { href: "/agent/tours", label: "Tours", roles: ["AGENT"], perm: "agent.tours.manage" },
   { href: "/agent/sales", label: "Quotes & invoices", roles: ["AGENT"], perm: "agent.sales.manage" },

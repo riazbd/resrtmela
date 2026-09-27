@@ -219,6 +219,36 @@ export interface BookingListQuery {
 }
 
 /**
+ * The same list, asked by an agency about itself.
+ *
+ * `resortId` is optional here and required above, which is the whole
+ * difference between the two questions: a resort asks about its own building,
+ * an agency asks about everything it has sold and narrows to one resort only
+ * when it wants to.
+ */
+export interface AgencyBookingListQuery {
+  resortId?: number;
+  state?: string;
+  from?: string;
+  to?: string;
+  skip?: number;
+  take?: number;
+  search?: string;
+  sort?: string;
+}
+
+/**
+ * A booking on the agency's own list.
+ *
+ * `resort` is the addition: with every resort on one list, a room called
+ * "102" is two different rooms and the code alone does not say which hotel
+ * the guest is standing in.
+ */
+export interface AgencyBookingRow extends BookingRow {
+  resort: { id: number; name: string } | null;
+}
+
+/**
  * What opening a resort's workspace asks for.
  *
  * `plan` and `scheduleId` carry the card and the billing period that were on
@@ -1061,6 +1091,17 @@ export function createApiClient(http: Fetcher) {
        * under `/agent`.
        */
       discover: () => http<DiscoverResort[]>("/agent/discover"),
+
+      /**
+       * Everything this agency has sold, across every resort.
+       *
+       * Served by the bookings controller, not the agent one — the fourth
+       * that answers under `/agent`, and it lives there because the rows and
+       * the money on them are the bookings service's, not a second opinion
+       * about them.
+       */
+      bookings: (q: AgencyBookingListQuery = {}) =>
+        http<Page<AgencyBookingRow>>(`/agent/bookings${qs({ ...q })}`),
 
       staff: () => http<AgencyStaff[]>("/agent/staff"),
       /** Which of the agency's own roles somebody holds; null takes it away. */

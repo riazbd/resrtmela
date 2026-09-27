@@ -89,10 +89,47 @@ const NEXT: Record<BookingState, NextState[]> = {
   NO_SHOW: [],
 };
 
-export function nextStates(state: string): NextState[] {
+/**
+ * Who may move a booking *to* each state.
+ *
+ * The API has enforced this since bookings existed — `assertTransition`
+ * refuses anything not listed here with a 403 — and neither client knew it.
+ * So the app drew "Confirm", "Check in" and "Mark no-show" for an agency,
+ * every one of which the server refuses, on the very screen an agent is sent
+ * to the moment they take a booking. An agency's way out of a booking is to
+ * ask the resort (`requestCancel`), which is not a transition at all.
+ *
+ * It lives here now for the reason the state machine above does: a rule the
+ * server enforces and the client guesses at is a rule the client will guess
+ * wrong. The API imports this rather than keeping a second copy.
+ *
+ * Roles are the fixed enum, so a resort unticking "Cancel bookings" for a
+ * front-desk user changes nothing here — that is the permission matrix's
+ * job, checked separately and after this.
+ */
+export const TRANSITION_ACTORS: Record<BookingState, string[]> = {
+  CONFIRMED: ["SUPER_ADMIN", "RESORT_ADMIN", "MANAGER", "FRONT_DESK"],
+  CHECKED_IN: ["SUPER_ADMIN", "RESORT_ADMIN", "MANAGER", "FRONT_DESK"],
+  CHECKED_OUT: ["SUPER_ADMIN", "RESORT_ADMIN", "MANAGER", "FRONT_DESK"],
+  NO_SHOW: ["SUPER_ADMIN", "RESORT_ADMIN", "MANAGER"],
+  CANCELLED: ["SUPER_ADMIN", "RESORT_ADMIN", "MANAGER", "FRONT_DESK"],
+  // nothing moves a booking *to* PENDING; it starts there
+  PENDING: [],
+};
+
+/**
+ * The buttons this person is offered on a booking in this state.
+ *
+ * `role` is optional because the rule it adds is a narrowing, and a caller
+ * that does not know who is looking is better off being told what the state
+ * allows than being told nothing. Every caller that does know passes it.
+ */
+export function nextStates(state: string, role?: string): NextState[] {
   // an imported row, or a state added to the database ahead of this list:
   // offering nothing is the only honest answer
-  return isBookingState(state) ? NEXT[state] : [];
+  const ahead = isBookingState(state) ? NEXT[state] : [];
+  if (role === undefined) return ahead;
+  return ahead.filter((action) => TRANSITION_ACTORS[action.to].includes(role));
 }
 
 /**

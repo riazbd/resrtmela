@@ -49,6 +49,9 @@ const SHORTER: Record<string, string> = {
   "/agent/discover": "Discover",      // "Discover resorts" — the resorts are what there is to discover
   "/agent/search": "Search",          // "Find a room" — the verb is enough on a bar
   "/agent/sales": "Quotes",           // "Quotes & invoices" — an invoice is a quote that was accepted
+  // "My bookings" is eleven. Nobody's bar shows both this and the resort's
+  // `/bookings`, so the shorter word is not ambiguous to anyone who sees it.
+  "/agent/bookings": "Bookings",
 };
 
 /** The console's label, unless the bar cannot hold it. */

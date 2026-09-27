@@ -96,6 +96,24 @@ class ListBookingsQuery {
   @IsOptional() @IsString() @MaxLength(24) sort?: string;
 }
 
+/**
+ * The same question without a resort in it.
+ *
+ * `resortId` is required above and optional here, which is the whole
+ * difference: an agency's bookings are spread across the resorts it sells,
+ * and narrowing to one is a filter rather than the shape of the request.
+ */
+class AgencyBookingsQuery {
+  @IsOptional() @Type(() => Number) @IsInt() resortId?: number;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
+  @IsOptional() @Type(() => Number) @IsInt() skip?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Max(200) take?: number;
+  @IsOptional() @IsString() @MaxLength(80) search?: string;
+  @IsOptional() @IsString() @MaxLength(24) sort?: string;
+}
+
 class UpdateBookingDto {
   @IsOptional() @IsDateString() checkIn?: string;
   @IsOptional() @IsDateString() checkOut?: string;
@@ -252,6 +270,19 @@ export class BookingsController {
   @Get("bookings")
   list(@Req() req: AuthedRequest, @Query() q: ListBookingsQuery) {
     return this.bookings.list(req.user, { ...q, state: q.state as BookingState });
+  }
+
+  /**
+   * An agency's own bookings, every resort at once.
+   *
+   * Above `bookings/:id` in this file on purpose — it is not, but Nest matches
+   * in declaration order and a route added below `bookings/:id` would be read
+   * as a booking with the id "agent"; the same trap `bookings/cancel-requests`
+   * is sitting above for.
+   */
+  @Get("agent/bookings")
+  agencyBookings(@Req() req: AuthedRequest, @Query() q: AgencyBookingsQuery) {
+    return this.bookings.agencyList(req.user, { ...q, state: q.state as BookingState });
   }
 
   @Get("bookings/cancel-requests")

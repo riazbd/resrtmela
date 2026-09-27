@@ -19,6 +19,7 @@ const BY_HREF: Record<string, IconName> = {
   "/platform": "earth",
   "/agent/discover": "map-marker-radius-outline",
   "/agent/search": "magnify",
+  "/agent/bookings": "bed-outline",
   "/agent/calendar": "calendar-month-outline",
   "/agent/tours": "package-variant-closed",
   "/agent/sales": "file-document-outline",

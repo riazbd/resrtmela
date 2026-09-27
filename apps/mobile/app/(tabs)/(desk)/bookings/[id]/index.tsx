@@ -42,6 +42,14 @@ import { Text } from "../../../../../src/design/text";
 import { useAction } from "../../../../../src/design/use-action";
 import { color, radius, space } from "../../../../../src/design/tokens";
 
+/**
+ * The states an agency may still ask to get out of.
+ *
+ * The API's `requestCancel` refuses anything else with a 409 — once a guest
+ * has walked in, cancelling is the resort's decision and not a request.
+ */
+const LIVE_FOR_AN_AGENCY = ["PENDING", "CONFIRMED"];
+
 /** "2 adults, 1 child" — and the ones who turned up unannounced, separately. */
 function whoIsStaying(b: BookingDetail): string {
   const parts = [`${b.adults} adult${b.adults === 1 ? "" : "s"}`];
@@ -310,12 +318,34 @@ function TheInvoice({ booking, onIssued }: { booking: BookingDetail; onIssued: (
  * a question to ask first. A no-show has none, so it goes straight
  * through — after a confirmation, because it says a guest did not come and
  * is not walked back with one tap.
+ *
+ * An agency gets none of it. It cannot move a booking (the API's
+ * `TRANSITION_ACTORS` has never listed AGENT) and it cannot take money
+ * (`payments.create` is a resort permission), so every button here answered
+ * 403 to the one person this screen opens for automatically — the agent who
+ * has just taken the booking. What an agency can do is ask the resort to
+ * cancel, which is not a transition at all, so it is drawn on its own.
  */
 function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void }) {
   const desk = useStayDesk();
   const { role } = useAuth();
   const [refused, setRefused] = useState<string | null>(null);
   const [asking, setAsking] = useState<NextState | null>(null);
+
+  /**
+   * The agency's request, which the resort then approves or refuses. It is
+   * not a transition: the booking stays exactly as it is until somebody at
+   * the resort decides, and `cancelState` is what says a request is waiting.
+   */
+  const askCancel = useAction(async () => {
+    setRefused(null);
+    try {
+      await client.bookings.requestCancel(booking.id);
+      onDone();
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That did not go through.");
+    }
+  });
 
   const move = useAction(async () => {
     const action = asking;
@@ -330,7 +360,14 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
     }
   });
 
-  const ahead = nextStates(booking.state);
+  /**
+   * `role`, because the API has always had the matching rule and this did
+   * not. An agency was offered Confirm, Check in and Mark no-show on its own
+   * booking — the screen it is sent to the instant it takes one — and the
+   * server answered 403 to every press. `nextStates` reads
+   * `TRANSITION_ACTORS` now, the same list `assertTransition` refuses by.
+   */
+  const ahead = nextStates(booking.state, role ?? undefined);
   /**
    * `canEditStay`, not a list of states. The API refuses a front desk
    * once the guest is in the room, and the console offers the form
@@ -338,7 +375,22 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
    * "Front desk can edit only Pending/Confirmed" with the form still up.
    */
   const mayChange = canEditStay({ role: role ?? "", state: booking.state }).allowed;
-  if (ahead.length === 0 && booking.due <= 0 && !mayChange) return null;
+  /**
+   * Money at this counter is the resort's to take. `payments.create` is a
+   * resort permission and an agency holds none of them, so offering it here
+   * was a button that answered 403. What an agency owes the resort is
+   * settled between them, not on the guest's booking.
+   */
+  const isAgent = role === "AGENT";
+  const mayTakeMoney = !isAgent && booking.due > 0;
+  /**
+   * An agency's only move: ask. `cancelState` is the queue the resort
+   * answers from, so a second press while one is waiting would be a second
+   * request for the same booking.
+   */
+  const mayAskToCancel =
+    isAgent && booking.cancelState === "NONE" && LIVE_FOR_AN_AGENCY.includes(booking.state);
+  if (ahead.length === 0 && !mayTakeMoney && !mayChange && !mayAskToCancel) return null;
 
   return (
     <View style={styles.desk}>
@@ -378,12 +430,21 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
               }}
             />
           ))}
-          {booking.due > 0 ? (
+          {mayTakeMoney ? (
             <Button
               label="Take payment"
               kind={ahead.length > 0 ? "ghost" : "primary"}
               block={false}
               onPress={() => router.push(`/bookings/${booking.id}/pay` as never)}
+            />
+          ) : null}
+          {mayAskToCancel ? (
+            <Button
+              label="Ask the resort to cancel"
+              kind="ghost"
+              block={false}
+              loading={askCancel.busy}
+              onPress={askCancel.go}
             />
           ) : null}
           {mayChange ? (

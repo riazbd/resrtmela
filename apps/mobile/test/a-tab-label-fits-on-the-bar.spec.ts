@@ -61,8 +61,10 @@ describe("what a tab can be called", () => {
    */
   it("shortens only where it must, and says so by leaving the rest alone", () => {
     const changed = destinations.filter((d) => barLabel(d.href, labelOf(d)) !== labelOf(d));
-    // a short list, and every entry on it is a label the bar cannot hold
-    expect(changed.length).toBeLessThan(6);
+    // a short list, and every entry on it is a label the bar cannot hold.
+    // Six since 2026-09-28, when the agency gained "My bookings" — eleven
+    // characters, so the bar calls it what the resort's own list is called.
+    expect(changed.length).toBeLessThan(7);
     for (const d of changed) expect(labelOf(d).length).toBeGreaterThan(BAR_LIMIT);
   });
 });

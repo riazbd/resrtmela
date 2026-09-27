@@ -4,8 +4,10 @@
  *   Pending → Cancelled (declined)
  *   Confirmed → No Show | Cancelled (admin/staff only)
  */
-import { ROLE, type Role } from "@rh/shared";
+import { TRANSITION_ACTORS, type Role } from "@rh/shared";
 import type { BookingState } from "@rh/db";
+
+export { TRANSITION_ACTORS };
 
 export const LIVE_STATES: BookingState[] = ["PENDING", "CONFIRMED", "CHECKED_IN"];
 
@@ -18,16 +20,14 @@ const TRANSITIONS: Record<BookingState, BookingState[]> = {
   NO_SHOW: [],
 };
 
-export const TRANSITION_ACTORS: Record<
-  string,
-  Role[]
-> = {
-  CONFIRMED: [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK],
-  CHECKED_IN: [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK],
-  CHECKED_OUT: [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK],
-  NO_SHOW: [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER],
-  CANCELLED: [ROLE.SUPER_ADMIN, ROLE.RESORT_ADMIN, ROLE.MANAGER, ROLE.FRONT_DESK],
-};
+/*
+ * `TRANSITION_ACTORS` moved to `@rh/shared` on 2026-09-28 and is re-exported
+ * above. It decided which buttons the API would accept while both clients
+ * guessed at the same question and one of them guessed wrong — the app drew
+ * Confirm, Check in and Mark no-show for an agency, and the server refused
+ * every press with a 403. A rule the server enforces and the client cannot
+ * read is a rule the client will get wrong.
+ */
 
 export function canTransition(from: BookingState, to: BookingState): boolean {
   return TRANSITIONS[from].includes(to);

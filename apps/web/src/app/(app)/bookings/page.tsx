@@ -725,8 +725,15 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       )}
 
       <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+        {/*
+          `role` is passed because the API has always refused some of these
+          to some staff and this list did not know it: `TRANSITION_ACTORS`
+          leaves FRONT_DESK off NO_SHOW, so the front desk was offered "Mark
+          no-show" and answered 403 by the server. The rule is in
+          `@rh/shared` now, read by both the button and the refusal.
+        */}
         {isStaff &&
-          nextStates(b.state).map((a) => (
+          nextStates(b.state, role).map((a) => (
             <Button
               key={a.to}
               size="sm"

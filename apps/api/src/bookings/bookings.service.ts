@@ -966,6 +966,110 @@ export class BookingsService {
     };
   }
 
+  /**
+   * Everything this agency has sold, across every resort it sells.
+   *
+   * `list` already narrows an agent to their own agency's rows — but it takes
+   * a `resortId`, and that is not the question an agency asks. "What have we
+   * sold" spans resorts; an agency selling three of them had to open three
+   * lists and add them up, and there was no screen in either client that
+   * showed an agency its own bookings at all. A quotation could be written
+   * and an invoice raised, and the booking behind them was only findable by
+   * going to the resort's list one resort at a time.
+   *
+   * The resort's name is on every row, because with the resort filter off
+   * "102" and "102" are two different rooms at two different hotels.
+   *
+   * `resortId` narrows it, the same option the agency calendar has: an agent
+   * settling up with one resort wants one resort.
+   */
+  async agencyList(
+    claims: JwtClaims,
+    q: {
+      resortId?: number;
+      state?: BookingState;
+      from?: string;
+      to?: string;
+      search?: string;
+      sort?: string;
+      skip?: number;
+      take?: number;
+    },
+  ) {
+    requireRoles(claims, [ROLE.AGENT]);
+    const where: Prisma.BookingWhereInput = {
+      // the agency is the unit, not the person: an owner sees what their staff
+      // sold, and neither sees another agency's anything
+      agentUserId: { in: await this.agencyActorIds(claims.userId) },
+      deletedAt: null,
+      ...(q.resortId ? { resortId: q.resortId } : {}),
+      ...(q.state ? { state: q.state } : {}),
+      ...(q.search?.trim()
+        ? {
+            OR: [
+              { code: { contains: q.search.trim() } },
+              { guest: { fullName: { contains: q.search.trim() } } },
+              { guest: { phone: { contains: q.search.trim() } } },
+            ],
+          }
+        : {}),
+      ...(q.from && q.to
+        ? { checkIn: { lt: dateOnly(q.to) }, checkOut: { gt: dateOnly(q.from) } }
+        : {}),
+    };
+    const order = bookingSort(q.sort);
+    const [rows, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        include: {
+          guest: { select: { id: true, fullName: true, phone: true } },
+          agentUser: { select: { id: true, name: true } },
+          resort: { select: { id: true, name: true } },
+          items: { include: { room: { select: { id: true, name: true } } } },
+          payments: true,
+        },
+        orderBy: [{ [order.field]: order.direction }, { id: order.direction }],
+        skip: q.skip ?? 0,
+        take: Math.min(q.take ?? 50, 200),
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    /**
+     * Tax is a resort's own set of rules, so the totals have to be worked out
+     * with the rules of the resort each row belongs to. One fetch per distinct
+     * resort on the page, not one per row: a page of fifty bookings across
+     * three resorts is three reads.
+     */
+    const rulesByResort = new Map<number, TaxRule[]>();
+    for (const resortId of new Set(rows.map((b) => b.resortId))) {
+      rulesByResort.set(resortId, await this.taxRulesFor(resortId));
+    }
+
+    return {
+      total,
+      rows: rows.map((b) => ({
+        id: b.id,
+        code: b.code,
+        state: b.state,
+        source: b.source,
+        checkIn: b.checkIn,
+        checkOut: b.checkOut,
+        guest: b.guest,
+        agent: b.agentUser?.name ?? null,
+        resort: b.resort ? { id: b.resort.id, name: b.resort.name } : null,
+        rooms: b.items
+          .filter((i) => i.itemKind === "ROOM")
+          .map((i) => i.room?.name)
+          .filter((n): n is string => !!n)
+          .sort(compareRoomNames),
+        adults: b.adults,
+        children: b.children,
+        ...BookingsService.computeTotals(b, rulesByResort.get(b.resortId) ?? []),
+      })),
+    };
+  }
+
   async detail(claims: JwtClaims, bookingId: number) {
     const b = await this.prisma.booking.findUnique({
       where: { id: bookingId },
@@ -1038,7 +1142,25 @@ export class BookingsService {
        * that is never present look exactly alike.
        */
       invoiceNo: b.invoiceNo,
-      agent: b.agentUser,
+      /**
+       * The name, not the row — which is what `BookingDetail` has always said
+       * and what every other route here sends.
+       *
+       * This sent `{ id, name }` until 2026-09-28, and `BookingDetail`
+       * inherits `agent: string | null` from `BookingRow`, so the compiler
+       * was happy on both sides of the wire and the app printed the object.
+       * React refuses an object as a child, so the phone's booking screen
+       * went blank — for agency bookings only, because a resort's own
+       * booking has no agent and rendered nothing at all. That is the screen
+       * an agent is sent to the instant they take a booking, so the app's
+       * whole selling flow ended on a white screen.
+       *
+       * The same mistake `rooms` made on this very type, noted in its own
+       * comment: a route that answers something its description does not
+       * describe is not caught by anything, because a cast is an assertion
+       * and not a check. Nothing wanted the id.
+       */
+      agent: b.agentUser?.name ?? null,
       createdBy: b.createdBy,
       checkIn: b.checkIn,
       checkOut: b.checkOut,
@@ -1538,7 +1660,19 @@ export class BookingsService {
     if (claims.role !== ROLE.AGENT) throw forbid("Only agents use the request flow");
     const b = await this.prisma.booking.findUnique({ where: { id: bookingId } });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
-    if (b.agentUserId !== claims.userId) throw forbid("Not your booking");
+    /**
+     * The agency's booking, not the individual's.
+     *
+     * This asked `b.agentUserId !== claims.userId` until 2026-09-28, so an
+     * agency owner could not ask to cancel a booking their own clerk had
+     * made — the clerk had to be at work, signed in, to undo it. It is the
+     * same mistake the booking list carried and fixed: an agency is the
+     * unit, and scoping a question to one person inside it turns one
+     * customer book into several private ones.
+     */
+    if (!(await this.agencyActorIds(claims.userId)).includes(b.agentUserId ?? -1)) {
+      throw forbid("Not your booking");
+    }
     if (b.cancelState !== "NONE") throw badRequest("A cancel request already exists");
     if (!["PENDING", "CONFIRMED"].includes(b.state)) {
       throw Object.assign(new Error("Booking not in cancellable state"), { status: 409 });
@@ -2290,7 +2424,9 @@ export class BookingsService {
       arriving: b.checkIn?.getTime() === t.getTime(),
       departing: b.checkOut?.getTime() === t.getTime(),
       guest: b.guest,
-      agent: b.agentUser?.name,
+      // `?? null`, because `TodayRow.agent` says `string | null` and an
+      // absent key is a third thing the type does not describe
+      agent: b.agentUser?.name ?? null,
       rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => i.room?.name),
       state: b.state,
       ...BookingsService.computeTotals(b, taxRules),
