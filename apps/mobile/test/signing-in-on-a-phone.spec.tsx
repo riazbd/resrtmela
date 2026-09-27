@@ -40,10 +40,16 @@ beforeEach(() => {
 });
 
 describe("what the screen asks for", () => {
-  it("takes a phone or an email in one box, as the console does", async () => {
+  /**
+   * One box for a phone or an email until 2026-09-28. A number can belong to
+   * more than one account now, so it cannot say which was meant — and a box
+   * that still offers one would be inviting a refusal.
+   */
+  it("asks for the email, and says so — the console asks the same", async () => {
     const r = await render(<LoginScreen />);
-    expect(r.getByLabelText("Phone or email")).toBeTruthy();
-    expect(r.getByPlaceholderText("01XXXXXXXXX or you@email.com")).toBeTruthy();
+    expect(r.getByLabelText("Email")).toBeTruthy();
+    expect(r.getByPlaceholderText("you@email.com")).toBeTruthy();
+    expect(r.queryByPlaceholderText("01XXXXXXXXX or you@email.com")).toBeNull();
   });
 
   it("hides the password while it is typed", async () => {
@@ -53,13 +59,19 @@ describe("what the screen asks for", () => {
 });
 
 describe("signing in", () => {
+  /**
+   * Untouched, and that is the whole assertion: the box does not trim, lower
+   * case, normalise or judge. Whether what was typed is an account is the
+   * server's question — including, since 2026-09-28, whether it is an email
+   * at all, which is the only kind of identifier that still signs anyone in.
+   */
   it("hands the identifier and password to the session, untouched", async () => {
     mockLogin.mockResolvedValue({ role: "RESORT_ADMIN" });
     const r = await render(<LoginScreen />);
-    await fireEvent.changeText(r.getByLabelText("Phone or email"), "01711111111");
+    await fireEvent.changeText(r.getByLabelText("Email"), " Karim@Example.com ");
     await fireEvent.changeText(r.getByLabelText("Password"), "hunter22");
     await fireEvent.press(r.getByRole("button", { name: "Sign in" }));
-    await waitFor(() => expect(mockLogin).toHaveBeenCalledWith("01711111111", "hunter22"));
+    await waitFor(() => expect(mockLogin).toHaveBeenCalledWith(" Karim@Example.com ", "hunter22"));
   });
 
   /**
@@ -70,7 +82,7 @@ describe("signing in", () => {
   it("sends an agent where an agent belongs", async () => {
     mockLogin.mockResolvedValue({ role: "AGENT" });
     const r = await render(<LoginScreen />);
-    await fireEvent.changeText(r.getByLabelText("Phone or email"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email"), "a@b.c");
     await fireEvent.changeText(r.getByLabelText("Password"), "hunter22");
     await fireEvent.press(r.getByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/agent/discover"));
@@ -79,7 +91,7 @@ describe("signing in", () => {
   it("sends the platform owner to the platform, not into a resort", async () => {
     mockLogin.mockResolvedValue({ role: "SUPER_ADMIN" });
     const r = await render(<LoginScreen />);
-    await fireEvent.changeText(r.getByLabelText("Phone or email"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email"), "a@b.c");
     await fireEvent.changeText(r.getByLabelText("Password"), "hunter22");
     await fireEvent.press(r.getByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/platform"));
@@ -88,7 +100,7 @@ describe("signing in", () => {
   it("shows the API's own words when it refuses", async () => {
     mockLogin.mockRejectedValue(new Error("Wrong phone or password"));
     const r = await render(<LoginScreen />);
-    await fireEvent.changeText(r.getByLabelText("Phone or email"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email"), "a@b.c");
     await fireEvent.changeText(r.getByLabelText("Password"), "nope1234");
     await fireEvent.press(r.getByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(r.getByText("Wrong phone or password")).toBeTruthy());
@@ -110,7 +122,7 @@ describe("signing in", () => {
     );
 
     const r = await render(<LoginScreen />);
-    await fireEvent.changeText(r.getByLabelText("Phone or email"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email"), "a@b.c");
     await fireEvent.changeText(r.getByLabelText("Password"), "hunter22");
     const button = r.getByRole("button", { name: "Sign in" });
 
@@ -131,13 +143,13 @@ describe("a password nobody can remember", () => {
   it("opens on asking, and asks for one identifier", async () => {
     const r = await render(<LoginScreen />);
     await fireEvent.press(r.getByRole("button", { name: "Forgot password?" }));
-    expect(r.getByLabelText("Phone or email for the reset link")).toBeTruthy();
+    expect(r.getByLabelText("Email for the reset link")).toBeTruthy();
   });
 
   it("says the same sentence the console says", async () => {
     const r = await render(<LoginScreen />);
     await fireEvent.press(r.getByRole("button", { name: "Forgot password?" }));
-    await fireEvent.changeText(r.getByLabelText("Phone or email for the reset link"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email for the reset link"), "a@b.c");
     await fireEvent.press(r.getByRole("button", { name: "Send reset link" }));
     await waitFor(() => expect(r.getByText(RESET_REQUESTED_MESSAGE)).toBeTruthy());
     expect(mockForgotPassword).toHaveBeenCalledWith("a@b.c");
@@ -151,7 +163,7 @@ describe("a password nobody can remember", () => {
     mockForgotPassword.mockRejectedValue(new Error("Network request failed"));
     const r = await render(<LoginScreen />);
     await fireEvent.press(r.getByRole("button", { name: "Forgot password?" }));
-    await fireEvent.changeText(r.getByLabelText("Phone or email for the reset link"), "a@b.c");
+    await fireEvent.changeText(r.getByLabelText("Email for the reset link"), "a@b.c");
     await fireEvent.press(r.getByRole("button", { name: "Send reset link" }));
     await waitFor(() => expect(r.getByText(RESET_REQUESTED_MESSAGE)).toBeTruthy());
     expect(r.queryByText(/network/i)).toBeNull();

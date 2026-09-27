@@ -136,9 +136,16 @@ describe("the database", () => {
     expect(phone?.nullable).toBe("NO");
   });
 
-  it("still lets no two accounts share either", async () => {
+  /**
+   * The email alone, since 2026-09-28. The phone's unique index was what made
+   * one person with one SIM unable to hold both a resort account and an
+   * agency account — asserted here rather than merely removed, because a
+   * unique index quietly coming back would break that person again and this
+   * is the only place that would notice.
+   */
+  it("lets no two accounts share an email, and lets any number be shared", async () => {
     expect(await uniquelyIndexed("email")).toBe(true);
-    expect(await uniquelyIndexed("phone")).toBe(true);
+    expect(await uniquelyIndexed("phone")).toBe(false);
   });
 });
 
@@ -174,8 +181,16 @@ describe("signing up", () => {
     await refuses(() => auth().signup(owner({ email: "MANAGER@example.com" })), 409, /email/i);
   });
 
-  it("refuses a phone that already has an account", async () => {
-    await refuses(() => auth().signup(owner({ phone: `+${TAKEN_PHONE}` })), 409, /phone/i);
+  /**
+   * The refusal this replaces (2026-09-28). A resort's owner and an agency's
+   * owner are frequently the same person with one SIM, and the second
+   * account could not be opened because the number was already an account's.
+   * An email can be made in a minute; a SIM cannot.
+   */
+  it("lets a second account open on a phone that already has one", async () => {
+    const { user } = await auth().signup(owner({ phone: `+${TAKEN_PHONE}` }));
+    expect(user.id).toBeGreaterThan(0);
+    expect(await prisma.user.count({ where: { phone: TAKEN_PHONE } })).toBe(2);
   });
 
   /**
@@ -231,8 +246,10 @@ describe("a resort adding a colleague", () => {
     await refuses(() => add({ email: TAKEN_EMAIL }), 400, /email/i);
   });
 
-  it("refuses a phone somebody already signs in with", async () => {
-    await refuses(() => add({ phone: `+${TAKEN_PHONE}` }), 400, /phone/i);
+  it("lets a colleague share a phone with somebody else — a shared desk line", async () => {
+    const made = await add({ phone: `+${TAKEN_PHONE}` });
+    expect(made).toBeTruthy();
+    expect(await prisma.user.count({ where: { phone: TAKEN_PHONE } })).toBe(2);
   });
 
   it("refuses a placeholder address — nobody can be reached at one", async () => {
@@ -275,8 +292,10 @@ describe("an agency hiring its own staff", () => {
     await refuses(() => hire({ email: TAKEN_EMAIL }), 400, /email/i);
   });
 
-  it("refuses a phone somebody already signs in with", async () => {
-    await refuses(() => hire({ phone: `+${TAKEN_PHONE}` }), 400, /phone/i);
+  it("lets staff share a phone with somebody else", async () => {
+    const made = await hire({ phone: `+${TAKEN_PHONE}` });
+    expect(made).toBeTruthy();
+    expect(await prisma.user.count({ where: { phone: TAKEN_PHONE } })).toBe(2);
   });
 });
 
@@ -322,9 +341,9 @@ describe("changing a person's email and phone", () => {
     await expect(change(admin, { email: TAKEN_EMAIL })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/email/i) });
   });
 
-  it("refuses a phone somebody else already signs in with", async () => {
-    await expect(change(admin, { phone: `+${TAKEN_PHONE}` })).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/phone/i) });
-    expect((await stored()).phone).toBe("placeholder-7");
+  it("lets a phone be changed to one somebody else also has", async () => {
+    await change(admin, { phone: `+${TAKEN_PHONE}` });
+    expect((await stored()).phone).toBe(TAKEN_PHONE);
   });
 
   it("refuses to replace an address with a placeholder", async () => {
@@ -405,23 +424,43 @@ describe("changing a person's email and phone", () => {
 
 describe("signing in", () => {
   /**
-   * `loginWithPassword` already branches on "@", so this one is a
-   * characterisation: it should pass before the change and keep passing.
+   * Email only since 2026-09-28. Every case in this block used to assert the
+   * opposite — that a number reaches the account however it is written — and
+   * that was right while a number belonged to exactly one account. It no
+   * longer does: one person may hold a resort account and an agency account
+   * on one SIM, so a number cannot say which was meant, and the only safe
+   * answer to "which of these did you mean" is to not guess.
+   *
+   * What the numbers below still prove is the half of the old behaviour that
+   * survives: they are stored normalised, whoever typed them and in whatever
+   * shape. That is what makes a resort able to ring its own front desk.
    */
-  it("reaches the same account by email as by phone", async () => {
+  it("reaches the account by email, and not by the phone on it", async () => {
     await prisma.user.update({
       where: { id: fx.managerId },
       data: { passwordHash: await bcrypt.hash("password123", 4), status: "active" },
     });
 
     const byEmail = await auth().loginWithPassword(" Manager@Example.com ", "password123");
-    const byPhone = await auth().loginWithPassword(`+${TAKEN_PHONE}`, "password123");
-
     expect(byEmail.user.id).toBe(fx.managerId);
-    expect(byPhone.user.id).toBe(fx.managerId);
+
+    await expect(auth().loginWithPassword(`+${TAKEN_PHONE}`, "password123")).rejects.toMatchObject({
+      status: 401,
+    });
   });
 
-  it("a colleague added with a local number signs in with that same local number", async () => {
+  it("says what to type, instead of calling a good password invalid", async () => {
+    await prisma.user.update({
+      where: { id: fx.managerId },
+      data: { passwordHash: await bcrypt.hash("password123", 4), status: "active" },
+    });
+
+    await expect(auth().loginWithPassword(`+${TAKEN_PHONE}`, "password123")).rejects.toMatchObject({
+      message: expect.stringMatching(/email/i),
+    });
+  });
+
+  it("stores a colleague's local number normalised, whatever the form sent", async () => {
     const made = await platform().createResortUser(admin, fx.resortId, {
       name: "Local Number",
       email: "local.number@example.com",
@@ -430,12 +469,11 @@ describe("signing in", () => {
       role: "FRONT_DESK",
     } as never);
 
-    const byPhone = await auth().loginWithPassword("01712000321", "password123");
-
-    expect(byPhone.user.id).toBe(made.id);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000321");
+    expect((await auth().loginWithPassword("local.number@example.com", "password123")).user.id).toBe(made.id);
   });
 
-  it("an agency's staff member added with a local number signs in with that number", async () => {
+  it("stores an agency staff member's local number the same way", async () => {
     const made = await platform().createAgentStaff(agency, {
       name: "Local Junior",
       email: "local.junior@example.com",
@@ -444,10 +482,10 @@ describe("signing in", () => {
     });
 
     expect((await prisma.user.findUniqueOrThrow({ where: { id: made.id } })).phone).toBe("8801712000322");
-    expect((await auth().loginWithPassword("01712000322", "password123")).user.id).toBe(made.id);
+    expect((await auth().loginWithPassword("local.junior@example.com", "password123")).user.id).toBe(made.id);
   });
 
-  it("a colleague whose phone is changed to a local number signs in with that number", async () => {
+  it("normalises a phone that is changed to a local number", async () => {
     const colleague = await prisma.user.create({
       data: {
         name: "Moving Number",
@@ -463,10 +501,10 @@ describe("signing in", () => {
     await platform().updateResortUser(admin, fx.resortId, colleague.id, { phone: "01712000324" } as never);
 
     expect((await prisma.user.findUniqueOrThrow({ where: { id: colleague.id } })).phone).toBe("8801712000324");
-    expect((await auth().loginWithPassword("01712000324", "password123")).user.id).toBe(colleague.id);
+    expect((await auth().loginWithPassword("moving.number@example.com", "password123")).user.id).toBe(colleague.id);
   });
 
-  it("lets the owner who signed up alone in by either — the account the reset could not reach", async () => {
+  it("lets the owner who signed up alone in by the email they gave", async () => {
     const { user } = await auth().signup({
       companyName: "Sea Breeze",
       resortName: "Sea Breeze Resort",
@@ -476,11 +514,8 @@ describe("signing in", () => {
       password: "password123",
     } as never);
 
-    const byEmail = await auth().loginWithPassword("solo@example.com", "password123");
-    const byPhone = await auth().loginWithPassword("01712000999", "password123");
-
-    expect(byEmail.user.id).toBe(user.id);
-    expect(byPhone.user.id).toBe(user.id);
+    expect((await auth().loginWithPassword("solo@example.com", "password123")).user.id).toBe(user.id);
+    await expect(auth().loginWithPassword("01712000999", "password123")).rejects.toMatchObject({ status: 401 });
   });
 });
 

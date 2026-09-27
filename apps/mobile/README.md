@@ -40,7 +40,7 @@ and they are not interchangeable.
 ```
 pnpm -F @rh/mobile web                                   # Metro, in one terminal
 node scripts/look.mjs /login shot.png                    # open a route, save the picture
-node scripts/look.mjs /login shot.png   --type "Phone or email=a@b.c;Password=secret"   --tap "Sign in" --wait 9000                            # drive it to a screen behind sign-in
+node scripts/look.mjs /login shot.png   --type "Email=a@b.c;Password=secret"   --tap "Sign in" --wait 9000                            # drive it to a screen behind sign-in
 ```
 
 Expo renders the same components through react-native-web, so this shows what

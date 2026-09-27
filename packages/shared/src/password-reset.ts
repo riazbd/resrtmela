@@ -12,10 +12,14 @@
 
 /**
  * The confirmation shown after asking for a reset link — same wording,
- * whether the identifier was an email or a phone, known or not, sent or not.
- * Every account now signs in with either (2026-09-11), but the link only
- * ever goes to the email on file — SMS is dormant — so the sentence says
- * that plainly rather than leaving "on its way" open to mean a text.
+ * known or not, sent or not, and whatever was typed into the box. The link
+ * goes to the email on file and only there, so the sentence says so plainly
+ * rather than leaving "on its way" open to mean a text.
+ *
+ * "Whatever was typed" includes a phone number, which since 2026-09-28
+ * reaches nobody: a number can belong to more than one account. It gets this
+ * same sentence and no mail, because a different answer here is where a
+ * stranger would learn which addresses exist.
  */
 export const RESET_REQUESTED_MESSAGE =
   "If that account exists, a reset link is on its way to its email address.";

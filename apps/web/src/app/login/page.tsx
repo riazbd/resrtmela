@@ -113,9 +113,17 @@ function LoginInner() {
           )}
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600">Phone or email</label>
+              {/*
+                Email only since 2026-09-28. A phone number can belong to more
+                than one account now — a resort's owner and an agency's owner
+                are often the same person with the same SIM — so it cannot say
+                which account was meant.
+              */}
+              <label className="text-xs font-semibold text-slate-600">Email</label>
               <Input
-                placeholder="01XXXXXXXXX or you@email.com"
+                type="email"
+                autoComplete="email"
+                placeholder="you@email.com"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 autoFocus
@@ -151,11 +159,13 @@ function LoginInner() {
                 ) : (
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-slate-600">
-                      Email or phone
+                      Email
                     </label>
                     <div className="flex gap-2">
                       <Input
-                        placeholder="01XXXXXXXXX or you@email.com"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="you@email.com"
                         value={forgotIdentifier}
                         onChange={(e) => setForgotIdentifier(e.target.value)}
                         onKeyDown={(e) => {

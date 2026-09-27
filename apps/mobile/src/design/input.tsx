@@ -29,7 +29,7 @@ export function Field({ label, children, hint, error, style }: FieldProps) {
   const id = useId();
   /**
    * The label is attached to the control rather than merely drawn above it,
-   * so a screen reader announces "Phone or email, edit box" and a test finds
+   * so a screen reader announces "Email, edit box" and a test finds
    * the box by the words a person reads. Every control this wraps takes
    * `accessibilityLabel`, so one clone does for all of them.
    */

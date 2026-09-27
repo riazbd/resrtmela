@@ -5,7 +5,7 @@ import { PushService } from "../notifications/push.service";
 import { signToken } from "../common/auth.guard";
 import { slugify } from "../common/plans";
 import { ensureResortRoles } from "../common/permissions";
-import { contactEmail, contactPhone, contactTaken, findUserByIdentifier } from "../common/contact";
+import { EMAIL_ONLY_SENTENCE, contactEmail, contactPhone, contactTaken, findUserByIdentifier, looksLikeEmail } from "../common/contact";
 import { openingSubscription, redeemOffer } from "../common/offers";
 import { agencyOf, sellableFor } from "../common/selling-access";
 import { uniqueResortSlug } from "../common/resort-slug";
@@ -76,9 +76,19 @@ export class AuthService {
     return entry;
   }
 
-  /** Identifier may be a phone number or an email address — see findUserByIdentifier. */
+  /**
+   * The email address and the password. Not the phone — see
+   * `findUserByIdentifier` for why it stopped being an identity.
+   *
+   * A phone typed here is told so, rather than told its password is wrong.
+   * The generic refusal exists so that a wrong email and a wrong password
+   * look alike to somebody guessing at accounts; a phone number gives that
+   * away about nobody, and the alternative is somebody whose password is
+   * perfectly good reading "invalid" and changing it.
+   */
   async loginWithPassword(identifierRaw: string, password: string) {
     if (!identifierRaw) throw new UnauthorizedException("Invalid identifier or password");
+    if (!looksLikeEmail(identifierRaw)) throw new UnauthorizedException(EMAIL_ONLY_SENTENCE);
     const user = await findUserByIdentifier(this.prisma, identifierRaw);
     if (!user || !user.passwordHash || user.status !== "active") {
       throw new UnauthorizedException("Invalid identifier or password");
@@ -182,7 +192,8 @@ export class AuthService {
     ]);
     if (slugTaken) throw Object.assign(new Error(`Workspace "${slug}" is already taken`), { status: 409 });
     if (taken === "email") throw Object.assign(new Error("This email already has an account — sign in instead"), { status: 409 });
-    if (taken === "phone") throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
+    // There is deliberately no refusal for the phone: one person with one
+    // SIM may open a resort account and an agency account (2026-09-28).
 
     const passwordHash = await bcrypt.hash(input.password, 12);
 
@@ -312,7 +323,8 @@ export class AuthService {
 
     const taken = await contactTaken(this.prisma, { email, phone });
     if (taken === "email") throw Object.assign(new Error("This email already has an account — sign in instead"), { status: 409 });
-    if (taken === "phone") throw Object.assign(new Error("This phone already has an account — sign in instead"), { status: 409 });
+    // There is deliberately no refusal for the phone: one person with one
+    // SIM may open a resort account and an agency account (2026-09-28).
 
     // the slug is not the agency's to see; it only has to be unique
     const base = slugify(agencyName) || "agency";

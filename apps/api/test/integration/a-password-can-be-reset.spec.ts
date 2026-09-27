@@ -125,13 +125,21 @@ describe("a password that can be reset", () => {
     expect(await prisma.user.count()).toBe(before);
   });
 
-  it("puts the link in the account's email when the request is made by phone", async () => {
+  /**
+   * A phone reached the account here until 2026-09-28 and the link went to
+   * the email on it, which was a kindness while a number meant one account.
+   * It no longer does — one person may hold two on one SIM — so a number
+   * now reaches nobody, and the reply is the same silence an unknown address
+   * gets. Saying "that is not an account" would be the one place this flow
+   * tells a stranger which addresses exist.
+   */
+  it("mails nothing when the request is made by phone, and says so no differently", async () => {
     const svc = service();
 
-    await svc.request(managerPhone);
+    const answer = await svc.request(managerPhone);
 
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]?.to).toBe("manager@example.com");
+    expect(outbox).toHaveLength(0);
+    expect(answer).toEqual(await svc.request("nobody@example.com"));
   });
 
   it("gives the same answer for an unknown phone as for a known one, and mails nothing for it", async () => {

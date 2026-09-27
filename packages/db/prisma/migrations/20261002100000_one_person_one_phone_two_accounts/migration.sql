@@ -1,0 +1,21 @@
+-- One person, one phone, two accounts.
+--
+-- A resort's owner and an agency's owner are often the same human being, and
+-- that human being has one mobile number. A unique index on `users.phone`
+-- made the second account impossible to open: the sign-up refused a number
+-- that was already an account's, and there is no second number to give it.
+-- An email address can be made in a minute; a SIM cannot.
+--
+-- So the number stops being an identity. It stays required and it stays on
+-- the account — it is how a resort rings its own staff — but it no longer
+-- says *which* account, and the ordinary index that replaces the unique one
+-- keeps the lookups that read it fast.
+--
+-- The consequence is that signing in by phone cannot work any more: two
+-- accounts can answer to one number and the only safe answer to "which of
+-- these did you mean" is to not guess. Email is the identifier now, which is
+-- also where the password reset has always been sent. Checked before
+-- writing this: every account on production has a real email address and
+-- none has a placeholder, so nobody loses their way in.
+DROP INDEX `users_phone_key` ON `users`;
+CREATE INDEX `users_phone_idx` ON `users`(`phone`);

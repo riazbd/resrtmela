@@ -91,16 +91,22 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.card}>
-          <Field label="Phone or email">
+          {/*
+            Email only since 2026-09-28. A number can belong to more than one
+            account now — a resort's owner and an agency's owner are often one
+            person with one SIM — so it cannot say which account was meant.
+            The box took either until then, which is why the field is still
+            called `identifier`: the server's word for it, and what it sends.
+          */}
+          <Field label="Email">
             <Input
-              placeholder="01XXXXXXXXX or you@email.com"
+              placeholder="you@email.com"
               value={identifier}
               onChangeText={setIdentifier}
               autoCapitalize="none"
               autoCorrect={false}
-              // one box for both, so the keyboard cannot decide for them
               keyboardType="email-address"
-              textContentType="username"
+              textContentType="emailAddress"
               returnKeyType="next"
             />
           </Field>
@@ -147,11 +153,11 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Field
-                  label="Phone or email for the reset link"
+                  label="Email for the reset link"
                   hint="The link goes to the email address on the account."
                 >
                   <Input
-                    placeholder="01XXXXXXXXX or you@email.com"
+                    placeholder="you@email.com"
                     value={resetIdentifier}
                     onChangeText={setResetIdentifier}
                     autoCapitalize="none"

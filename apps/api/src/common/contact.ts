@@ -45,54 +45,40 @@ export function reachablePhone(value: string | null | undefined): string | null 
 }
 
 /**
- * The one rule for turning what somebody typed into an account: an "@" means
- * an email (trimmed, lower-cased, the way it is stored); anything else is a
- * phone, read through the same `normalizePhone` every path stores one with.
+ * The one rule for turning what somebody typed into an account: the email
+ * address, trimmed and lower-cased, the way it is stored.
  *
- * `loginWithPassword` had this branch inline; the password reset needed the
- * identical rule — an account reachable by either has to be *findable* by
- * either — so it moved here rather than being typed out a second time for a
- * second caller to drift from the first.
+ * It accepted a phone number too until 2026-09-28, and it cannot any more.
+ * `users.phone` stopped being unique that day, so that one person with one
+ * SIM could hold both a resort account and an agency account — which the
+ * owner of both asked for, and which no second SIM can solve. A number that
+ * two accounts answer to cannot say which was meant, and signing somebody
+ * into the wrong account is worse than asking for their email.
+ *
+ * So: no guessing, no "the only one that matched", and no quiet
+ * best-of-two. A phone typed here is refused in a sentence that says what
+ * to type instead, because the alternative is "Invalid identifier or
+ * password" in front of somebody whose password is perfectly good.
+ *
+ * `loginWithPassword` had the old branch inline; the password reset needed
+ * the identical rule, so it lives here and has one caller's worth of truth
+ * rather than two that can drift.
  */
+export const EMAIL_ONLY_SENTENCE =
+  "Sign in with your email address — a phone number can belong to more than one account";
+
+/** Whether what was typed is meant to be an email at all. */
+export function looksLikeEmail(raw: string | null | undefined): boolean {
+  return (raw ?? "").includes("@");
+}
+
 export async function findUserByIdentifier<T extends Pick<PrismaService, "user">>(
   prisma: T,
   identifierRaw: string,
 ) {
-  if (!identifierRaw) return null;
-  if (identifierRaw.includes("@")) {
-    return prisma.user.findFirst({ where: { email: identifierRaw.trim().toLowerCase() } });
-  }
-
-  const exact = await prisma.user.findFirst({ where: { phone: normalizePhone(identifierRaw) } });
-  if (exact) return exact;
-
-  /**
-   * The number as it is stored, when that is not the number as it should be.
-   *
-   * Reported as "you have to type an extra 88 to sign in". Some accounts hold
-   * a phone a digit short — `880` and nine, where a Bangladeshi mobile is
-   * `880` and ten — so `normalizePhone("0170000101")` produces a correct
-   * thirteen that matches nothing, while typing the stored twelve verbatim
-   * matches exactly. The person is then told their own number is wrong
-   * because of how it was written into the table before they saw a login
-   * screen.
-   *
-   * So: fall back to the national part, the digits after the country code and
-   * any trunk zero. Nine digits at minimum — a suffix shorter than that would
-   * start matching strangers — and only when exactly one account ends that
-   * way. Two candidates is a refusal, because signing somebody into the wrong
-   * account is the one outcome worse than asking them to type more.
-   *
-   * Runs only after the exact match misses, and the user table is staff and
-   * agents rather than guests, so the scan is small.
-   */
-  const national = identifierRaw.replace(/\D/g, "").replace(/^880/, "").replace(/^0/, "");
-  if (national.length < 9) return null;
-  const candidates = await prisma.user.findMany({
-    where: { phone: { endsWith: national } },
-    take: 2,
-  });
-  return candidates.length === 1 ? candidates[0]! : null;
+  const email = (identifierRaw ?? "").trim().toLowerCase();
+  if (!email || !email.includes("@")) return null;
+  return prisma.user.findFirst({ where: { email } });
 }
 
 /**
@@ -129,29 +115,39 @@ export function contactPhone(raw: string | null | undefined): string {
 }
 
 /**
- * Which of the two already signs someone else in, if either.
+ * Whether the email already signs someone else in.
  *
  * Asked before writing so the person is told in a sentence, instead of the
  * unique index answering with a constraint error. Each caller throws in its
  * own convention — signup says 409 and "sign in instead", the resort and
  * agency paths have always said 400.
+ *
+ * The phone is no longer asked about. It stopped being unique on
+ * 2026-09-28: a resort's owner and an agency's owner are frequently the
+ * same person, and that person has one number. The refusal it used to
+ * produce was the whole obstacle. `contact.phone` is still accepted as an
+ * argument so that no caller had to be found and changed, and it is
+ * deliberately ignored — a silent parameter being safer here than twelve
+ * edited call sites, each a chance to drop the email check with it.
  */
 export async function contactTaken(
   prisma: Pick<PrismaService, "user">,
   contact: { email?: string; phone?: string },
   exceptUserId?: number,
-): Promise<"email" | "phone" | null> {
+): Promise<"email" | null> {
   const not = exceptUserId != null ? { id: { not: exceptUserId } } : {};
   if (contact.email && (await prisma.user.findFirst({ where: { email: contact.email, ...not }, select: { id: true } }))) {
     return "email";
-  }
-  if (contact.phone && (await prisma.user.findFirst({ where: { phone: contact.phone, ...not }, select: { id: true } }))) {
-    return "phone";
   }
   return null;
 }
 
 export const TAKEN_SENTENCE = {
   email: "This email address already belongs to another account",
+  /**
+   * Kept, and never reached. The phone stopped being unique on 2026-09-28,
+   * so nothing produces this any more — it stays so that the two sentences
+   * can be read side by side by whoever wonders why one of them vanished.
+   */
   phone: "This phone number already belongs to another account",
 } as const;

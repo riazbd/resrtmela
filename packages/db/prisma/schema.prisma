@@ -297,12 +297,22 @@ model Resort {
 model User {
   id            Int        @id @default(autoincrement())
   name          String     @db.VarChar(160)
-  /// Both required (2026-09-11): a person signs in with either, and the
-  /// password reset mails a link. Stored as `normalizePhone` makes it — the
-  /// form login looks it up by. Accounts that had none carry a placeholder
-  /// (`placeholder-<id>`, `user-<id>@placeholder.invalid`) until a resort
-  /// replaces it.
-  phone         String     @unique @db.VarChar(32)
+  /// Both required. The email is the identity; the phone is contact detail.
+  ///
+  /// It was `@unique` until 2026-09-28, and that made one human being with
+  /// one SIM unable to hold both a resort account and an agency account —
+  /// which the owner of both had asked for. A number is not an identity: it
+  /// is how the resort rings its own front desk. Indexed, not unique, so the
+  /// lookups that read it stay fast.
+  ///
+  /// Signing in is by email only, for the reason the index change forces:
+  /// two accounts can answer to one number and guessing which was meant is
+  /// the one outcome worse than asking for the email.
+  ///
+  /// Stored as `normalizePhone` makes it. Accounts that had none carry a
+  /// placeholder (`placeholder-<id>`, `user-<id>@placeholder.invalid`) until
+  /// a resort replaces it.
+  phone         String     @db.VarChar(32)
   email         String     @unique @db.VarChar(191)
   passwordHash  String?    @db.VarChar(255)
   role          Role
@@ -357,6 +367,9 @@ model User {
   passwordResets    PasswordReset[]
 
   @@index([accountId])
+  /// Not unique any more (2026-09-28) — see the note on the column. Indexed
+  /// because `findUserByIdentifier` and the staff screens still read by it.
+  @@index([phone])
   @@map("users")
 }
 

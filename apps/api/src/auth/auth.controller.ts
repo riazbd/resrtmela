@@ -11,7 +11,12 @@ import { agencyOf } from "../common/selling-access";
 import { ROLE } from "@rh/shared";
 
 export class LoginDto {
-  /** phone number OR email — one identifier is enough */
+  /**
+   * The email address. `phone` and `identifier` are both still accepted as
+   * fields — a web bundle cached across a deploy posts one of them, and the
+   * shipped app posts `identifier` — but whatever arrives has to be an email
+   * since 2026-09-28. `findUserByIdentifier` says why.
+   */
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() @MaxLength(191) email?: string;
   @IsOptional() @IsString() identifier?: string;
@@ -62,7 +67,7 @@ class SignupAgencyDto {
 }
 
 class ForgotPasswordDto {
-  /** phone number OR email — one identifier is enough, same as LoginDto */
+  /** The email address, same as LoginDto — the link goes there either way. */
   @IsOptional() @IsString() @MaxLength(191) identifier?: string;
   // kept so a web bundle cached across the deploy — still posting { email } —
   // does not start getting 400s the moment this ships
