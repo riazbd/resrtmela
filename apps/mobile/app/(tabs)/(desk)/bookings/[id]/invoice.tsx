@@ -159,7 +159,7 @@ export default function InvoiceScreen() {
               commission: what the resort pays an agency is between those two
               businesses, and it is not a figure the guest was charged.
             */
-            meta={[d.booking.code, d.booking.agent ? `booked through ${d.booking.agent}` : null]
+            meta={[d.booking.code, d.booking.agency ? `booked through ${d.booking.agency}` : null]
               .filter(Boolean)
               .join(" · ")}
             last

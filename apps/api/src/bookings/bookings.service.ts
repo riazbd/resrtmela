@@ -160,6 +160,50 @@ export class BookingsService {
     @Inject(AgentAccountsService) private readonly agentAccounts: AgentAccountsService,
   ) {}
 
+
+  /**
+   * Which agency each of these sellers acts for, by user id.
+   *
+   * Two queries whatever the length of the page, the same shape the Dues
+   * rollup uses — a per-row lookup would make a list of fifty agency stays a
+   * hundred round trips. An agent with no agency behind them is their own
+   * firm, so they come back named by themselves and every caller can render
+   * one field without asking which case it is.
+   */
+  private async agencyOfSellers(sellerIds: (number | null)[]): Promise<Map<number, string>> {
+    const ids = [...new Set(sellerIds.filter((id): id is number => id != null))];
+    if (ids.length === 0) return new Map();
+    const sellers = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        name: true,
+        accountId: true,
+        parentAgent: { select: { accountId: true } },
+      },
+    });
+    const accountIds = [
+      ...new Set(
+        sellers
+          .map((u) => u.accountId ?? u.parentAgent?.accountId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const accounts = accountIds.length
+      ? await this.prisma.tenant.findMany({
+          where: { id: { in: accountIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const named = new Map(accounts.map((a) => [a.id, a.name]));
+    return new Map(
+      sellers.map((u) => {
+        const account = u.accountId ?? u.parentAgent?.accountId ?? null;
+        return [u.id, (account != null ? named.get(account) : null) ?? u.name];
+      }),
+    );
+  }
+
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
   static computeTotals(
     booking: Prisma.BookingGetPayload<{
@@ -953,6 +997,8 @@ export class BookingsService {
       }),
       this.prisma.booking.count({ where }),
     ]);
+    const agencies = await this.agencyOfSellers(rows.map((b) => b.agentUserId));
+
     return {
       total,
       rows: rows.map((b) => ({
@@ -964,6 +1010,13 @@ export class BookingsService {
         checkOut: b.checkOut,
         guest: b.guest,
         agent: b.agentUser?.name ?? null,
+        /**
+         * The firm, beside the person. A resort's relationship — the rate, the
+         * account, the settlement — is with the agency; "who rang" is the
+         * follow-up, not the answer. `soldBy` in @rh/shared joins them the one
+         * way, so no screen invents its own.
+         */
+        agency: b.agentUserId == null ? null : (agencies.get(b.agentUserId) ?? null),
         // room lines only: an extra person's line names the room they sleep in.
         // In number order too — the line read "7, 6, 4, 2" because the items
         // came back in the order they were added to the booking.
@@ -1059,6 +1112,8 @@ export class BookingsService {
       rulesByResort.set(resortId, await this.taxRulesFor(resortId));
     }
 
+    const agencies = await this.agencyOfSellers(rows.map((b) => b.agentUserId));
+
     return {
       total,
       rows: rows.map((b) => ({
@@ -1070,6 +1125,13 @@ export class BookingsService {
         checkOut: b.checkOut,
         guest: b.guest,
         agent: b.agentUser?.name ?? null,
+        /**
+         * The firm, beside the person. A resort's relationship — the rate, the
+         * account, the settlement — is with the agency; "who rang" is the
+         * follow-up, not the answer. `soldBy` in @rh/shared joins them the one
+         * way, so no screen invents its own.
+         */
+        agency: b.agentUserId == null ? null : (agencies.get(b.agentUserId) ?? null),
         resort: b.resort ? { id: b.resort.id, name: b.resort.name } : null,
         rooms: b.items
           .filter((i) => i.itemKind === "ROOM")
@@ -1174,6 +1236,15 @@ export class BookingsService {
        * and not a check. Nothing wanted the id.
        */
       agent: b.agentUser?.name ?? null,
+      /**
+       * The firm behind the person. A resort's relationship is with the
+       * agency — the rate, the account and the settlement all hang off it —
+       * and this screen named only whoever typed the booking.
+       */
+      agency:
+        b.agentUserId == null
+          ? null
+          : ((await this.agencyOfSellers([b.agentUserId])).get(b.agentUserId) ?? null),
       createdBy: b.createdBy,
       checkIn: b.checkIn,
       checkOut: b.checkOut,
@@ -2419,7 +2490,7 @@ export class BookingsService {
          * booked through an agency can see which one on the document they
          * keep.
          */
-        agent: soldThrough,
+        agency: soldThrough,
       },
       guest: { fullName: b.guest.fullName, phone: b.guest.phone, nidPassportNo: b.guest.nidPassportNo, email: b.guest.email },
       items: b.items.map((i) => ({
@@ -2477,6 +2548,8 @@ export class BookingsService {
         payments: true,
       },
     });
+    const agencies = await this.agencyOfSellers(rows.map((b) => b.agentUserId));
+
     const withTotals = rows.map((b) => ({
       id: b.id,
       code: b.code,
@@ -2486,6 +2559,8 @@ export class BookingsService {
       // `?? null`, because `TodayRow.agent` says `string | null` and an
       // absent key is a third thing the type does not describe
       agent: b.agentUser?.name ?? null,
+      /** Which agency it came from — the half the day sheet never said. */
+      agency: b.agentUserId == null ? null : (agencies.get(b.agentUserId) ?? null),
       rooms: b.items.filter((i) => i.itemKind === "ROOM").map((i) => i.room?.name),
       state: b.state,
       ...BookingsService.computeTotals(b, taxRules),

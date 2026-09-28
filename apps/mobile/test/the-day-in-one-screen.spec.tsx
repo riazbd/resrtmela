@@ -46,6 +46,8 @@ const arrival = (over: Partial<TodayFeed["arrivals"][number]> = {}) => ({
   arriving: true,
   departing: false,
   guest: { fullName: "Rafiq Hasan", phone: "01811110001" },
+  // a walk-in: no agency behind it, and nobody at one
+  agency: null,
   agent: null,
   rooms: ["1 Camellia"],
   state: "CONFIRMED",

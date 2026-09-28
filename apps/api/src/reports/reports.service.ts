@@ -759,15 +759,44 @@ export class ReportsService {
       select: { id: true, name: true, accountId: true, parentAgent: { select: { accountId: true } } },
     });
 
-    const byAgent = new Map<number, { agentId: number; name: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
+    /**
+     * The firms behind them, in one query.
+     *
+     * This report read an agency's terms to price the commission and then
+     * named the *person* who typed the booking — so an owner asking "who sold
+     * how much" got a list of clerks, when the rate, the account and the
+     * settlement all belong to the agency. Both now, and the screen leads with
+     * the firm.
+     */
+    const reportAccountIds = [
+      ...new Set(
+        agents
+          .map((a) => a.accountId ?? a.parentAgent?.accountId)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+    const firms = new Map(
+      (reportAccountIds.length
+        ? await this.prisma.tenant.findMany({
+            where: { id: { in: reportAccountIds } },
+            select: { id: true, name: true },
+          })
+        : []
+      ).map((t) => [t.id, t.name]),
+    );
+
+    const byAgent = new Map<number, { agentId: number; name: string; agency: string; commissionRate: number; commissionKind: string; bookings: number; rent: number; due: number }>();
     for (const a of agents) {
       // the resort's rate, or the one it struck with this agent's agency —
       // never a per-person figure, which is how two agents once earned
       // differently on the same booking
       const terms = await this.commission.termsFor(resortId, a.accountId ?? a.parentAgent?.accountId ?? null);
+      const account = a.accountId ?? a.parentAgent?.accountId ?? null;
       byAgent.set(a.id, {
         agentId: a.id,
         name: a.name,
+        // a lone agent is their own firm, so this is never blank
+        agency: (account != null ? firms.get(account) : null) ?? a.name,
         commissionRate: terms.rate,
         commissionKind: terms.kind,
         bookings: 0,

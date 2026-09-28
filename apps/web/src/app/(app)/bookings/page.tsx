@@ -1218,7 +1218,17 @@ function BookingsInner() {
                     </Td>
                     <Td className="text-xs">{dmy(b.checkIn)} → {dmy(b.checkOut)}<div className="text-[11px] text-slate-400">{b.nights}n</div></Td>
                     <Td className="text-xs">{b.rooms.join(", ")}</Td>
-                    <Td className="text-xs">{b.source}{b.agent ? <div className="text-[11px] text-slate-400">{b.agent}</div> : null}</Td>
+                    {/* the firm, then who rang — a resort deals with the
+                        agency, and this column named only the person */}
+                    <Td className="text-xs">
+                      {b.source}
+                      {b.agency ? (
+                        <div className="text-[11px] text-slate-500">{b.agency}</div>
+                      ) : null}
+                      {b.agent && b.agent !== b.agency ? (
+                        <div className="text-[11px] text-slate-400">{b.agent}</div>
+                      ) : null}
+                    </Td>
                     <Td><Badge value={b.state} /></Td>
                     <Td><Badge value={b.paymentState} /></Td>
                     <Td className="text-right font-semibold">{money(b.due)}</Td>

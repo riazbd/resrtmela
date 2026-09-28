@@ -27,6 +27,10 @@ import type { PrismaClient } from "@rh/db";
 import { ROLE, type JwtClaims } from "@rh/shared";
 import { testPrisma, resetDb, seedResort, seedBooking, type Fixture } from "../helpers/db";
 import { makeBookingsService } from "../helpers/services";
+import { todayIn } from "../../src/common/dates";
+
+/** `n` days on from a date-only value, in UTC as the column stores it. */
+const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86_400_000);
 import type { PrismaService } from "../../src/prisma/prisma.service";
 
 const prisma = testPrisma();
@@ -72,6 +76,9 @@ async function invoicedAgencyStay() {
 }
 
 describe("an invoice and the agency behind it", () => {
+  /** The field is `agency`, not `agent` — on a booking row `agent` is the
+   * person, and one word meaning two things across two payloads is how a
+   * clerk's name reached a guest's tax document in the first place. */
   it("names the agency that sold the stay", async () => {
     const b = await invoicedAgencyStay();
     const inv = await bookings().invoicePayload(owner, b.id);
@@ -79,7 +86,7 @@ describe("an invoice and the agency behind it", () => {
     const agency = await prisma.tenant.findUniqueOrThrow({
       where: { id: (await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } })).accountId! },
     });
-    expect(inv.booking.agent).toBe(agency.name);
+    expect(inv.booking.agency).toBe(agency.name);
   });
 
   /**
@@ -90,7 +97,7 @@ describe("an invoice and the agency behind it", () => {
     const b = await invoicedAgencyStay();
     const clerk = await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } });
     const inv = await bookings().invoicePayload(owner, b.id);
-    expect(inv.booking.agent).not.toBe(clerk.name);
+    expect(inv.booking.agency).not.toBe(clerk.name);
   });
 
   /**
@@ -128,6 +135,76 @@ describe("an invoice and the agency behind it", () => {
       data: { invoiceNo: "SER-00002", invoiceAt: new Date() },
     });
     const inv = await bookings().invoicePayload(owner, b.id);
-    expect(inv.booking.agent).toBeNull();
+    expect(inv.booking.agency).toBeNull();
+  });
+});
+
+/**
+ * The other half of the same question, and the one the owner asked next:
+ * *"okhane person er name ase valo kotha but kon agency er person?"*
+ *
+ * A resort's booking list named the person and stopped. That is the smaller
+ * half — a resort has no relationship with Rafiqul Islam, and the rate, the
+ * account and the settlement all hang off Sea Breeze Travels behind him. Both
+ * facts now travel, under two names that mean one thing each.
+ */
+describe("a booking says which agency it came from", () => {
+  it("carries the firm and the person on the list", async () => {
+    const b = await invoicedAgencyStay();
+    const page = await bookings().list(owner, { resortId: fx.resortId, take: 50 });
+    const row = page.rows.find((r) => r.id === b.id);
+    expect(row).toBeTruthy();
+
+    const clerk = await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } });
+    const agency = await prisma.tenant.findUniqueOrThrow({ where: { id: clerk.accountId! } });
+    expect(row!.agency).toBe(agency.name);
+    expect(row!.agent).toBe(clerk.name);
+  });
+
+  it("carries both on the booking itself", async () => {
+    const b = await invoicedAgencyStay();
+    const detail = await bookings().detail(owner, b.id);
+    const clerk = await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } });
+    const agency = await prisma.tenant.findUniqueOrThrow({ where: { id: clerk.accountId! } });
+    expect(detail.agency).toBe(agency.name);
+    expect(detail.agent).toBe(clerk.name);
+  });
+
+  /**
+   * The day sheet reads the *resort's* today rather than a date it is handed,
+   * so the stay is moved onto it instead of the clock being moved back.
+   */
+  it("carries both on the day sheet", async () => {
+    const b = await invoicedAgencyStay();
+    const resort = await prisma.resort.findUniqueOrThrow({
+      where: { id: fx.resortId },
+      select: { timezone: true },
+    });
+    const today = todayIn(resort.timezone);
+    await prisma.booking.update({
+      where: { id: b.id },
+      data: { checkIn: today, checkOut: addDays(today, 2), state: "CONFIRMED" },
+    });
+    const sheet = await bookings().today(owner, fx.resortId);
+    // the feed is arrivals and departures; this stay arrives that morning
+    const row = [...sheet.arrivals, ...sheet.departures].find((r) => r.id === b.id);
+    expect(row).toBeTruthy();
+    const agency = await prisma.tenant.findUniqueOrThrow({
+      where: { id: (await prisma.user.findUniqueOrThrow({ where: { id: fx.agentId } })).accountId! },
+    });
+    expect(row!.agency).toBe(agency.name);
+  });
+
+  /** A walk-in has neither, and must not be given an invented firm. */
+  it("says nothing on a stay the resort took itself", async () => {
+    const b = await seedBooking(prisma as unknown as PrismaClient, fx, {
+      roomId: fx.rooms[1]!.id,
+      checkIn: "2026-09-10",
+      checkOut: "2026-09-11",
+      unitPrice: 5000,
+    });
+    const detail = await bookings().detail(owner, b.id);
+    expect(detail.agency).toBeNull();
+    expect(detail.agent).toBeNull();
   });
 });

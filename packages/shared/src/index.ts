@@ -47,6 +47,7 @@ export * from "./new-booking";
 export * from "./quote-bill";
 export * from "./housekeeping";
 export * from "./agent-account";
+export * from "./sold-by";
 
 /** Cross-app constants shared by the API and the console. */
 

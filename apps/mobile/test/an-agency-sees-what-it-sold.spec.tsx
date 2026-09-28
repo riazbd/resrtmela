@@ -81,6 +81,8 @@ const sold = (over: Partial<AgencyBookingRow> = {}): AgencyBookingRow =>
     checkIn: "2026-11-07",
     checkOut: "2026-11-08",
     guest: { id: 3, fullName: "Shahriar Kabir", phone: "8801711000222" },
+    // the firm the resort deals with, and the person at it who rang
+    agency: "Sea Breeze Travels",
     agent: "Nabila Rahman",
     resort: { id: 1, name: "Sky Eco Resort" },
     rooms: ["101"],
@@ -107,6 +109,7 @@ const booking = (over: Partial<BookingDetail> = {}): BookingDetail =>
     checkOut: "2026-11-08",
     guest: { id: 3, fullName: "Shahriar Kabir", phone: "8801711000222" },
     // the field that took the screen down: a name, never a row
+    agency: "Sea Breeze Travels",
     agent: "Nabila Rahman",
     createdBy: null,
     items: [],
@@ -183,6 +186,14 @@ describe("the booking screen an agent lands on after taking one", () => {
 
     // the whole bug: this screen rendered nothing at all when `agent` was a row
     await waitFor(() => expect(view.getByText("Sold by")).toBeTruthy());
+    /**
+     * The firm first. This named only the person until 2026-09-28 — and a
+     * resort has no relationship with Nabila Rahman; the rate, the account and
+     * the settlement all hang off Sea Breeze Travels behind her. Both are
+     * here, under headings that say which is which.
+     */
+    expect(view.getByText("Sea Breeze Travels")).toBeTruthy();
+    expect(view.getByText("Who rang")).toBeTruthy();
     expect(view.getByText("Nabila Rahman")).toBeTruthy();
   });
 

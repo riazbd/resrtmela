@@ -146,6 +146,21 @@ export interface BookingRow {
   checkIn: string | null;
   checkOut: string | null;
   guest: { id: number; fullName: string; phone: string };
+  /**
+   * Two names for two different facts, and the list used to carry only the
+   * second.
+   *
+   * `agency` is the firm the booking came from — the party the resort has a
+   * rate, an account and a settlement with. `agent` is the person at it who
+   * rang. A list naming "Rafiqul Islam" and nothing else answers the smaller
+   * half of "where did this come from"; a resort has no relationship with
+   * Rafiqul Islam.
+   *
+   * A lone agent with no agency behind them comes back as their own firm, so
+   * a screen can render `agency` alone without asking which case it is.
+   * `soldBy` in @rh/shared joins them the one way.
+   */
+  agency: string | null;
   agent: string | null;
   rooms: (string | null)[];
   adults: number;
@@ -337,6 +352,8 @@ export interface TodayRow {
   arriving: boolean;
   departing: boolean;
   guest: { fullName: string; phone: string } | null;
+  /** the firm it came from; `agent` is the person there — see `BookingRow` */
+  agency: string | null;
   agent: string | null;
   rooms: (string | null | undefined)[];
   state: string;
@@ -1411,7 +1428,15 @@ export interface InvoicePayload {
     adults: number;
     children: number;
     remarks: string | null;
-    agent: string | null;
+    /**
+     * The agency, and only ever the agency.
+     *
+     * Named `agency` rather than `agent` because on a booking row `agent` is
+     * the *person*, and one word meaning two things across two payloads is how
+     * a screen ends up printing a clerk's name on a guest's tax document —
+     * which is exactly what this field used to do.
+     */
+    agency: string | null;
   };
   guest: {
     fullName: string;
@@ -1493,7 +1518,15 @@ export interface DailyRevenueRow {
 
 export interface AgentPerformanceRow {
   agentId: number;
+  /** the person who sold it */
   name: string;
+  /**
+   * The firm they sell for, and the one the money is actually with — this row
+   * has always priced the commission from the *agency's* terms while naming
+   * the person, so an owner asking who sold how much got a list of clerks.
+   * A lone agent is their own firm, so it is never blank.
+   */
+  agency: string;
   /** the resort's terms with this agency, never a per-person figure */
   commissionRate: number;
   commissionKind: string;

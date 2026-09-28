@@ -141,7 +141,15 @@ export default function BookingScreen() {
               value={`${dayLabel(b.checkIn)} → ${dayLabel(b.checkOut)} · ${b.nights} night${b.nights === 1 ? "" : "s"}`}
             />
             <Fact label="Guests" value={whoIsStaying(b)} />
-            {b.agent ? <Fact label="Sold by" value={b.agent} /> : null}
+            {/*
+              The firm, then who rang. This said "Sold by Rafiqul Islam" — a
+              person the resort has no relationship with; the rate, the account
+              and the settlement all hang off the agency behind them.
+            */}
+            {b.agency ? <Fact label="Sold by" value={b.agency} /> : null}
+            {b.agent && b.agent !== b.agency ? (
+              <Fact label="Who rang" value={b.agent} />
+            ) : null}
             {b.source ? <Fact label="Source" value={b.source} /> : null}
           </View>
         </Card>

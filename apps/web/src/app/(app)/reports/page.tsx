@@ -496,7 +496,13 @@ export default function ReportsPage() {
               <tbody className="divide-y divide-slate-50">
                 {agents.map((r) => (
                   <tr key={r.agentId}>
-                    <Td className="font-medium">{r.name}</Td>
+                    {/* the firm the money is with, then who sold it */}
+                    <Td className="font-medium">
+                      {r.agency}
+                      {r.name !== r.agency ? (
+                        <div className="text-[11px] font-normal text-slate-400">{r.name}</div>
+                      ) : null}
+                    </Td>
                     <Td className="text-xs">{r.commissionKind === "FLAT" ? `${money(r.commissionRate)}/booking` : `${r.commissionRate}%`}</Td>
                     <Td>{r.bookings}</Td>
                     <Td className="text-right">{money(r.rent)}</Td>

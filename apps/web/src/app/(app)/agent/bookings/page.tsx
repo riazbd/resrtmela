@@ -146,6 +146,8 @@ export default function AgencyBookingsPage() {
                   </Td>
                   <Td className="text-xs">{b.rooms.join(", ")}</Td>
                   <Td><Badge value={b.state} /></Td>
+                  {/* on an agency's own list the firm is itself, so the
+                      useful half is which of its people sold it */}
                   <Td className="text-xs text-slate-500">{b.agent ?? "—"}</Td>
                   <Td className="text-right font-semibold">{money(b.due)}</Td>
                 </tr>

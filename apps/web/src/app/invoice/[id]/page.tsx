@@ -151,9 +151,9 @@ export default function InvoicePage() {
             invoice it is a figure the guest was not charged, and in this market
             it is the figure that ends the agency's relationship with them.
           */}
-          {inv.booking.agent ? (
+          {inv.booking.agency ? (
             <div className="text-slate-500">
-              Booked through {inv.booking.agent}
+              Booked through {inv.booking.agency}
             </div>
           ) : null}
           <div lang="bn">

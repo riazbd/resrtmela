@@ -18,6 +18,7 @@ import {
   isStoredAgentEntryKind,
   overCreditLimit,
 } from "../src/agent-account";
+import { soldBy, soldByParts } from "../src/sold-by";
 
 const collected = (amount: number) => ({ kind: "COLLECTED", amount, status: "CONFIRMED" });
 const remit = (amount: number) => ({ kind: "REMIT", amount: -amount, status: "CONFIRMED" });
@@ -248,5 +249,45 @@ describe("the money adds up", () => {
   it("ignores a line with no number in it", () => {
     const b = agentBalance([{ kind: "REMIT", amount: Number.NaN, status: "CONFIRMED" }]);
     expect(b.balance).toBe(0);
+  });
+});
+
+describe("naming who a booking came from", () => {
+  /**
+   * The resort's booking list named the person and nothing else. A resort has
+   * no relationship with Rafiqul Islam; it has one with Sea Breeze Travels,
+   * and the rate, the account and the settlement all hang off the agency.
+   */
+  it("puts the firm first and the person after it", () => {
+    expect(soldBy("Sea Breeze Travels", "Rafiqul Islam")).toBe("Sea Breeze Travels · Rafiqul Islam");
+  });
+
+  /** A lone agent is their own firm, and saying it twice is saying it wrong. */
+  it("says a lone agent's name once", () => {
+    expect(soldBy("Rafiqul Islam", "Rafiqul Islam")).toBe("Rafiqul Islam");
+    expect(soldBy(null, "Rafiqul Islam")).toBe("Rafiqul Islam");
+    expect(soldBy("Rafiqul Islam", null)).toBe("Rafiqul Islam");
+  });
+
+  it("says nothing about a stay the resort sold itself", () => {
+    expect(soldBy(null, null)).toBeNull();
+    expect(soldBy("", "  ")).toBeNull();
+  });
+
+  /**
+   * Apart, for a screen with room to stack them — the Dues screen draws the
+   * firm in the row's weight and the person under it, and a joined string
+   * would have to be split again to do that.
+   */
+  it("hands the two halves over separately when asked", () => {
+    expect(soldByParts("Sea Breeze Travels", "Rafiqul Islam")).toEqual({
+      firm: "Sea Breeze Travels",
+      who: "Rafiqul Islam",
+    });
+    expect(soldByParts("Rafiqul Islam", "Rafiqul Islam")).toEqual({
+      firm: "Rafiqul Islam",
+      who: null,
+    });
+    expect(soldByParts(null, null)).toEqual({ firm: null, who: null });
   });
 });
