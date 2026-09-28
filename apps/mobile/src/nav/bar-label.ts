@@ -52,6 +52,9 @@ const SHORTER: Record<string, string> = {
   // "My bookings" is eleven. Nobody's bar shows both this and the resort's
   // `/bookings`, so the shorter word is not ambiguous to anyone who sees it.
   "/agent/bookings": "Bookings",
+  // "Construction" is twelve. The building is the thing, and nobody looking
+  // for what it cost looks anywhere else.
+  "/construction": "Building",
 };
 
 /** The console's label, unless the bar cannot hold it. */

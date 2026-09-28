@@ -114,6 +114,15 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   { key: "expenses.view", label: "View expenses", group: "Money" },
   { key: "expenses.create", label: "Record expenses", group: "Money" },
   { key: "expenses.delete", label: "Delete expenses", group: "Money" },
+  /**
+   * The construction book is the owner's money, not the day's takings — who
+   * put money in towards building the place, what it went on, and what is in
+   * hand. Its own pair of permissions rather than the expense ones: a clerk
+   * who records the electricity bill has no business reading what the
+   * partners contributed.
+   */
+  { key: "construction.view", label: "View the construction book", group: "Money" },
+  { key: "construction.manage", label: "Record construction money", group: "Money" },
   { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
   { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
@@ -296,6 +305,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   Manager: [
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
     "payments.view", "payments.create", "expenses.view", "expenses.create",
+    "construction.view", "construction.manage",
     "rooms.view", "rooms.manage", "guests.view",
     "housekeeping.view", "housekeeping.manage",
     "restaurant.view", "restaurant.create", "restaurant.menu",

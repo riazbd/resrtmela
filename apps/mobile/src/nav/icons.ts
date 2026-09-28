@@ -38,6 +38,7 @@ const BY_HREF: Record<string, IconName> = {
   "/payments": "wallet-outline",
   "/guests": "account-group-outline",
   "/expenses": "receipt",
+  "/construction": "hammer-wrench",
   "/fb": "silverware-fork-knife",
   "/payroll": "cash-multiple",
   "/reports": "chart-bar",

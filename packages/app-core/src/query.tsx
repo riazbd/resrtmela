@@ -208,6 +208,9 @@ export const keys = {
   agentSalesDoc: (id: number) => ["agent", "sales", "doc", id] as const,
   agentGuests: (q?: unknown) => ["agent", "guests", q] as const,
   agentBookings: (q?: unknown) => ["agent", "bookings", q] as const,
+  /** The construction book — per resort, because the money is the resort's. */
+  construction: (resortId: number | undefined, q?: unknown) =>
+    ["construction", resortId ?? null, q] as const,
   // the resort is part of the question: a search narrowed to one resort
   // and a search across all of them are different answers
   agentRooms: (from: string, to: string, resortId?: number) =>

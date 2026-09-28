@@ -43,6 +43,7 @@ import { EngageService } from "../../src/engage/engage.service";
 import { TenancyService } from "../../src/tenancy/tenancy.service";
 import { ImportService } from "../../src/import/import.service";
 import { ExpensesService } from "../../src/expenses/expenses.service";
+import { ConstructionService } from "../../src/construction/construction.service";
 import { PayrollService } from "../../src/payroll/payroll.service";
 import { FbService } from "../../src/fb/fb.service";
 import { ReportsService } from "../../src/reports/reports.service";
@@ -271,6 +272,15 @@ export function makeExpensesService(prisma: PrismaService): ExpensesService {
     new PermissionsService(prisma),
     makeOptionsService(prisma),
     new TenantStateService(prisma),
+  );
+}
+
+export function makeConstructionService(prisma: PrismaService): ConstructionService {
+  return new ConstructionService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makeOptionsService(prisma),
   );
 }
 

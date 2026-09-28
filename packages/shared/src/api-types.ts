@@ -2830,3 +2830,94 @@ export interface AgencyMoneyReceived {
     note: string | null;
   }[];
 }
+
+/**
+ * The construction book — what a resort cost to build.
+ *
+ * Separate from the expense book on purpose: an expense is the cost of
+ * running a resort that is open, and this is the cost of building one that is
+ * not. Filed together, the roof would land in last month's profit and loss.
+ */
+export const CONSTRUCTION_KINDS = ["IN", "OUT"] as const;
+export type ConstructionKind = (typeof CONSTRUCTION_KINDS)[number];
+
+/** One line of the book: money in, or money out. */
+export interface ConstructionEntryRow {
+  id: number;
+  kind: string;
+  date: string | null;
+  amount: number;
+  /** The contributor's or the purpose's name as it read on the day. */
+  label: string;
+  contributorId: number | null;
+  purposeId: number | null;
+  /** OUT only: the shop, the contractor, the mason. */
+  paidTo: string | null;
+  /** A code from the resort's own PAYMENT_METHOD list. */
+  method: string | null;
+  note: string | null;
+  enteredBy: string | null;
+}
+
+/** A name with a total behind it — the answer to "who gave" or "what for". */
+export interface ConstructionTally {
+  name: string;
+  amount: number;
+  entries: number;
+}
+
+export interface ConstructionContributor {
+  id: number;
+  name: string;
+  note: string | null;
+}
+
+export interface ConstructionPurpose {
+  id: number;
+  name: string;
+}
+
+/**
+ * The whole screen in one read.
+ *
+ * `totals` answers for the whole book and never for the filter: "what is in
+ * hand" is one number about the resort, and narrowing the list to one mason
+ * must not change what the till holds.
+ */
+export interface ConstructionBook {
+  totals: { received: number; spent: number; inHand: number };
+  byContributor: ConstructionTally[];
+  byPurpose: ConstructionTally[];
+  contributors: ConstructionContributor[];
+  purposes: ConstructionPurpose[];
+  total: number;
+  rows: ConstructionEntryRow[];
+}
+
+/** What a new line of the book needs. */
+export interface ConstructionEntryInput {
+  kind: ConstructionKind;
+  date: string;
+  amount: number;
+  /** Choose an existing heading… */
+  contributorId?: number;
+  purposeId?: number;
+  /** …or type one that is not on the list yet, in the same box. */
+  contributorName?: string;
+  purposeName?: string;
+  paidTo?: string;
+  method?: string;
+  note?: string;
+  /** Offline identity: the same line replayed is still one line. */
+  clientRef?: string;
+}
+
+export interface ConstructionQuery {
+  kind?: string;
+  from?: string;
+  to?: string;
+  contributorId?: number;
+  purposeId?: number;
+  search?: string;
+  take?: number;
+}

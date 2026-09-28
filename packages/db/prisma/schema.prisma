@@ -254,40 +254,43 @@ model Resort {
   suspendedAt         DateTime?
   createdAt           DateTime  @default(now())
 
-  roomTypes        RoomType[]
-  agencyTerms      ResortAgency[]
+  roomTypes                RoomType[]
+  agencyTerms              ResortAgency[]
   /// what this resort publishes about itself, and the pictures it publishes
-  site             ResortSite?
-  domains          ResortDomain[]
-  webhooks         WebhookEndpoint[]
-  sitePhotos       ResortPhoto[]
-  uploads          Upload[]
-  rooms            Room[]
-  ratePlans        RatePlan[]
-  guests           Guest[]
-  bookings         Booking[]
-  activities       ActivityCatalog[]
-  userResorts      UserResort[]
-  auditLogs        AuditLog[]
-  counters         Counter[]
-  expenses         Expense[]
-  fbBills          FbBill[]
-  apiKeys          ApiKey[]
-  discountOffers   DiscountOffer[]
-  accessRequests   ResortAccess[]
-  roles            CustomRole[]
-  employees        Employee[]
-  foodPackages     FoodPackage[]
-  payrollPayments  PayrollPayment[]
-  messageTemplates MessageTemplate[]
-  options          ResortOption[]
-  taxRules         TaxRule[]
-  notificationJobs NotificationJob[]
-  paymentIntents   PaymentIntent[]
-  notifications    Notification[]
-  emailCampaigns   EmailCampaign[]
-  platformCharges  PlatformCharge[]
-  creditOrders     EmailCreditOrder[]
+  site                     ResortSite?
+  domains                  ResortDomain[]
+  webhooks                 WebhookEndpoint[]
+  sitePhotos               ResortPhoto[]
+  uploads                  Upload[]
+  rooms                    Room[]
+  ratePlans                RatePlan[]
+  guests                   Guest[]
+  bookings                 Booking[]
+  activities               ActivityCatalog[]
+  userResorts              UserResort[]
+  auditLogs                AuditLog[]
+  counters                 Counter[]
+  expenses                 Expense[]
+  fbBills                  FbBill[]
+  apiKeys                  ApiKey[]
+  discountOffers           DiscountOffer[]
+  accessRequests           ResortAccess[]
+  roles                    CustomRole[]
+  employees                Employee[]
+  foodPackages             FoodPackage[]
+  payrollPayments          PayrollPayment[]
+  messageTemplates         MessageTemplate[]
+  options                  ResortOption[]
+  taxRules                 TaxRule[]
+  notificationJobs         NotificationJob[]
+  paymentIntents           PaymentIntent[]
+  notifications            Notification[]
+  emailCampaigns           EmailCampaign[]
+  platformCharges          PlatformCharge[]
+  creditOrders             EmailCreditOrder[]
+  constructionEntries      ConstructionEntry[]
+  constructionContributors ConstructionContributor[]
+  constructionPurposes     ConstructionPurpose[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -337,34 +340,35 @@ model User {
   account       Tenant?    @relation("AccountUsers", fields: [accountId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
 
-  resorts           UserResort[]
-  createdBookings   Booking[]          @relation("BookingCreatedBy")
-  agentBookings     Booking[]          @relation("BookingAgent")
-  paymentsRecv      Payment[]          @relation("PaymentReceivedBy")
-  salesPaymentsRecv SalesPayment[]     @relation("SalesPaymentReceivedBy")
-  duesPaid          SubscriptionDue[]  @relation("DuePaidBy")
-  chargesPaid       PlatformCharge[]   @relation("ChargePaidBy")
-  roomsCleaned      Room[]             @relation("RoomCleanedBy")
-  deviceTokens      DeviceToken[]
-  walletTxnsMade    WalletTxn[]        @relation("WalletTxnBy")
-  auditLogs         AuditLog[]         @relation("AuditActor")
-  wallet            Wallet?
-  notifications     Notification[]
-  accessRequests    ResortAccess[]
-  uploads           Upload[]
-  emailCredits      EmailCredit?
-  creditOrders      EmailCreditOrder[]
-  campaigns         EmailCampaign[]
-  agentRoles        AgentRole[]        @relation("AgencyRoles")
-  agencyExpenses    Expense[]          @relation("AgencyExpenses")
-  agencyHeads       ExpenseHead[]      @relation("AgencyExpenseHeads")
-  agencyEmployees   Employee[]         @relation("AgencyEmployees")
-  agencyPayroll     PayrollPayment[]   @relation("AgencyPayroll")
-  agencyCounters    Counter[]          @relation("AgencyCounters")
-  tourCategories    TourCategory[]     @relation("AgencyTourCategories")
-  tourPackages      TourPackage[]      @relation("AgencyTourPackages")
-  salesDocs         SalesDoc[]         @relation("AgencySalesDocs")
-  passwordResets    PasswordReset[]
+  resorts             UserResort[]
+  createdBookings     Booking[]           @relation("BookingCreatedBy")
+  agentBookings       Booking[]           @relation("BookingAgent")
+  paymentsRecv        Payment[]           @relation("PaymentReceivedBy")
+  salesPaymentsRecv   SalesPayment[]      @relation("SalesPaymentReceivedBy")
+  duesPaid            SubscriptionDue[]   @relation("DuePaidBy")
+  chargesPaid         PlatformCharge[]    @relation("ChargePaidBy")
+  roomsCleaned        Room[]              @relation("RoomCleanedBy")
+  deviceTokens        DeviceToken[]
+  walletTxnsMade      WalletTxn[]         @relation("WalletTxnBy")
+  auditLogs           AuditLog[]          @relation("AuditActor")
+  wallet              Wallet?
+  notifications       Notification[]
+  accessRequests      ResortAccess[]
+  uploads             Upload[]
+  emailCredits        EmailCredit?
+  creditOrders        EmailCreditOrder[]
+  campaigns           EmailCampaign[]
+  agentRoles          AgentRole[]         @relation("AgencyRoles")
+  agencyExpenses      Expense[]           @relation("AgencyExpenses")
+  agencyHeads         ExpenseHead[]       @relation("AgencyExpenseHeads")
+  agencyEmployees     Employee[]          @relation("AgencyEmployees")
+  agencyPayroll       PayrollPayment[]    @relation("AgencyPayroll")
+  agencyCounters      Counter[]           @relation("AgencyCounters")
+  tourCategories      TourCategory[]      @relation("AgencyTourCategories")
+  tourPackages        TourPackage[]       @relation("AgencyTourPackages")
+  salesDocs           SalesDoc[]          @relation("AgencySalesDocs")
+  passwordResets      PasswordReset[]
+  constructionEntries ConstructionEntry[] @relation("ConstructionEntries")
 
   @@index([accountId])
   /// Not unique any more (2026-09-28) — see the note on the column. Indexed
@@ -2031,4 +2035,86 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_tokens")
+}
+
+/// Who put money in towards building the resort.
+///
+/// A list the resort owns rather than a name typed on each entry: the whole
+/// question is *who gave how much*, and "Karim", "karim" and "Karim bhai"
+/// are three people to a SUM and one person to everybody else. Same reason
+/// an agency's expense heads are a table.
+model ConstructionContributor {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(120)
+  note      String?  @db.VarChar(255)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  entries ConstructionEntry[]
+
+  @@unique([resortId, name])
+  @@map("construction_contributors")
+}
+
+/// What construction money was spent on — the resort's own list of headings.
+model ConstructionPurpose {
+  id        Int      @id @default(autoincrement())
+  resortId  Int
+  resort    Resort   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(120)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  entries ConstructionEntry[]
+
+  @@unique([resortId, name])
+  @@map("construction_purposes")
+}
+
+/// One line of the construction book: money in, or money out.
+///
+/// One table and not two, because the three questions the owner asked are
+/// one ledger read three ways — who gave how much, what it went on, and what
+/// is left. A balance computed across two tables is a balance that can be
+/// half-written; here it is one SUM with a sign.
+///
+/// `Decimal(14,2)` rather than the `(10,2)` the rest of this schema uses for
+/// money. Ten digits stops at just under ten crore, and a building is the
+/// one figure in this product that reaches it.
+model ConstructionEntry {
+  id            Int                      @id @default(autoincrement())
+  resortId      Int
+  resort        Resort                   @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  /// IN — somebody put money in. OUT — money was spent.
+  kind          String                   @db.VarChar(3)
+  date          DateTime                 @db.Date
+  amount        Decimal                  @db.Decimal(14, 2)
+  /// IN only: who gave it.
+  contributorId Int?
+  contributor   ConstructionContributor? @relation(fields: [contributorId], references: [id], onDelete: SetNull)
+  /// OUT only: what it was for.
+  purposeId     Int?
+  purpose       ConstructionPurpose?     @relation(fields: [purposeId], references: [id], onDelete: SetNull)
+  /// The contributor's or purpose's name as it read on the day. The link is
+  /// what the summaries group by, so renaming a heading renames it
+  /// everywhere; this keeps what an exported sheet should say.
+  label         String                   @db.VarChar(120)
+  /// OUT only: the shop, the contractor, the mason.
+  paidTo        String?                  @db.VarChar(160)
+  /// One of PAYMENT_METHODS in @rh/shared.
+  method        String                   @default("CASH") @db.VarChar(16)
+  note          String?                  @db.VarChar(255)
+  createdById   Int?
+  createdBy     User?                    @relation("ConstructionEntries", fields: [createdById], references: [id], onDelete: SetNull)
+  /// Offline identity: the same line replayed twice is still one line.
+  clientRef     String?                  @db.VarChar(64)
+  createdAt     DateTime                 @default(now())
+
+  @@unique([resortId, clientRef])
+  @@index([resortId, date])
+  @@index([contributorId])
+  @@index([purposeId])
+  @@map("construction_entries")
 }

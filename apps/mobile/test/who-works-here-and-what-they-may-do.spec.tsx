@@ -280,7 +280,10 @@ describe("what a role may do", () => {
     await waitFor(() => expect(r.getByText("Manager")).toBeTruthy());
     await fireEvent.press(r.getByLabelText("Manager, held by 1 of the team"));
     await waitFor(() => expect(r.getByText("Money")).toBeTruthy());
-    await fireEvent.press(r.getByLabelText("Money, 1 of 5 allowed"));
+    // matched rather than spelt out: the count is how many of the group's
+    // permissions this role holds, and adding one to Money — the construction
+    // book did, on 2026-09-28 — is not a fault in reaching the expense one
+    await fireEvent.press(r.getByLabelText(/^Money, \d+ of \d+ allowed$/));
     await waitFor(() => expect(r.getByRole("switch", { name: "Record expenses" })).toBeTruthy());
     await fireEvent.press(r.getByRole("switch", { name: "Record expenses" }));
     await fireEvent.press(r.getByRole("button", { name: "Save" }));
@@ -294,7 +297,10 @@ describe("what a role may do", () => {
     await waitFor(() => expect(r.getByText("Manager")).toBeTruthy());
     await fireEvent.press(r.getByLabelText("Manager, held by 1 of the team"));
     await waitFor(() => expect(r.getByText("Money")).toBeTruthy());
-    await fireEvent.press(r.getByLabelText("Money, 1 of 5 allowed"));
+    // matched rather than spelt out: the count is how many of the group's
+    // permissions this role holds, and adding one to Money — the construction
+    // book did, on 2026-09-28 — is not a fault in reaching the expense one
+    await fireEvent.press(r.getByLabelText(/^Money, \d+ of \d+ allowed$/));
     await waitFor(() => expect(r.getByRole("switch", { name: "View expenses" })).toBeTruthy());
     await fireEvent.press(r.getByRole("switch", { name: "View expenses" }));
     await fireEvent.press(r.getByRole("button", { name: "Save" }));

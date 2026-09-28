@@ -121,6 +121,13 @@ export const CONSOLE_NAV: readonly NavDestination[] = [
   { href: "/payments", labelKey: "nav.dues", roles: ["STAFF"], perm: "payments.view" },
   { href: "/guests", labelKey: "nav.guests", roles: ["STAFF"], perm: "guests.view" },
   { href: "/expenses", labelKey: "nav.expenses", roles: ["STAFF"], perm: "expenses.view" },
+  /**
+   * Beside the expenses because both are money going out, and separate from
+   * them because they are different books: an expense is the cost of running
+   * a resort that is open, and this is the cost of building one that is not.
+   * Filed together, the roof would land in last month's profit and loss.
+   */
+  { href: "/construction", label: "Construction", roles: ["MGMT"], perm: "construction.view" },
   { href: "/fb", labelKey: "nav.fb", roles: ["STAFF"], perm: "restaurant.view", feature: "restaurant" },
   { href: "/payroll", label: "Payroll", roles: ["PAYROLL"], perm: "payroll.view", feature: "payroll" },
   { href: "/reports", labelKey: "nav.reports", roles: ["STAFF"], perm: "reports.view" },

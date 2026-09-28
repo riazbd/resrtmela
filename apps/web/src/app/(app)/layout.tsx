@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe, KeyRound,
-  Brush, HelpCircle,
+  Brush, HelpCircle, HardHat,
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -54,6 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/payments": Wallet,
   "/guests": Users,
   "/expenses": Receipt,
+  "/construction": HardHat,
   "/fb": UtensilsCrossed,
   "/payroll": Banknote,
   "/reports": BarChart3,

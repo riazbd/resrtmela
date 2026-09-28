@@ -174,6 +174,12 @@ import type {
   Session,
   TaxRuleRow,
   TodayFeed,
+  ConstructionBook,
+  ConstructionContributor,
+  ConstructionEntryInput,
+  ConstructionEntryRow,
+  ConstructionPurpose,
+  ConstructionQuery,
 } from "./api-types";
 import type { AppRelease } from "./app-version";
 import type { DiscountKind } from "./discount";
@@ -693,6 +699,38 @@ export function createApiClient(http: Fetcher) {
     },
 
     // ── money ──
+    /**
+     * The construction book: what the building cost and what is left.
+     *
+     * Not `expenses`, and deliberately a different door. An expense is the
+     * cost of running a resort that is open; this is the cost of building one
+     * that is not, and the two share neither a screen, a permission nor a
+     * profit-and-loss line.
+     */
+    construction: {
+      /** Entries, both summaries, the totals and the pick-lists, in one read. */
+      book: (resortId: number, q: ConstructionQuery = {}) =>
+        http<ConstructionBook>(`/resorts/${resortId}/construction${qs({ ...q })}`),
+      add: (resortId: number, body: ConstructionEntryInput) =>
+        http<ConstructionEntryRow>(`/resorts/${resortId}/construction`, { method: "POST", body }),
+      update: (resortId: number, id: number, body: ConstructionEntryInput) =>
+        http<ConstructionEntryRow>(`/resorts/${resortId}/construction/${id}`, { method: "PATCH", body }),
+      remove: (resortId: number, id: number) =>
+        http<{ deleted: boolean }>(`/resorts/${resortId}/construction/${id}`, { method: "DELETE" }),
+      /** Somebody who is going to put money in, named before they do. */
+      addContributor: (resortId: number, name: string, note?: string) =>
+        http<ConstructionContributor>(`/resorts/${resortId}/construction/contributors`, {
+          method: "POST",
+          body: { name, note },
+        }),
+      /** A heading to file spending under. */
+      addPurpose: (resortId: number, name: string) =>
+        http<ConstructionPurpose>(`/resorts/${resortId}/construction/purposes`, {
+          method: "POST",
+          body: { name },
+        }),
+    },
+
     expenses: {
       list: (resortId: number, q: DateRange & { category?: string; scope?: string; skip?: number; take?: number } = {}) =>
         http<ExpensePage>(`/resorts/${resortId}/expenses${qs(q)}`),
