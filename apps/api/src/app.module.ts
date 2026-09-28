@@ -23,6 +23,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { ReportsModule } from "./reports/reports.module";
 import { ExpensesModule } from "./expenses/expenses.module";
 import { ConstructionModule } from "./construction/construction.module";
+import { AgentAccountsModule } from "./agent-accounts/agent-accounts.module";
 import { FbModule } from "./fb/fb.module";
 import { PlatformModule } from "./platform/platform.module";
 import { EngageModule } from "./engage/engage.module";
@@ -52,6 +53,7 @@ const ROOT_ENV = resolve(process.cwd(), "..", "..", ".env");
     ReportsModule,
     ExpensesModule,
     ConstructionModule,
+    AgentAccountsModule,
     FbModule,
     PlatformModule,
     EngageModule,

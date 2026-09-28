@@ -19,6 +19,7 @@ import { PermissionsService } from "../common/permissions";
 import { OptionsService } from "../options/options.service";
 import { TaxService } from "../common/tax.service";
 import { CommissionService } from "../common/commission.service";
+import { AgentAccountsService } from "../agent-accounts/agent-accounts.service";
 import { escapeHtml } from "../agent/sales-render";
 import { TenantStateService } from "../common/tenant-state.service";
 import type { BookingState } from "@rh/db";
@@ -156,6 +157,7 @@ export class BookingsService {
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(WebhookService) private readonly webhooks: WebhookService,
     @Inject(PushService) private readonly push: PushService,
+    @Inject(AgentAccountsService) private readonly agentAccounts: AgentAccountsService,
   ) {}
 
   // ── computed money (never stored — doc §5.2), one implementation for all callers ──
@@ -567,6 +569,17 @@ export class BookingsService {
     if (isAgent) {
       source = "AGENT";
       agentUserId = claims.userId;
+      /**
+       * Before the room is held, not after: an agency at its credit limit is
+       * one holding the resort's money, and the cheapest place to stop it is
+       * before a night is locked to its name.
+       *
+       * Answers yes for every resort that has not set a limit — which is all of
+       * them until somebody asks — so this changes nothing for anybody by
+       * existing. The refusal carries both figures, because "you have reached
+       * your limit" on its own sends an agent to the telephone.
+       */
+      await this.agentAccounts.assertMayBook(input.resortId, claims.userId);
     }
     // a source the resort offers, or none — the list is theirs, so is the check
     if (source) await this.options.assertAccepted(input.resortId, "BOOKING_SOURCE", source);

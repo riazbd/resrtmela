@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
 import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
@@ -30,7 +31,7 @@ type DueRow = DuesReport["rows"][number];
  */
 
 export default function PaymentsPage() {
-  const { activeResort, isStaff } = useAuth();
+  const { activeResort, isStaff, can } = useAuth();
   const { push } = useToast();
   const t = useT();
   const qc = useQueryClient();
@@ -92,9 +93,25 @@ export default function PaymentsPage() {
       {/**
        * Who to ring, and for how much. Four bookings from one agency are one
        * phone call, and this is the only place on the screen that says so.
+       *
+       * What it does *not* say is whether the agency is holding money already
+       * collected from those guests — that is the trade account, and it lives
+       * on its own screen because it is a different question with a different
+       * answer. An unpaid agency booking may be money still in the guest's
+       * pocket; an account balance is money one business owes another.
        */}
       {who === "Agencies" && data.byAgency.length > 0 && (
-        <Card className="!p-0" title="Due from each agency">
+        <Card
+          className="!p-0"
+          title="Due from each agency"
+          action={
+            can("settlement.view") ? (
+              <Link href="/agents" className="text-xs font-semibold text-brand-600 hover:underline">
+                Agent accounts →
+              </Link>
+            ) : undefined
+          }
+        >
           <div className="divide-y divide-slate-50">
             {data.byAgency.map((a) => (
               <div

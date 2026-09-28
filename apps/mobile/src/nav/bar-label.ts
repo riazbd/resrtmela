@@ -55,6 +55,13 @@ const SHORTER: Record<string, string> = {
   // "Construction" is twelve. The building is the thing, and nobody looking
   // for what it cost looks anywhere else.
   "/construction": "Building",
+  // "Agent accounts" is fourteen. What the bar has room for is who it is
+  // about; the screen itself says it is the account and not the bookings.
+  "/agents": "Agents",
+  // "Resort accounts" is fifteen, and on an agent's bar every other entry is
+  // already about resorts — so the word that distinguishes this one is the
+  // money, not the supplier.
+  "/agent/account": "Accounts",
 };
 
 /** The console's label, unless the bar cannot hold it. */

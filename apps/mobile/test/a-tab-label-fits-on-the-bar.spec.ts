@@ -62,9 +62,9 @@ describe("what a tab can be called", () => {
   it("shortens only where it must, and says so by leaving the rest alone", () => {
     const changed = destinations.filter((d) => barLabel(d.href, labelOf(d)) !== labelOf(d));
     // a short list, and every entry on it is a label the bar cannot hold.
-    // Seven since 2026-09-28: "My bookings" is eleven characters and
-    // "Construction" is twelve, so each has a shorter name for the bar.
-    expect(changed.length).toBeLessThan(8);
+    // Nine since 2026-09-28: the two agent-account screens joined it —
+    // "Agent accounts" is fourteen characters and "Resort accounts" fifteen.
+    expect(changed.length).toBeLessThan(10);
     for (const d of changed) expect(labelOf(d).length).toBeGreaterThan(BAR_LIMIT);
   });
 });

@@ -175,6 +175,15 @@ import type {
   TaxRuleRow,
   TodayFeed,
   ConstructionBook,
+  AgentAccountList,
+  AgentAccountTotals,
+  AgentStatement,
+  AgentReceivedInput,
+  AgentEntryInput,
+  AgentCollectInput,
+  AgentDeclareInput,
+  AgentEarnings,
+  MyAccountList,
   ConstructionContributor,
   ConstructionEntryInput,
   ConstructionEntryRow,
@@ -731,6 +740,49 @@ export function createApiClient(http: Fetcher) {
         }),
     },
 
+    /**
+     * The running account between this resort and each agent who sells it.
+     *
+     * Separate from `dues`, which is about bookings: that screen says an
+     * agency's stays are short, and this one says whether the agency is holding
+     * the resort's money, owed commission, or square. Two questions about the
+     * same agency, acted on differently.
+     */
+    agentAccounts: {
+      list: (resortId: number) =>
+        http<AgentAccountList>(`/resorts/${resortId}/agent-accounts`),
+      statement: (resortId: number, agencyId: number, q: DateRange = {}) =>
+        http<AgentStatement>(`/resorts/${resortId}/agent-accounts/${agencyId}${qs({ ...q })}`),
+      /** The twenty-second door: what came in, and what the agent kept. */
+      received: (resortId: number, agencyId: number, body: AgentReceivedInput) =>
+        http<AgentAccountTotals & { replayed: boolean }>(
+          `/resorts/${resortId}/agent-accounts/${agencyId}/received`,
+          { method: "POST", body },
+        ),
+      entry: (resortId: number, agencyId: number, body: AgentEntryInput) =>
+        http<AgentAccountTotals & { id: string; replayed: boolean }>(
+          `/resorts/${resortId}/agent-accounts/${agencyId}/entries`,
+          { method: "POST", body },
+        ),
+      /** Null clears it, and null is what every account starts as. */
+      setLimit: (resortId: number, agencyId: number, creditLimit: number | null) =>
+        http<{ creditLimit: number | null }>(
+          `/resorts/${resortId}/agent-accounts/${agencyId}/limit`,
+          { method: "PUT", body: { creditLimit } },
+        ),
+      /** Matching a declared remittance against the money that arrived. */
+      confirm: (resortId: number, entryId: string) =>
+        http<AgentAccountTotals & { confirmed: boolean }>(
+          `/resorts/${resortId}/agent-accounts/entries/${entryId}/confirm`,
+          { method: "PATCH" },
+        ),
+      remove: (resortId: number, entryId: string) =>
+        http<AgentAccountTotals & { removed: boolean }>(
+          `/resorts/${resortId}/agent-accounts/entries/${entryId}`,
+          { method: "DELETE" },
+        ),
+    },
+
     expenses: {
       list: (resortId: number, q: DateRange & { category?: string; scope?: string; skip?: number; take?: number } = {}) =>
         http<ExpensePage>(`/resorts/${resortId}/expenses${qs(q)}`),
@@ -1113,6 +1165,40 @@ export function createApiClient(http: Fetcher) {
     agent: {
       me: () => http<{ agencyId: number; isOwner: boolean; permissions: string[] }>("/agent/me"),
       wallet: () => http<AgencyWallet>("/agent/wallet"),
+
+      /**
+       * The trade account with each resort — **not** the wallet above it.
+       *
+       * The wallet is money deposited with the *platform* for subscriptions and
+       * email credits. This is what a supplier and a reseller owe each other,
+       * and the figure an agency rings a resort about at month end. Two
+       * different pockets, and a screen that confused them would be worse than
+       * no screen.
+       */
+      accounts: {
+        list: () => http<MyAccountList>("/agent/accounts"),
+        statement: (resortId: number, q: DateRange = {}) =>
+          http<AgentStatement>(`/agent/accounts/${resortId}${qs({ ...q })}`),
+        /** What selling earned this month, read off the ledger, never recomputed. */
+        earnings: (month?: string) =>
+          http<AgentEarnings>(`/agent/accounts/earnings${qs({ month })}`),
+        /** "I sent it by bKash, here is the TrxID." Pending until the resort matches it. */
+        declare: (resortId: number, body: AgentDeclareInput) =>
+          http<{ id: string; replayed: boolean; status: string }>(
+            `/agent/accounts/${resortId}/declare`,
+            { method: "POST", body },
+          ),
+        withdraw: (entryId: string) =>
+          http<{ withdrawn: boolean }>(`/agent/accounts/declarations/${entryId}`, {
+            method: "DELETE",
+          }),
+        /** "I took money from the guest." Written on the booking, so the desk knows. */
+        collect: (bookingId: number, body: AgentCollectInput) =>
+          http<AgentAccountTotals & { replayed: boolean; amount: number }>(
+            `/agent/bookings/${bookingId}/collect`,
+            { method: "POST", body },
+          ),
+      },
 
       /**
        * Who works at the agency, and on what role.

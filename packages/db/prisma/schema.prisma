@@ -163,6 +163,15 @@ model ResortAgency {
   blocked        Boolean  @default(false)
   commissionKind String?  @db.VarChar(8)
   commissionRate Decimal? @db.Decimal(10, 2)
+  /// How much of the resort's money this agency may be holding before it stops
+  /// being able to book.
+  ///
+  /// Null — the default — means no limit, so nothing changes for a resort that
+  /// never asks for one. Where it is set, a balance at or above it refuses the
+  /// next booking with the figure in the sentence. This is where money is
+  /// actually lost in this trade: an agency collects two lakh from guests,
+  /// remits none of it, and keeps booking rooms.
+  creditLimit    Decimal? @db.Decimal(14, 2)
   updatedAt      DateTime @updatedAt
 
   @@unique([resortId, accountId])
@@ -291,6 +300,7 @@ model Resort {
   constructionEntries      ConstructionEntry[]
   constructionContributors ConstructionContributor[]
   constructionPurposes     ConstructionPurpose[]
+  agentAccountEntries      AgentAccountEntry[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -369,6 +379,10 @@ model User {
   salesDocs           SalesDoc[]          @relation("AgencySalesDocs")
   passwordResets      PasswordReset[]
   constructionEntries ConstructionEntry[] @relation("ConstructionEntries")
+  paymentsCollected   Payment[]           @relation("PaymentCollectedByAgent")
+  agentAccountLines   AgentAccountEntry[] @relation("AgentAccountLines")
+  agentEntriesMade    AgentAccountEntry[] @relation("AgentAccountEntryBy")
+  agentEntriesOkd     AgentAccountEntry[] @relation("AgentAccountEntryConfirmedBy")
 
   @@index([accountId])
   /// Not unique any more (2026-09-28) — see the note on the column. Indexed
@@ -700,10 +714,11 @@ model Booking {
   updatedAt       DateTime     @updatedAt
   deletedAt       DateTime? // soft delete; never hard-delete history
 
-  items    BookingItem[]
-  payments Payment[]
-  intents  PaymentIntent[]
-  fbBills  FbBill[]
+  items               BookingItem[]
+  payments            Payment[]
+  intents             PaymentIntent[]
+  fbBills             FbBill[]
+  agentAccountEntries AgentAccountEntry[]
 
   @@unique([resortId, code])
   /// A VAT invoice with a duplicated serial is a problem with the VAT office,
@@ -818,10 +833,10 @@ model ActivitySlot {
 // ───────────────────────── Money ─────────────────────────
 
 model Payment {
-  id           Int         @id @default(autoincrement())
-  bookingId    Int
-  booking      Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  amount       Decimal     @db.Decimal(10, 2)
+  id                 Int         @id @default(autoincrement())
+  bookingId          Int
+  booking            Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount             Decimal     @db.Decimal(10, 2)
   /// A code from the resort's own PAYMENT_METHOD list, or null.
   ///
   /// Nullable since 2026-09-13. This was `@default("CASH")` and the importer
@@ -831,21 +846,131 @@ model Payment {
   /// thing, where a defaulted CASH was indistinguishable from cash somebody
   /// counted. The desk still requires one: `payments.create` puts every
   /// method through `assertAccepted`.
-  method       String?     @db.VarChar(24)
-  paymentType  PaymentType @default(ADVANCE)
-  receivedById Int?
-  receivedBy   User?       @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
-  receivedAt   DateTime    @default(now())
-  note         String?     @db.VarChar(255)
+  method             String?     @db.VarChar(24)
+  paymentType        PaymentType @default(ADVANCE)
+  receivedById       Int?
+  receivedBy         User?       @relation("PaymentReceivedBy", fields: [receivedById], references: [id])
+  /// The agent who took this money from the guest, when it was not the resort.
+  ///
+  /// `receivedById` is whoever *recorded* it, which on an agency booking is
+  /// often somebody at the resort typing up a phone call. Those are two
+  /// different people and the difference is the whole trade account: money an
+  /// agent is holding is money the resort has not got yet, and money the desk
+  /// counted is money in the till.
+  ///
+  /// One nullable column rather than a row in the agent ledger, because
+  /// `payments` is already the resort's record of money arriving and a second
+  /// copy of the same fact is two tables that disagree by the end of the month.
+  collectedByAgentId Int?
+  collectedByAgent   User?       @relation("PaymentCollectedByAgent", fields: [collectedByAgentId], references: [id], onDelete: SetNull)
+  receivedAt         DateTime    @default(now())
+  note               String?     @db.VarChar(255)
   /// client-generated id for a write that may be replayed (offline front desk)
-  clientRef    String?     @db.VarChar(64)
+  clientRef          String?     @db.VarChar(64)
 
   /// the guard against a replayed payment becoming a second receipt: scoped to
   /// the booking, so two devices cannot collide across different stays
   @@unique([bookingId, clientRef])
   @@index([bookingId])
   @@index([receivedAt])
+  @@index([collectedByAgentId])
   @@map("payments")
+}
+
+/// One line in the running account between a resort and an agent.
+///
+/// **The account is the invariant; how a line gets written is not.** The owner
+/// asked for a system that works "formal, informal shob vabei" — the same
+/// account reached by a twenty-second form after a phone call, or by an agent
+/// declaring a bKash transfer and the resort matching it. No door is
+/// mandatory, and a resort that only ever uses the quickest one still ends up
+/// with a complete account.
+///
+/// **What is not here: the guest's money.** That an agent collected from a
+/// guest is `Payment.collectedByAgentId`, one nullable column on the row that
+/// already records money arriving. A second copy of the same fact would be two
+/// tables that disagree by the end of the month. So the balance is
+///
+///     Σ payments this agency collected  +  Σ these entries
+///
+/// and **positive means the agent owes the resort, negative the reverse.**
+/// Bookings are not in it: an agent owes the resort the money they *took*, so
+/// a guest who pays at the counter leaves the agent owing nothing and owed
+/// their commission.
+model AgentAccountEntry {
+  id       BigInt @id @default(autoincrement())
+  resortId Int
+  resort   Resort @relation(fields: [resortId], references: [id], onDelete: Cascade)
+
+  /// The agency, named by its owner's user id.
+  ///
+  /// Not the `tenants` row, because that is not how this codebase says "belongs
+  /// to this agency" anywhere else — `Expense.agencyId`, `Employee.agencyId`
+  /// and `SalesDoc.agencyId` are all the owner's user, and `AgencyContext`
+  /// hands every agency-side service exactly that number. It also makes a lone
+  /// agent no special case: `parentAgentId ?? id` is the owner of a one-person
+  /// agency as much as of a twenty-person one.
+  ///
+  /// An agency's staff all settle through the agency, so a booking a clerk
+  /// sold lands on the agency's account and never on the clerk.
+  agencyId Int
+  agency   User @relation("AgentAccountLines", fields: [agencyId], references: [id], onDelete: Cascade)
+
+  /// REMIT | COMMISSION | COMMISSION_PAID | ADVANCE | ADJUSTMENT
+  /// (AGENT_ENTRY_KINDS in @rh/shared)
+  kind String @db.VarChar(20)
+
+  /// Signed: positive makes the agent owe more, negative less.
+  ///
+  /// Signed rather than a kind plus a positive figure — the shape the
+  /// construction book uses — because `ADJUSTMENT` runs both ways, and because
+  /// a balance assembled from two conditional sums can be half-written where
+  /// one SUM cannot. The sign is checked against the kind on the way in.
+  /// `wallet_txns` stores signed amounts for the same reason.
+  amount Decimal  @db.Decimal(14, 2)
+  date   DateTime @db.Date
+
+  /// The booking this is about, where it is about one. Commission always is;
+  /// a month-end remittance covering forty stays is about none of them.
+  bookingId Int?
+  booking   Booking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  /// a code from the resort's own PAYMENT_METHOD list, for money that moved
+  method String? @db.VarChar(24)
+  /// The bKash, Nagad or bank reference. Every settlement argument in this
+  /// country is ended by one of these, so the box is there to be filled.
+  trxId  String? @db.VarChar(64)
+  note   String? @db.VarChar(255)
+
+  /// COMMISSION only: the terms as they read on the day.
+  ///
+  /// Written down rather than recomputed, so a resort raising its rate in
+  /// November does not restate October — the rule already applied to a sales
+  /// quotation and to a construction heading's label.
+  rateKind String?  @db.VarChar(8)
+  rate     Decimal? @db.Decimal(10, 2)
+
+  /// PENDING | CONFIRMED. An agent may *declare* a remittance and never
+  /// confirm one: an agent writing "I paid you" straight into the resort's
+  /// books is not a ledger. A PENDING row is outside the balance and shown as
+  /// awaiting confirmation — the idiom `cancelState` already uses, where the
+  /// agent asks and the resort agrees.
+  status String @default("CONFIRMED") @db.VarChar(12)
+
+  createdById   Int?
+  createdBy     User?     @relation("AgentAccountEntryBy", fields: [createdById], references: [id], onDelete: SetNull)
+  confirmedById Int?
+  confirmedBy   User?     @relation("AgentAccountEntryConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedAt   DateTime?
+
+  /// client-generated id for a write that may be replayed, as payments have
+  clientRef String?  @db.VarChar(64)
+  createdAt DateTime @default(now())
+
+  @@unique([resortId, clientRef])
+  @@index([resortId, agencyId])
+  @@index([bookingId])
+  @@map("agent_account_entries")
 }
 
 // ───────────────────────── Platform ops ─────────────────────────

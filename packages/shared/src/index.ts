@@ -46,6 +46,7 @@ export * from "./booking-sort";
 export * from "./new-booking";
 export * from "./quote-bill";
 export * from "./housekeeping";
+export * from "./agent-account";
 
 /** Cross-app constants shared by the API and the console. */
 
@@ -123,6 +124,17 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
    */
   { key: "construction.view", label: "View the construction book", group: "Money" },
   { key: "construction.manage", label: "Record construction money", group: "Money" },
+  /**
+   * An agency's trade account — what they are holding of ours, what we owe
+   * them in commission, and the settlement.
+   *
+   * Not the front desk's, for the same reason as the construction book: the
+   * desk collects from a departing guest, and what an agency owes across forty
+   * stays is a conversation between two businesses. The desk learns everything
+   * it needs from the booking's own due once a collection is recorded on it.
+   */
+  { key: "settlement.view", label: "View agent accounts", group: "Money" },
+  { key: "settlement.manage", label: "Settle with agents", group: "Money" },
   { key: "rooms.view", label: "View rooms & rates", group: "Inventory" },
   { key: "rooms.manage", label: "Manage rooms, types & rates", group: "Inventory" },
   { key: "rooms.delete", label: "Remove rooms from the inventory", group: "Inventory" },
@@ -164,6 +176,16 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
   // agent portal
   { key: "agent.book", label: "Book for guests", group: "Agent portal" },
   { key: "agent.wallet.view", label: "See the agency wallet", group: "Agent portal" },
+  /**
+   * The trade account with each resort — not the wallet above it, which is
+   * money deposited with the platform. Three keys rather than one, because
+   * they are trusted differently: reading the statement is bookkeeping, taking
+   * a guest's money is part of selling a room, and declaring that ৳90,000 left
+   * the agency's bKash is the owner's word.
+   */
+  { key: "agent.account.view", label: "See the resort accounts", group: "Agent portal" },
+  { key: "agent.collect", label: "Take money from a guest", group: "Agent portal" },
+  { key: "agent.remit", label: "Tell a resort money was sent", group: "Agent portal" },
   { key: "agent.staff.manage", label: "Add & manage agency staff", group: "Agent portal" },
   { key: "agent.staff.password", label: "Set a staff member's password", group: "Agent portal" },
   { key: "agent.auditlog.view", label: "See the agency activity log", group: "Agent portal" },
@@ -187,6 +209,18 @@ export const PERMISSIONS: { key: string; label: string; group: string }[] = [
 export const AGENT_PERMISSIONS = [
   "agent.book",
   "agent.wallet.view",
+  /**
+   * The agency's own side of the running account with each resort: the
+   * balance, the statement, and declaring a payment sent.
+   *
+   * `agent.collect` — taking money from a guest on a booking of ours — is
+   * separate from `agent.remit`, because they are trusted differently. A
+   * counter clerk who may sell a room handles its money; deciding that ৳90,000
+   * left the agency's bKash is the owner's word, not the clerk's.
+   */
+  "agent.account.view",
+  "agent.collect",
+  "agent.remit",
   "agent.staff.manage",
   "agent.staff.password",
   "agent.auditlog.view",
@@ -306,6 +340,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
     "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.walkin",
     "payments.view", "payments.create", "expenses.view", "expenses.create",
     "construction.view", "construction.manage",
+    "settlement.view", "settlement.manage",
     "rooms.view", "rooms.manage", "guests.view",
     "housekeeping.view", "housekeeping.manage",
     "restaurant.view", "restaurant.create", "restaurant.menu",
@@ -333,7 +368,12 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
    * signed in to an app with no screens in it at all.
    */
   Housekeeping: ["housekeeping.view", "housekeeping.manage", "rooms.view"],
-  Agent: ["agent.book", "agent.wallet.view"],
+  /**
+   * An agency's staff. The owner holds everything by being the owner, so this
+   * is the *less* that staff can be given — and reading your own account and
+   * taking a guest's money are part of selling a room, not extras on top of it.
+   */
+  Agent: ["agent.book", "agent.wallet.view", "agent.account.view", "agent.collect"],
   "Agency owner": [...AGENT_PERMISSIONS],
 };
 

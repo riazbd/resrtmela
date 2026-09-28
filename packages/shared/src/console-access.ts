@@ -108,6 +108,15 @@ export const CONSOLE_NAV: readonly NavDestination[] = [
   { href: "/agent/guests", label: "Guests", roles: ["AGENT"], perm: "agent.guests.view" },
   { href: "/agent/expenses", label: "Expenses", roles: ["AGENT"], perm: "agent.expenses.manage" },
   { href: "/agent/payroll", label: "Payroll", roles: ["AGENT"], perm: "agent.payroll.manage" },
+  /**
+   * The running account with each resort: what we owe them, what they owe us.
+   *
+   * Beside the Wallet and not the same thing, which is the distinction the
+   * whole screen exists to draw. The Wallet is money deposited with the
+   * *platform* for subscriptions and email credits. This is the trade account
+   * with a supplier — the number an agency rings a resort about at month end.
+   */
+  { href: "/agent/account", label: "Resort accounts", roles: ["AGENT"], perm: "agent.account.view" },
   { href: "/agent/wallet", label: "Wallet", roles: ["AGENT"], perm: "agent.wallet.view" },
   { href: "/agent/team", label: "My team", roles: ["AGENT"], perm: "agent.staff.manage" },
   // sold on the agency's own plan (2026-09-17): hidden when the plan leaves them out
@@ -119,6 +128,14 @@ export const CONSOLE_NAV: readonly NavDestination[] = [
   { href: "/calendar", labelKey: "nav.calendar", roles: ["*"], perm: "bookings.view" },
   { href: "/bookings", labelKey: "nav.bookings", roles: ["*"], perm: "bookings.view" },
   { href: "/payments", labelKey: "nav.dues", roles: ["STAFF"], perm: "payments.view" },
+  /**
+   * After the Dues, because it answers the question the Dues screen raises and
+   * cannot finish: that screen says an agency's bookings are short, and this
+   * one says whether the agency is holding our money, owed commission, or
+   * square. Two different questions about the same agency, and the resort acts
+   * on them differently.
+   */
+  { href: "/agents", label: "Agent accounts", roles: ["MGMT"], perm: "settlement.view" },
   { href: "/guests", labelKey: "nav.guests", roles: ["STAFF"], perm: "guests.view" },
   { href: "/expenses", labelKey: "nav.expenses", roles: ["STAFF"], perm: "expenses.view" },
   /**

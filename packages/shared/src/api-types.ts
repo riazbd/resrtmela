@@ -2921,3 +2921,140 @@ export interface ConstructionQuery {
   search?: string;
   take?: number;
 }
+
+// ───────────────────── the account between a resort and an agent ─────────────
+
+/**
+ * One line of a statement, on either client.
+ *
+ * `amount` is signed the way it moves the balance: positive makes the agent owe
+ * more, negative less. The screens never re-derive that — they render
+ * `agentEntryLabel(kind)` and the figure.
+ */
+export interface AgentAccountRow {
+  id: string;
+  kind: string;
+  amount: number;
+  date: string;
+  status: string;
+  booking: { id: number; code: string } | null;
+  method: string | null;
+  methodLabel: string | null;
+  trxId: string | null;
+  note: string | null;
+  rateKind: string | null;
+  rate: number | null;
+  by: string | null;
+  confirmedBy: string | null;
+}
+
+/** The pieces of a balance, as `agentBalance` folds them. */
+export interface AgentAccountTotals {
+  /** positive: the agent owes the resort; negative: the resort owes the agent */
+  balance: number;
+  collected: number;
+  remitted: number;
+  commission: number;
+  commissionPaid: number;
+  advances: number;
+  adjustments: number;
+  /** declared by the agent and not yet matched — deliberately outside `balance` */
+  pending: number;
+}
+
+/** One agency, as the resort's list shows it. */
+export interface AgentAccountSummary extends AgentAccountTotals {
+  agencyId: number;
+  name: string;
+  accountId: number | null;
+  creditLimit: number | null;
+  overLimit: boolean;
+  bookings: number;
+}
+
+export interface AgentAccountList {
+  rows: AgentAccountSummary[];
+  owedToResort: number;
+  owedToAgents: number;
+  pending: number;
+}
+
+/** One account in full: the same document both sides print. */
+export interface AgentStatement extends AgentAccountTotals {
+  resort: { id: number; name: string; timezone: string; currency: string; locale: string };
+  agency: {
+    agencyId: number;
+    name: string;
+    contact: string;
+    phone: string | null;
+    email: string | null;
+  };
+  terms: { kind: string; rate: number };
+  creditLimit: number | null;
+  overLimit: boolean;
+  /** the methods this resort actually takes, so a form cannot offer bKash to a resort that does not */
+  methods: { code: string; label: string }[];
+  rows: AgentAccountRow[];
+}
+
+/** One resort, as the agency's own list shows it. */
+export interface MyAccountRow extends AgentAccountTotals {
+  resort: { id: number; name: string; currency: string; locale: string };
+  bookings: number;
+  creditLimit: number | null;
+}
+
+export interface MyAccountList {
+  rows: MyAccountRow[];
+  owedByMe: number;
+  owedToMe: number;
+  pending: number;
+}
+
+/** "The agent sent this much and kept that much." One form, three facts. */
+export interface AgentReceivedInput {
+  amount: number;
+  commission?: number;
+  bookingId?: number;
+  method: string;
+  trxId?: string;
+  date?: string;
+  note?: string;
+  clientRef?: string;
+}
+
+/** A single line: a remittance, a commission, a payout, an advance, a correction. */
+export interface AgentEntryInput {
+  kind: string;
+  /** signed only for ADJUSTMENT; every other kind is forced to its direction */
+  amount: number;
+  bookingId?: number;
+  method?: string;
+  trxId?: string;
+  date?: string;
+  note?: string;
+  clientRef?: string;
+}
+
+export interface AgentCollectInput {
+  amount: number;
+  method: string;
+  date?: string;
+  note?: string;
+  clientRef?: string;
+}
+
+export interface AgentDeclareInput {
+  amount: number;
+  method: string;
+  trxId?: string;
+  date?: string;
+  note?: string;
+  clientRef?: string;
+}
+
+export interface AgentEarnings {
+  month: string;
+  commission: number;
+  bookings: number;
+}

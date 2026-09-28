@@ -27,6 +27,9 @@ const BY_HREF: Record<string, IconName> = {
   "/agent/expenses": "receipt",
   "/agent/payroll": "cash-multiple",
   "/agent/wallet": "wallet-outline",
+  // a ledger between two businesses, not the wallet above it — a different
+  // picture, because the two screens sit next to each other in More
+  "/agent/account": "notebook-outline",
   "/agent/team": "account-multiple-outline",
   "/agent/website": "web",
   "/agent/api": "key-outline",
@@ -39,6 +42,7 @@ const BY_HREF: Record<string, IconName> = {
   "/guests": "account-group-outline",
   "/expenses": "receipt",
   "/construction": "hammer-wrench",
+  "/agents": "handshake-outline",
   "/fb": "silverware-fork-knife",
   "/payroll": "cash-multiple",
   "/reports": "chart-bar",

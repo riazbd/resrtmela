@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ScrollText, LayoutDashboard, CalendarDays, BedDouble, Wallet, Users, Receipt,
   UtensilsCrossed, BarChart3, Building2, Compass, Upload, User, Settings, Globe, KeyRound,
-  Brush, HelpCircle, HardHat,
+  Brush, HelpCircle, HardHat, Handshake, NotebookText,
   Bell, Mail, MapPin as MapIcon, Menu, Banknote, Plus, Package, FileText, Search,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -42,6 +42,9 @@ const ICONS: Record<string, LucideIcon> = {
   "/agent/guests": Users,
   "/agent/expenses": Receipt,
   "/agent/payroll": Banknote,
+  // a ledger between two businesses, not the wallet above it — a different
+  // picture, because the two sit next to each other in the sidebar
+  "/agent/account": NotebookText,
   "/agent/wallet": Wallet,
   "/agent/team": Users,
   "/agent/website": Globe,
@@ -55,6 +58,7 @@ const ICONS: Record<string, LucideIcon> = {
   "/guests": Users,
   "/expenses": Receipt,
   "/construction": HardHat,
+  "/agents": Handshake,
   "/fb": UtensilsCrossed,
   "/payroll": Banknote,
   "/reports": BarChart3,

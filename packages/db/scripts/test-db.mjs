@@ -70,6 +70,17 @@ const run = (args, input) =>
     input,
     shell: true,
     stdio: ["pipe", "inherit", "inherit"],
+    /**
+     * **`prisma db push` has no `--url`.** It reads the datasource from the
+     * environment, and `packages/db/.env` names the *development* database — so
+     * until 2026-09-28 this script printed "building resorthub_test" and then
+     * pushed the schema to `resorthub`, leaving the test database a version
+     * behind. It went unnoticed because a test database built correctly once
+     * stays correct until the schema changes, and then every spec touching the
+     * new table fails with "the table does not exist" while the script reports
+     * success.
+     */
+    env: { ...process.env, DATABASE_URL: url },
   });
 
 console.log(`building ${url.replace(/:[^:@/]+@/, ":***@")}`);

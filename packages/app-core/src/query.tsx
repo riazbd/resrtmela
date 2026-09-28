@@ -211,6 +211,22 @@ export const keys = {
   /** The construction book — per resort, because the money is the resort's. */
   construction: (resortId: number | undefined, q?: unknown) =>
     ["construction", resortId ?? null, q] as const,
+  /**
+   * The accounts between a resort and the agents who sell it.
+   *
+   * Two shapes, one prefix, so settling with one agency can invalidate the list
+   * behind it without naming every key: writing a line changes both what that
+   * agency's statement says and where they sit in the resort's list.
+   */
+  agentAccounts: (resortId: number | undefined) =>
+    ["agentAccounts", resortId ?? null] as const,
+  agentStatement: (resortId: number | undefined, agencyId: number | undefined, q?: unknown) =>
+    ["agentAccounts", resortId ?? null, "statement", agencyId ?? null, q] as const,
+  /** The agency's own side: every resort it has an account with. */
+  myAccounts: () => ["myAccounts"] as const,
+  myStatement: (resortId: number | undefined, q?: unknown) =>
+    ["myAccounts", resortId ?? null, q] as const,
+  myEarnings: (month: string) => ["myAccounts", "earnings", month] as const,
   // the resort is part of the question: a search narrowed to one resort
   // and a search across all of them are different answers
   agentRooms: (from: string, to: string, resortId?: number) =>

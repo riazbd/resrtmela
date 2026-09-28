@@ -328,7 +328,7 @@ function TheInvoice({ booking, onIssued }: { booking: BookingDetail; onIssued: (
  */
 function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void }) {
   const desk = useStayDesk();
-  const { role } = useAuth();
+  const { role, can } = useAuth();
   const [refused, setRefused] = useState<string | null>(null);
   const [asking, setAsking] = useState<NextState | null>(null);
 
@@ -376,13 +376,20 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
    */
   const mayChange = canEditStay({ role: role ?? "", state: booking.state }).allowed;
   /**
-   * Money at this counter is the resort's to take. `payments.create` is a
-   * resort permission and an agency holds none of them, so offering it here
-   * was a button that answered 403. What an agency owes the resort is
-   * settled between them, not on the guest's booking.
+   * Two doors to the same money, and which one you get depends on whose till
+   * it lands in.
+   *
+   * `payments.create` is a resort permission — the desk counting cash into the
+   * resort's till — and an agency holds none of them, so offering it to an
+   * agent was a button that answered 403. But an agent takes guest money all
+   * the time; it goes into *their* pocket and the resort is owed it. That is
+   * `agent.collect`, which writes the same payment marked as collected by the
+   * agent, so the desk stops asking a guest who has already paid and the
+   * agency's account shows what they are holding.
    */
   const isAgent = role === "AGENT";
   const mayTakeMoney = !isAgent && booking.due > 0;
+  const mayCollect = isAgent && can("agent.collect") && booking.due > 0;
   /**
    * An agency's only move: ask. `cancelState` is the queue the resort
    * answers from, so a second press while one is waiting would be a second
@@ -390,7 +397,7 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
    */
   const mayAskToCancel =
     isAgent && booking.cancelState === "NONE" && LIVE_FOR_AN_AGENCY.includes(booking.state);
-  if (ahead.length === 0 && !mayTakeMoney && !mayChange && !mayAskToCancel) return null;
+  if (ahead.length === 0 && !mayTakeMoney && !mayCollect && !mayChange && !mayAskToCancel) return null;
 
   return (
     <View style={styles.desk}>
@@ -436,6 +443,14 @@ function Desk({ booking, onDone }: { booking: BookingDetail; onDone: () => void 
               kind={ahead.length > 0 ? "ghost" : "primary"}
               block={false}
               onPress={() => router.push(`/bookings/${booking.id}/pay` as never)}
+            />
+          ) : null}
+          {mayCollect ? (
+            <Button
+              label="Money from the guest"
+              kind={ahead.length > 0 ? "ghost" : "primary"}
+              block={false}
+              onPress={() => router.push(`/agent/collect?booking=${booking.id}` as never)}
             />
           ) : null}
           {mayAskToCancel ? (

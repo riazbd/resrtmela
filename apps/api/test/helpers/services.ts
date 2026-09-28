@@ -34,6 +34,9 @@ import { PaymentsService } from "../../src/payments/payments.service";
 import { TemplatesService } from "../../src/notifications/templates.service";
 import { AgentService } from "../../src/agent/agent.service";
 import { AgencyContextService } from "../../src/agent/agency-context.service";
+import { AgentAccountsService } from "../../src/agent-accounts/agent-accounts.service";
+import { SettleService } from "../../src/agent-accounts/settle.service";
+import { MyAccountsService } from "../../src/agent-accounts/my-accounts.service";
 import { ToursService } from "../../src/agent/tours.service";
 import { BooksService } from "../../src/agent/books.service";
 import { SalesService } from "../../src/agent/sales.service";
@@ -73,6 +76,9 @@ export function makeBookingsService(prisma: PrismaService): BookingsService {
     // of a booking should be reaching anybody's website
     new WebhookService(prisma, async () => ({ status: 200 })),
     makePushService(prisma),
+    // the credit-limit check before an agent's booking is taken; answers yes
+    // for every resort that has not set one, which is all of them by default
+    makeAgentAccountsService(prisma),
   );
 }
 
@@ -377,5 +383,34 @@ export function makeImportService(prisma: PrismaService): ImportService {
     makeOptionsService(prisma),
     makeTaxService(prisma),
     makePlanLimits(prisma),
+  );
+}
+
+export function makeAgentAccountsService(prisma: PrismaService): AgentAccountsService {
+  return new AgentAccountsService(
+    prisma,
+    new PermissionsService(prisma),
+    makeCommissionService(prisma),
+    makeOptionsService(prisma),
+  );
+}
+
+export function makeSettleService(prisma: PrismaService): SettleService {
+  return new SettleService(
+    prisma,
+    new AuditService(prisma),
+    new PermissionsService(prisma),
+    makeCommissionService(prisma),
+    makeOptionsService(prisma),
+    makeTaxService(prisma),
+    makeAgentAccountsService(prisma),
+  );
+}
+
+export function makeMyAccountsService(prisma: PrismaService): MyAccountsService {
+  return new MyAccountsService(
+    prisma,
+    new AgencyContextService(prisma),
+    makeAgentAccountsService(prisma),
   );
 }

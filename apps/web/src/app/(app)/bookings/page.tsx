@@ -14,7 +14,7 @@ import { useOutbox } from "@/lib/outbox";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { invoiceHref } from "@/lib/invoice-intent";
-import { methodLabel } from "@rh/shared";
+import { methodLabel, type AgentStatement } from "@rh/shared";
 import {
   Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast,
 } from "@/components/ui";
@@ -405,6 +405,61 @@ function AddPayment({ bookingId, onDone }: { bookingId: number; onDone: () => vo
   );
 }
 
+/**
+ * "The guest gave me this." An agent's panel, not the desk's.
+ *
+ * The resort's payment methods come from the agency's own statement, because
+ * `options.list` is behind `settings.manage` and an agency holds no resort
+ * permission — but the methods have to be the resort's, since the question of
+ * whether a place takes bKash is per resort and so is the check.
+ */
+function CollectFromGuest({ booking, onDone }: { booking: BookingDetail; onDone: () => void }) {
+  const { push } = useToast();
+  const [amount, setAmount] = useState(0);
+  const [method, setMethod] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const { data } = useApi<AgentStatement>(
+    keys.myStatement(booking.resortId),
+    () => client.agent.accounts.statement(booking.resortId),
+  );
+  const methods = data?.methods ?? [];
+  const chosen = method || methods[0]?.code || "";
+
+  async function take() {
+    setBusy(true);
+    try {
+      await client.agent.accounts.collect(booking.id, { amount, method: chosen });
+      push("Written down — the resort can see it");
+      onDone();
+    } catch (ex) {
+      push((ex as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-end gap-2">
+      <Field label={`Money from the guest (${cur()})`}>
+        <Input
+          type="number"
+          min={1}
+          value={amount || ""}
+          onChange={(e) => setAmount(Number(e.target.value))}
+          className="!w-28"
+        />
+      </Field>
+      <Select value={chosen} onChange={(e) => setMethod(e.target.value)} className="!w-24">
+        {methods.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+      </Select>
+      <Button size="sm" onClick={take} loading={busy} disabled={amount <= 0 || methods.length === 0}>
+        Add
+      </Button>
+    </div>
+  );
+}
+
 function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
   const { isStaff, isAgent, isManagement, activeResort, can, role } = useAuth();
   const { push } = useToast();
@@ -698,6 +753,27 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
         )}
         {isStaff && b.state !== "CANCELLED" && (
           <div className="mt-2"><AddPayment bookingId={b.id} onDone={async () => { await load(); onChanged(); }} /></div>
+        )}
+        {/**
+         * The agent's own door to the same money.
+         *
+         * `payments.create` is the desk counting cash into the resort's till,
+         * and an agency holds no resort permission — so this used to be no
+         * panel at all, and guest money handed to an agent stayed outside the
+         * system: the agent held it, the stay read unpaid, and the guest was
+         * asked again at checkout for money paid in Dhaka a week before.
+         *
+         * `agent.collect` writes the same payment marked as collected by the
+         * agent, which answers two questions at once: the guest's bill goes
+         * down, and the agency's account shows what they are holding.
+         */}
+        {isAgent && can("agent.collect") && b.state !== "CANCELLED" && b.due > 0 && (
+          <div className="mt-2">
+            <CollectFromGuest
+              booking={b}
+              onDone={async () => { await load(); onChanged(); }}
+            />
+          </div>
         )}
       </div>
 
