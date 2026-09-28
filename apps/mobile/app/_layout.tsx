@@ -10,12 +10,14 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/api/session";
-import { UpdateReady } from "../src/screens/update-ready";
+import { UpdateReady, useUpdateReady } from "../src/screens/update-ready";
+import { TopEdge } from "../src/design/top-edge";
 import { lensMetrics } from "../src/design/lens-insets";
 import { color, text } from "../src/design/tokens";
 
 export default function RootLayout() {
   return (
+    /* the provider has to be above anything that reads an inset */
     /*
       `initialMetrics` is undefined on a phone, which is the provider's
       own default and means "measure for yourself". It is set only when
@@ -29,14 +31,33 @@ export default function RootLayout() {
           screen, and a light status bar over it is invisible */}
       <StatusBar style="dark" />
       <SessionProvider>
-        {/*
-          Above every screen, because an update that has been
-          downloaded and never mentioned is a person running last
-          week's code all week. It is one line and a button rather
-          than a reload, so nobody is restarted mid-booking — see
-          update-ready.tsx.
-        */}
-        <UpdateReady />
+        <Everything />
+      </SessionProvider>
+    </SafeAreaProvider>
+  );
+}
+
+/**
+ * Inside the provider, so the insets can be measured, and inside one `TopEdge`
+ * so they are spent exactly once.
+ *
+ * Before this, the tab navigator padded itself and the update bar sat above
+ * it: the bar went under the clock, and the tabs left a band of nothing below
+ * the bar by padding a second time. Screens outside the tab group — the
+ * sign-up form — had nobody padding them at all and drew "PLAN · Starter"
+ * through the status bar.
+ */
+function Everything() {
+  return (
+    <TopEdge tone={useUpdateReady() ? "brand" : "screen"}>
+      {/*
+        Above every screen, because an update that has been
+        downloaded and never mentioned is a person running last
+        week's code all week. It is one line and a button rather
+        than a reload, so nobody is restarted mid-booking — see
+        update-ready.tsx.
+      */}
+      <UpdateReady />
         {/*
           A header by default, and off for the screens that are their own
           world. Everything else is pushed from somewhere — the More
@@ -81,8 +102,7 @@ export default function RootLayout() {
             name="update-required"
             options={{ headerShown: false, gestureEnabled: false }}
           />
-        </Stack>
-      </SessionProvider>
-    </SafeAreaProvider>
+      </Stack>
+    </TopEdge>
   );
 }

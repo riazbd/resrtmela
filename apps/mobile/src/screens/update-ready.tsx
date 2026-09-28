@@ -28,10 +28,39 @@
  * rule `push.ts` follows. In Expo Go and in development the module is
  * there but disabled, and this renders nothing.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../design/text";
 import { TOUCH_TARGET, color, radius, space } from "../design/tokens";
+
+/**
+ * Whether the bar is up, readable from outside it.
+ *
+ * `TopEdge` colours the status-bar strip, and the strip has to match what is
+ * under it — a grey band above a green bar reads as a mistake. A module-level
+ * store rather than a context provider because there is exactly one of these
+ * in the app and the alternative is a provider whose only job is to carry one
+ * boolean past two components.
+ */
+let pending = false;
+const watching = new Set<() => void>();
+
+function announce(now: boolean) {
+  if (pending === now) return;
+  pending = now;
+  for (const tell of watching) tell();
+}
+
+export function useUpdateReady(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      watching.add(onChange);
+      return () => watching.delete(onChange);
+    },
+    () => pending,
+    () => pending,
+  );
+}
 
 /** Loaded lazily so a host without the native module never touches it. */
 function updates(): typeof import("expo-updates") | null {
@@ -44,14 +73,23 @@ function updates(): typeof import("expo-updates") | null {
 }
 
 export function UpdateReady() {
-  const [ready, setReady] = useState(false);
+  const ready = useUpdateReady();
   const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     const Updates = updates();
-    // `isEnabled` is false in Expo Go and in development: there is no
-    // bundle to swap and nothing to announce
-    if (!Updates?.isEnabled) return;
+    /*
+     * `isEnabled` is false in Expo Go and in development: there is no bundle
+     * to swap and nothing to announce. Said out loud rather than returned
+     * quietly, because the answer now lives in a module-level store that
+     * outlives this component — and a store that only ever learns "yes" would
+     * keep colouring the status-bar strip green after the bar itself had
+     * gone.
+     */
+    if (!Updates?.isEnabled) {
+      announce(false);
+      return;
+    }
 
     let alive = true;
 
@@ -64,7 +102,7 @@ export function UpdateReady() {
      * latest bundle.
      */
     const sub = Updates.addUpdatesStateChangeListener?.((event) => {
-      if (alive && event.context.isUpdatePending) setReady(true);
+      if (alive && event.context.isUpdatePending) announce(true);
     });
 
     void (async () => {
@@ -72,7 +110,7 @@ export function UpdateReady() {
         const state = await Updates.checkForUpdateAsync();
         if (!alive || !state.isAvailable) return;
         await Updates.fetchUpdateAsync();
-        if (alive) setReady(true);
+        if (alive) announce(true);
       } catch {
         // no signal, or the server is quiet. There is nothing useful to
         // say about an update that could not be fetched, and a banner

@@ -14,6 +14,20 @@
  * set, and this returns `undefined`, which is exactly what the provider
  * wants when it is to measure for itself.
  *
+ * **This is only half of it, and on its own it did nothing.** `initialMetrics`
+ * is the *first frame*. On web the provider then measures for itself: it puts
+ * a hidden div on the page with `padding: env(safe-area-inset-*)` and reads
+ * the computed padding back, and a browser tab has no safe area — so a moment
+ * after the first paint every pretend inset was overwritten with zero. From
+ * 2026-09-20 to 2026-09-28 the lens said it could draw a phone's edges and
+ * drew none, which is worse than not offering: a screenshot of the status-bar
+ * bug looked exactly like a screenshot of the fix.
+ *
+ * `scripts/look.mjs` now supplies the other half, overriding that div's
+ * padding with `!important` so the measurement itself says what it was told.
+ * Anything else that opens this app in a browser has to do the same, or it is
+ * looking at a phone with no edges again.
+ *
  * It refuses nonsense rather than correcting it. A lens that quietly turns
  * a bad number into a plausible one draws a phone nobody sells, and
  * somebody then spends an afternoon on a layout bug that is not there.

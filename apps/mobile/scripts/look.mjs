@@ -111,6 +111,53 @@ if (INSETS !== "none") {
     : INSETS;
   await context.addInitScript((given) => {
     globalThis.__RM_INSETS__ = given;
+
+    /*
+     * The second half, and the half that was missing until 2026-09-28.
+     *
+     * `__RM_INSETS__` only reaches `SafeAreaProvider`'s `initialMetrics`,
+     * which is the *first frame*. On web the provider then measures for
+     * itself: it appends a hidden div to `<body>` with
+     * `padding: env(safe-area-inset-*)` and reads the computed padding back.
+     * A browser tab has no safe area, so `env()` is `0px`, and a moment after
+     * the first paint every pretend inset was overwritten with zero.
+     *
+     * So the lens said it could draw a phone's edges and drew none of them,
+     * and a screenshot of a screen with the status-bar bug looked exactly like
+     * a screenshot of the fix. Overriding that div's padding with `!important`
+     * — inline styles lose to it — makes the measurement itself say what we
+     * told it to.
+     */
+    const PRETEND = {
+      notch: { top: 47, bottom: 34, left: 0, right: 0 },
+      android: { top: 24, bottom: 0, left: 0, right: 0 },
+    };
+    const edges = typeof given === "string" ? PRETEND[given] : given;
+    if (!edges) return;
+
+    const css =
+      'div[style*="safe-area-inset"]{' +
+      `padding-top:${edges.top ?? 0}px!important;` +
+      `padding-bottom:${edges.bottom ?? 0}px!important;` +
+      `padding-left:${edges.left ?? 0}px!important;` +
+      `padding-right:${edges.right ?? 0}px!important}`;
+
+    const put = () => {
+      const where = document.head ?? document.documentElement;
+      if (!where || document.getElementById("rm-pretend-edges")) return;
+      const tag = document.createElement("style");
+      tag.id = "rm-pretend-edges";
+      tag.textContent = css;
+      where.appendChild(tag);
+    };
+    /*
+     * The listener goes on first. This script runs before the document has
+     * been parsed, so `document.head` and `document.documentElement` can both
+     * be null — and an `appendChild` on null throws, which took the listener
+     * registration down with it and left the rule never injected at all.
+     */
+    document.addEventListener("DOMContentLoaded", put);
+    put();
   }, pairs);
 }
 

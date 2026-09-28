@@ -20,7 +20,6 @@
 import { View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useT } from "@rh/app-core";
 import type { NavDestination } from "@rh/shared";
 import { useAuth } from "../../src/api/session";
@@ -44,7 +43,6 @@ const FILES = [
 export default function TabLayout() {
   const { me, role, can, features } = useAuth();
   const t = useT();
-  const insets = useSafeAreaInsets();
 
   const mine = me ? tabsFor({ role, can, features }) : [];
   const onTheBar = new Map(mine.map((d, i) => [d.href, { d, i }]));
@@ -55,12 +53,14 @@ export default function TabLayout() {
 
   return (
     /**
-     * The inset is the group's, not each screen's. Padding the navigator
-     * keeps the status-bar strip in the screen's own colour and stops
-     * content scrolling up behind the clock; putting it in eight screen
-     * files instead would be eight chances to forget.
+     * No top padding here any more: `TopEdge` at the root spends the top inset
+     * once for the whole app and hands `top: 0` down, so this used to add a
+     * second one — a band of nothing under the update bar, which sits above
+     * this navigator. The View stays for the background; the edge is not this
+     * group's to own, because the sign-up form is not in this group and was
+     * drawing through the clock.
      */
-    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: color.screen }}>
+    <View style={{ flex: 1, backgroundColor: color.screen }}>
     <Tabs
       /**
        * Back goes back, not home.

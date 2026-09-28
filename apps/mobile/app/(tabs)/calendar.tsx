@@ -50,6 +50,7 @@ import {
 import { client, useAuth } from "../../src/api/session";
 import { WhichResort } from "../../src/screens/which-resort";
 import { MonthBar } from "../../src/design/month-bar";
+import { SideSwipe } from "../../src/design/side-swipe";
 import { Lenses } from "../../src/design/lenses";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Text } from "../../src/design/text";
@@ -203,6 +204,19 @@ export default function CalendarScreen() {
     );
   }
 
+  /**
+   * One move, whichever lens is showing, so the arrows and the drag cannot
+   * come to mean different things. Rooms walks a week at a time; Month lands
+   * on the first of the next one, which is where picking a month already puts
+   * you.
+   */
+  const step = (by: number) =>
+    setStart(
+      view === "Rooms"
+        ? addDaysIso(start, by * WEEK)
+        : (monthStart(stepMonth(month, by)) ?? today),
+    );
+
   return (
     <>
       {header}
@@ -233,7 +247,7 @@ export default function CalendarScreen() {
               ? `${dayLabel(start)} — ${dayLabel(addDaysIso(start, WEEK - 1))}`
               : undefined
           }
-          onStep={view === "Rooms" ? (by) => setStart(addDaysIso(start, by * WEEK)) : undefined}
+          onStep={view === "Rooms" ? (by) => step(by) : undefined}
           stepLabels={
             view === "Rooms"
               ? { back: "Previous week", forward: "Next week" }
@@ -249,6 +263,18 @@ export default function CalendarScreen() {
           <RefreshControl refreshing={calQ.isRefetching} onRefresh={() => void calQ.refetch()} />
         }
       >
+        {/*
+          Dragging sideways moves the same step the arrows do, because a
+          calendar is read by moving through it and the chevrons are at the top
+          of the screen while the thumb is on the grid. Pull right for the days
+          behind, left for the ones ahead — the direction the content would go
+          if it followed the finger.
+
+          Around the grid and not the whole screen: the lens toggle and the
+          month label are buttons, and a drag that started on them would be a
+          press somebody did not finish.
+        */}
+        <SideSwipe onBack={() => step(-1)} onForward={() => step(1)}>
         {view === "Month" ? (
           <>
             <MonthOfNights
@@ -295,6 +321,8 @@ export default function CalendarScreen() {
             ))}
           </View>
         )}
+
+        </SideSwipe>
 
         {/*
           What the colours mean.

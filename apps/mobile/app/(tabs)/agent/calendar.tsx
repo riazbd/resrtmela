@@ -29,6 +29,7 @@ import {
   monthGrid,
   monthLength,
   monthOf,
+  stepMonth,
   monthStart,
   todayIn,
   type AgencyCalendar,
@@ -36,6 +37,7 @@ import {
   PLATFORM_TIMEZONE,
 } from "@rh/shared";
 import { MonthBar } from "../../../src/design/month-bar";
+import { SideSwipe } from "../../../src/design/side-swipe";
 import { client, useAuth } from "../../../src/api/session";
 import { Chip } from "../../../src/design/chip";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
@@ -172,6 +174,16 @@ export default function AgentCalendarScreen() {
               </View>
             ) : null}
 
+            {/*
+              The grid moves under the thumb too, a month at a time — the same
+              step the arrows above it take. An agent reading for next season
+              is moving through months, and the chevrons are at the top of the
+              screen while the hand is on the squares.
+            */}
+            <SideSwipe
+              onBack={() => setMonth(stepMonth(month, -1))}
+              onForward={() => setMonth(stepMonth(month, 1))}
+            >
             <Card
               title={
                 chosen
@@ -204,6 +216,7 @@ export default function AgentCalendarScreen() {
                 </View>
               ))}
             </Card>
+            </SideSwipe>
 
             <Text step="caption" tone="muted" style={styles.footnote}>
               {chosen
