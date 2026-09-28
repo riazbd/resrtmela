@@ -2313,12 +2313,45 @@ export class BookingsService {
         guest: true,
         items: { include: { room: { include: { roomType: true } }, activitySlot: { include: { catalog: { select: { name: true } } } } } },
         payments: { include: { receivedBy: { select: { name: true } } } },
-        agentUser: { select: { name: true } },
+        /**
+         * The *agency*, not the person at it.
+         *
+         * The invoice used to print `agentUser.name` — the clerk who typed the
+         * booking — so a guest's tax document named a stranger who has nothing
+         * to do with the supply. It is also the one place in this codebase
+         * that answered "who sold this" with a person; the Dues screen and the
+         * agent accounts both resolve to the agency, and an invoice disagreeing
+         * with them is an invoice somebody cannot reconcile.
+         */
+        agentUser: {
+          select: {
+            name: true,
+            accountId: true,
+            parentAgent: { select: { accountId: true } },
+          },
+        },
       },
     });
     if (!b || b.deletedAt) throw Object.assign(new Error("Booking not found"), { status: 404 });
     await this.requireOwnBooking(claims, b);
     if (!b.invoiceNo) throw Object.assign(new Error("Invoice not generated yet"), { status: 404 });
+
+    /**
+     * Named by the agency it sells for, falling back to the person only when
+     * there is no agency behind them — a lone agent is their own firm, which
+     * is the same rule the Dues rollup uses.
+     */
+    const sellingAccountId = b.agentUser?.accountId ?? b.agentUser?.parentAgent?.accountId ?? null;
+    const soldThrough = b.agentUser
+      ? ((sellingAccountId != null
+          ? (
+              await this.prisma.tenant.findUnique({
+                where: { id: sellingAccountId },
+                select: { name: true },
+              })
+            )?.name
+          : null) ?? b.agentUser.name)
+      : null;
     const totals = BookingsService.computeTotals(b, await this.taxRulesFor(b.resortId));
 
     /**
@@ -2373,7 +2406,20 @@ export class BookingsService {
         adults: b.adults,
         children: b.children,
         remarks: b.remarks,
-        agent: b.agentUser?.name ?? null,
+        /**
+         * One reference line, and never a price.
+         *
+         * What the resort pays an agency is between those two businesses: on a
+         * guest's invoice it is a figure the guest was not charged, and in this
+         * market it is the figure that ends the agency's relationship with them
+         * the moment they see it. It is not here and must not be added — the
+         * commission lives on the agency's own statement.
+         *
+         * The name stays, as a reference like the booking code, so a guest who
+         * booked through an agency can see which one on the document they
+         * keep.
+         */
+        agent: soldThrough,
       },
       guest: { fullName: b.guest.fullName, phone: b.guest.phone, nidPassportNo: b.guest.nidPassportNo, email: b.guest.email },
       items: b.items.map((i) => ({

@@ -143,6 +143,19 @@ export default function InvoicePage() {
             BOOKING · <span lang="bn">বুকিং</span>
           </div>
           <div>{inv.booking.code}</div>
+          {/*
+            Which agency sold it, where one did — a reference beside the
+            booking code, and the app's invoice has printed it since it was
+            written while this one did not. **Never the commission.** What the
+            resort pays an agency is between those two businesses; on a guest's
+            invoice it is a figure the guest was not charged, and in this market
+            it is the figure that ends the agency's relationship with them.
+          */}
+          {inv.booking.agent ? (
+            <div className="text-slate-500">
+              Booked through {inv.booking.agent}
+            </div>
+          ) : null}
           <div lang="bn">
             চেক-ইন {inv.resort.checkInTime} · চেক-আউট {inv.resort.checkOutTime}
           </div>

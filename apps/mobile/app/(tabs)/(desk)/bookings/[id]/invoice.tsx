@@ -152,7 +152,14 @@ export default function InvoiceScreen() {
           <Row
             title={`${dayLabel(d.booking.checkIn)} → ${dayLabel(d.booking.checkOut)}`}
             subtitle={`${d.booking.nights} night${d.booking.nights === 1 ? "" : "s"} · ${d.booking.adults} adult${d.booking.adults === 1 ? "" : "s"}${d.booking.children ? `, ${d.booking.children} children` : ""}`}
-            meta={[d.booking.code, d.booking.agent ? `booked by ${d.booking.agent}` : null]
+            /*
+              "booked through", and the name is the agency's — it used to be
+              whichever clerk typed the booking, so a guest's tax document
+              named a stranger with nothing to do with the supply. Never a
+              commission: what the resort pays an agency is between those two
+              businesses, and it is not a figure the guest was charged.
+            */
+            meta={[d.booking.code, d.booking.agent ? `booked through ${d.booking.agent}` : null]
               .filter(Boolean)
               .join(" · ")}
             last
