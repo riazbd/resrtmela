@@ -245,11 +245,17 @@ function StatementModal({
             </div>
           )}
 
+          {/*
+            The table is 640 wide and not the 760 it started at. This statement
+            lives inside a modal, and at 760 the last column — Confirm, Remove
+            — was cut in half by the modal's own edge: a button reading "R",
+            which a screenshot found and no typecheck could.
+          */}
           <Card className="!p-0" title="Every line">
             {data.rows.length === 0 ? (
               <Empty msg="Nothing on this account yet" />
             ) : (
-              <Table minWidth={760}>
+              <Table minWidth={640}>
                 <thead className="border-b border-slate-100">
                   <tr>
                     <Th>Date</Th>
@@ -463,13 +469,24 @@ function ReceivedForm({
           <Input value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </div>
-      {Number(amount) + Number(commission) > 0 && (
+      {/*
+        Only when a stay is chosen, because only then is anything credited.
+        This said "the guest's bill will be credited with ৳1,000" whatever was
+        picked in the stay box — including "Not about one stay", where no
+        payment is written at all. Driving the form found it; the figures were
+        right and the sentence was not.
+      */}
+      {bookingCode && Number(amount) + Number(commission) > 0 ? (
         <p className="mt-3 text-xs text-slate-500">
-          The guest&rsquo;s bill will be credited with{" "}
+          {bookingCode}&rsquo;s bill will be credited with{" "}
           <b>{money((Number(amount) || 0) + (Number(commission) || 0))}</b> — what arrived plus what
           was kept, because that is what the guest paid.
         </p>
-      )}
+      ) : Number(amount) > 0 ? (
+        <p className="mt-3 text-xs text-slate-500">
+          Filed against the account rather than a stay, so no guest&rsquo;s bill changes.
+        </p>
+      ) : null}
       <div className="mt-4 flex gap-2">
         <Button onClick={submit} disabled={busy}>
           {busy ? "Saving…" : "Record it"}

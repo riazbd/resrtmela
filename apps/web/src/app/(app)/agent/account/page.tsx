@@ -197,7 +197,7 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
             {data.rows.length === 0 ? (
               <Empty msg="Nothing on this account yet" />
             ) : (
-              <Table minWidth={720}>
+              <Table minWidth={640}>
                 <thead className="border-b border-slate-100">
                   <tr>
                     <Th>Date</Th>
