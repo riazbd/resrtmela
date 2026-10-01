@@ -3078,6 +3078,8 @@ export interface AgentCollectInput {
 }
 
 export interface AgentDeclareInput {
+  /** REMIT — handed over against stays sold; ADVANCE — put down ahead of them. REMIT when absent. */
+  kind?: "REMIT" | "ADVANCE";
   amount: number;
   method: string;
   trxId?: string;

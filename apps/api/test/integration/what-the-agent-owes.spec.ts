@@ -328,9 +328,85 @@ describe("the agent's own doors", () => {
     expect(list.rows[0]!.commission).toBe(1_000);
   });
 
-  it("refuses an agency a statement at a resort it has nothing with", async () => {
+  it("refuses an agency a statement at a resort it neither sells nor has anything with", async () => {
     const other = await seedResort(prisma as unknown as PrismaClient);
+    // the other resort has turned this agency away
+    await prisma.resortAgency.create({
+      data: { resortId: other.resortId, accountId: fx.agencyId, blocked: true },
+    });
     await expect(mine().statement(agent, other.resortId, {})).rejects.toThrow(/no account/i);
+  });
+});
+
+/**
+ * "agent resort ke adv dite pare na?" — an agency putting money with a resort
+ * before the stays it will be spent on: a float for the season, a deposit that
+ * holds a block of rooms. `ADVANCE` was in the ledger's vocabulary and only the
+ * resort could write it; the agency's one door wrote every declaration as a
+ * remittance, so a deposit read on both statements as "Handed money to the
+ * resort" against stays that did not exist yet.
+ */
+describe("an agency's advance to a resort", () => {
+  it("is declared as an advance, and counts once the resort has matched it", async () => {
+    const declared = await settle().declare(agent, fx.agentId, fx.resortId, {
+      kind: "ADVANCE",
+      amount: 20_000,
+      method: "BKASH",
+      trxId: "ADV-1",
+    });
+    expect(declared.status).toBe("PENDING");
+    const row = await prisma.agentAccountEntry.findFirstOrThrow();
+    expect(row.kind).toBe("ADVANCE");
+
+    let balance = await accounts().balanceOf(fx.resortId, fx.agentId);
+    expect(balance.balance).toBe(0);
+    expect(balance.pending).toBe(20_000);
+
+    await settle().confirm(owner, fx.resortId, declared.id);
+    balance = await accounts().balanceOf(fx.resortId, fx.agentId);
+    // the resort is holding 20,000 of the agency's money
+    expect(balance.balance).toBe(-20_000);
+  });
+
+  it("is netted against the guest money the agency later holds", async () => {
+    const declared = await settle().declare(agent, fx.agentId, fx.resortId, {
+      kind: "ADVANCE",
+      amount: 20_000,
+      method: "CASH",
+    });
+    await settle().confirm(owner, fx.resortId, declared.id);
+    const b = await agentBooking();
+    await settle().collect(agent, fx.agentId, b.id, { amount: 10_000, method: "CASH" });
+    const balance = await accounts().balanceOf(fx.resortId, fx.agentId);
+    expect(balance.balance).toBe(-10_000);
+  });
+
+  it("can open the account: a resort the agency may sell, before its first booking there", async () => {
+    const other = await seedResort(prisma as unknown as PrismaClient);
+    const declared = await settle().declare(agent, fx.agentId, other.resortId, {
+      kind: "ADVANCE",
+      amount: 5_000,
+      method: "CASH",
+    });
+    expect(declared.status).toBe("PENDING");
+    // and both sides can now see the account it opened
+    const theirs = await mine().statement(agent, other.resortId, {});
+    expect(theirs.pending).toBe(5_000);
+    const ownerThere: JwtClaims = { userId: other.managerId, role: ROLE.RESORT_ADMIN, resortIds: [other.resortId] };
+    const list = await accounts().accounts(ownerThere, other.resortId);
+    expect(list.rows.map((r) => r.agencyId)).toContain(fx.agentId);
+  });
+
+  it("still says remittance when nothing says otherwise", async () => {
+    await settle().declare(agent, fx.agentId, fx.resortId, { amount: 1_000, method: "CASH" });
+    expect((await prisma.agentAccountEntry.findFirstOrThrow()).kind).toBe("REMIT");
+  });
+
+  /** Commission and adjustments are the resort's to write, never the agency's. */
+  it("refuses any other kind from an agency", async () => {
+    await expect(
+      settle().declare(agent, fx.agentId, fx.resortId, { kind: "COMMISSION", amount: 1_000, method: "CASH" }),
+    ).rejects.toThrow(/advance or a remittance/i);
   });
 });
 

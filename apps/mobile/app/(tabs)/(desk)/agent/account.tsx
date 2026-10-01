@@ -13,6 +13,13 @@
  * the balance until the resort has matched it against the money. An agency able
  * to confirm its own remittances could reduce what it owes by typing, and then
  * a statement is not a statement.
+ *
+ * **A declaration says what the money was for** (2026-10-01): handed over
+ * against stays sold, or put down in advance of them. Every one was a
+ * remittance before, so a float for the season read on both statements as
+ * money for stays that did not exist yet. And an advance can open the account —
+ * "Deposit an advance" offers the resorts open to the agency as well as the
+ * ones it has sold, because the deposit is often the first thing paid.
  */
 import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -24,9 +31,10 @@ import {
   dayLabel,
   formatMoney,
   todayIn,
+  type AgentDeclareKind,
   type AgentStatement,
+  type DiscoverResort,
   type MyAccountList,
-  type MyAccountRow,
 } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { Button } from "../../../../src/design/button";
@@ -43,7 +51,9 @@ export default function MyAccountsScreen() {
   const { can } = useAuth();
   const money = useMoneyFormat();
   const whole = (amount: number) => formatMoney(amount, { ...money, decimals: 0 });
-  const [open, setOpen] = useState<MyAccountRow | null>(null);
+  /** The resort whose statement is open, and whether it opened on the form. */
+  const [open, setOpen] = useState<{ resortId: number; declare?: AgentDeclareKind } | null>(null);
+  const [choosing, setChoosing] = useState(false);
 
   const list = useApi<MyAccountList>(keys.myAccounts(), () => client.agent.accounts.list(), {
     enabled: can("agent.account.view"),
@@ -86,12 +96,29 @@ export default function MyAccountsScreen() {
       <>
         {header}
         <MyStatement
-          row={open}
+          resortId={open.resortId}
+          startDeclaring={open.declare}
           mayRemit={can("agent.remit")}
           onBack={() => {
             setOpen(null);
             void list.refetch();
           }}
+        />
+      </>
+    );
+  }
+
+  if (choosing) {
+    return (
+      <>
+        {header}
+        <ChooseResort
+          known={d.rows.map((r) => ({ id: r.resort.id, name: r.resort.name }))}
+          onChoose={(resortId) => {
+            setChoosing(false);
+            setOpen({ resortId, declare: "ADVANCE" });
+          }}
+          onClose={() => setChoosing(false)}
         />
       </>
     );
@@ -119,6 +146,10 @@ export default function MyAccountsScreen() {
           />
         ) : null}
 
+        {can("agent.remit") ? (
+          <Button label="Deposit an advance" kind="ghost" onPress={() => setChoosing(true)} />
+        ) : null}
+
         <Card title={`${d.rows.length} ${d.rows.length === 1 ? "resort" : "resorts"}`}>
           {d.rows.length === 0 ? (
             <View style={styles.emptyBox}>
@@ -141,7 +172,7 @@ export default function MyAccountsScreen() {
                   .filter(Boolean)
                   .join(" · ")}
                 last={i === d.rows.length - 1}
-                onPress={() => setOpen(r)}
+                onPress={() => setOpen({ resortId: r.resort.id })}
                 accessibilityLabel={`${r.resort.name}, ${agentBalanceSays(r.balance, "you")}, ${whole(Math.abs(r.balance))}`}
                 right={
                   <Text
@@ -162,21 +193,71 @@ export default function MyAccountsScreen() {
   );
 }
 
+/**
+ * Which resort an advance goes to.
+ *
+ * The ones the agency already has an account with, and the ones open to it —
+ * once each, because a resort it sells is in both lists.
+ */
+function ChooseResort({
+  known,
+  onChoose,
+  onClose,
+}: {
+  known: { id: number; name: string }[];
+  onChoose: (resortId: number) => void;
+  onClose: () => void;
+}) {
+  const open = useApi<DiscoverResort[]>(["agent-discover"], () => client.agent.discover());
+  const choices = [
+    ...new Map(
+      [...known, ...(open.data ?? []).filter((r) => r.access === "OPEN")].map((r) => [r.id, r.name]),
+    ),
+  ];
+
+  return (
+    <ScrollView contentContainerStyle={styles.sheetBody}>
+      <Text step="strong" tone="title" weight="medium">
+        Deposit an advance with
+      </Text>
+      <Text step="small" tone="muted">
+        Money put down ahead of the stays it will pay for. The resort confirms it once the money
+        has arrived, and it is set against what is due from you.
+      </Text>
+      {open.isLoading && known.length === 0 ? <Loading what="the resorts open to you" /> : null}
+      <View style={styles.chips}>
+        {choices.map(([id, name]) => (
+          <Chip key={id} label={name} on={false} onPress={() => onChoose(id)} />
+        ))}
+      </View>
+      {!open.isLoading && choices.length === 0 ? (
+        <Empty message="No resort is open to you yet" />
+      ) : null}
+      <Button label="Not now" kind="ghost" onPress={onClose} />
+    </ScrollView>
+  );
+}
+
 function MyStatement({
-  row,
+  resortId,
+  startDeclaring,
   mayRemit,
   onBack,
 }: {
-  row: MyAccountRow;
+  resortId: number;
+  /** opened from "Deposit an advance": straight to the form, on that kind */
+  startDeclaring?: AgentDeclareKind;
   mayRemit: boolean;
   onBack: () => void;
 }) {
   const money = useMoneyFormat();
   const whole = (amount: number) => formatMoney(amount, { ...money, decimals: 0 });
-  const [declaring, setDeclaring] = useState(false);
+  const [declaring, setDeclaring] = useState<AgentDeclareKind | null>(
+    mayRemit ? (startDeclaring ?? null) : null,
+  );
 
-  const s = useApi<AgentStatement>(keys.myStatement(row.resort.id), () =>
-    client.agent.accounts.statement(row.resort.id),
+  const s = useApi<AgentStatement>(keys.myStatement(resortId), () =>
+    client.agent.accounts.statement(resortId),
   );
 
   /**
@@ -203,9 +284,10 @@ function MyStatement({
     return (
       <Declare
         statement={d}
-        onClose={() => setDeclaring(false)}
+        initialKind={declaring}
+        onClose={() => setDeclaring(null)}
         onSaved={() => {
-          setDeclaring(false);
+          setDeclaring(null);
           void s.refetch();
         }}
       />
@@ -243,13 +325,15 @@ function MyStatement({
         <Stat label="Commission earned" value={whole(d.commission)} />
         <Stat label="Commission received" value={whole(d.commissionPaid)} />
       </View>
+      {/* put down ahead of the stays — already inside the figure at the top */}
+      <Stat label="Advances" value={whole(d.advances)} />
 
       <Text step="small" tone="muted">
         Your terms here:{" "}
         {d.terms.kind === "FLAT" ? `${whole(d.terms.rate)} per booking` : `${d.terms.rate}% of rent`}
       </Text>
 
-      {mayRemit ? <Button label="I have sent money" onPress={() => setDeclaring(true)} /> : null}
+      {mayRemit ? <Button label="I have sent money" onPress={() => setDeclaring("REMIT")} /> : null}
 
       <Card title="Every line">
         {d.rows.length === 0 ? (
@@ -289,16 +373,25 @@ function MyStatement({
   );
 }
 
+/** The two things an agency may say it sent, as it says them. */
+const DECLARE_CHOICES: { kind: AgentDeclareKind; label: string; says: string }[] = [
+  { kind: "REMIT", label: "For stays sold", says: "Guest money you are handing over, or settling up." },
+  { kind: "ADVANCE", label: "An advance", says: "Put down ahead of the stays it will pay for." },
+];
+
 /** "I sent it, here is the TrxID." Pending until the resort matches it. */
 function Declare({
   statement,
+  initialKind,
   onClose,
   onSaved,
 }: {
   statement: AgentStatement;
+  initialKind: AgentDeclareKind;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [kind, setKind] = useState<AgentDeclareKind>(initialKind);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState(statement.methods[0]?.code ?? "");
   const [trxId, setTrxId] = useState("");
@@ -314,6 +407,7 @@ function Declare({
     }
     try {
       await client.agent.accounts.declare(statement.resort.id, {
+        kind,
         amount: value,
         method,
         trxId: trxId.trim() || undefined,
@@ -336,6 +430,14 @@ function Declare({
         Recorded straight away and shown to the resort. It changes your balance once they have
         matched it against the money.
       </Text>
+
+      <Field label="What it is" hint={DECLARE_CHOICES.find((c) => c.kind === kind)?.says}>
+        <View style={styles.chips}>
+          {DECLARE_CHOICES.map((c) => (
+            <Chip key={c.kind} label={c.label} on={kind === c.kind} onPress={() => setKind(c.kind)} />
+          ))}
+        </View>
+      </Field>
 
       <Field label="How much">
         <Input

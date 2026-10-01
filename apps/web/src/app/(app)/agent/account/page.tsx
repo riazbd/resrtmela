@@ -13,9 +13,10 @@ import {
   agentBalanceSays,
   agentEntryLabel,
   todayIn,
+  type AgentDeclareKind,
   type AgentStatement,
+  type DiscoverResort,
   type MyAccountList,
-  type MyAccountRow,
 } from "@rh/shared";
 
 /**
@@ -33,10 +34,16 @@ import {
  * bKash, here is the TrxID" — which stays outside the balance until somebody at
  * the resort has seen the money. An agency that could confirm its own
  * remittances could reduce what it owes by typing.
+ *
+ * A declaration says what the money was for (2026-10-01): handed over against
+ * stays sold, or put down in advance of them. And an advance can open the
+ * account — "Deposit an advance" offers the resorts open to the agency as well
+ * as the ones it has sold, because the deposit is often the first thing paid.
  */
 export default function MyAccountsPage() {
   const { can } = useAuth();
-  const [open, setOpen] = useState<MyAccountRow | null>(null);
+  const [open, setOpen] = useState<{ id: number; name: string; declare?: AgentDeclareKind } | null>(null);
+  const [choosing, setChoosing] = useState(false);
 
   const { data, isLoading, error } = useApi<MyAccountList>(
     keys.myAccounts(),
@@ -58,6 +65,11 @@ export default function MyAccountsPage() {
           The running account with each resort you sell — money you are holding of theirs, the
           commission you have earned, and what has been settled. This is not your platform wallet.
         </p>
+        {can("agent.remit") && (
+          <Button size="sm" variant="ghost" className="mt-3" onClick={() => setChoosing(true)}>
+            Deposit an advance
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -104,7 +116,7 @@ export default function MyAccountsPage() {
                     {agentBalanceSays(r.balance, "you")}
                   </Td>
                   <Td className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => setOpen(r)}>
+                    <Button size="sm" variant="ghost" onClick={() => setOpen({ id: r.resort.id, name: r.resort.name })}>
                       Statement
                     </Button>
                   </Td>
@@ -115,20 +127,81 @@ export default function MyAccountsPage() {
         )}
       </Card>
 
-      {open && <MyStatement row={open} onClose={() => setOpen(null)} />}
+      {open && <MyStatement resort={open} onClose={() => setOpen(null)} />}
+      {choosing && (
+        <ChooseResort
+          known={rows.map((r) => ({ id: r.resort.id, name: r.resort.name }))}
+          onChoose={(resort) => {
+            setChoosing(false);
+            setOpen({ ...resort, declare: "ADVANCE" });
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      )}
     </div>
   );
 }
 
-function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void }) {
+/**
+ * Which resort an advance goes to: the ones the agency has an account with,
+ * and the ones open to it — once each, because a resort it sells is in both.
+ */
+function ChooseResort({
+  known,
+  onChoose,
+  onClose,
+}: {
+  known: { id: number; name: string }[];
+  onChoose: (resort: { id: number; name: string }) => void;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useApi<DiscoverResort[]>(["agent-discover"], () => client.agent.discover());
+  const choices = [
+    ...new Map(
+      [...known, ...(data ?? []).filter((r) => r.access === "OPEN")].map((r) => [r.id, { id: r.id, name: r.name }]),
+    ).values(),
+  ];
+  return (
+    <Modal open onClose={onClose} title="Deposit an advance with">
+      <p className="mb-3 text-sm text-slate-500">
+        Money put down ahead of the stays it will pay for. The resort confirms it once the money has
+        arrived, and it is set against what is due from you.
+      </p>
+      {isLoading && known.length === 0 ? (
+        <Spinner />
+      ) : choices.length === 0 ? (
+        <Empty msg="No resort is open to you yet" />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {choices.map((r) => (
+            <Button key={r.id} size="sm" variant="ghost" onClick={() => onChoose(r)}>
+              {r.name}
+            </Button>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function MyStatement({
+  resort,
+  onClose,
+}: {
+  /** `declare` opens it straight on the form, on that kind */
+  resort: { id: number; name: string; declare?: AgentDeclareKind };
+  onClose: () => void;
+}) {
   const { can } = useAuth();
   const qc = useQueryClient();
   const { push } = useToast();
-  const [declaring, setDeclaring] = useState(false);
+  const [declaring, setDeclaring] = useState<AgentDeclareKind | null>(
+    can("agent.remit") ? (resort.declare ?? null) : null,
+  );
 
   const { data, isLoading, error, refetch } = useApi<AgentStatement>(
-    keys.myStatement(row.resort.id),
-    () => client.agent.accounts.statement(row.resort.id),
+    keys.myStatement(resort.id),
+    () => client.agent.accounts.statement(resort.id),
   );
 
   const reload = () => {
@@ -148,7 +221,7 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
   };
 
   return (
-    <Modal open onClose={onClose} title={row.resort.name} wide>
+    <Modal open onClose={onClose} title={resort.name} wide>
       {error ? (
         <ErrorState error={error as Error} />
       ) : isLoading || !data ? (
@@ -173,9 +246,11 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             <Stat label="Took from guests" value={money(data.collected)} />
             <Stat label="Handed over" value={money(data.remitted)} />
+            {/* put down ahead of the stays — already inside the figure above */}
+            <Stat label="Advances" value={money(data.advances)} />
             <Stat label="Commission earned" value={money(data.commission)} />
             <Stat label="Commission received" value={money(data.commissionPaid)} />
           </div>
@@ -188,7 +263,7 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
           </div>
 
           {can("agent.remit") && (
-            <Button size="sm" onClick={() => setDeclaring(true)}>
+            <Button size="sm" onClick={() => setDeclaring("REMIT")}>
               I have sent money
             </Button>
           )}
@@ -249,11 +324,12 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
           {declaring && (
             <DeclareForm
               statement={data}
+              initialKind={declaring}
               onDone={() => {
-                setDeclaring(false);
+                setDeclaring(null);
                 reload();
               }}
-              onCancel={() => setDeclaring(false)}
+              onCancel={() => setDeclaring(null)}
             />
           )}
         </div>
@@ -265,14 +341,17 @@ function MyStatement({ row, onClose }: { row: MyAccountRow; onClose: () => void 
 /** "I sent it, here is the TrxID." Pending until the resort matches it. */
 function DeclareForm({
   statement,
+  initialKind,
   onDone,
   onCancel,
 }: {
   statement: AgentStatement;
+  initialKind: AgentDeclareKind;
   onDone: () => void;
   onCancel: () => void;
 }) {
   const { push } = useToast();
+  const [kind, setKind] = useState<AgentDeclareKind>(initialKind);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState(statement.methods[0]?.code ?? "");
   const [trxId, setTrxId] = useState("");
@@ -284,6 +363,7 @@ function DeclareForm({
     setBusy(true);
     try {
       await client.agent.accounts.declare(statement.resort.id, {
+        kind,
         amount: Number(amount) || 0,
         method,
         trxId: trxId || undefined,
@@ -306,6 +386,15 @@ function DeclareForm({
         once they have matched it against the money.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
+        <Field
+          label="What it is"
+          hint={kind === "ADVANCE" ? "Put down ahead of the stays it will pay for" : "Guest money you are handing over, or settling up"}
+        >
+          <Select value={kind} onChange={(e) => setKind(e.target.value as AgentDeclareKind)}>
+            <option value="REMIT">For stays sold</option>
+            <option value="ADVANCE">An advance</option>
+          </Select>
+        </Field>
         <Field label="How much">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>

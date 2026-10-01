@@ -17,6 +17,7 @@ import { agentBalance, type JwtClaims } from "@rh/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AgencyContextService } from "../agent/agency-context.service";
 import { forbid } from "../common/rbac";
+import { sellableResortIds } from "../common/selling-access";
 import { round2 } from "../common/dates";
 import { AgentAccountsService } from "./agent-accounts.service";
 
@@ -111,6 +112,12 @@ export class MyAccountsService {
    * A booking or a line — either is enough. An agency about to declare its first
    * remittance has bookings and no lines, and one that has only ever deposited a
    * float has lines and no bookings.
+   *
+   * Or a resort it may sell and has not yet: an advance is often the first thing
+   * that passes between them, a deposit put down before the season's stays, and
+   * an account that only opened after a booking could never hold one. The
+   * statement there is empty and the agency's own; nothing of anyone else's is
+   * on it.
    */
   async assertMine(agencyId: number, resortId: number): Promise<void> {
     const actors = await this.accounts.actorIds(agencyId);
@@ -124,7 +131,9 @@ export class MyAccountsService {
         select: { id: true },
       }),
     ]);
-    if (!booking && !entry) throw forbid("You have no account with that resort");
+    if (booking || entry) return;
+    const sellable = await sellableResortIds(this.prisma, agencyId, resortId);
+    if (!sellable.includes(resortId)) throw forbid("You have no account with that resort");
   }
 
   /**

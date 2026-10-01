@@ -214,10 +214,14 @@ function StatementModal({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat label="Took from guests" value={money(data.collected)} />
             <Stat label="Handed over" value={money(data.remitted)} />
+            {/* put down by the agency ahead of its stays — counted in the
+                figure above all along, and shown nowhere until 2026-10-01 */}
+            <Stat label="Advances" value={money(data.advances)} />
             <Stat label="Commission" value={money(data.commission)} />
+            <Stat label="Commission paid out" value={money(data.commissionPaid)} />
             <Stat
               label="Credit limit"
               value={data.creditLimit == null ? "None" : money(data.creditLimit)}

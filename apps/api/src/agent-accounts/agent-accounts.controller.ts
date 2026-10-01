@@ -34,7 +34,7 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { AGENT_ENTRY_KINDS_STORED } from "@rh/shared";
+import { AGENT_DECLARE_KINDS, AGENT_ENTRY_KINDS_STORED, type AgentDeclareKind } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { AgentAccountsService } from "./agent-accounts.service";
 import { SettleService } from "./settle.service";
@@ -84,6 +84,7 @@ class CollectDto {
 }
 
 class DeclareDto {
+  @IsOptional() @IsIn([...AGENT_DECLARE_KINDS]) kind?: AgentDeclareKind;
   @IsNumber() @Min(0.01) amount!: number;
   @IsString() @MaxLength(24) method!: string;
   @IsOptional() @IsString() @MaxLength(64) trxId?: string;

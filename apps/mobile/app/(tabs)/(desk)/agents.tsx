@@ -20,6 +20,7 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
 import {
+  AGENT_ENTRY_KINDS_STORED,
   agentBalanceSays,
   agentEntryLabel,
   dayLabel,
@@ -27,6 +28,7 @@ import {
   todayIn,
   type AgentAccountList,
   type AgentAccountSummary,
+  type AgentEntryKind,
   type AgentStatement,
 } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
@@ -204,7 +206,8 @@ function Statement({
 }) {
   const money = useMoneyFormat();
   const whole = (amount: number) => formatMoney(amount, { ...money, decimals: 0 });
-  const [writing, setWriting] = useState(false);
+  /** Which form is open over the statement: money received, or any other line. */
+  const [writing, setWriting] = useState<"received" | "line" | null>(null);
 
   const s = useApi<AgentStatement>(
     keys.agentStatement(resortId, summary.agencyId),
@@ -232,18 +235,32 @@ function Statement({
 
   const d = s.data;
 
-  if (writing) {
+  const saved = () => {
+    setWriting(null);
+    void s.refetch();
+  };
+
+  if (writing === "received") {
     return (
       <Received
         statement={d}
         resortId={resortId}
         agencyId={summary.agencyId}
         timezone={timezone}
-        onClose={() => setWriting(false)}
-        onSaved={() => {
-          setWriting(false);
-          void s.refetch();
-        }}
+        onClose={() => setWriting(null)}
+        onSaved={saved}
+      />
+    );
+  }
+  if (writing === "line") {
+    return (
+      <AddLine
+        statement={d}
+        resortId={resortId}
+        agencyId={summary.agencyId}
+        timezone={timezone}
+        onClose={() => setWriting(null)}
+        onSaved={saved}
       />
     );
   }
@@ -279,6 +296,11 @@ function Statement({
           tone={d.overLimit ? "danger" : undefined}
         />
       </View>
+      <View style={styles.figures}>
+        {/* put down by the agency ahead of its stays — already inside the figure at the top */}
+        <Stat label="Advances" value={whole(d.advances)} />
+        <Stat label="Commission paid out" value={whole(d.commissionPaid)} />
+      </View>
 
       <Text step="small" tone="muted">
         Terms:{" "}
@@ -287,7 +309,11 @@ function Statement({
       </Text>
 
       {mayManage ? (
-        <Button label="Received from agent" onPress={() => setWriting(true)} />
+        <>
+          <Button label="Received from agent" onPress={() => setWriting("received")} />
+          {/* an advance, commission paid out, a correction — the console's "Add a line" */}
+          <Button label="Add a line" kind="ghost" onPress={() => setWriting("line")} />
+        </>
       ) : null}
 
       <Card title="Every line">
@@ -488,6 +514,113 @@ function Received({
       ) : null}
 
       <Button label="Record it" loading={save.busy} onPress={save.go} />
+      <Button label="Not now" kind="ghost" onPress={onClose} />
+    </ScrollView>
+  );
+}
+
+/**
+ * Any other line: an advance the agency put down, commission owed or paid out,
+ * a correction. The console's "Add a line", which the phone did not have — so
+ * an agency's deposit could be confirmed here when the agency declared it, and
+ * not written here when the money simply arrived.
+ *
+ * The server pins every kind but an adjustment to its own direction, so the
+ * amount is asked for as a plain figure; only an adjustment keeps a sign.
+ */
+function AddLine({
+  statement,
+  resortId,
+  agencyId,
+  timezone,
+  onClose,
+  onSaved,
+}: {
+  statement: AgentStatement;
+  resortId: number;
+  agencyId: number;
+  timezone: string | undefined;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [kind, setKind] = useState<AgentEntryKind>("ADVANCE");
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState(statement.methods[0]?.code ?? "");
+  const [note, setNote] = useState("");
+  const [refused, setRefused] = useState<string | null>(null);
+  const correcting = kind === "ADJUSTMENT";
+
+  const save = useAction(async () => {
+    setRefused(null);
+    const value = Number(amount.replace(/[^0-9.-]/g, ""));
+    if (!Number.isFinite(value) || value === 0) {
+      setRefused("Put in the amount.");
+      return;
+    }
+    try {
+      await client.agentAccounts.entry(resortId, agencyId, {
+        kind,
+        amount: correcting ? value : Math.abs(value),
+        // a correction moves no money, so it has no way of moving
+        ...(correcting ? {} : { method }),
+        // the resort's today, not the phone's — see the note on `Received`
+        date: todayIn(timezone),
+        ...(note.trim() ? { note: note.trim() } : {}),
+      });
+      onSaved();
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : "That did not go through.");
+    }
+  });
+
+  return (
+    <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
+      <Text step="strong" tone="title" weight="medium">
+        A line on {statement.agency.name}&rsquo;s account
+      </Text>
+
+      <Field label="What kind">
+        <View style={styles.chips}>
+          {AGENT_ENTRY_KINDS_STORED.map((k) => (
+            <Chip key={k} label={agentEntryLabel(k)} on={kind === k} onPress={() => setKind(k)} />
+          ))}
+        </View>
+      </Field>
+
+      <Field
+        label="Amount"
+        hint={correcting ? "Positive raises what is due from them, negative lowers it" : undefined}
+      >
+        <Input
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType={correcting ? "numbers-and-punctuation" : "number-pad"}
+          placeholder="0"
+          accessibilityLabel="Amount"
+        />
+      </Field>
+
+      {correcting ? null : (
+        <Field label="How it moved">
+          <View style={styles.chips}>
+            {statement.methods.map((m) => (
+              <Chip key={m.code} label={m.label} on={method === m.code} onPress={() => setMethod(m.code)} />
+            ))}
+          </View>
+        </Field>
+      )}
+
+      <Field label="Note" hint="Optional">
+        <Input value={note} onChangeText={setNote} placeholder="What it was for" accessibilityLabel="Note" />
+      </Field>
+
+      {refused ? (
+        <Text step="small" tone="danger" weight="medium">
+          {refused}
+        </Text>
+      ) : null}
+
+      <Button label="Add it" loading={save.busy} onPress={save.go} />
       <Button label="Not now" kind="ghost" onPress={onClose} />
     </ScrollView>
   );

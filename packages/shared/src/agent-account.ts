@@ -41,6 +41,23 @@ export const AGENT_ENTRY_KINDS_STORED: readonly AgentEntryKind[] = [
   "ADJUSTMENT",
 ];
 
+/**
+ * What an agency may write about its own money: that it handed some over, or
+ * that it put some down in advance.
+ *
+ * Every declaration was a remittance until 2026-10-01, so an agency's float for
+ * the season read on both statements as "Handed money to the resort" against
+ * stays that did not exist yet. Commission and adjustments stay the resort's to
+ * write — an agency able to file its own commission could pay itself by typing.
+ */
+export const AGENT_DECLARE_KINDS = ["REMIT", "ADVANCE"] as const satisfies readonly AgentEntryKind[];
+
+export type AgentDeclareKind = (typeof AGENT_DECLARE_KINDS)[number];
+
+export function isAgentDeclareKind(v: unknown): v is AgentDeclareKind {
+  return typeof v === "string" && (AGENT_DECLARE_KINDS as readonly string[]).includes(v);
+}
+
 export function isAgentEntryKind(v: string): v is AgentEntryKind {
   return (AGENT_ENTRY_KINDS as readonly string[]).includes(v);
 }

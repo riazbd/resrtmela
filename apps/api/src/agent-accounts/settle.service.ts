@@ -32,6 +32,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import {
   AGENT_ENTRY_SIGN,
+  isAgentDeclareKind,
   isStoredAgentEntryKind,
   type AgentEntryKind,
   type JwtClaims,
@@ -578,8 +579,18 @@ export class SettleService {
     claims: JwtClaims,
     agencyId: number,
     resortId: number,
-    input: { amount: number; method: string; trxId?: string; note?: string; date?: string; clientRef?: string },
+    input: {
+      kind?: string;
+      amount: number;
+      method: string;
+      trxId?: string;
+      note?: string;
+      date?: string;
+      clientRef?: string;
+    },
   ) {
+    const kind = input.kind ?? "REMIT";
+    if (!isAgentDeclareKind(kind)) throw badRequest("An agency can declare an advance or a remittance");
     const amount = round2(Number(input.amount ?? 0));
     if (!Number.isFinite(amount) || amount <= 0) throw badRequest("The amount must be more than zero");
     const method = await this.assertMethod(resortId, input.method);
@@ -597,8 +608,8 @@ export class SettleService {
       data: {
         resortId,
         agencyId,
-        kind: "REMIT",
-        amount: this.signed("REMIT", amount) as never,
+        kind,
+        amount: this.signed(kind, amount) as never,
         date,
         method,
         trxId: input.trxId,
@@ -611,10 +622,10 @@ export class SettleService {
     await this.audit.log({
       actorId: claims.userId,
       resortId,
-      action: "agent.remit.declare",
+      action: kind === "ADVANCE" ? "agent.advance.declare" : "agent.remit.declare",
       entity: "agentAccount",
       entityId: agencyId,
-      diff: { amount, method, trxId: input.trxId },
+      diff: { kind, amount, method, trxId: input.trxId },
     });
     return { id: row.id.toString(), replayed: false, status: "PENDING" as const };
   }
