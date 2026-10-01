@@ -42,6 +42,7 @@ import { Card, Row, Stat } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { useAction } from "../../../src/design/use-action";
 import { color, space } from "../../../src/design/tokens";
+import { BarList } from "../../../src/design/charts";
 
 export default function AgentAccountsScreen() {
   const { activeResort, can } = useAuth();
@@ -146,6 +147,17 @@ export default function AgentAccountsScreen() {
             value={whole(d.pending)}
             sub="An agent says they have sent this. Open the account to match it."
           />
+        ) : null}
+
+        {d.rows.some((r) => r.balance > 0) ? (
+          <Card title="Due from each agency">
+            <BarList
+              format={whole}
+              limit={8}
+              barColor={color.chart.money.late.solid}
+              rows={[...d.rows].filter((r) => r.balance > 0).sort((a, b) => b.balance - a.balance).map((r) => ({ label: r.name, value: r.balance }))}
+            />
+          </Card>
         ) : null}
 
         <Card title={`${d.rows.length} ${d.rows.length === 1 ? "agent" : "agents"}`}>

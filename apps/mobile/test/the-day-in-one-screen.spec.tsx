@@ -31,7 +31,7 @@ jest.mock("expo-router", () => ({
 jest.mock("../src/api/session", () => ({
   // signed in throughout: this screen is about a person who has a
   // session, with or without a resort chosen
-  useAuth: () => ({ activeResort: mockResort, me: { id: 1, name: "Rahim" } }),
+  useAuth: () => ({ activeResort: mockResort, me: { id: 1, name: "Rahim" }, can: () => false }),
   client: { today: (...a: unknown[]) => mockToday(...a) },
 }));
 

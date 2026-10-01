@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { BarList } from "@/components/charts";
+import { MONEY_TONE } from "@rh/shared";
 import {
   Button, Card, Empty, Field, Input, Modal, Select, Spinner, Stat, Td, Th, useToast,
 } from "@/components/ui";
@@ -75,6 +77,31 @@ export default function AgentAccountsPage() {
         <Stat label="Awaiting confirmation" value={money(data?.pending ?? 0)} />
         <Stat label="Accounts" value={String(rows.length)} />
       </div>
+
+      {rows.some((r) => r.balance !== 0) && (
+        <Card title="Where the money is">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <div className="mb-2 text-xs font-semibold text-slate-500">Due from each agency</div>
+              <BarList
+                format={money}
+                limit={8}
+                color={MONEY_TONE.late.solid}
+                rows={[...rows].filter((r) => r.balance > 0).sort((a, b) => b.balance - a.balance).map((r) => ({ label: r.name, value: r.balance, sub: r.overLimit ? "over its limit" : undefined }))}
+              />
+            </div>
+            <div>
+              <div className="mb-2 text-xs font-semibold text-slate-500">Due to each agency</div>
+              <BarList
+                format={money}
+                limit={8}
+                color={MONEY_TONE.left.solid}
+                rows={[...rows].filter((r) => r.balance < 0).sort((a, b) => a.balance - b.balance).map((r) => ({ label: r.name, value: -r.balance }))}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card className="!p-0" title="Every agent this resort sells through">
         {rows.length === 0 ? (

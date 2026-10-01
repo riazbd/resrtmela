@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { api, client, money, cur } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
+import { Donut } from "@/components/charts";
+import { compactNumber, seriesColor } from "@rh/shared";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Button, Card, Empty, Field, Input, Select, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
@@ -12,7 +14,7 @@ import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
 /** Daily cashbook register — the sheet's expense tab, with a live day total. */
 export default function ExpensesPage() {
-  const { activeResort, isManagement } = useAuth();
+  const { activeResort, isManagement, can } = useAuth();
   const t = useT();
   const { push } = useToast();
   const [date, setDate] = useState(() => todayIn(activeResort?.timezone));
@@ -46,6 +48,22 @@ export default function ExpensesPage() {
     () => client.options.list(activeResort!.id, "EXPENSE_CATEGORY"),
     { enabled: !!activeResort, staleTime: 3_600_000 },
   );
+
+  // the month so far, by category: the P&L already sums it, so this reads
+  // the same figures the Reports page shows rather than adding them again
+  const monthStart = `${date.slice(0, 7)}-01`;
+  const monthQ = useApi(
+    keys.reports(activeResort?.id, "pl", `${monthStart}:${to}`),
+    () => client.reports.pl(activeResort!.id, monthStart, to),
+    { enabled: !!activeResort && can("reports.view") },
+  );
+  const monthCats = (() => {
+    const m = new Map<string, number>();
+    for (const c of [...(monthQ.data?.resort.expenseCategories ?? []), ...(monthQ.data?.restaurant.expenseCategories ?? [])]) {
+      m.set(c.category, (m.get(c.category) ?? 0) + c.amount);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  })();
 
   const rows = listQ.data?.rows ?? null;
   // the day total is aggregated server-side over every matching row, so a day
@@ -119,6 +137,21 @@ export default function ExpensesPage() {
       <div className="grid grid-cols-2 gap-4">
         <Stat label="দিনের মোট খরচ / Day total" value={money(dayTotal)} tone="red" sub={`${entryCount} entries`} />
       </div>
+
+      {monthCats.length > 0 && (
+        <Card title={`${new Date(`${monthStart}T00:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" })} so far, by category`}>
+          <Donut
+            format={money}
+            center={{ value: compactNumber(monthCats.reduce((s, [, v]) => s + v, 0)), label: "spent" }}
+            parts={[
+              ...monthCats.slice(0, 7).map(([label, value], i) => ({ label, value, color: seriesColor(i + 1) })),
+              ...(monthCats.length > 7
+                ? [{ label: "Everything else", value: monthCats.slice(7).reduce((s, [, v]) => s + v, 0), color: "#94a3b8" }]
+                : []),
+            ]}
+          />
+        </Card>
+      )}
 
       {/* entry row */}
       {canManage && (

@@ -404,7 +404,7 @@ export function Donut({
           ) : null}
         </div>
       </div>
-      <ul className="min-w-[10rem] flex-1 space-y-1.5 text-sm">
+      <ul className="min-w-[14rem] flex-1 space-y-1.5 text-sm">
         {parts.map((p, i) => (
           <li key={p.label} className={`flex items-center justify-between gap-3 rounded-lg px-1.5 py-0.5 ${hover === i ? "bg-slate-50" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
             <span className="inline-flex min-w-0 items-center gap-2 text-slate-600">

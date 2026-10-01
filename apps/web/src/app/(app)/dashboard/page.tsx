@@ -7,10 +7,21 @@ import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
+import { AreaChart, Donut, Legend } from "@/components/charts";
+import { MONEY_TONE, addDaysIso, todayIn } from "@rh/shared";
 
 export default function DashboardPage() {
-  const { activeResort, isStaff } = useAuth();
+  const { activeResort, isStaff, can } = useAuth();
   const enabled = !!activeResort;
+  const today = todayIn(activeResort?.timezone);
+  const monthAgo = addDaysIso(today, -29);
+  // the last thirty days, as a picture: the same daily report the Reports
+  // page lists, so the two cannot disagree
+  const trendQ = useApi(
+    keys.reports(activeResort?.id, "daily", `${monthAgo}:${today}`),
+    () => client.reports.daily(activeResort!.id, monthAgo, addDaysIso(today, 1)),
+    { enabled: enabled && isStaff && can("reports.view") },
+  );
   // three independent reads, three cache entries: the room list is the same
   // one the Rooms page just fetched, and it is not fetched again
   const todayQ = useApi(keys.today(activeResort?.id), () => client.today(activeResort!.id), { enabled });
@@ -76,6 +87,55 @@ export default function DashboardPage() {
           />
         )}
       </div>
+
+      {(trendQ.data?.length ?? 0) > 0 && (
+        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+          <Card
+            title="The last 30 days"
+            action={
+              <Link href="/reports" className="text-xs text-brand-600 hover:underline">
+                Reports →
+              </Link>
+            }
+          >
+            <Legend
+              className="mb-2"
+              items={[
+                { label: "Rooms", color: MONEY_TONE.paid.solid, value: money(trendQ.data!.reduce((s, d) => s + d.roomRevenue, 0)) },
+                { label: "Restaurant", color: MONEY_TONE.advance.solid, value: money(trendQ.data!.reduce((s, d) => s + d.fbRevenue, 0)) },
+                { label: "Expenses", color: MONEY_TONE.expense.solid, value: money(trendQ.data!.reduce((s, d) => s + d.expenses, 0)) },
+              ]}
+            />
+            <AreaChart
+              height={200}
+              formatFull={money}
+              data={trendQ.data!.map((d) => ({
+                label: new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }),
+                title: d.date,
+                values: { rooms: d.roomRevenue, fb: d.fbRevenue, expenses: d.expenses },
+              }))}
+              series={[
+                { key: "rooms", label: "Rooms", color: MONEY_TONE.paid.solid },
+                { key: "fb", label: "Restaurant", color: MONEY_TONE.advance.solid },
+                { key: "expenses", label: "Expenses", color: MONEY_TONE.expense.solid },
+              ]}
+            />
+          </Card>
+          <Card title="Tonight">
+            <Donut
+              format={(n) => String(Math.round(n))}
+              center={{ value: `${feed.occupancyPct}%`, label: "occupied" }}
+              parts={[
+                { label: "Occupied", value: feed.occupancyPct, color: MONEY_TONE.paid.solid },
+                { label: "Free", value: Math.max(0, 100 - feed.occupancyPct), color: "#e2e8f0" },
+              ]}
+            />
+            <p className="mt-3 text-xs text-slate-400">
+              {feed.arrivals.length} arriving and {feed.departures.length} leaving today.
+            </p>
+          </Card>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card

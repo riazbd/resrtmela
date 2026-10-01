@@ -14,21 +14,31 @@ import { useCallback } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
-import { formatMoney, type TodayRow } from "@rh/shared";
+import { addDaysIso, dayLabel, formatMoney, todayIn, type DailyRevenueRow, type TodayRow } from "@rh/shared";
 import { client, useAuth } from "../../src/api/session";
 import { WhichResort } from "../../src/screens/which-resort";
 import { useMoneyFormat } from "../../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Card, Row, Stat } from "../../src/design/surface";
+import { Columns, Legend, SplitBar } from "../../src/design/charts";
 import { Text } from "../../src/design/text";
-import { space } from "../../src/design/tokens";
+import { color, space } from "../../src/design/tokens";
 
 /** A room list that reads, with the gaps an imported booking can leave. */
 const roomsOf = (row: TodayRow) => row.rooms.filter(Boolean).join(", ") || "—";
 
 export default function DashboardScreen() {
-  const { activeResort } = useAuth();
+  const { activeResort, can } = useAuth();
   const resortId = activeResort?.id;
+  const today = todayIn(activeResort?.timezone);
+  const twoWeeksAgo = addDaysIso(today, -13);
+  // the last two weeks as a picture — the same daily report the console
+  // draws, for whoever may read reports
+  const trend = useApi<DailyRevenueRow[]>(
+    keys.reports(resortId, "daily", `${twoWeeksAgo}:${today}`),
+    () => client.reports.daily(resortId!, twoWeeksAgo, addDaysIso(today, 1)),
+    { enabled: resortId !== undefined && can("reports.view") },
+  );
   const money = useMoneyFormat();
   /** Whole taka, and the same call the `Money` component would make. */
   const whole = useCallback(
@@ -97,6 +107,43 @@ export default function DashboardScreen() {
             tone={feed.arrivalsDueTotal > 0 ? "danger" : "title"}
           />
         </View>
+
+        <Card title="Tonight">
+          <SplitBar
+            format={(n) => `${Math.round(n)}%`}
+            total={100}
+            parts={[
+              { label: "Occupied", value: feed.occupancyPct, color: color.chart.money.paid.solid },
+              { label: "Free", value: Math.max(0, 100 - feed.occupancyPct), color: color.ink[200] },
+            ]}
+          />
+        </Card>
+
+        {trend.data && trend.data.length > 0 ? (
+          <Card title="The last two weeks">
+            <Columns
+              height={130}
+              formatFull={whole}
+              series={[
+                { key: "rooms", label: "Rooms", color: color.chart.money.paid.solid },
+                { key: "fb", label: "Restaurant", color: color.chart.money.advance.solid },
+              ]}
+              marker={{ key: "expenses", label: "Spent", color: color.chart.money.expense.solid }}
+              data={trend.data.map((d, i, all) => ({
+                label: i % 3 === 0 || i === all.length - 1 ? String(Number(d.date.slice(8, 10))) : "",
+                title: dayLabel(d.date),
+                values: { rooms: d.roomRevenue, fb: d.fbRevenue, expenses: d.expenses },
+              }))}
+            />
+            <Legend
+              items={[
+                { label: "Rooms", color: color.chart.money.paid.solid },
+                { label: "Restaurant", color: color.chart.money.advance.solid },
+                { label: "Spent", color: color.chart.money.expense.solid },
+              ]}
+            />
+          </Card>
+        ) : null}
 
         <Card title="Arrivals">
           <StayList rows={feed.arrivals} empty="No arrivals today" whole={whole} />

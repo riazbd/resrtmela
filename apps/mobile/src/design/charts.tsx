@@ -80,14 +80,14 @@ export function Columns({
     <View style={styles.gap}>
       {d ? (
         <View style={styles.readout} accessibilityLiveRegion="polite">
-          <Text step="small" weight="bold" tone="title">
+          <Text step="small" weight="bold" tone="title" numberOfLines={1}>
             {d.title ?? d.label}
           </Text>
           <View style={styles.readoutRows}>
             {[...series, ...(marker ? [marker] : [])].map((s) => (
               <View key={s.key} style={styles.legendItem}>
                 <View style={[styles.swatch, { backgroundColor: s.color }]} />
-                <Text step="caption" tone="body" tabular>
+                <Text step="caption" tone="body" tabular numberOfLines={1}>
                   {`${s.label} ${formatFull(d.values[s.key] ?? 0)}`}
                 </Text>
               </View>
@@ -97,13 +97,13 @@ export function Columns({
       ) : null}
       <View style={[styles.columns, { height: height + 20 }]}>
         <View style={[styles.axis, { height }]}>
-          <Text step="caption" tone="muted" tabular>
+          <Text step="caption" tone="muted" tabular numberOfLines={1}>
             {format(top)}
           </Text>
-          <Text step="caption" tone="muted" tabular>
+          <Text step="caption" tone="muted" tabular numberOfLines={1}>
             {format(top / 2)}
           </Text>
-          <Text step="caption" tone="muted" tabular>
+          <Text step="caption" tone="muted" tabular numberOfLines={1}>
             0
           </Text>
         </View>
@@ -215,7 +215,7 @@ export function BarList({
   const max = Math.max(1, ...shown.map((r) => r.value));
   if (shown.length === 0) {
     return (
-      <Text step="small" tone="muted">
+      <Text step="small" tone="muted" numberOfLines={1}>
         Nothing to show yet.
       </Text>
     );
@@ -225,10 +225,17 @@ export function BarList({
       {shown.map((r, i) => (
         <View key={r.label + i} style={styles.barRow} accessible accessibilityLabel={`${r.label}: ${format(r.value)}`}>
           <View style={styles.barHead}>
-            <Text step="small" tone="body" numberOfLines={1} style={styles.flex}>
-              {r.sub ? `${r.label} · ${r.sub}` : r.label}
+            <Text step="small" tone="body" numberOfLines={1} style={styles.shrink}>
+              {r.label}
             </Text>
-            <Text step="small" weight="bold" tone="title" tabular>
+            {r.sub ? (
+              <Text step="caption" tone="muted" numberOfLines={1} style={styles.flex}>
+                {r.sub}
+              </Text>
+            ) : (
+              <View style={styles.flex} />
+            )}
+            <Text step="small" weight="bold" tone="title" tabular numberOfLines={1}>
               {format(r.value)}
             </Text>
           </View>
@@ -259,10 +266,10 @@ export function Shares({
           <Text step="small" tone="body" numberOfLines={1} style={styles.flex}>
             {p.label}
           </Text>
-          <Text step="small" weight="bold" tone="title" tabular>
+          <Text step="small" weight="bold" tone="title" tabular numberOfLines={1}>
             {format(p.value)}
           </Text>
-          <Text step="caption" tone="muted" tabular style={styles.percent}>
+          <Text step="caption" tone="muted" tabular style={styles.percent} numberOfLines={1}>
             {`${percentOf(p.value, total)}%`}
           </Text>
         </View>
@@ -319,7 +326,7 @@ export function TimelineGrid<C>({
           <View style={styles.cellsRow}>
             {columns.map((c, i) => (
               <View key={c + i} style={styles.headCell}>
-                <Text step="caption" tone={activeColumn === i ? "title" : "muted"} weight={activeColumn === i ? "bold" : "regular"}>
+                <Text step="caption" tone={activeColumn === i ? "title" : "muted"} weight={activeColumn === i ? "bold" : "regular"} numberOfLines={1}>
                   {c}
                 </Text>
               </View>
@@ -344,7 +351,7 @@ export function TimelineGrid<C>({
                     ]}
                   >
                     {look.text ? (
-                      <Text step="caption" weight="bold" tabular style={{ color: look.ink }}>
+                      <Text step="caption" weight="bold" tabular style={{ color: look.ink }} numberOfLines={1}>
                         {look.text}
                       </Text>
                     ) : null}
@@ -395,6 +402,7 @@ const CELL = 40;
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  shrink: { flexShrink: 1 },
   gap: { gap: space.sm },
   legend: { flexDirection: "row", flexWrap: "wrap", columnGap: space.md, rowGap: space.xs },
   legendItem: { flexDirection: "row", alignItems: "center", gap: space.xs },

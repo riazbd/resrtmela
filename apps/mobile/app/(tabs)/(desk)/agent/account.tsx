@@ -46,6 +46,7 @@ import { Card, Row, Stat } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
 import { useAction } from "../../../../src/design/use-action";
 import { color, space } from "../../../../src/design/tokens";
+import { BarList } from "../../../../src/design/charts";
 
 export default function MyAccountsScreen() {
   const { can } = useAuth();
@@ -144,6 +145,24 @@ export default function MyAccountsScreen() {
             value={whole(d.pending)}
             sub="You have told the resort. It counts once they match it."
           />
+        ) : null}
+
+        {d.rows.some((r) => r.balance !== 0) ? (
+          <Card title="Where the money is">
+            <BarList
+              format={whole}
+              limit={8}
+              rows={[...d.rows]
+                .filter((r) => r.balance !== 0)
+                .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
+                .map((r) => ({
+                  label: r.resort.name,
+                  sub: r.balance > 0 ? "due from you" : "due to you",
+                  value: Math.abs(r.balance),
+                  color: r.balance > 0 ? color.chart.money.late.solid : color.chart.money.paid.solid,
+                }))}
+            />
+          </Card>
         ) : null}
 
         {can("agent.remit") ? (

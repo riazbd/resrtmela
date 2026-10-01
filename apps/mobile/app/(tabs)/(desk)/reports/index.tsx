@@ -32,7 +32,8 @@ import { useMoneyFormat } from "../../../../src/design/money";
 import { Loading, Problem, Stale } from "../../../../src/design/states";
 import { Card, Row, Stat } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
-import { space } from "../../../../src/design/tokens";
+import { color, space } from "../../../../src/design/tokens";
+import { SplitBar } from "../../../../src/design/charts";
 
 /**
  * How far back to look. Named periods rather than a date picker, because
@@ -134,6 +135,42 @@ export default function ReportsScreen() {
           />
           <Stat label="Bookings" value={String(m.bookings)} sub="stays in the period" />
         </View>
+
+        <Card title="The period in pictures">
+          <Text step="small" weight="medium" tone="title">
+            Of what was billed
+          </Text>
+          <SplitBar
+            format={whole}
+            parts={[
+              { label: "Received", value: m.grossIncome, color: color.chart.money.paid.solid },
+              { label: "Still due", value: m.stillDue, color: color.chart.money.left.solid },
+            ]}
+          />
+          <Text step="small" weight="medium" tone="title">
+            Where the income went
+          </Text>
+          <SplitBar
+            format={whole}
+            total={Math.max(m.grossIncome, m.expenses)}
+            parts={[
+              { label: "Spent", value: m.expenses, color: color.chart.money.expense.solid },
+              m.netProfit >= 0
+                ? { label: "Kept as profit", value: m.netProfit, color: color.chart.money.paid.solid }
+                : { label: "Loss", value: -m.netProfit, color: color.chart.money.late.solid },
+            ]}
+          />
+          <Text step="small" weight="medium" tone="title">
+            Where it came from
+          </Text>
+          <SplitBar
+            format={whole}
+            parts={[
+              { label: "Rooms", value: m.netRoomRevenue, color: color.chart.money.paid.solid },
+              { label: "Restaurant", value: m.restaurantRevenue, color: color.chart.money.advance.solid },
+            ]}
+          />
+        </Card>
 
         <Card title="Where it came from">
           <Row

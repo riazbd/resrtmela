@@ -14,6 +14,7 @@
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
+import { Columns, Shares } from "../../../../src/design/charts";
 import { addDaysIso, formatMoney, stayRange, todayIn, type PLReport } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { WhichResort } from "../../../../src/screens/which-resort";
@@ -98,6 +99,22 @@ export default function ProfitAndLossScreen() {
           />
         </View>
 
+        <Card title="Money in, money out">
+          <Columns
+            formatFull={whole}
+            series={[
+              { key: "in", label: "Income", color: color.chart.money.paid.solid },
+              { key: "out", label: "Spent", color: color.chart.money.expense.solid },
+              { key: "net", label: "Net", color: color.chart.money.advance.solid },
+            ]}
+            data={[
+              { label: "Resort", title: "The resort", values: { in: resort.income, out: resort.expenses + resort.payroll, net: 0 } },
+              { label: "Restaurant", title: "The restaurant", values: { in: restaurant.income, out: restaurant.expenses, net: 0 } },
+              { label: "Net", title: "Net, both together", values: { in: 0, out: 0, net: Math.max(0, combined.net) } },
+            ]}
+          />
+        </Card>
+
         <Card title="The resort">
           <Row title="Room rent" meta={whole(resort.roomRevenue)} accessibilityLabel={`Room rent: ${whole(resort.roomRevenue)}`} />
           <Row title="Extra persons" meta={whole(resort.extraPersonRevenue)} accessibilityLabel={`Extra persons: ${whole(resort.extraPersonRevenue)}`} />
@@ -157,6 +174,17 @@ export default function ProfitAndLossScreen() {
 
         {resort.expenseCategories.length > 0 ? (
           <Card title="What the money went on">
+            <Shares
+              format={whole}
+              parts={[
+                ...resort.expenseCategories.map((c, i) => ({
+                  label: c.category,
+                  value: c.amount,
+                  color: color.chart.series[(i + 1) % color.chart.series.length]!,
+                })),
+                ...(resort.payroll > 0 ? [{ label: "Payroll", value: resort.payroll, color: color.chart.money.bonus.solid }] : []),
+              ]}
+            />
             {resort.expenseCategories.map((line, i) => (
               <Row
                 key={line.category}

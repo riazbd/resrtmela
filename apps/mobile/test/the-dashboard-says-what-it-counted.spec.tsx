@@ -81,8 +81,10 @@ describe("the dashboard says what it counted", () => {
   it("names the day it is counting, as the other three tiles do", async () => {
     mockToday.mockResolvedValue(feed({ arrivalsDueTotal: 4000, arrivalsDueCount: 1 }));
     const r = await open();
-    await waitFor(() => expect(r.getByText(/today/i)).toBeTruthy());
-    expect(r.getByLabelText(/To collect today/)).toBeTruthy();
+    // the tile, not the loading line: "Loading today" matched this once and
+    // passed before the dashboard had drawn anything
+    await waitFor(() => expect(r.getByLabelText(/To collect today/)).toBeTruthy());
+    expect(r.getByText("To collect today")).toBeTruthy();
   });
 
   it("shows the figure it was given", async () => {

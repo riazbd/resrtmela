@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
 import { client, money, dmy, cur, type DuesReport } from "@/lib/api";
 import { useApi, keys, useMutation, useQueryClient } from "@/lib/query";
+import { Meter } from "@/components/charts";
+import { MONEY_TONE } from "@rh/shared";
 import { useOutbox } from "@/lib/outbox";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
@@ -72,6 +74,20 @@ export default function PaymentsPage() {
         <Stat label="Due from guests" value={money(data.guestTotal)} />
         <Stat label="Due from agencies" value={money(data.agencyTotal)} />
       </div>
+
+      {data.total > 0 && (
+        <Card title="Who the dues are with">
+          <Meter
+            height={16}
+            format={money}
+            total={data.total}
+            parts={[
+              { label: "Guests", value: data.guestTotal, color: MONEY_TONE.left.solid },
+              { label: "Agencies", value: data.agencyTotal, color: MONEY_TONE.advance.solid },
+            ]}
+          />
+        </Card>
+      )}
 
       <div className="flex overflow-hidden rounded-lg border border-slate-200">
         {DUES_LENSES.map((w) => (

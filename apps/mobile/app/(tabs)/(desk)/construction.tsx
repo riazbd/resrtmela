@@ -38,6 +38,7 @@ import { Card, Row, Stat } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { useAction } from "../../../src/design/use-action";
 import { color, space } from "../../../src/design/tokens";
+import { BarList } from "../../../src/design/charts";
 
 const LENSES = ["The book", "Who put in", "What for"] as const;
 type Lens = (typeof LENSES)[number];
@@ -254,20 +255,17 @@ function TallyCard({
           <Empty message={empty} hint="It fills itself as the book is kept." />
         </View>
       ) : (
-        rows.map((r, i) => (
-          <Row
-            key={r.name}
-            title={r.name}
-            subtitle={`${r.entries} ${r.entries === 1 ? "entry" : "entries"}`}
-            last={i === rows.length - 1}
-            accessibilityLabel={`${r.name}, ${whole(r.amount)} over ${r.entries} entries`}
-            right={
-              <Text step="body" weight="medium" tone="title" tabular>
-                {whole(r.amount)}
-              </Text>
-            }
-          />
-        ))
+        // a bar each, longest first, so the biggest giver and the biggest
+        // spend are seen before they are read
+        <BarList
+          format={whole}
+          barColor={color.chart.money.paid.solid}
+          rows={rows.map((r) => ({
+            label: r.name,
+            sub: `${r.entries} ${r.entries === 1 ? "entry" : "entries"}`,
+            value: r.amount,
+          }))}
+        />
       )}
     </Card>
   );

@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { Donut, Meter } from "@/components/charts";
+import { MONEY_TONE, compactNumber, seriesColor } from "@rh/shared";
 import { useDebounced } from "@/lib/use-debounced";
 import { usePaymentMethods } from "@/lib/resort-options";
 import {
@@ -110,6 +112,22 @@ export default function ConstructionPage() {
           sub={(book?.totals.inHand ?? 0) < 0 ? "Spent more than was put in" : undefined}
         />
       </div>
+
+      {book && book.totals.received + book.totals.spent > 0 && (
+        <Card title="Of what was put in">
+          <Meter
+            height={16}
+            format={money}
+            total={Math.max(book.totals.received, book.totals.spent)}
+            parts={[
+              { label: "Spent", value: book.totals.spent, color: MONEY_TONE.expense.solid },
+              ...(book.totals.inHand >= 0
+                ? [{ label: "In hand", value: book.totals.inHand, color: MONEY_TONE.paid.solid }]
+                : []),
+            ]}
+          />
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Tally
@@ -280,6 +298,19 @@ function Tally({
       {rows.length === 0 ? (
         <Empty msg={empty} />
       ) : (
+        <>
+        <div className="border-b border-slate-50 p-4">
+          <Donut
+            format={money}
+            center={{ value: compactNumber(total), label: "in all" }}
+            parts={[
+              ...rows.slice(0, 7).map((r, i) => ({ label: r.name, value: r.amount, color: seriesColor(i) })),
+              ...(rows.length > 7
+                ? [{ label: "Everything else", value: rows.slice(7).reduce((s, r) => s + r.amount, 0), color: "#94a3b8" }]
+                : []),
+            ]}
+          />
+        </div>
         <div className="divide-y divide-slate-50">
           {rows.map((r) => (
             <div key={r.name} className="flex items-center gap-3 px-4 py-2.5">
@@ -303,6 +334,7 @@ function Tally({
             </div>
           ))}
         </div>
+        </>
       )}
     </Card>
   );

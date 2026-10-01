@@ -30,6 +30,10 @@ const mockAgentPay = jest.fn();
 const mockAgentPeople = jest.fn();
 let mockCan = (_k: string) => true;
 
+// several screens' worth of presses per test; under the whole suite's load
+// the default five seconds was not always enough
+jest.setTimeout(30_000);
+
 jest.mock("expo-print", () => ({ printAsync: jest.fn() }));
 
 jest.mock("expo-router", () => ({

@@ -7,6 +7,7 @@ import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Select, Td, Th } from "@/components/ui";
 import { Tabs, Table } from "@/components/patterns";
+import { AgentsChart, DailyCharts, MoneyArrivedCharts, PLCharts, SourcesChart, SummaryCharts } from "@/components/report-charts";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 import {
   methodLabel,
@@ -240,6 +241,7 @@ export default function ReportsPage() {
                 Received in this period
               </div>
               <div className="text-3xl font-bold text-brand-700">{money(collectors.total)}</div>
+              <MoneyArrivedCharts c={collectors} methodLabel={methodLabel} />
 
               {/*
                 How it arrived, before who took it. Cash has to be counted
@@ -389,6 +391,7 @@ export default function ReportsPage() {
       */}
       {tab === "Summary" && metrics && (
         <Card title="P&L summary (management metrics)">
+          <SummaryCharts m={metrics} />
           {/*
             Two rows because they answer two questions. The first is what the
             stays were worth; the second is what the resort actually has. A
@@ -424,6 +427,7 @@ export default function ReportsPage() {
             Billed counts the stays that check in between these dates. Income counts the money
             received between them — profit is made only from that.
           </p>
+          <PLCharts pl={pl} />
           <div className="grid gap-4 lg:grid-cols-3">
             {/* resort column */}
             <div className="rounded-xl border border-slate-200 p-4">
@@ -489,6 +493,8 @@ export default function ReportsPage() {
         {!agents || agents.length === 0 ? (
           <Empty msg="No agent bookings in this period" />
         ) : (
+          <>
+          <AgentsChart rows={agents} />
           <Table minWidth={640}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Agent</Th><Th>Rate</Th><Th>Bookings</Th><Th className="text-right">Rent sold</Th><Th className="text-right">Dues</Th><Th className="text-right">Commission</Th></tr>
@@ -512,6 +518,7 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </Table>
+          </>
         )}
       </Card>
       )}
@@ -521,6 +528,8 @@ export default function ReportsPage() {
         {!sources || sources.length === 0 ? (
           <Empty msg="No bookings in this period" />
         ) : (
+          <>
+          <SourcesChart rows={sources} />
           <Table minWidth={520}>
               <thead className="border-b border-slate-100">
                 <tr><Th>Source</Th><Th>Bookings</Th><Th className="text-right">Rent</Th><Th className="text-right">Dues</Th></tr>
@@ -536,6 +545,7 @@ export default function ReportsPage() {
                 ))}
               </tbody>
             </Table>
+          </>
         )}
       </Card>
       )}
@@ -549,6 +559,7 @@ export default function ReportsPage() {
             What each night of stay is worth, paid or not. For money that actually came in, see
             Money and Profit &amp; loss.
           </p>
+          <DailyCharts rows={daily} />
           <div className="max-h-64 overflow-auto">
             <Table minWidth={520}>
               <thead className="sticky top-0 border-b border-slate-100 bg-white">

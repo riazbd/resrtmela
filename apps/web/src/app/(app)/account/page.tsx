@@ -17,6 +17,7 @@
 
 import { useAuth } from "@/lib/auth";
 import { ChangeMyPassword } from "@/components/set-password";
+import { MyPayCard } from "@/components/my-pay";
 import { Card } from "@/components/ui";
 import { displayEmail, displayPhone } from "@/lib/contact";
 
@@ -52,6 +53,8 @@ export default function AccountPage() {
           </div>
         </dl>
       </Card>
+
+      <MyPayCard />
 
       <ChangeMyPassword />
     </div>
