@@ -8,10 +8,12 @@
  * one-night stay got 36 usable pixels and no name fits in that, so the
  * grid drew an ellipsis and nothing else.
  *
- * It is a week now, seven nights across the full width, with the room's
- * name on its own line above its strip. Nothing scrolls sideways,
- * nothing is truncated, and a bar too narrow to hold a name does not
- * try — see `room-week.tsx`.
+ * It is seven nights across the full width now, with the room's name on
+ * its own line above its strip — nothing truncated, and a bar too narrow
+ * to hold a name does not try (`room-week.tsx`). And since 2026-10-01 the
+ * strip scrolls: day after day, both ways, for as long as anybody likes,
+ * with no scroll bar and the names pinned (`room-scroll.tsx`). It used to
+ * jump a week per swipe, and the owner wanted the dates to keep coming.
  *
  * Both lenses move by month from a picker rather than by `‹ ›` alone.
  * Six presses to reach March was the other half of what the owner
@@ -27,10 +29,10 @@
  * is a night the resort can sell that evening, and a calendar that paints it
  * red turns guests away from an empty room.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
-import { keys, useApi } from "@rh/app-core";
+import { keys, useApi, useQueryClient } from "@rh/app-core";
 import {
   NIGHT_MEANING,
   addDaysIso,
@@ -54,7 +56,8 @@ import { SideSwipe } from "../../src/design/side-swipe";
 import { Lenses } from "../../src/design/lenses";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Text } from "../../src/design/text";
-import { RoomWeek, WeekHead, WEEK } from "../../src/screens/room-week";
+import { WEEK } from "../../src/screens/room-week";
+import { RoomScroll, type RoomScrollHandle } from "../../src/screens/room-scroll";
 import { TOUCH_TARGET, color, radius, space } from "../../src/design/tokens";
 
 /**
@@ -108,6 +111,31 @@ export default function CalendarScreen() {
   const anchor = chosen ?? today;
 
   /**
+   * The room strip scrolls, so it has two days rather than one: where it was
+   * opened (`origin`, which the strip measures every offset from and which
+   * only moves when somebody picks a month beyond its reach) and the day at
+   * its left edge now (`seen`, which the bar's label reads).
+   */
+  const [origin, setOrigin] = useState<string | null>(null);
+  const [seen, setSeen] = useState<string | null>(null);
+  const roomsFrom = origin ?? anchor;
+  const seenDay = seen ?? roomsFrom;
+  const scroller = useRef<RoomScrollHandle>(null);
+  const qc = useQueryClient();
+  const openBooking = useCallback((id: number) => router.push(`/bookings/${id}` as never), []);
+  /*
+   * A free night is where a booking starts. Somebody who has just found a
+   * gap is about to fill it, and making them go to another screen and
+   * re-enter the room and the date is the kind of small tax that stops a
+   * tool being used at the desk.
+   */
+  const takeNight = useCallback(
+    (roomId: number, day: string) =>
+      router.push(`/new-booking?roomId=${roomId}&checkIn=${day}` as never),
+    [],
+  );
+
+  /**
    * The window follows the lens.
    *
    * Rooms reads a week from wherever you are. Month draws a calendar
@@ -115,8 +143,13 @@ export default function CalendarScreen() {
    * squares with no data, which the grid would cheerfully draw as
    * "3 left" on nights that are sold out.
    */
-  const month = monthOf(anchor);
-  const start = view === "Month" ? (monthStart(month) ?? anchor) : anchor;
+  const month = monthOf(view === "Month" ? anchor : seenDay);
+  /*
+   * In Rooms this is the week the strip opens on — the same key its first
+   * week asks under, so the two are one request, and this screen's loading
+   * and refusal states cover the strip's first sight of the server.
+   */
+  const start = view === "Month" ? (monthStart(month) ?? anchor) : roomsFrom;
   const span = view === "Month" ? monthLength(month) : WEEK;
   const end = addDaysIso(start, span);
 
@@ -205,17 +238,40 @@ export default function CalendarScreen() {
   }
 
   /**
-   * One move, whichever lens is showing, so the arrows and the drag cannot
-   * come to mean different things. Rooms walks a week at a time; Month lands
-   * on the first of the next one, which is where picking a month already puts
-   * you.
+   * Somewhere in Rooms: scrolled to, if the strip reaches it, or the strip
+   * opened again from there if it does not — ten years either way is far,
+   * and the year picker goes further.
+   */
+  const roomsTo = (day: string) => {
+    if (scroller.current?.reaches(day)) {
+      scroller.current.goTo(day);
+    } else {
+      setOrigin(day);
+      setSeen(null);
+    }
+  };
+
+  /**
+   * One move, whichever lens is showing. Rooms slides the strip a week —
+   * it is still a week per press, because a press is a jump and the scroll
+   * is for everything in between; Month lands on the first of the next one,
+   * which is where picking a month already puts you.
    */
   const step = (by: number) =>
-    setStart(
-      view === "Rooms"
-        ? addDaysIso(start, by * WEEK)
-        : (monthStart(stepMonth(month, by)) ?? today),
-    );
+    view === "Rooms"
+      ? roomsTo(addDaysIso(seenDay, by * WEEK))
+      : setStart(monthStart(stepMonth(month, by)) ?? today);
+
+  /** Each lens opens where the other one was. */
+  const changeView = (next: CalendarView) => {
+    if (next === view) return;
+    if (next === "Month") setStart(seenDay);
+    else {
+      setOrigin(anchor);
+      setSeen(null);
+    }
+    setView(next);
+  };
 
   return (
     <>
@@ -241,10 +297,12 @@ export default function CalendarScreen() {
         <MonthBar
           month={month}
           today={today}
-          onChange={(m) => setStart(monthStart(m) ?? today)}
+          onChange={(m) =>
+            view === "Rooms" ? roomsTo(monthStart(m) ?? today) : setStart(monthStart(m) ?? today)
+          }
           label={
             view === "Rooms"
-              ? `${dayLabel(start)} — ${dayLabel(addDaysIso(start, WEEK - 1))}`
+              ? `${dayLabel(seenDay)} — ${dayLabel(addDaysIso(seenDay, WEEK - 1))}`
               : undefined
           }
           onStep={view === "Rooms" ? (by) => step(by) : undefined}
@@ -255,28 +313,29 @@ export default function CalendarScreen() {
           }
         />
 
-        <Lenses options={VIEWS} value={view} onChange={setView} />
+        <Lenses options={VIEWS} value={view} onChange={changeView} />
       </View>
 
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={calQ.isRefetching} onRefresh={() => void calQ.refetch()} />
+          <RefreshControl
+            refreshing={calQ.isRefetching}
+            onRefresh={() =>
+              // in Rooms every week on the strip is its own request; all of them
+              view === "Rooms"
+                ? void qc.invalidateQueries({ queryKey: ["calendar", resortId] })
+                : void calQ.refetch()
+            }
+          />
         }
       >
-        {/*
-          Dragging sideways moves the same step the arrows do, because a
-          calendar is read by moving through it and the chevrons are at the top
-          of the screen while the thumb is on the grid. Pull right for the days
-          behind, left for the ones ahead — the direction the content would go
-          if it followed the finger.
-
-          Around the grid and not the whole screen: the lens toggle and the
-          month label are buttons, and a drag that started on them would be a
-          press somebody did not finish.
-        */}
-        <SideSwipe onBack={() => step(-1)} onForward={() => step(1)}>
         {view === "Month" ? (
-          <>
+          /*
+            Dragging sideways moves a month, as the arrows do — the month is
+            squares that fit the screen, so there is nothing to scroll and a
+            drag is a page turn. The room strip below scrolls instead.
+          */
+          <SideSwipe onBack={() => step(-1)} onForward={() => step(1)}>
             <MonthOfNights
               month={month}
               today={today}
@@ -291,38 +350,21 @@ export default function CalendarScreen() {
               and the screen has room for eight.
             */}
             <MonthTotals days={days} sellable={sellable.length} occupancy={occupancy} />
-          </>
+          </SideSwipe>
         ) : (
-          <View style={styles.sheet}>
-            <WeekHead
-              days={days}
-              taken={new Map(occupancy.map((o) => [o.day, o.taken]))}
-              sellable={sellable.length}
-              today={today}
-            />
-            {rooms.map((room) => (
-              <RoomWeek
-                key={room.id}
-                room={room}
-                days={days}
-                held={held}
-                onOpenBooking={(id) => router.push(`/bookings/${id}` as never)}
-                /*
-                 * A free night is where a booking starts. Somebody who
-                 * has just found a gap is about to fill it, and making
-                 * them go to another screen and re-enter the room and
-                 * the date is the kind of small tax that stops a tool
-                 * being used at the desk.
-                 */
-                onTakeNight={(roomId, day) =>
-                  router.push(`/new-booking?roomId=${roomId}&checkIn=${day}` as never)
-                }
-              />
-            ))}
-          </View>
+          <RoomScroll
+            // a new origin is a new strip, measured from there
+            key={roomsFrom}
+            ref={scroller}
+            resortId={resortId}
+            origin={roomsFrom}
+            rooms={rooms}
+            today={today}
+            onSeen={setSeen}
+            onOpenBooking={openBooking}
+            onTakeNight={takeNight}
+          />
         )}
-
-        </SideSwipe>
 
         {/*
           What the colours mean.

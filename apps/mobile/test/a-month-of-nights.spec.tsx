@@ -8,9 +8,10 @@
  * usable pixels, no name fits in that, and the grid drew an ellipsis
  * and nothing else.
  *
- * It is a week now — seven nights across the full width, the room's
- * name on its own line above its strip, nothing scrolling sideways.
- * The rules that follow are what that has to keep true.
+ * It is seven nights across the full width now, the room's name on its
+ * own line above its strip, and the strip scrolls sideways day after day
+ * (the-dates-keep-coming.spec.tsx). The rules that follow are what each
+ * week of it has to keep true.
  *
  * The rule the bars obey is `@rh/shared`'s, not this screen's: green is free
  * and nothing else is green, red is held and the shade says how firmly, grey
@@ -248,15 +249,15 @@ describe("a gap you can act on", () => {
 });
 
 describe("moving through the year", () => {
+  /** The strip scrolls; the arrows still jump a week, for a reader who wants a jump. */
   it("steps a week at a time in the room lens", async () => {
     const r = await render(<Harness><CalendarScreen /></Harness>);
-    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(1));
-    const firstFrom = mockCalendar.mock.calls[0]![1] as string;
-
+    await waitFor(() => expect(r.getByText("19 Sep — 25 Sep")).toBeTruthy());
     await fireEvent.press(r.getByRole("button", { name: "Next week" }));
-    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
-    const nextFrom = mockCalendar.mock.calls[1]![1] as string;
-    expect(nextFrom > firstFrom).toBe(true);
+    await waitFor(() => expect(r.getByText("26 Sep — 02 Oct")).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Previous week" }));
+    await fireEvent.press(r.getByRole("button", { name: "Previous week" }));
+    await waitFor(() => expect(r.getByText("12 Sep — 18 Sep")).toBeTruthy());
   });
 
   /**
@@ -291,8 +292,8 @@ describe("moving through the year", () => {
     await fireEvent.press(r.getByLabelText(/September 2026\. Choose another month/));
     await fireEvent.press(r.getByLabelText("December 2026"));
 
-    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
-    expect(mockCalendar.mock.calls[1]![1]).toBe("2026-12-01");
+    // the strip slides to it; the week it lands on asks for itself as it arrives
+    await waitFor(() => expect(r.getByText("01 Dec — 07 Dec")).toBeTruthy());
   });
 
   /** And any year, which no number of month presses was going to reach. */
@@ -306,8 +307,7 @@ describe("moving through the year", () => {
     await fireEvent.press(r.getByRole("button", { name: "Previous year" }));
     await fireEvent.press(r.getByLabelText("March 2025"));
 
-    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
-    expect(mockCalendar.mock.calls[1]![1]).toBe("2025-03-01");
+    await waitFor(() => expect(r.getByText("01 Mar — 07 Mar")).toBeTruthy());
   });
 
   it("comes back to this month in one press", async () => {
@@ -320,8 +320,7 @@ describe("moving through the year", () => {
     await fireEvent.press(r.getByRole("button", { name: "Next year" }));
     await fireEvent.press(r.getByRole("button", { name: "Go to this month" }));
 
-    await waitFor(() => expect(mockCalendar).toHaveBeenCalledTimes(2));
-    expect(mockCalendar.mock.calls[1]![1]).toBe("2026-09-01");
+    await waitFor(() => expect(r.getByText("01 Sep — 07 Sep")).toBeTruthy());
   });
 });
 
