@@ -19,8 +19,9 @@ import { client, useAuth } from "../../src/api/session";
 import { WhichResort } from "../../src/screens/which-resort";
 import { useMoneyFormat } from "../../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../../src/design/states";
-import { Card, Row, Stat } from "../../src/design/surface";
+import { Card, Row } from "../../src/design/surface";
 import { Columns, Legend, SplitBar } from "../../src/design/charts";
+import { Hero, HeroFigure, greetingAt } from "../../src/design/hero";
 import { Text } from "../../src/design/text";
 import { color, space } from "../../src/design/tokens";
 
@@ -28,10 +29,14 @@ import { color, space } from "../../src/design/tokens";
 const roomsOf = (row: TodayRow) => row.rooms.filter(Boolean).join(", ") || "—";
 
 export default function DashboardScreen() {
-  const { activeResort, can } = useAuth();
+  const { activeResort, can, me } = useAuth();
   const resortId = activeResort?.id;
   const today = todayIn(activeResort?.timezone);
   const twoWeeksAgo = addDaysIso(today, -13);
+  // the resort's hour, so the greeting is the resort's morning
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: activeResort?.timezone ?? "Asia/Dhaka" }).format(new Date()),
+  );
   // the last two weeks as a picture — the same daily report the console
   // draws, for whoever may read reports
   const trend = useApi<DailyRevenueRow[]>(
@@ -78,10 +83,13 @@ export default function DashboardScreen() {
           <RefreshControl refreshing={day.isRefetching} onRefresh={() => void day.refetch()} />
         }
       >
-        <View style={styles.figures}>
-          <Stat label="Occupancy" value={`${feed.occupancyPct}%`} sub="rooms checked in" />
-          <Stat label="Arrivals" value={String(feed.arrivals.length)} sub="expected today" tone="ok" />
-          <Stat label="Departures" value={String(feed.departures.length)} sub="due out today" />
+        <Hero
+          title={`${greetingAt(hour)}, ${(me?.name ?? "").split(" ")[0] || "there"}`}
+          subtitle={`${activeResort?.name ?? ""} · ${dayLabel(today)}`}
+        >
+          <HeroFigure label="Occupancy" value={`${feed.occupancyPct}%`} sub="rooms checked in" />
+          <HeroFigure label="Arrivals" value={String(feed.arrivals.length)} sub="expected today" />
+          <HeroFigure label="Departures" value={String(feed.departures.length)} sub="due out today" />
           {/*
             "Outstanding dues" until 2026-09-21, which is the resort's
             whole ledger and belongs to the Dues screen. This counts only
@@ -89,7 +97,7 @@ export default function DashboardScreen() {
             lakh read ৳0 here while Dues, one tap away, read ৳1,59,000.
             The figure was right and the word was not.
           */}
-          <Stat
+          <HeroFigure
             label="To collect today"
             value={whole(feed.arrivalsDueTotal)}
             sub={
@@ -104,9 +112,8 @@ export default function DashboardScreen() {
                 ? `from ${feed.arrivalsDueCount} arrival${feed.arrivalsDueCount === 1 ? "" : "s"}`
                 : "nothing to collect"
             }
-            tone={feed.arrivalsDueTotal > 0 ? "danger" : "title"}
           />
-        </View>
+        </Hero>
 
         <Card title="Tonight">
           <SplitBar

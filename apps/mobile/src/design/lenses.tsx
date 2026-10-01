@@ -11,7 +11,7 @@
  */
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "./text";
-import { TOUCH_TARGET, color, radius, space } from "./tokens";
+import { TOUCH_TARGET, color, elevation, radius, space } from "./tokens";
 
 export function Lenses<T extends string>({
   options,
@@ -48,11 +48,11 @@ export function Lenses<T extends string>({
               wrap that the row then clipped, while the accessibility tree
               went on reporting "This year" to anything that asked in text.
             */}
-            <Text step="small" weight="medium" tone={on ? "onBrand" : "muted"} numberOfLines={1}>
+            <Text step="small" weight={on ? "bold" : "medium"} tone={on ? "ok" : "muted"} numberOfLines={1}>
               {option}
             </Text>
             {count === undefined ? null : (
-              <Text step="caption" tone={on ? "onBrand" : "muted"} tabular numberOfLines={1}>
+              <Text step="caption" tone={on ? "ok" : "muted"} tabular numberOfLines={1}>
                 {count}
               </Text>
             )}
@@ -66,11 +66,10 @@ export function Lenses<T extends string>({
 const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.line,
+    backgroundColor: color.ink[100],
     borderRadius: radius.md,
-    overflow: "hidden",
+    padding: space.xs,
+    gap: space.xs,
   },
   option: {
     flex: 1,
@@ -80,7 +79,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: space.xs,
     paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
   },
-  on: { backgroundColor: color.brand[600] },
+  on: { backgroundColor: color.surface, ...elevation.raised },
   pressed: { backgroundColor: color.ink[50] },
 });

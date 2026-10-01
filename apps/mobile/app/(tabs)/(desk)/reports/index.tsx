@@ -34,6 +34,7 @@ import { Card, Row, Stat } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
 import { color, space } from "../../../../src/design/tokens";
 import { SplitBar } from "../../../../src/design/charts";
+import { ReportPictures } from "../../../../src/screens/report-pictures";
 
 /**
  * How far back to look. Named periods rather than a date picker, because
@@ -137,6 +138,7 @@ export default function ReportsScreen() {
         </View>
 
         <Card title="The period in pictures">
+          <View style={styles.pictures}>
           <Text step="small" weight="medium" tone="title">
             Of what was billed
           </Text>
@@ -170,7 +172,10 @@ export default function ReportsScreen() {
               { label: "Restaurant", value: m.restaurantRevenue, color: color.chart.money.advance.solid },
             ]}
           />
+          </View>
         </Card>
+
+        {can("reports.view") ? <ReportPictures resortId={resortId!} range={range} whole={whole} /> : null}
 
         <Card title="Where it came from">
           <Row
@@ -248,5 +253,6 @@ const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   settling: { opacity: 0.5 },
+  pictures: { gap: space.sm },
   footnote: { textAlign: "center" },
 });

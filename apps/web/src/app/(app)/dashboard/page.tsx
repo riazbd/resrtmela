@@ -5,13 +5,14 @@ import { Table } from "@/components/patterns";
 import { client, money, dmy, type TodayRow } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
-import { Badge, Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
+import { Badge, Card, Empty, Spinner, Td, Th } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { AreaChart, Donut, Legend } from "@/components/charts";
+import { Hero, HeroFigure, greetingAt } from "@/components/hero";
 import { MONEY_TONE, addDaysIso, todayIn } from "@rh/shared";
 
 export default function DashboardPage() {
-  const { activeResort, isStaff, can } = useAuth();
+  const { activeResort, isStaff, can, me } = useAuth();
   const enabled = !!activeResort;
   const today = todayIn(activeResort?.timezone);
   const monthAgo = addDaysIso(today, -29);
@@ -40,8 +41,42 @@ export default function DashboardPage() {
 
   const person = (b: TodayRow) => b.guest?.fullName ?? "—";
 
+  // the resort's hour, so a 9pm visit from a laptop abroad is still "evening" at the resort
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: activeResort?.timezone ?? "Asia/Dhaka" }).format(new Date()),
+  );
+  const longDay = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+
   return (
     <div className="space-y-6">
+      <Hero
+        title={`${greetingAt(hour)}, ${(me?.name ?? "").split(" ")[0] || "there"}`}
+        subtitle={`${activeResort?.name ?? ""} · ${longDay}`}
+      >
+        <HeroFigure label="Occupied tonight" value={`${feed.occupancyPct}%`} />
+        <HeroFigure label="Arriving" value={String(feed.arrivals.length)} hint="today" />
+        <HeroFigure label="Leaving" value={String(feed.departures.length)} hint="today" />
+        {dues && (
+          <HeroFigure
+            label="Outstanding dues"
+            value={money(dues.total)}
+            /* how much of it the desk can actually ask for. The rest is an
+               agency settlement, and reading one number for both sends
+               somebody to chase a guest for money the guest does not owe. */
+            hint={
+              dues.agencyTotal > 0
+                ? `${dues.count} booking(s) · ${money(dues.agencyTotal)} from agencies`
+                : `${dues.count} booking(s)`
+            }
+          />
+        )}
+      </Hero>
+
       {roomCount === 0 && (
         <div className="rounded-xl border border-brand-200 bg-brand-50 p-4">
           <div className="text-sm font-semibold text-brand-900">
@@ -66,27 +101,6 @@ export default function DashboardPage() {
           </p>
         </div>
       )}
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat label="Occupancy today" value={`${feed.occupancyPct}%`} sub="checked-in rooms" />
-        <Stat label="Arrivals" value={String(feed.arrivals.length)} sub="expected today" tone="green" />
-        <Stat label="Departures" value={String(feed.departures.length)} sub="due out today" />
-        {dues && (
-          <Stat
-            label="Outstanding dues"
-            value={money(dues.total)}
-            /* how much of it the desk can actually ask for. The rest is an
-               agency settlement, and reading one number for both sends
-               somebody to chase a guest for money the guest does not owe. */
-            sub={
-              dues.agencyTotal > 0
-                ? `${dues.count} booking(s) · ${money(dues.agencyTotal)} from agencies`
-                : `${dues.count} booking(s)`
-            }
-            tone="red"
-          />
-        )}
-      </div>
 
       {(trendQ.data?.length ?? 0) > 0 && (
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">

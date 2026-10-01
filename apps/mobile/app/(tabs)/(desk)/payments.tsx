@@ -23,7 +23,8 @@ import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
 import { Card, Row, Stat } from "../../../src/design/surface";
 import { Lenses } from "../../../src/design/lenses";
 import { Text } from "../../../src/design/text";
-import { space } from "../../../src/design/tokens";
+import { color, space } from "../../../src/design/tokens";
+import { BarList, SplitBar } from "../../../src/design/charts";
 
 export default function DuesScreen() {
   const { activeResort } = useAuth();
@@ -91,6 +92,19 @@ export default function DuesScreen() {
           <Stat label="Due from agencies" value={whole(report.agencyTotal)} sub="settled on account" />
         </View>
 
+        {report.total > 0 ? (
+          <Card title="Who the dues are with">
+            <SplitBar
+              format={whole}
+              total={report.total}
+              parts={[
+                { label: "Guests", value: report.guestTotal, color: color.chart.money.left.solid },
+                { label: "Agencies", value: report.agencyTotal, color: color.chart.money.advance.solid },
+              ]}
+            />
+          </Card>
+        ) : null}
+
         <Lenses
           options={DUES_LENSES}
           value={lens}
@@ -102,6 +116,12 @@ export default function DuesScreen() {
             and this is the only place on the screen that says so */}
         {lens === "Agencies" && report.byAgency.length > 0 ? (
           <Card title="Due from each agency">
+            <BarList
+              format={whole}
+              limit={6}
+              barColor={color.chart.money.advance.solid}
+              rows={report.byAgency.map((a) => ({ label: a.agency, value: a.due }))}
+            />
             {report.byAgency.map((a, i) => (
               <Row
                 key={a.accountId ?? a.agency}

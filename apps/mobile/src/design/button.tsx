@@ -7,7 +7,7 @@
  */
 import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { Text } from "./text";
-import { TOUCH_TARGET, color, radius, space } from "./tokens";
+import { TOUCH_TARGET, color, elevation, radius, space } from "./tokens";
 
 export type ButtonKind = "primary" | "ghost" | "danger" | "subtle";
 
@@ -34,9 +34,9 @@ export interface ButtonProps {
 }
 
 const ground: Record<ButtonKind, ViewStyle> = {
-  primary: { backgroundColor: color.brand[600] },
-  danger: { backgroundColor: color.danger.fg },
-  ghost: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.ink[300] },
+  primary: { backgroundColor: color.brand[600], ...elevation.raised, shadowColor: color.brand[700], shadowOpacity: 0.25 },
+  danger: { backgroundColor: color.danger.fg, ...elevation.raised, shadowColor: color.danger.fg, shadowOpacity: 0.2 },
+  ghost: { backgroundColor: color.surface, borderWidth: 1, borderColor: color.ink[200] },
   subtle: { backgroundColor: color.ink[100] },
 };
 
@@ -91,7 +91,7 @@ export function Button({
             color={kind === "primary" || kind === "danger" ? color.onBrand : color.body}
           />
         ) : null}
-        <Text step="body" weight="medium" tone={ink[kind]} numberOfLines={1}>
+        <Text step="body" weight="bold" tone={ink[kind]} numberOfLines={1}>
           {label}
         </Text>
       </View>

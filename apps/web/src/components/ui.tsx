@@ -3,6 +3,7 @@
 import { useT, isStateKey, type DictKey } from "@/lib/i18n";
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import { EmptyArt } from "@/components/art";
 
 // ── primitives ──
 
@@ -19,14 +20,15 @@ export function Button({
   loading?: boolean;
 }) {
   const base =
-    "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center gap-1.5 rounded-xl font-semibold transition duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100";
   const variants = {
-    primary: "bg-brand-600 text-white hover:bg-brand-700",
-    ghost: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-    danger: "bg-red-600 text-white hover:bg-red-700",
+    primary:
+      "bg-gradient-to-b from-emerald-500 to-brand-600 text-white shadow-sm shadow-brand-600/30 ring-1 ring-inset ring-white/10 hover:from-emerald-600 hover:to-brand-700 hover:shadow-md hover:shadow-brand-600/30",
+    ghost: "border border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-900/5 hover:border-slate-300 hover:bg-slate-50",
+    danger: "bg-gradient-to-b from-red-500 to-red-600 text-white shadow-sm shadow-red-600/30 hover:from-red-600 hover:to-red-700",
     subtle: "bg-slate-100 text-slate-700 hover:bg-slate-200",
   };
-  const sizes = { sm: "px-2.5 py-1.5 text-xs", md: "px-3.5 py-2 text-sm" };
+  const sizes = { sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm" };
   return (
     <button
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
@@ -86,7 +88,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
             },
           }
         : {})}
-      className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 ${props.className ?? ""}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 ${props.className ?? ""}`}
     />
   );
 }
@@ -95,7 +97,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-500 ${props.className ?? ""}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 ${props.className ?? ""}`}
     />
   );
 }
@@ -111,7 +113,7 @@ export function Field({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <span className="text-xs font-semibold text-slate-600">{label}</span>
       {children}
       {hint && <span className="block text-[11px] text-slate-400">{hint}</span>}
     </label>
@@ -130,14 +132,17 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className={`rm-card rounded-2xl border border-slate-200/70 bg-white ${className}`}>
       {(title || action) && (
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100/80 px-5 py-3.5">
+          <h3 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-800">
+            <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-emerald-400 to-teal-600" />
+            {title}
+          </h3>
           {action}
         </div>
       )}
-      <div className="p-4">{children}</div>
+      <div className="p-5">{children}</div>
     </div>
   );
 }
@@ -153,17 +158,25 @@ export function Stat({
   sub?: string;
   tone?: "default" | "green" | "red" | "amber";
 }) {
+  /**
+   * Each tone is a colour that means something — green money in, red money
+   * due, amber waiting — carried by the figure, a soft wash in the corner
+   * and the rule along the top, so a row of tiles reads at a glance.
+   */
   const tones = {
-    default: "text-slate-900",
-    green: "text-green-700",
-    red: "text-red-700",
-    amber: "text-amber-700",
+    default: { text: "text-slate-900", wash: "from-slate-400/15", rule: "from-slate-300 to-slate-400" },
+    green: { text: "text-emerald-700", wash: "from-emerald-400/25", rule: "from-emerald-400 to-teal-500" },
+    red: { text: "text-rose-700", wash: "from-rose-400/20", rule: "from-rose-400 to-red-500" },
+    amber: { text: "text-amber-700", wash: "from-amber-400/25", rule: "from-amber-300 to-orange-500" },
   };
+  const t = tones[tone];
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-bold tracking-tight ${tones[tone]}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-slate-400">{sub}</div>}
+    <div className="rm-card relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-4">
+      <div aria-hidden className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${t.rule}`} />
+      <div aria-hidden className={`pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${t.wash} to-transparent`} />
+      <div className="relative text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`relative mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums ${t.text}`}>{value}</div>
+      {sub && <div className="relative mt-0.5 text-xs text-slate-400">{sub}</div>}
     </div>
   );
 }
@@ -265,7 +278,7 @@ export function Modal({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-10">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-10 backdrop-blur-[2px]">
       <div
         ref={box}
         role="dialog"
@@ -274,10 +287,10 @@ export function Modal({
         // focusable so the dialog itself can hold focus on open; -1 keeps
         // it out of the Tab order, where it is not a stop of its own
         tabIndex={-1}
-        className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} rounded-xl bg-white shadow-xl outline-none`}
+        className={`rm-pop w-full ${wide ? "max-w-3xl" : "max-w-lg"} overflow-hidden rounded-2xl bg-white shadow-2xl shadow-slate-900/20 ring-1 ring-slate-900/5 outline-none`}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h3 id={titleId} className="text-sm font-semibold text-slate-800">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-3.5">
+          <h3 id={titleId} className="text-[15px] font-bold tracking-tight text-slate-800">
             {title}
           </h3>
           <button
@@ -344,13 +357,19 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
+/** Nothing to show: a small picture and the sentence, never a blank box. */
 export function Empty({ msg }: { msg: string }) {
-  return <div className="py-10 text-center text-sm text-slate-400">{msg}</div>;
+  return (
+    <div className="flex flex-col items-center gap-3 py-10 text-center">
+      <EmptyArt />
+      <div className="max-w-sm text-sm font-medium text-slate-500">{msg}</div>
+    </div>
+  );
 }
 
 export function Th({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
   return (
-    <th className={`px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-400 ${className}`}>
+    <th className={`bg-slate-50/70 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 ${className}`}>
       {children}
     </th>
   );

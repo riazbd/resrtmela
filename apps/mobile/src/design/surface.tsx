@@ -9,7 +9,7 @@
  */
 import { Pressable, StyleSheet, View, type ViewStyle } from "react-native";
 import { Text } from "./text";
-import { TOUCH_TARGET, color, radius, space } from "./tokens";
+import { TOUCH_TARGET, color, elevation, radius, space } from "./tokens";
 
 /**
  * A titled block on the screen's ground.
@@ -42,9 +42,12 @@ export function Card({
             restaurant screen headed its card "The" for a week. See
             `a-word-does-not-fall-off-the-end`.
           */}
-          <Text step="strong" weight="medium" tone="title" numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.cardTitle}>
+            <View style={styles.cardMark} />
+            <Text step="strong" weight="bold" tone="title" numberOfLines={1} style={styles.shrink}>
+              {title}
+            </Text>
+          </View>
           {action}
         </View>
       ) : null}
@@ -75,6 +78,10 @@ export function Stat({
 }) {
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${label}: ${value}`}>
+      {/* the tone, carried by a rule along the top and a wash in the corner,
+          so a row of tiles reads before a single figure is */}
+      <View style={[styles.statRule, { backgroundColor: statTint[tone] }]} />
+      <View style={[styles.statWash, { backgroundColor: statTint[tone] }]} />
       <Text step="caption" tone="muted">
         {label}
       </Text>
@@ -172,15 +179,25 @@ export function Row({
   );
 }
 
+const statTint = {
+  title: color.ink[300],
+  ok: color.chart.money.paid.solid,
+  danger: color.chart.money.expense.solid,
+} as const;
+
 const styles = StyleSheet.create({
   card: {
     backgroundColor: color.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: color.line,
+    borderColor: color.ink[100],
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
+    ...elevation.raised,
   },
+  cardTitle: { flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1 },
+  cardMark: { width: 4, height: 16, borderRadius: 2, backgroundColor: color.brand[500] },
+  shrink: { flexShrink: 1 },
   cardHead: {
     flexDirection: "row",
     alignItems: "center",
@@ -188,13 +205,17 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingBottom: space.sm,
   },
+  statRule: { position: "absolute", top: 0, left: 0, right: 0, height: 4 },
+  statWash: { position: "absolute", top: -36, right: -36, width: 96, height: 96, borderRadius: 48, opacity: 0.1 },
   stat: {
     flex: 1,
     minWidth: 140,
+    overflow: "hidden",
     backgroundColor: color.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: color.line,
+    borderColor: color.ink[100],
+    ...elevation.raised,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     gap: space.xs,

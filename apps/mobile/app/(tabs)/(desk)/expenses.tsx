@@ -25,6 +25,8 @@ import {
   type ExpensePage,
   type ExpenseRow,
   type ResortOption,
+  monthName,
+  type PLReport,
 } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { WhichResort } from "../../../src/screens/which-resort";
@@ -38,6 +40,7 @@ import { Card, Row, Stat } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { useAction } from "../../../src/design/use-action";
 import { color, radius, space } from "../../../src/design/tokens";
+import { Shares } from "../../../src/design/charts";
 
 export default function ExpensesScreen() {
   const { activeResort, can } = useAuth();
@@ -70,6 +73,22 @@ export default function ExpensesScreen() {
       placeholderData: (prev: ExpensePage | undefined) => prev,
     },
   );
+
+  // the month so far, by category — summed by the P&L, so this is the
+  // figure the reports show rather than a second addition of the same rows
+  const monthStart = `${date.slice(0, 7)}-01`;
+  const month = useApi<PLReport>(
+    keys.reports(resortId, "pl", `${monthStart}:${to}`),
+    () => client.reports.pl(resortId!, monthStart, to),
+    { enabled: resortId !== undefined && can("reports.view") },
+  );
+  const monthCats = (() => {
+    const m = new Map<string, number>();
+    for (const c of [...(month.data?.resort.expenseCategories ?? []), ...(month.data?.restaurant.expenseCategories ?? [])]) {
+      m.set(c.category, (m.get(c.category) ?? 0) + c.amount);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  })();
 
   const categories = useApi<ResortOption[]>(
     keys.expenseCategories(resortId),
@@ -157,6 +176,24 @@ export default function ExpensesScreen() {
           <Stat label="Spent" value={whole(total)} tone={total > 0 ? "danger" : "title"} />
           <Stat label="Entries" value={String(count)} />
         </View>
+
+        {monthCats.length > 0 ? (
+          <Card title={`${monthName(date.slice(0, 7))} so far, by category`}>
+            <Shares
+              format={whole}
+              parts={[
+                ...monthCats.slice(0, 6).map(([label, value], i) => ({
+                  label,
+                  value,
+                  color: color.chart.series[(i + 1) % color.chart.series.length]!,
+                })),
+                ...(monthCats.length > 6
+                  ? [{ label: "Everything else", value: monthCats.slice(6).reduce((s, [, v]) => s + v, 0), color: color.ink[400] }]
+                  : []),
+              ]}
+            />
+          </Card>
+        ) : null}
 
         <Card
           title="The day"

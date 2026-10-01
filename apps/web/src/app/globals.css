@@ -153,3 +153,27 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .rm-grow-y, .rm-grow-x, .rm-fade, .rm-draw { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   The console's surface. Cards float a little off a ground that is not flat
+   white: a soft wash of the brand in one corner and warm light in the other,
+   the way the dashboard's scene is lit.
+   --------------------------------------------------------------------------- */
+.rm-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px -18px rgba(15, 23, 42, 0.18);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.rm-card:hover { box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 16px 40px -20px rgba(15, 23, 42, 0.25); }
+.rm-ground {
+  background:
+    radial-gradient(1200px 500px at 100% -10%, rgba(16, 185, 129, 0.09), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, rgba(251, 191, 36, 0.07), transparent 60%),
+    #f6f8fa;
+}
+@keyframes rm-pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.rm-pop { animation: rm-pop 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes rm-page { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rm-page > * { animation: rm-page 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .rm-pop, .rm-page > * { animation: none; }
+}

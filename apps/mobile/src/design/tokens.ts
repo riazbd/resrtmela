@@ -84,11 +84,37 @@ const chart = {
   payrollState: PAYROLL_STATE_TONE,
 } as const;
 
+/**
+ * The resort scene's colours — sky, sun, hills, lake, the cottages and the
+ * trees — the console's picture (`apps/web/src/components/art.tsx`) drawn
+ * again with views. Here because this is the one file a colour may live in.
+ */
+const art = {
+  sky: "#ecfdf5",
+  skyLow: "#d1fae5",
+  sun: "#fbbf24",
+  sunGlow: "#fde68a",
+  hillFar: "#6ee7b7",
+  hillNear: "#10b981",
+  hillDeep: "#047857",
+  lake: "#2dd4bf",
+  wall: "#fef3c7",
+  roof: "#c2410c",
+  tree: "#065f46",
+  /** the dashboard's greeting card, under the scene */
+  heroFrom: "#047857",
+  heroTo: "#0d9488",
+  /** frosted figures on the greeting card */
+  frost: "rgba(255, 255, 255, 0.18)",
+  frostLine: "rgba(255, 255, 255, 0.32)",
+} as const;
+
 export const color = {
   brand,
   ink,
   ...meaning,
   chart,
+  art,
 
   /** The ground a screen is drawn on, and the card that sits on it. */
   screen: ink[50],
@@ -162,9 +188,10 @@ export const text = {
 
 /** Corners. `pill` is deliberately larger than any control is tall. */
 export const radius = {
-  sm: 6,
-  md: 10,
-  lg: 14,
+  sm: 8,
+  md: 12,
+  lg: 18,
+  xl: 24,
   pill: 999,
 } as const;
 
@@ -178,9 +205,9 @@ export const radius = {
 export const elevation = {
   raised: {
     shadowColor: ink[900],
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   floating: {

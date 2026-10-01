@@ -58,6 +58,10 @@ const stay = (rooms: number[], from: string, to: string, id = 41): CalendarBooki
   }) as CalendarBooking;
 
 /** Noon in Dhaka on the 19th, so "today" is a fact rather than the run date. */
+// the whole calendar per test; under the full suite's load five seconds was not
+// always enough, and alone it takes one
+jest.setTimeout(30_000);
+
 beforeEach(() => {
   jest.useFakeTimers({
     now: new Date("2026-09-19T06:00:00Z"),

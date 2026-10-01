@@ -221,22 +221,38 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* mobile backdrop */}
       {navOpen && <div className="fixed inset-0 z-[35] bg-slate-900/50 lg:hidden" onClick={() => setNavOpen(false)} />}
       {/* sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col bg-brand-900 text-white transition-transform duration-200 lg:translate-x-0 ${navOpen ? "translate-x-0" : "-translate-x-full"}`}>
-        <div className="px-4 py-4">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col overflow-hidden bg-gradient-to-b from-[#0d3b26] via-brand-900 to-[#082516] text-white shadow-2xl shadow-emerald-950/20 transition-transform duration-200 lg:translate-x-0 ${navOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        {/* light from the top corner, and the hills at the foot — the
+            dashboard's scene, quietly, so the console has one look */}
+        <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
+        <svg aria-hidden viewBox="0 0 240 90" className="pointer-events-none absolute inset-x-0 bottom-0 w-full opacity-[0.12]" preserveAspectRatio="none">
+          <path d="M0 50 C40 25 80 35 120 45 C160 55 200 25 240 35 L240 90 L0 90Z" fill="#6ee7b7" />
+          <path d="M0 70 C50 50 110 58 150 66 C190 74 220 58 240 62 L240 90 L0 90Z" fill="#34d399" />
+        </svg>
+        <div className="relative px-4 py-4">
           <Logo size={32} tone="onDark" sub="Admin Console" />
         </div>
-        <nav className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
+        <nav className="relative mt-2 flex-1 space-y-0.5 overflow-y-auto px-2">
           {NAV.filter(allowed).map((n) => {
             const active = pathname.startsWith(n.href);
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
-                  active ? "bg-white/15 font-medium text-white" : "text-brand-100 hover:bg-white/10 hover:text-white"
+                className={`group relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition ${
+                  active
+                    ? "bg-gradient-to-r from-white/20 to-white/5 font-semibold text-white shadow-inner shadow-white/5 ring-1 ring-inset ring-white/10"
+                    : "text-emerald-100/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                <n.icon className="h-4 w-4 opacity-70" strokeWidth={1.75} />
+                {active && <span aria-hidden className="absolute -left-2 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-amber-300 to-emerald-300" />}
+                <span
+                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                    active ? "bg-white/15 text-amber-200" : "bg-white/5 text-emerald-200 group-hover:bg-white/10"
+                  }`}
+                >
+                  <n.icon className="h-4 w-4" strokeWidth={1.9} />
+                </span>
                 {/*
                   The shared dictionary, and only it. The sidebar kept a
                   private copy of these fourteen words until 2026-09-21,
@@ -251,9 +267,16 @@ function Shell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="border-t border-white/10 px-4 py-3">
-          <div className="text-xs font-medium text-white">{me.name}</div>
+        <div className="relative border-t border-white/10 px-4 py-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-emerald-400 text-sm font-extrabold text-emerald-950 shadow">
+              {me.name.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+          <div className="truncate text-xs font-semibold text-white">{me.name}</div>
           <div className="text-[10px] text-brand-200">{role.replace(/_/g, " ")}</div>
+            </div>
+          </div>
           {/* Account is not in NAV above: every entry there is filtered by role,
               permission and plan, and this one belongs to whoever is signed in
               — resort staff, an agency, the platform's own owner — whatever
@@ -367,7 +390,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             top-0 it covered the menu button and the bell whenever it showed */}
         <OutboxBar />
         </div>
-        <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6">
+        <main className="rm-ground rm-page flex-1 px-3 py-4 sm:px-6 sm:py-6">
           {/* an agency's standing with the platform: it can look around, but not sell */}
           {me?.account && me.account.status !== "active" && (
             <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">

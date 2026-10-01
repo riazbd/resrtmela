@@ -16,6 +16,7 @@ import { ApiError } from "@rh/shared";
 import { Button } from "./button";
 import { Text } from "./text";
 import { color, radius, space } from "./tokens";
+import { EmptyArt } from "./art";
 
 /**
  * Waiting.
@@ -45,6 +46,7 @@ export function Loading({ what }: { what: string }) {
 export function Empty({ message, hint }: { message: string; hint?: string }) {
   return (
     <View style={styles.middle}>
+      <EmptyArt />
       <Text step="body" weight="medium" tone="title" style={styles.centred}>
         {message}
       </Text>
