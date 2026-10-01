@@ -1,71 +1,44 @@
 /**
- * The resort's own settings, as much of them as belongs on a phone.
+ * The resort's settings — every one the console has, on the phone.
  *
- * The console's settings page is 2,144 lines across twelve tabs. Most of
- * those are things an owner genuinely changes away from a desk — the
- * resort's own details, what it charges tax at, the lists its forms
- * offer, who works there, what each role may do, what the rooms cost by
- * season, and how it looks to a guest. What is left is not: a
- * subscription, an API key, a data export and an activity log are all
- * read-across-a-wide-table work, and a phone makes each of them worse.
- *
- * The permission matrix was on the second list until 2026-09-21, on the
- * grounds that nine groups of checkboxes do not fit. They do, a group at
- * a time — see the note in `roles.tsx` — and the owner met the version
- * that did not fit as "there is no expense permission to tick".
- *
- * So this is a hub, and what is missing from it is missing on purpose.
- * The line at the bottom says so, because a person who cannot find the
- * API keys should learn that from the screen rather than by hunting.
+ * This said, until 2026-10-02, that the subscription, the API keys, the
+ * activity log and the data exports "stay on the desk" because they are wide
+ * tables. The owner's answer: "jahai web e ache, tahai app e thakbe" —
+ * whatever the console has, the app has. So every tab of the console's
+ * settings is a tile here, drawn for a phone rather than left out of one.
  */
 import { ScrollView, StyleSheet } from "react-native";
 import { Stack, router } from "expo-router";
 import { useAuth } from "../../../../src/api/session";
 import { WhichResort } from "../../../../src/screens/which-resort";
 import { Empty } from "../../../../src/design/states";
-import { Card, Row } from "../../../../src/design/surface";
-import { Text } from "../../../../src/design/text";
+import { Card } from "../../../../src/design/surface";
+import { Tiles, type TileIcon } from "../../../../src/design/tiles";
 import { space } from "../../../../src/design/tokens";
 
 interface Section {
   href: string;
   title: string;
   hint: string;
+  icon: TileIcon;
   /** What the API asks for before it will answer. */
   perm?: string;
 }
 
 const SECTIONS: Section[] = [
-  {
-    href: "/settings/resort",
-    title: "The resort",
-    hint: "Name, where it is, its day, and what it charges tax at",
-    perm: "settings.manage",
-  },
-  {
-    href: "/settings/lists",
-    title: "Lists",
-    hint: "Payment methods, booking sources, expense categories",
-    perm: "settings.manage",
-  },
-  {
-    href: "/settings/team",
-    title: "Team",
-    hint: "Who works here and what each of them may do",
-    perm: "users.manage",
-  },
-  {
-    href: "/settings/roles",
-    title: "Permissions",
-    hint: "What each role may do",
-    perm: "roles.manage",
-  },
-  {
-    href: "/settings/rates",
-    title: "Rate plans",
-    hint: "What a room costs in a season, over its base rate",
-    perm: "rooms.manage",
-  },
+  { href: "/settings/resort", title: "The resort", hint: "Name, its day, tax, agents' terms, numbering", icon: "home-city", perm: "settings.manage" },
+  { href: "/settings/subscription", title: "Subscription", hint: "Your plan, what it costs, every bill", icon: "card-account-details-star", perm: "billing.view" },
+  { href: "/settings/website", title: "Website", hint: "Your own page — words, pictures, address", icon: "web", perm: "settings.manage" },
+  { href: "/settings/team", title: "Team", hint: "Who works here", icon: "account-group", perm: "users.manage" },
+  { href: "/settings/roles", title: "Permissions", hint: "What each role may do", icon: "shield-account", perm: "roles.manage" },
+  { href: "/settings/agencies", title: "Agent access", hint: "Agencies, commission, invitations", icon: "handshake", perm: "settings.manage" },
+  { href: "/settings/rates", title: "Rate plans", hint: "Prices by season", icon: "tag-multiple", perm: "rooms.manage" },
+  { href: "/settings/discounts", title: "Discounts", hint: "Offers applied at booking", icon: "sale", perm: "settings.manage" },
+  { href: "/settings/lists", title: "Lists", hint: "Payment methods, sources, categories", icon: "format-list-bulleted-square", perm: "settings.manage" },
+  { href: "/settings/messages", title: "Messages", hint: "What your guests read", icon: "message-text", perm: "settings.manage" },
+  { href: "/settings/activity", title: "Activity log", hint: "Who did what", icon: "history", perm: "settings.manage" },
+  { href: "/settings/api", title: "API & webhooks", hint: "Keys for your own website", icon: "api", perm: "settings.manage" },
+  { href: "/settings/data", title: "Your data", hint: "Every register, downloaded", icon: "database-export", perm: "settings.manage" },
 ];
 
 export default function SettingsScreen() {
@@ -87,32 +60,21 @@ export default function SettingsScreen() {
     <>
       {header}
       <ScrollView contentContainerStyle={styles.page}>
-        <Card title={activeResort.name}>
-          {mine.length === 0 ? (
-            <Empty
-              message="Nothing here is yours to change"
-              hint="Ask the owner for the permissions you need."
-            />
-          ) : (
-            mine.map((section, i) => (
-              <Row
-                key={section.href}
-                title={section.title}
-                subtitle={section.hint}
-                last={i === mine.length - 1}
-                accessibilityLabel={`${section.title} — ${section.hint}`}
-                onPress={() => router.push(section.href as never)}
-              />
-            ))
-          )}
-        </Card>
-
-        {/* said on the screen rather than learned by hunting for it */}
-        <Text step="caption" tone="muted" style={styles.footnote}>
-          The subscription, API keys, the activity log and your data exports stay
-          on the desk — each of them is a wide table, and a phone makes them
-          harder to read rather than easier.
-        </Text>
+        {mine.length === 0 ? (
+          <Card title={activeResort.name}>
+            <Empty message="Nothing here is yours to change" hint="Ask the owner for the permissions you need." />
+          </Card>
+        ) : (
+          <Tiles
+            items={mine.map((s) => ({
+              key: s.href,
+              title: s.title,
+              hint: s.hint,
+              icon: s.icon,
+              onPress: () => router.push(s.href as never),
+            }))}
+          />
+        )}
       </ScrollView>
     </>
   );
@@ -120,5 +82,4 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
-  footnote: { textAlign: "center" },
 });

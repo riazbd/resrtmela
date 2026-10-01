@@ -18,10 +18,11 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
-import { currencySymbol, type ResortSettings } from "@rh/shared";
+import { AGENT_BOOKING_WINDOW_PRESETS, currencySymbol, type ResortSettings } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { WhichResort } from "../../../../src/screens/which-resort";
 import { Button } from "../../../../src/design/button";
+import { Chip } from "../../../../src/design/chip";
 import { Field, Input } from "../../../../src/design/input";
 import { Loading, Problem } from "../../../../src/design/states";
 import { Card, Row } from "../../../../src/design/surface";
@@ -101,6 +102,11 @@ function Form({
   const [tax, setTax] = useState(String(Number(resort.taxRatePct ?? 0)));
   const [bin, setBin] = useState(resort.binNumber ?? "");
   const [showRates, setShowRates] = useState(Boolean(resort.showRatesToAgents));
+  const [payHours, setPayHours] = useState(String(resort.agentPaymentHours ?? 48));
+  const [windowDays, setWindowDays] = useState<number | null>(resort.agentBookingWindowDays ?? null);
+  const [invoicePrefix, setInvoicePrefix] = useState(resort.invoicePrefix ?? "");
+  const [bookingPrefix, setBookingPrefix] = useState(resort.bookingPrefix ?? "");
+  const [fbPrefix, setFbPrefix] = useState(resort.fbPrefix ?? "");
   const [refused, setRefused] = useState<string | null>(null);
 
   const save = useAction(async () => {
@@ -117,6 +123,12 @@ function Form({
     if (moved(checkOut, resort.checkOutTime)) patch.checkOutTime = checkOut;
     if (moved(bin.trim(), resort.binNumber ?? "")) patch.binNumber = bin.trim();
     if (moved(showRates, Boolean(resort.showRatesToAgents))) patch.showRatesToAgents = showRates;
+    const hours = Math.max(1, Math.floor(Number(payHours.replace(/[^0-9]/g, "")) || 1));
+    if (moved(hours, resort.agentPaymentHours ?? 48)) patch.agentPaymentHours = hours;
+    if (moved(windowDays, resort.agentBookingWindowDays ?? null)) patch.agentBookingWindowDays = windowDays;
+    if (moved(invoicePrefix.trim(), resort.invoicePrefix ?? "") && invoicePrefix.trim()) patch.invoicePrefix = invoicePrefix.trim();
+    if (moved(bookingPrefix.trim(), resort.bookingPrefix ?? "") && bookingPrefix.trim()) patch.bookingPrefix = bookingPrefix.trim();
+    if (moved(fbPrefix.trim(), resort.fbPrefix ?? "") && fbPrefix.trim()) patch.fbPrefix = fbPrefix.trim();
     const rate = Number(tax.replace(/[^0-9.]/g, "")) || 0;
     if (moved(rate, Number(resort.taxRatePct ?? 0))) patch.taxRatePct = rate;
 
@@ -198,12 +210,45 @@ function Form({
       </Card>
 
       <Card title="Agents">
-        <Toggle
-          label="Show rates to agents"
-          hint="Off, an agency sees its own price and not the resort's"
-          value={showRates}
-          onChange={setShowRates}
-        />
+        <View style={styles.fields}>
+          <Toggle
+            label="Show rates to agents"
+            hint="Off, an agency sees its own price and not the resort's"
+            value={showRates}
+            onChange={setShowRates}
+          />
+          <Field label="Paid in full, hours before check-in" hint="An agency's booking must be paid up this long before the guest arrives">
+            <Input value={payHours} onChangeText={setPayHours} keyboardType="numeric" placeholder="48" />
+          </Field>
+          <Text step="small" weight="medium" tone="title">
+            How far ahead agents can book
+          </Text>
+          <View style={styles.chips}>
+            <Chip label="No limit" on={windowDays == null} onPress={() => setWindowDays(null)} />
+            {AGENT_BOOKING_WINDOW_PRESETS.map((n) => (
+              <Chip key={n} label={`${n} days`} on={windowDays === n} onPress={() => setWindowDays(n)} />
+            ))}
+          </View>
+          <Text step="caption" tone="muted">
+            {windowDays == null
+              ? "Agencies can book any date you have open."
+              : `Agencies can book stays checking out within ${windowDays} days from today. Your own desk is not limited.`}
+          </Text>
+        </View>
+      </Card>
+
+      <Card title="Numbering">
+        <View style={styles.fields}>
+          <Field label="Booking prefix" hint="BK-00041">
+            <Input value={bookingPrefix} onChangeText={setBookingPrefix} autoCapitalize="characters" />
+          </Field>
+          <Field label="Invoice prefix">
+            <Input value={invoicePrefix} onChangeText={setInvoicePrefix} autoCapitalize="characters" />
+          </Field>
+          <Field label="Restaurant bill prefix">
+            <Input value={fbPrefix} onChangeText={setFbPrefix} autoCapitalize="characters" />
+          </Field>
+        </View>
       </Card>
 
       {/*
@@ -212,7 +257,7 @@ function Form({
         app means, so they are a desk decision made once — not a field
         somebody edits on a phone between guests.
       */}
-      <Card title="Set on the desk">
+      <Card title="Money, time and numbers">
         <Row
           title="Currency"
           meta={`${resort.currency} (${currencySymbol({ currency: resort.currency })})`}
@@ -247,6 +292,7 @@ function Form({
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
   fields: { gap: space.md },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   refused: {
     backgroundColor: color.danger.bg,
     borderWidth: 1,

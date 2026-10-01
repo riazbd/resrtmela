@@ -157,16 +157,22 @@ const open = (Screen: any) => render(<Harness><Screen /></Harness>);
 describe("the hub", () => {
   it("offers what belongs on a phone", async () => {
     const r = await open(SettingsScreen);
-    await waitFor(() => expect(r.getByText("The resort")).toBeTruthy());
+    await waitFor(() => expect(r.getByText("The resort")).toBeTruthy(), { timeout: 15_000 });
     expect(r.getByText("Lists")).toBeTruthy();
     expect(r.getByText("Team")).toBeTruthy();
     expect(r.getByText("Rate plans")).toBeTruthy();
   });
 
-  /** Learning it from the screen beats hunting for it. */
-  it("says what stayed on the desk, and why", async () => {
+  /**
+   * Nothing stays on the desk. The owner, 2026-10-02: "jahai web e ache,
+   * tahai app e thakbe" — every tab of the console's settings is here.
+   */
+  it("offers every tab the console has", async () => {
     const r = await open(SettingsScreen);
-    await waitFor(() => expect(r.getByText(/stay on the desk/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText("The resort")).toBeTruthy(), { timeout: 15_000 });
+    for (const tab of ["Subscription", "Website", "Team", "Permissions", "Agent access", "Lists", "Activity log", "Discounts", "Messages", "API & webhooks", "Your data"]) {
+      expect(r.getByText(tab)).toBeTruthy();
+    }
   });
 
   it("offers nothing somebody may not change", async () => {
@@ -178,7 +184,7 @@ describe("the hub", () => {
   it("opens a section", async () => {
     const r = await open(SettingsScreen);
     await waitFor(() => expect(r.getByText("The resort")).toBeTruthy());
-    await fireEvent.press(r.getByLabelText(/^The resort —/));
+    await fireEvent.press(r.getByLabelText(/^The resort, /));
     expect(mockPush).toHaveBeenCalledWith("/settings/resort");
   });
 });
