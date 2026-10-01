@@ -24,7 +24,8 @@ import { dateOnly, round2 } from "../common/dates";
 import { pageArgs, toPage, type PageRequest } from "../common/page";
 import { AuditService } from "../common/audit.service";
 import { AgencyContextService } from "./agency-context.service";
-import { monthRow, paidSoFar, paymentKind, settlementAmount } from "../payroll/month-of-payroll";
+import { paymentKind } from "../payroll/month-of-payroll";
+import { PayrollBook, dayOrClear } from "../payroll/payroll-book";
 import type { JwtClaims } from "@rh/shared";
 
 const EXPENSES = "agent.expenses.manage";
@@ -283,6 +284,10 @@ export class BooksService {
 
   // ─────────────────────────── payroll ───────────────────────────
 
+  private book(agencyId: number) {
+    return new PayrollBook(this.prisma, { agencyId });
+  }
+
   async employees(claims: JwtClaims) {
     const ctx = await this.agency.require(claims, PAYROLL);
     const rows = await this.prisma.employee.findMany({
@@ -297,6 +302,8 @@ export class BooksService {
       designation: e.designation,
       salary: Number(e.salary),
       joinDate: e.joinDate ? e.joinDate.toISOString().slice(0, 10) : null,
+      leftDate: e.leftDate ? e.leftDate.toISOString().slice(0, 10) : null,
+      userId: e.userId,
       active: e.active,
       recent: e.payments.map((p) => ({ month: p.month, amount: Number(p.amount) })),
     }));
@@ -304,11 +311,12 @@ export class BooksService {
 
   async addEmployee(
     claims: JwtClaims,
-    input: { name: string; phone?: string; designation?: string; salary?: number; joinDate?: string },
+    input: { name: string; phone?: string; designation?: string; salary?: number; joinDate?: string; userId?: number },
   ) {
     const ctx = await this.agency.require(claims, PAYROLL);
     const name = input.name?.trim();
     if (!name) throw badRequest("The person needs a name");
+    if (input.userId) await this.book(ctx.agencyId).checkLogin(input.userId);
     const emp = await this.prisma.employee.create({
       data: {
         agencyId: ctx.agencyId,
@@ -316,7 +324,8 @@ export class BooksService {
         phone: input.phone?.replace(/[^\d+]/g, "") || null,
         designation: input.designation || null,
         salary: (input.salary ?? 0) as never,
-        joinDate: input.joinDate ? dateOnly(input.joinDate) : null,
+        joinDate: dayOrClear(input.joinDate, "The joining date") ?? null,
+        userId: input.userId || null,
       },
     });
     await this.audit.log({
@@ -338,11 +347,16 @@ export class BooksService {
       designation?: string;
       salary?: number;
       joinDate?: string;
+      leftDate?: string;
       active?: boolean;
+      userId?: number;
     },
   ) {
     const ctx = await this.agency.require(claims, PAYROLL);
     await this.ownEmployee(ctx.agencyId, employeeId);
+    if (input.userId) await this.book(ctx.agencyId).checkLogin(input.userId, employeeId);
+    const joinDate = dayOrClear(input.joinDate, "The joining date");
+    const leftDate = dayOrClear(input.leftDate, "The leaving date");
     const emp = await this.prisma.employee.update({
       where: { id: employeeId },
       data: {
@@ -350,8 +364,12 @@ export class BooksService {
         ...(input.phone !== undefined ? { phone: input.phone?.replace(/[^\d+]/g, "") || null } : {}),
         ...(input.designation !== undefined ? { designation: input.designation || null } : {}),
         ...(input.salary != null ? { salary: input.salary as never } : {}),
-        ...(input.joinDate ? { joinDate: dateOnly(input.joinDate) } : {}),
-        ...(input.active != null ? { active: input.active } : {}),
+        ...(joinDate !== undefined ? { joinDate } : {}),
+        ...(leftDate !== undefined ? { leftDate } : {}),
+        ...(input.userId !== undefined ? { userId: input.userId || null } : {}),
+        ...(input.active != null
+          ? { active: input.active, ...(input.active && leftDate === undefined ? { leftDate: null } : {}) }
+          : {}),
       },
     });
     await this.audit.log({
@@ -364,13 +382,19 @@ export class BooksService {
     return { id: emp.id, name: emp.name };
   }
 
-  /** Someone who has been paid is deactivated, so the history stays true. */
-  async removeEmployee(claims: JwtClaims, employeeId: number) {
+  /**
+   * Someone who has been paid is switched off with the day they left, so the
+   * history stays true and the month they left in is worth the days worked.
+   */
+  async removeEmployee(claims: JwtClaims, employeeId: number, leftOn?: string) {
     const ctx = await this.agency.require(claims, PAYROLL);
     await this.ownEmployee(ctx.agencyId, employeeId);
-    const paid = await this.prisma.payrollPayment.count({ where: { employeeId } });
+    const paid =
+      (await this.prisma.payrollPayment.count({ where: { employeeId } })) +
+      (await this.prisma.payrollAdjustment.count({ where: { employeeId } }));
     if (paid > 0) {
-      await this.prisma.employee.update({ where: { id: employeeId }, data: { active: false } });
+      const leftDate = dayOrClear(leftOn, "The leaving date") ?? dateOnly(await this.book(ctx.agencyId).today());
+      await this.prisma.employee.update({ where: { id: employeeId }, data: { active: false, leftDate } });
       await this.audit.log({
         actorId: claims.userId,
         action: "agent.payroll.employee.deactivate",
@@ -391,29 +415,51 @@ export class BooksService {
 
   async payrollSheet(claims: JwtClaims, month: string) {
     const ctx = await this.agency.require(claims, PAYROLL);
-    if (!MONTH_RE.test(month)) throw badRequest("The month must look like 2026-09");
-    const employees = await this.prisma.employee.findMany({
-      where: { agencyId: ctx.agencyId, active: true },
-      orderBy: { name: "asc" },
-      include: { payments: { where: { month }, orderBy: { paidAt: "asc" } } },
+    // the same book the resort's sheet reads, from the same file: two copies
+    // of "is this month closed" is how the two come to disagree
+    return this.book(ctx.agencyId).sheet(month);
+  }
+
+  async payrollPeople(claims: JwtClaims) {
+    const ctx = await this.agency.require(claims, PAYROLL);
+    return this.book(ctx.agencyId).people();
+  }
+
+  async payrollYear(claims: JwtClaims, year: number) {
+    const ctx = await this.agency.require(claims, PAYROLL);
+    return this.book(ctx.agencyId).year(year);
+  }
+
+  /** A bonus or a deduction against a month. */
+  async adjust(
+    claims: JwtClaims,
+    employeeId: number,
+    input: { month: string; kind?: string; amount: number; note?: string },
+  ) {
+    const ctx = await this.agency.require(claims, PAYROLL);
+    const emp = await this.ownEmployee(ctx.agencyId, employeeId);
+    const row = await this.book(ctx.agencyId).adjust(claims.userId, employeeId, input);
+    await this.audit.log({
+      actorId: claims.userId,
+      action: `agent.payroll.${row.kind.toLowerCase()}`,
+      entity: "payroll_adjustment",
+      entityId: row.id,
+      diff: { employee: emp.name, month: input.month, amount: row.amount },
     });
-    // the same arithmetic the resort's sheet runs, from the same file: two
-    // copies of "is this month closed" is how the two come to disagree
-    const rows = employees.map((e) =>
-      monthRow(e.id, e.name, e.designation, Number(e.salary), e.payments),
-    );
-    return {
-      month,
-      rows,
-      totals: {
-        expected: round2(rows.reduce((s, r) => s + r.salary, 0)),
-        paid: round2(rows.reduce((s, r) => s + r.paid, 0)),
-        advance: round2(rows.reduce((s, r) => s + r.advance, 0)),
-        remaining: round2(rows.reduce((s, r) => s + r.remaining, 0)),
-        headcount: rows.length,
-        settledCount: rows.filter((r) => r.settled).length,
-      },
-    };
+    return row;
+  }
+
+  async unadjust(claims: JwtClaims, adjustmentId: number) {
+    const ctx = await this.agency.require(claims, PAYROLL);
+    const row = await this.book(ctx.agencyId).unadjust(adjustmentId);
+    await this.audit.log({
+      actorId: claims.userId,
+      action: "agent.payroll.adjustment.undo",
+      entity: "payroll_adjustment",
+      entityId: adjustmentId,
+      diff: { month: row.month, kind: row.kind },
+    });
+    return { deleted: true };
   }
 
   /**
@@ -438,8 +484,7 @@ export class BooksService {
     } else if (kind === "ADVANCE") {
       throw badRequest("How much is the advance?");
     } else {
-      const paid = await paidSoFar(this.prisma, employeeId, input.month);
-      amount = settlementAmount(Number(emp.salary), paid, emp.name, input.month);
+      amount = await this.book(ctx.agencyId).settlement(employeeId, input.month, emp.name);
     }
 
     const row = await this.prisma.payrollPayment.create({

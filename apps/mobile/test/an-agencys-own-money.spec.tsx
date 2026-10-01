@@ -61,7 +61,6 @@ jest.mock("../src/api/session", () => ({
 /* eslint-disable @typescript-eslint/no-var-requires */
 const WalletScreen = require("../app/(tabs)/(desk)/agent/wallet").default;
 const ExpensesScreen = require("../app/(tabs)/(desk)/agent/expenses").default;
-const PayrollScreen = require("../app/(tabs)/(desk)/agent/payroll").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 
@@ -114,6 +113,8 @@ const employee = (over: Partial<AgencyEmployee> = {}): AgencyEmployee => ({
   designation: "Driver",
   salary: 18000,
   joinDate: "2025-01-05",
+  leftDate: null,
+  userId: null,
   active: true,
   recent: [],
   ...over,
@@ -242,26 +243,4 @@ describe("what the agency spends", () => {
   });
 });
 
-describe("what the agency pays its people", () => {
-  it("shows the month, what is owed and what is left", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText(/September 2026/)).toBeTruthy());
-    expect(r.getAllByText(/৳13,000/).length).toBeGreaterThan(0);
-  });
-
-  it("names each person and what they are still owed", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByLabelText("Shorif, salary ৳18,000, ৳13,000 left")).toBeTruthy());
-  });
-
-
-  it("says nobody is on payroll rather than drawing an empty sheet", async () => {
-    mockSheet.mockResolvedValue({
-      month: "2026-09",
-      rows: [],
-      totals: { expected: 0, paid: 0, advance: 0, remaining: 0, headcount: 0, settledCount: 0 },
-    });
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText(/Nobody on payroll/)).toBeTruthy());
-  });
-});
+// the agency’s payroll is in who-is-paid-and-what-for.spec.tsx, with the resort’s

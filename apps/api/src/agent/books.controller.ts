@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
-import { PAYROLL_PAYMENT_KINDS } from "@rh/shared";
+import { PAYROLL_ADJUSTMENT_KINDS, PAYROLL_PAYMENT_KINDS } from "@rh/shared";
 import { AuthGuard, AuthedRequest } from "../common/auth.guard";
 import { BooksService } from "./books.service";
 
@@ -24,6 +24,14 @@ class HeadDto {
 class HeadPatchDto {
   @IsOptional() @IsString() @MaxLength(80) name?: string;
   @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsString() leftDate?: string;
+}
+
+class AdjustDto {
+  @IsString() month!: string;
+  @IsIn([...PAYROLL_ADJUSTMENT_KINDS]) kind!: string;
+  @IsNumber() @Min(1) amount!: number;
+  @IsOptional() @IsString() @MaxLength(255) note?: string;
 }
 
 class ExpenseDto {
@@ -40,6 +48,8 @@ class EmployeeDto {
   @IsOptional() @IsString() @MaxLength(80) designation?: string;
   @IsOptional() @IsNumber() @Min(0) salary?: number;
   @IsOptional() @IsString() joinDate?: string;
+  /** the app login this person uses; 0 unlinks */
+  @IsOptional() @IsInt() @Min(0) userId?: number;
 }
 
 class EmployeePatchDto extends EmployeeDto {
@@ -136,8 +146,32 @@ export class BooksController {
   @Delete("employees/:id") removeEmployee(
     @Req() req: AuthedRequest,
     @Param("id", ParseIntPipe) id: number,
+    @Query("leftDate") leftDate?: string,
   ) {
-    return this.books.removeEmployee(req.user, id);
+    return this.books.removeEmployee(req.user, id, leftDate);
+  }
+
+  @Get("payroll-people") payrollPeople(@Req() req: AuthedRequest) {
+    return this.books.payrollPeople(req.user);
+  }
+
+  @Get("payroll-year") payrollYear(@Req() req: AuthedRequest, @Query("year", ParseIntPipe) year: number) {
+    return this.books.payrollYear(req.user, year);
+  }
+
+  @Post("payroll/:employeeId/adjust") adjust(
+    @Req() req: AuthedRequest,
+    @Param("employeeId", ParseIntPipe) employeeId: number,
+    @Body() dto: AdjustDto,
+  ) {
+    return this.books.adjust(req.user, employeeId, dto);
+  }
+
+  @Delete("payroll/adjustment/:id") unadjust(
+    @Req() req: AuthedRequest,
+    @Param("id", ParseIntPipe) id: number,
+  ) {
+    return this.books.unadjust(req.user, id);
   }
 
   @Get("payroll") sheet(@Req() req: AuthedRequest, @Query("month") month: string) {

@@ -95,6 +95,10 @@ import type {
   NewExpense,
   NewResortUser,
   PayrollPay,
+  PayrollAdjust,
+  PayrollPeople,
+  PayrollYear,
+  MyPay,
   PayrollPaymentSaved,
   PlanDefinition,
   PlanEdit,
@@ -922,9 +926,9 @@ export function createApiClient(http: Fetcher) {
        * to keep naming somebody. Typed `{ deleted: boolean }` until
        * 2026-09-20, so the one field that matters was missing.
        */
-      removeEmployee: (resortId: number, employeeId: number) =>
+      removeEmployee: (resortId: number, employeeId: number, leftDate?: string) =>
         http<{ deleted?: boolean; deactivated?: boolean }>(
-          `/resorts/${resortId}/payroll/employees/${employeeId}`,
+          `/resorts/${resortId}/payroll/employees/${employeeId}${qs({ leftDate })}`,
           { method: "DELETE" },
         ),
       sheet: (resortId: number, month: string) => http<PayrollSheet>(`/resorts/${resortId}/payroll${qs({ month })}`),
@@ -934,6 +938,16 @@ export function createApiClient(http: Fetcher) {
           { method: "POST", body },
         ),
       unpay: (paymentId: number) => http<{ deleted: boolean }>(`/payroll/payments/${paymentId}`, { method: "DELETE" }),
+      /** who is on payroll, and which logins are not */
+      people: (resortId: number) => http<PayrollPeople>(`/resorts/${resortId}/payroll/people`),
+      year: (resortId: number, year: number) => http<PayrollYear>(`/resorts/${resortId}/payroll/year${qs({ year })}`),
+      /** a bonus or a deduction against a month */
+      adjust: (resortId: number, employeeId: number, body: PayrollAdjust) =>
+        http<{ id: number }>(`/resorts/${resortId}/payroll/employees/${employeeId}/adjust`, { method: "POST", body }),
+      unadjust: (adjustmentId: number) =>
+        http<{ deleted: boolean }>(`/payroll/adjustments/${adjustmentId}`, { method: "DELETE" }),
+      /** the signed-in person's own pay, wherever they are on payroll */
+      mine: () => http<MyPay>("/me/pay"),
     },
 
     // ── what the numbers say ──
@@ -1339,7 +1353,8 @@ export function createApiClient(http: Fetcher) {
         editEmployee: (id: number, body: EmployeeEdit) =>
           http<{ id: number }>(`/agent/employees/${id}`, { method: "PATCH", body }),
         // same two answers as a head: paid wages keep the person on the books
-        removeEmployee: (id: number) => http<Removal>(`/agent/employees/${id}`, { method: "DELETE" }),
+        removeEmployee: (id: number, leftDate?: string) =>
+          http<Removal>(`/agent/employees/${id}${qs({ leftDate })}`, { method: "DELETE" }),
         sheet: (month: string) => http<PayrollSheet>(`/agent/payroll${qs({ month })}`),
         /**
          * `month` is required and `amount` is not: paying without one
@@ -1351,6 +1366,12 @@ export function createApiClient(http: Fetcher) {
           http<{ id: number }>(`/agent/payroll/${employeeId}`, { method: "POST", body }),
         undoPay: (paymentId: number) =>
           http<{ deleted: boolean }>(`/agent/payroll/payment/${paymentId}`, { method: "DELETE" }),
+        people: () => http<PayrollPeople>("/agent/payroll-people"),
+        year: (year: number) => http<PayrollYear>(`/agent/payroll-year${qs({ year })}`),
+        adjust: (employeeId: number, body: PayrollAdjust) =>
+          http<{ id: number }>(`/agent/payroll/${employeeId}/adjust`, { method: "POST", body }),
+        unadjust: (adjustmentId: number) =>
+          http<{ deleted: boolean }>(`/agent/payroll/adjustment/${adjustmentId}`, { method: "DELETE" }),
       },
 
       sales: {

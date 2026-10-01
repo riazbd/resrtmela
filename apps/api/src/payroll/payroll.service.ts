@@ -1,15 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { JwtClaims } from "@rh/shared";
-import { monthRow, paidSoFar, paymentKind, settlementAmount } from "./month-of-payroll";
+import { paymentKind } from "./month-of-payroll";
+import { PayrollBook, dayOrClear, myPay, requireMonth } from "./payroll-book";
 import { round2 } from "../common/dates";
 import { requireResortAccess, badRequest } from "../common/rbac";
 import { dateOnly } from "../common/dates";
 import { PermissionsService } from "../common/permissions";
 import { AuditService } from "../common/audit.service";
 import { PlanLimitsService } from "../common/plan-limits.service";
-
-const MONTH_RE = /^\d{4}-\d{2}$/;
 
 @Injectable()
 export class PayrollService {
@@ -30,6 +29,10 @@ export class PayrollService {
     await this.planLimits.requireFeature(resortId, "payroll");
   }
 
+  private book(resortId: number) {
+    return new PayrollBook(this.prisma, { resortId });
+  }
+
   async employees(claims: JwtClaims, resortId: number) {
     await this.requireView(claims, resortId);
     return this.prisma.employee.findMany({
@@ -42,10 +45,19 @@ export class PayrollService {
   async addEmployee(
     claims: JwtClaims,
     resortId: number,
-    input: { name: string; phone?: string; designation?: string; salary?: number; joinDate?: string; active?: boolean },
+    input: {
+      name: string;
+      phone?: string;
+      designation?: string;
+      salary?: number;
+      joinDate?: string;
+      active?: boolean;
+      userId?: number;
+    },
   ) {
     await this.requireManage(claims, resortId);
     if (!input.name.trim()) throw badRequest("name required");
+    if (input.userId) await this.book(resortId).checkLogin(input.userId);
     const emp = await this.prisma.employee.create({
       data: {
         resortId,
@@ -53,7 +65,8 @@ export class PayrollService {
         phone: input.phone?.replace(/[^\d+]/g, "") || null,
         designation: input.designation || null,
         salary: (input.salary ?? 0) as never,
-        joinDate: input.joinDate ? dateOnly(input.joinDate) : null,
+        joinDate: dayOrClear(input.joinDate, "The joining date") ?? null,
+        userId: input.userId || null,
         ...(input.active != null ? { active: input.active } : {}),
       },
     });
@@ -65,11 +78,23 @@ export class PayrollService {
     claims: JwtClaims,
     resortId: number,
     employeeId: number,
-    input: { name?: string; phone?: string; designation?: string; salary?: number; joinDate?: string; active?: boolean },
+    input: {
+      name?: string;
+      phone?: string;
+      designation?: string;
+      salary?: number;
+      joinDate?: string;
+      leftDate?: string;
+      active?: boolean;
+      userId?: number;
+    },
   ) {
     await this.requireManage(claims, resortId);
     const emp = await this.prisma.employee.findUnique({ where: { id: employeeId } });
     if (!emp || emp.resortId !== resortId) throw badRequest("employee not found");
+    if (input.userId) await this.book(resortId).checkLogin(input.userId, employeeId);
+    const joinDate = dayOrClear(input.joinDate, "The joining date");
+    const leftDate = dayOrClear(input.leftDate, "The leaving date");
     const updated = await this.prisma.employee.update({
       where: { id: employeeId },
       data: {
@@ -77,21 +102,34 @@ export class PayrollService {
         ...(input.phone !== undefined ? { phone: input.phone?.replace(/[^\d+]/g, "") || null } : {}),
         ...(input.designation !== undefined ? { designation: input.designation || null } : {}),
         ...(input.salary != null ? { salary: input.salary as never } : {}),
-        ...(input.joinDate ? { joinDate: dateOnly(input.joinDate) } : {}),
-        ...(input.active != null ? { active: input.active } : {}),
+        ...(joinDate !== undefined ? { joinDate } : {}),
+        ...(leftDate !== undefined ? { leftDate } : {}),
+        ...(input.userId !== undefined ? { userId: input.userId || null } : {}),
+        // back on payroll: the leaving date no longer applies
+        ...(input.active != null
+          ? { active: input.active, ...(input.active && leftDate === undefined ? { leftDate: null } : {}) }
+          : {}),
       },
     });
     await this.audit.log({ actorId: claims.userId, resortId, action: "payroll.employee.update", entity: "employee", entityId: employeeId, diff: input });
     return updated;
   }
 
-  async removeEmployee(claims: JwtClaims, resortId: number, employeeId: number) {
+  /**
+   * Off payroll. Somebody who has been paid stays on the books, switched off
+   * with the day they left — so their months before it still show, and the
+   * month they left in is worth the days they worked.
+   */
+  async removeEmployee(claims: JwtClaims, resortId: number, employeeId: number, leftOn?: string) {
     await this.requireManage(claims, resortId);
-    const emp = await this.prisma.employee.findUnique({ where: { id: employeeId }, include: { _count: { select: { payments: true } } } });
+    const emp = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { _count: { select: { payments: true, adjustments: true } } },
+    });
     if (!emp || emp.resortId !== resortId) throw badRequest("employee not found");
-    if (emp._count.payments > 0) {
-      // keep payroll history intact — deactivate instead
-      await this.prisma.employee.update({ where: { id: employeeId }, data: { active: false } });
+    if (emp._count.payments + emp._count.adjustments > 0) {
+      const leftDate = dayOrClear(leftOn, "The leaving date") ?? dateOnly(await this.book(resortId).today());
+      await this.prisma.employee.update({ where: { id: employeeId }, data: { active: false, leftDate } });
       await this.audit.log({ actorId: claims.userId, resortId, action: "payroll.employee.deactivate", entity: "employee", entityId: employeeId });
       return { deactivated: true };
     }
@@ -111,27 +149,61 @@ export class PayrollService {
    */
   async sheet(claims: JwtClaims, resortId: number, month: string) {
     await this.requireView(claims, resortId);
-    if (!MONTH_RE.test(month)) throw badRequest("month must look like 2026-09");
-    const employees = await this.prisma.employee.findMany({
-      where: { resortId, active: true },
-      orderBy: { name: "asc" },
-      include: { payments: { where: { month }, orderBy: { paidAt: "asc" } } },
+    return this.book(resortId).sheet(month);
+  }
+
+  async people(claims: JwtClaims, resortId: number) {
+    await this.requireView(claims, resortId);
+    return this.book(resortId).people();
+  }
+
+  async year(claims: JwtClaims, resortId: number, year: number) {
+    await this.requireView(claims, resortId);
+    return this.book(resortId).year(year);
+  }
+
+  /** A bonus or a deduction: what the month is worth, not money handed over. */
+  async adjust(
+    claims: JwtClaims,
+    resortId: number,
+    employeeId: number,
+    input: { month: string; kind?: string; amount: number; note?: string },
+  ) {
+    await this.requireManage(claims, resortId);
+    const emp = await this.prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!emp || emp.resortId !== resortId) throw badRequest("employee not found");
+    const row = await this.book(resortId).adjust(claims.userId, employeeId, input);
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId,
+      action: `payroll.${row.kind.toLowerCase()}`,
+      entity: "payroll_adjustment",
+      entityId: row.id,
+      diff: { employee: emp.name, month: input.month, amount: row.amount },
     });
-    const rows = employees.map((e) =>
-      monthRow(e.id, e.name, e.designation, Number(e.salary), e.payments),
-    );
-    return {
-      month,
-      rows,
-      totals: {
-        expected: round2(rows.reduce((s, r) => s + r.salary, 0)),
-        paid: round2(rows.reduce((s, r) => s + r.paid, 0)),
-        advance: round2(rows.reduce((s, r) => s + r.advance, 0)),
-        remaining: round2(rows.reduce((s, r) => s + r.remaining, 0)),
-        headcount: rows.length,
-        settledCount: rows.filter((r) => r.settled).length,
-      },
-    };
+    return row;
+  }
+
+  async unadjust(claims: JwtClaims, adjustmentId: number) {
+    const row = await this.prisma.payrollAdjustment.findUnique({ where: { id: adjustmentId } });
+    // shared with the agency side, like payments
+    if (!row || row.resortId == null) throw badRequest("Adjustment not found");
+    await this.requireManage(claims, row.resortId);
+    await this.book(row.resortId).unadjust(adjustmentId);
+    await this.audit.log({
+      actorId: claims.userId,
+      resortId: row.resortId,
+      action: "payroll.adjustment.undo",
+      entity: "payroll_adjustment",
+      entityId: adjustmentId,
+      diff: { month: row.month, kind: row.kind },
+    });
+    return { deleted: true };
+  }
+
+  /** The signed-in person's own pay. Nobody else's: it reads by their user id. */
+  mine(claims: JwtClaims) {
+    return myPay(this.prisma, claims.userId);
   }
 
   /**
@@ -157,7 +229,7 @@ export class PayrollService {
     input: { month: string; amount?: number; method?: string; note?: string; kind?: string },
   ) {
     await this.requireManage(claims, resortId);
-    if (!MONTH_RE.test(input.month)) throw badRequest("month must look like 2026-09");
+    requireMonth(input.month);
     const kind = paymentKind(input.kind);
     const emp = await this.prisma.employee.findUnique({ where: { id: employeeId } });
     if (!emp || emp.resortId !== resortId) throw badRequest("employee not found");
@@ -170,8 +242,7 @@ export class PayrollService {
       // "give him some money" has no sensible number to invent for it
       throw badRequest("How much is the advance?");
     } else {
-      const paid = await paidSoFar(this.prisma, employeeId, input.month);
-      amount = settlementAmount(Number(emp.salary), paid, emp.name, input.month);
+      amount = await this.book(resortId).settlement(employeeId, input.month, emp.name);
     }
 
     const row = await this.prisma.payrollPayment.create({

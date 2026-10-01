@@ -579,6 +579,26 @@ export interface Employee {
   payments: { id: number; month: string; amount: number; method: string | null }[];
 }
 
+/** The app login a person on payroll signs in with. */
+export interface PayrollLogin {
+  userId: number;
+  name: string;
+  /** what they are in the app — "Front desk", "Manager", a role the resort wrote */
+  role: string;
+  /** active | suspended … */
+  status: string;
+}
+
+/** A bonus or a deduction, as the sheet lists it. */
+export interface PayrollAdjustmentRow {
+  id: number;
+  /** BONUS | DEDUCTION */
+  kind: string;
+  amount: number;
+  note: string | null;
+  createdAt: string;
+}
+
 /** One payment against a month — an advance, or the settlement. */
 export interface PayrollPaymentRow {
   id: number;
@@ -613,15 +633,133 @@ export interface PayrollSheet {
     /** the salary has been handed over in full, however many payments it took */
     settled: boolean;
     payments: PayrollPaymentRow[];
+    phone: string | null;
+    /** "YYYY-MM-DD" or null */
+    joinDate: string | null;
+    leftDate: string | null;
+    login: PayrollLogin | null;
+    /** days on payroll this month, of how many it has */
+    days: number;
+    daysInMonth: number;
+    /** the salary for those days */
+    base: number;
+    bonus: number;
+    deduction: number;
+    /** base + bonus − deduction: what the month is worth */
+    due: number;
+    /** overpaid in earlier months, used against this one */
+    aheadUsed: number;
+    /** handed over beyond what this month is worth; carried forward */
+    over: number;
+    /** PayrollMonthState */
+    state: string;
+    /** what earlier months still have left to pay */
+    arrears: number;
+    adjustments: PayrollAdjustmentRow[];
   }[];
   totals: {
+    /** what the month is worth to everyone on it */
     expected: number;
     paid: number;
     advance: number;
     remaining: number;
     headcount: number;
     settledCount: number;
+    bonus: number;
+    deduction: number;
+    /** what earlier months still have left to pay, everyone together */
+    arrears: number;
   };
+}
+
+/** Somebody on payroll, with the login they use, if any. */
+export interface PayrollPerson {
+  id: number;
+  name: string;
+  phone: string | null;
+  designation: string | null;
+  salary: number;
+  joinDate: string | null;
+  leftDate: string | null;
+  active: boolean;
+  login: PayrollLogin | null;
+  /** the month the books start for this person */
+  since: string;
+}
+
+/**
+ * Payroll's people, and the app's.
+ *
+ * Two lists that mostly overlap: who is paid a salary, and who can sign in.
+ * `team` is the second minus the first — logins nobody has put on payroll —
+ * so the screen can say so rather than leave the owner wondering why the
+ * front desk is missing.
+ */
+export interface PayrollPeople {
+  people: PayrollPerson[];
+  team: { userId: number; name: string; phone: string | null; role: string }[];
+}
+
+/** One person's month in the year view. */
+export interface PayrollYearCell {
+  month: string;
+  /** PayrollMonthState */
+  state: string;
+  due: number;
+  paid: number;
+  advance: number;
+  bonus: number;
+  deduction: number;
+  remaining: number;
+}
+
+/** A year of payroll: every person, every month, and the totals by month. */
+export interface PayrollYear {
+  year: number;
+  /** "2026-01" … "2026-12" */
+  months: string[];
+  /** the month it is now */
+  current: string;
+  people: {
+    employeeId: number;
+    name: string;
+    designation: string | null;
+    salary: number;
+    active: boolean;
+    login: PayrollLogin | null;
+    cells: PayrollYearCell[];
+    totals: { due: number; paid: number; advance: number; bonus: number; deduction: number; remaining: number };
+  }[];
+  byMonth: {
+    month: string;
+    due: number;
+    paid: number;
+    advance: number;
+    bonus: number;
+    deduction: number;
+    remaining: number;
+    headcount: number;
+  }[];
+  /**
+   * `due` and `remaining` stop at the month it is now — a December not yet
+   * reached is not money still to pay. What the months ahead will be worth
+   * is `upcoming`.
+   */
+  totals: { due: number; paid: number; advance: number; bonus: number; deduction: number; remaining: number; upcoming: number };
+  /** the monthly wage bill today, by designation */
+  byDesignation: { designation: string; people: number; salary: number }[];
+}
+
+/** A login's own pay, wherever they are on payroll. */
+export interface MyPay {
+  places: {
+    employeeId: number;
+    /** the resort or agency that pays them */
+    employer: string;
+    designation: string | null;
+    salary: number;
+    months: (PayrollYearCell & { payments: PayrollPaymentRow[]; adjustments: PayrollAdjustmentRow[] })[];
+  }[];
 }
 
 export interface FoodPackage {
@@ -1006,6 +1144,9 @@ export interface AgencyEmployee {
   designation: string | null;
   salary: number;
   joinDate: string | null;
+  leftDate: string | null;
+  /** the app login this person uses */
+  userId: number | null;
   active: boolean;
   recent: { month: string; amount: number }[];
 }
@@ -2026,8 +2167,11 @@ export interface NewEmployee {
   phone?: string;
   designation?: string;
   salary?: number;
+  /** "YYYY-MM-DD"; on payroll from this day */
   joinDate?: string;
   active?: boolean;
+  /** the app login this person uses */
+  userId?: number;
 }
 
 export interface EmployeeEdit {
@@ -2035,8 +2179,22 @@ export interface EmployeeEdit {
   phone?: string;
   designation?: string;
   salary?: number;
+  /** "YYYY-MM-DD"; "" clears it */
   joinDate?: string;
+  /** "YYYY-MM-DD"; off payroll after this day; "" clears it */
+  leftDate?: string;
   active?: boolean;
+  /** the app login this person uses; 0 unlinks */
+  userId?: number;
+}
+
+/** A bonus or a deduction against a month. */
+export interface PayrollAdjust {
+  month: string;
+  /** BONUS | DEDUCTION */
+  kind: string;
+  amount: number;
+  note?: string;
 }
 
 export interface NewPermRole {

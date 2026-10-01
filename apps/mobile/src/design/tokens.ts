@@ -18,6 +18,8 @@
  * Resort staff scan numbers, and the screen should let them.
  */
 
+import { MONEY_TONE, PAYROLL_STATE_TONE, SERIES_COLORS } from "@rh/shared";
+
 /**
  * The brand ramp, from `apps/web/tailwind.config.ts`.
  *
@@ -71,10 +73,22 @@ const meaning = {
   info: { fg: "#1d4ed8", bg: "#eff6ff", line: "#bfdbfe" },
 } as const;
 
+/**
+ * What a chart's colours mean — money paid, money early, money still to pay —
+ * decided once in `@rh/shared` for the console and the phone together, and
+ * reached from here so this stays the one file a screen takes a colour from.
+ */
+const chart = {
+  money: MONEY_TONE,
+  series: SERIES_COLORS,
+  payrollState: PAYROLL_STATE_TONE,
+} as const;
+
 export const color = {
   brand,
   ink,
   ...meaning,
+  chart,
 
   /** The ground a screen is drawn on, and the card that sits on it. */
   screen: ink[50],

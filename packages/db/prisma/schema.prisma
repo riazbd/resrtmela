@@ -301,6 +301,7 @@ model Resort {
   constructionContributors ConstructionContributor[]
   constructionPurposes     ConstructionPurpose[]
   agentAccountEntries      AgentAccountEntry[]
+  payrollAdjustments       PayrollAdjustment[]
 
   @@index([tenantId])
   @@map("resorts")
@@ -350,39 +351,41 @@ model User {
   account       Tenant?    @relation("AccountUsers", fields: [accountId], references: [id], onDelete: SetNull)
   createdAt     DateTime   @default(now())
 
-  resorts             UserResort[]
-  createdBookings     Booking[]           @relation("BookingCreatedBy")
-  agentBookings       Booking[]           @relation("BookingAgent")
-  paymentsRecv        Payment[]           @relation("PaymentReceivedBy")
-  salesPaymentsRecv   SalesPayment[]      @relation("SalesPaymentReceivedBy")
-  duesPaid            SubscriptionDue[]   @relation("DuePaidBy")
-  chargesPaid         PlatformCharge[]    @relation("ChargePaidBy")
-  roomsCleaned        Room[]              @relation("RoomCleanedBy")
-  deviceTokens        DeviceToken[]
-  walletTxnsMade      WalletTxn[]         @relation("WalletTxnBy")
-  auditLogs           AuditLog[]          @relation("AuditActor")
-  wallet              Wallet?
-  notifications       Notification[]
-  accessRequests      ResortAccess[]
-  uploads             Upload[]
-  emailCredits        EmailCredit?
-  creditOrders        EmailCreditOrder[]
-  campaigns           EmailCampaign[]
-  agentRoles          AgentRole[]         @relation("AgencyRoles")
-  agencyExpenses      Expense[]           @relation("AgencyExpenses")
-  agencyHeads         ExpenseHead[]       @relation("AgencyExpenseHeads")
-  agencyEmployees     Employee[]          @relation("AgencyEmployees")
-  agencyPayroll       PayrollPayment[]    @relation("AgencyPayroll")
-  agencyCounters      Counter[]           @relation("AgencyCounters")
-  tourCategories      TourCategory[]      @relation("AgencyTourCategories")
-  tourPackages        TourPackage[]       @relation("AgencyTourPackages")
-  salesDocs           SalesDoc[]          @relation("AgencySalesDocs")
-  passwordResets      PasswordReset[]
-  constructionEntries ConstructionEntry[] @relation("ConstructionEntries")
-  paymentsCollected   Payment[]           @relation("PaymentCollectedByAgent")
-  agentAccountLines   AgentAccountEntry[] @relation("AgentAccountLines")
-  agentEntriesMade    AgentAccountEntry[] @relation("AgentAccountEntryBy")
-  agentEntriesOkd     AgentAccountEntry[] @relation("AgentAccountEntryConfirmedBy")
+  resorts                  UserResort[]
+  createdBookings          Booking[]           @relation("BookingCreatedBy")
+  agentBookings            Booking[]           @relation("BookingAgent")
+  paymentsRecv             Payment[]           @relation("PaymentReceivedBy")
+  salesPaymentsRecv        SalesPayment[]      @relation("SalesPaymentReceivedBy")
+  duesPaid                 SubscriptionDue[]   @relation("DuePaidBy")
+  chargesPaid              PlatformCharge[]    @relation("ChargePaidBy")
+  roomsCleaned             Room[]              @relation("RoomCleanedBy")
+  deviceTokens             DeviceToken[]
+  walletTxnsMade           WalletTxn[]         @relation("WalletTxnBy")
+  auditLogs                AuditLog[]          @relation("AuditActor")
+  wallet                   Wallet?
+  notifications            Notification[]
+  accessRequests           ResortAccess[]
+  uploads                  Upload[]
+  emailCredits             EmailCredit?
+  creditOrders             EmailCreditOrder[]
+  campaigns                EmailCampaign[]
+  agentRoles               AgentRole[]         @relation("AgencyRoles")
+  agencyExpenses           Expense[]           @relation("AgencyExpenses")
+  agencyHeads              ExpenseHead[]       @relation("AgencyExpenseHeads")
+  agencyEmployees          Employee[]          @relation("AgencyEmployees")
+  agencyPayroll            PayrollPayment[]    @relation("AgencyPayroll")
+  agencyPayrollAdjustments PayrollAdjustment[] @relation("AgencyPayrollAdjustments")
+  payrollRecords           Employee[]          @relation("PayrollLogin")
+  agencyCounters           Counter[]           @relation("AgencyCounters")
+  tourCategories           TourCategory[]      @relation("AgencyTourCategories")
+  tourPackages             TourPackage[]       @relation("AgencyTourPackages")
+  salesDocs                SalesDoc[]          @relation("AgencySalesDocs")
+  passwordResets           PasswordReset[]
+  constructionEntries      ConstructionEntry[] @relation("ConstructionEntries")
+  paymentsCollected        Payment[]           @relation("PaymentCollectedByAgent")
+  agentAccountLines        AgentAccountEntry[] @relation("AgentAccountLines")
+  agentEntriesMade         AgentAccountEntry[] @relation("AgentAccountEntryBy")
+  agentEntriesOkd          AgentAccountEntry[] @relation("AgentAccountEntryConfirmedBy")
 
   @@index([accountId])
   /// Not unique any more (2026-09-28) — see the note on the column. Indexed
@@ -452,14 +455,24 @@ model Employee {
   phone       String?   @db.VarChar(20)
   designation String?   @db.VarChar(80)
   salary      Decimal   @default(0) @db.Decimal(10, 2)
+  /// On payroll from this day; a month joined part-way is paid for the days.
   joinDate    DateTime? @db.Date
+  /// Off payroll after this day; the month left part-way is paid for the days.
+  leftDate    DateTime? @db.Date
   active      Boolean   @default(true)
+  /// The app login this person signs in with, if they have one. Payroll is
+  /// everyone who is paid a salary; a login is who can use the app. They are
+  /// different lists that mostly overlap, and this is the overlap.
+  userId      Int?
+  user        User?     @relation("PayrollLogin", fields: [userId], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
 
-  payments PayrollPayment[]
+  payments    PayrollPayment[]
+  adjustments PayrollAdjustment[]
 
   @@index([resortId])
   @@index([agencyId])
+  @@index([userId])
   @@map("employees")
 }
 
@@ -490,6 +503,31 @@ model PayrollPayment {
   @@index([resortId, month])
   @@index([agencyId, month])
   @@map("payroll_payments")
+}
+
+/// A change to what a month is worth, not money handed over: a bonus raises
+/// it, a deduction lowers it. Kept apart from payments so the P&L, which
+/// counts money that left, never counts a promise.
+model PayrollAdjustment {
+  id          Int      @id @default(autoincrement())
+  resortId    Int?
+  resort      Resort?  @relation(fields: [resortId], references: [id], onDelete: Cascade)
+  agencyId    Int?
+  agency      User?    @relation("AgencyPayrollAdjustments", fields: [agencyId], references: [id], onDelete: Cascade)
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month       String   @db.VarChar(7)
+  /// BONUS | DEDUCTION
+  kind        String   @db.VarChar(12)
+  amount      Decimal  @db.Decimal(10, 2)
+  note        String?  @db.VarChar(255)
+  createdAt   DateTime @default(now())
+  createdById Int?
+
+  @@index([employeeId, month])
+  @@index([resortId, month])
+  @@index([agencyId, month])
+  @@map("payroll_adjustments")
 }
 
 // ───────────────────────── Restaurant packages ─────────────────────────

@@ -226,7 +226,7 @@ describe("the agency's payroll", () => {
 
     await books().pay(agency, emp.id, { month: "2026-09" });
 
-    await expect(books().pay(agency, emp.id, { month: "2026-09" })).rejects.toThrow(/whole salary/i);
+    await expect(books().pay(agency, emp.id, { month: "2026-09" })).rejects.toThrow(/already had everything/i);
     const sheet = await books().payrollSheet(agency, "2026-09");
     expect(sheet.totals.paid).toBe(18000);
     expect(sheet.totals.remaining).toBe(0);
@@ -272,10 +272,12 @@ describe("the agency's payroll", () => {
     const emp = await books().addEmployee(agency, { name: "Rakib", salary: 18000 });
     await books().pay(agency, emp.id, { month: "2026-09" });
 
-    expect(await books().removeEmployee(agency, emp.id)).toEqual({ deactivated: true });
-    // they leave the sheet, because nobody owes them next month's salary —
-    // but September's payment stays, so last month's books still add up
-    expect((await books().payrollSheet(agency, "2026-09")).rows).toEqual([]);
+    expect(await books().removeEmployee(agency, emp.id, "2026-09-30")).toEqual({ deactivated: true });
+    // September stays on the sheet, paid, so the month still adds up to what
+    // went out; the months after they left do not carry them
+    const september = (await books().payrollSheet(agency, "2026-09")).rows;
+    expect(september.map((r) => [r.name, r.paid, r.state])).toEqual([["Rakib", 18000, "SETTLED"]]);
+    expect((await books().payrollSheet(agency, "2026-10")).rows).toEqual([]);
     const paid = await prisma.payrollPayment.findFirst({ where: { employeeId: emp.id } });
     expect(Number(paid!.amount)).toBe(18000);
   });

@@ -67,7 +67,6 @@ jest.mock("../src/api/session", () => ({
 const FbScreen = require("../app/(tabs)/(desk)/fb/index").default;
 const TicketScreen = require("../app/(tabs)/(desk)/fb/new").default;
 const ActivitiesScreen = require("../app/(tabs)/(desk)/activities").default;
-const PayrollScreen = require("../app/(tabs)/(desk)/payroll").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
 
@@ -350,38 +349,4 @@ describe("what a resort sells besides a bed", () => {
   });
 });
 
-describe("the month's wages", () => {
-  it("opens on the resort's month and totals it", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText("September 2026")).toBeTruthy());
-    expect(mockSheet).toHaveBeenCalledWith(3, "2026-09");
-    expect(r.getByLabelText("Due: ৳32,000")).toBeTruthy();
-    expect(r.getByLabelText("Left: ৳12,000")).toBeTruthy();
-  });
-
-  it("moves a month at a time", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByRole("button", { name: "‹ Prev" })).toBeTruthy());
-    await fireEvent.press(r.getByRole("button", { name: "‹ Prev" }));
-    await waitFor(() => expect(mockSheet).toHaveBeenCalledWith(3, "2026-08"));
-  });
-
-  /**
-   * Settled is the salary handed over in full, however many payments it
-   * took — not a flag on one payment row.
-   */
-  it("tells somebody settled from somebody still due", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByLabelText(/^Jamal Uddin, salary ৳18,000, ৳12,000 left/)).toBeTruthy());
-    expect(r.getByLabelText(/^Shefali Begum, salary ৳14,000, settled/)).toBeTruthy();
-  });
-
-  /** Money already handed over changes how the month reads. */
-  it("says when somebody took an advance", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText(/৳6,000 advanced/)).toBeTruthy());
-  });
-
-  // paying, advances and the staff list are in
-  // advances-and-the-people-paid.spec.tsx, against both owners' screens
-});
+// the month’s wages are in who-is-paid-and-what-for.spec.tsx
