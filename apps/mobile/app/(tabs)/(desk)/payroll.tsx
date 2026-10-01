@@ -1,16 +1,15 @@
 /**
- * The month's wages: who is owed what, and handing it over.
+ * The month's wages: who is owed what, handing it over, and who is on it.
  *
- * A month is the unit, and the sheet is the server's arithmetic over
- * it — `salary`, what has been `paid` against the month, how much of
- * that was an `advance`, and what is `remaining`. None of it is worked
- * out here, because a month can hold several payments and "settled"
- * means the salary has been handed over in full however many payments
- * it took, not that there is one payment row.
+ * A month is the unit, and the sheet is the server's arithmetic over it —
+ * `salary`, what has been `paid` against the month, how much of that was an
+ * `advance`, and what is `remaining`. None of it is worked out here, because
+ * a month can hold several payments and "settled" means the salary has been
+ * handed over in full however many payments it took.
  *
- * Paying is on the phone because it is the thing that happens standing
- * in front of somebody with cash. Adding an employee and setting a
- * salary are not — those are a decision with a contract behind them.
+ * The month and the staff are drawn by `PayrollMonth` and `PayrollStaff`,
+ * shared with the agency's payroll; this screen keeps which resort, which
+ * routes, and who may change anything (`payroll.manage`).
  */
 import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -21,20 +20,18 @@ import {
   formatMoney,
   shiftMonth,
   todayIn,
+  type Employee,
   type PayrollSheet,
   type ResortOption,
 } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { WhichResort } from "../../../src/screens/which-resort";
+import { PayrollFigures, PayrollMonth, PayrollStaff } from "../../../src/screens/payroll-month";
 import { Button } from "../../../src/design/button";
-import { Chip } from "../../../src/design/chip";
-import { Field, Input } from "../../../src/design/input";
 import { useMoneyFormat } from "../../../src/design/money";
-import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
-import { Card, Row, Stat } from "../../../src/design/surface";
+import { Loading, Problem, Stale } from "../../../src/design/states";
 import { Text } from "../../../src/design/text";
-import { useAction } from "../../../src/design/use-action";
-import { color, radius, space } from "../../../src/design/tokens";
+import { space } from "../../../src/design/tokens";
 
 /** "September 2026" from "2026-09". */
 function monthName(month: string): string {
@@ -53,11 +50,6 @@ export default function PayrollScreen() {
   const [chosen, setMonth] = useState<string | null>(null);
   const month = chosen ?? todayIn(activeResort?.timezone).slice(0, 7);
 
-  const [paying, setPaying] = useState<number | null>(null);
-  const [amount, setAmount] = useState(0);
-  const [method, setMethod] = useState("CASH");
-  const [refused, setRefused] = useState<string | null>(null);
-
   const sheet = useApi<PayrollSheet>(
     keys.payroll(resortId, month),
     () => client.payroll.sheet(resortId!, month),
@@ -67,26 +59,26 @@ export default function PayrollScreen() {
     },
   );
 
+  const staff = useApi<Employee[]>(
+    keys.employees(resortId),
+    () => client.payroll.employees(resortId!),
+    { enabled: resortId !== undefined },
+  );
+
   const methods = useApi<ResortOption[]>(
     keys.options(resortId, "PAYMENT_METHOD"),
     () => client.options.list(resortId!, "PAYMENT_METHOD"),
     { enabled: resortId !== undefined, staleTime: 3_600_000 },
   );
 
-  const hand = useAction(async () => {
-    if (paying === null || !(amount > 0)) return;
-    setRefused(null);
-    try {
-      await client.payroll.pay(resortId!, paying, { month, amount, method });
-      setPaying(null);
-      setAmount(0);
-      await sheet.refetch();
-      // wages are an expense in the period's figures
-      await qc.invalidateQueries({ queryKey: ["reports"] });
-    } catch (error) {
-      setRefused(error instanceof Error ? error.message : "That did not go through.");
-    }
-  });
+  /** Every month's sheet, the staff list, and the period's figures — wages are an expense. */
+  const reload = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["payroll", resortId] }),
+      qc.invalidateQueries({ queryKey: ["employees", resortId] }),
+      qc.invalidateQueries({ queryKey: ["reports"] }),
+    ]);
+  };
 
   const header = <Stack.Screen options={{ title: "Payroll" }} />;
 
@@ -117,9 +109,10 @@ export default function PayrollScreen() {
     );
   }
 
-  const { rows, totals } = sheet.data;
-  const mayPay = can("payroll.manage");
-  const choices = (methods.data ?? []).filter((m) => m.active);
+  const mayManage = can("payroll.manage");
+  const choices = (methods.data ?? [])
+    .filter((m) => m.active)
+    .map((m) => ({ code: m.code, label: m.label }));
 
   return (
     <>
@@ -129,7 +122,13 @@ export default function PayrollScreen() {
         contentContainerStyle={styles.page}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={sheet.isRefetching} onRefresh={() => void sheet.refetch()} />
+          <RefreshControl
+            refreshing={sheet.isRefetching}
+            onRefresh={() => {
+              void sheet.refetch();
+              void staff.refetch();
+            }}
+          />
         }
       >
         <View style={styles.months}>
@@ -150,109 +149,35 @@ export default function PayrollScreen() {
           />
         </View>
 
-        <View style={styles.figures}>
-          <Stat label="Due" value={whole(totals.expected)} />
-          <Stat label="Paid" value={whole(totals.paid)} tone="ok" />
-          <Stat
-            label="Left"
-            value={whole(Math.max(0, totals.expected - totals.paid))}
-            tone={totals.expected - totals.paid > 0 ? "danger" : "title"}
-          />
-        </View>
+        <PayrollFigures sheet={sheet.data} whole={whole} />
 
-        <Card title="The month">
-          {rows.length === 0 ? (
-            <View style={styles.emptyBox}>
-              {/* the footnote below already says where staff are added;
-                  saying it twice on one screen reads as a stutter */}
-              <Empty message="Nobody on payroll" />
-            </View>
-          ) : (
-            rows.map((row, i) => (
-              <Row
-                key={row.employeeId}
-                title={row.name}
-                subtitle={[
-                  row.designation,
-                  // an advance is money already handed over, and a month
-                  // where somebody took one reads differently from one
-                  // where they did not
-                  row.advance > 0 ? `${whole(row.advance)} advanced` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || undefined}
-                last={i === rows.length - 1}
-                accessibilityLabel={`${row.name}, salary ${whole(row.salary)}, ${row.settled ? "settled" : `${whole(row.remaining)} left`}`}
-                onPress={
-                  mayPay && !row.settled
-                    ? () => {
-                        setPaying(paying === row.employeeId ? null : row.employeeId);
-                        setAmount(row.remaining);
-                        setRefused(null);
-                      }
-                    : undefined
-                }
-                right={
-                  row.settled ? (
-                    <Text step="small" weight="medium" tone="ok">
-                      Settled
-                    </Text>
-                  ) : (
-                    <Text step="body" weight="medium" tone="danger" tabular>
-                      {whole(row.remaining)}
-                    </Text>
-                  )
-                }
-              />
-            ))
-          )}
-        </Card>
+        <PayrollMonth
+          // a different month is a different sheet; nothing half-typed carries over
+          key={month}
+          sheet={sheet.data}
+          month={month}
+          monthName={monthName(month)}
+          mayManage={mayManage}
+          methods={choices}
+          whole={whole}
+          pay={(employeeId, body) => client.payroll.pay(resortId, employeeId, body)}
+          undo={(paymentId) => client.payroll.unpay(paymentId)}
+          onDone={reload}
+        />
 
-        {paying !== null && mayPay ? (
-          <Card title={`Hand over — ${rows.find((r) => r.employeeId === paying)?.name ?? ""}`}>
-            <View style={styles.fields}>
-              <Field
-                label="Amount"
-                hint="Less than what is left is an advance; the rest settles the month"
-              >
-                <Input
-                  value={amount ? String(amount) : ""}
-                  onChangeText={(text) => setAmount(Number(text.replace(/[^0-9.]/g, "")) || 0)}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-              </Field>
-              {choices.length > 0 ? (
-                <View style={styles.kinds}>
-                  {choices.map((m) => (
-                    <Chip
-                      key={m.code}
-                      label={m.label}
-                      on={method === m.code}
-                      onPress={() => setMethod(m.code)}
-                    />
-                  ))}
-                </View>
-              ) : null}
-
-              {refused ? (
-                <View style={styles.refused}>
-                  <Text step="small" tone="danger" weight="medium">
-                    {refused}
-                  </Text>
-                </View>
-              ) : null}
-
-              <Button label={`Pay ${whole(amount)}`} loading={hand.busy} onPress={hand.go} />
-              <Button label="Not now" kind="ghost" onPress={() => setPaying(null)} />
-            </View>
-          </Card>
-        ) : null}
+        <PayrollStaff
+          people={staff.data ?? []}
+          mayManage={mayManage}
+          whole={whole}
+          add={(body) => client.payroll.addEmployee(resortId, body)}
+          edit={(id, body) => client.payroll.updateEmployee(resortId, id, body)}
+          remove={(id) => client.payroll.removeEmployee(resortId, id)}
+          onDone={reload}
+        />
 
         <Text step="caption" tone="muted" style={styles.footnote}>
-          Staff and their salaries are set up on the desk. A month is settled
-          when the salary has been handed over in full, however many payments
-          it took.
+          A month is settled when the salary has been handed over in full,
+          however many payments it took.
         </Text>
       </ScrollView>
     </>
@@ -262,16 +187,5 @@ export default function PayrollScreen() {
 const styles = StyleSheet.create({
   page: { padding: space.lg, gap: space.lg },
   months: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
-  figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
-  fields: { gap: space.md },
-  kinds: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  emptyBox: { paddingVertical: space.lg },
   footnote: { textAlign: "center" },
-  refused: {
-    backgroundColor: color.danger.bg,
-    borderWidth: 1,
-    borderColor: color.danger.line,
-    borderRadius: radius.md,
-    padding: space.md,
-  },
 });

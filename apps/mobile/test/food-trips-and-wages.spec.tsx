@@ -57,6 +57,7 @@ jest.mock("../src/api/session", () => ({
     payroll: {
       sheet: (...a: unknown[]) => mockSheet(...a),
       pay: (...a: unknown[]) => mockPay(...a),
+      employees: () => Promise.resolve([]),
     },
     options: { list: (...a: unknown[]) => mockOptions(...a) },
   },
@@ -146,7 +147,7 @@ const sheet = (over: Partial<PayrollSheet> = {}): PayrollSheet =>
         payments: [],
       },
     ],
-    totals: { expected: 32000, paid: 20000, advance: 6000 },
+    totals: { expected: 32000, paid: 20000, advance: 6000, remaining: 12000, headcount: 2, settledCount: 1 },
     ...over,
   }) as PayrollSheet;
 
@@ -381,31 +382,6 @@ describe("the month's wages", () => {
     await waitFor(() => expect(r.getByText(/৳6,000 advanced/)).toBeTruthy());
   });
 
-  it("hands over what is left, against the month on screen", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByLabelText(/^Jamal Uddin,/)).toBeTruthy());
-    await fireEvent.press(r.getByLabelText(/^Jamal Uddin,/));
-    await waitFor(() => expect(r.getByLabelText("Amount")).toBeTruthy());
-    // opens on what is left, which is what usually gets handed over
-    expect(r.getByLabelText("Amount").props.value).toBe("12000");
-    await fireEvent.press(r.getByRole("button", { name: /^Pay / }));
-    await waitFor(() =>
-      expect(mockPay).toHaveBeenCalledWith(3, 4, { month: "2026-09", amount: 12000, method: "CASH" }),
-    );
-  });
-
-  it("does not offer to pay somebody already settled", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByLabelText(/^Shefali Begum,/)).toBeTruthy());
-    await fireEvent.press(r.getByLabelText(/^Shefali Begum,/));
-    expect(r.queryByLabelText("Amount")).toBeNull();
-  });
-
-  it("offers no payment to somebody who may only look", async () => {
-    mockCan = (k) => k !== "payroll.manage";
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByLabelText(/^Jamal Uddin,/)).toBeTruthy());
-    await fireEvent.press(r.getByLabelText(/^Jamal Uddin,/));
-    expect(r.queryByLabelText("Amount")).toBeNull();
-  });
+  // paying, advances and the staff list are in
+  // advances-and-the-people-paid.spec.tsx, against both owners' screens
 });

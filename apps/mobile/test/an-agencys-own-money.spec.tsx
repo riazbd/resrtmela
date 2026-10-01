@@ -14,8 +14,8 @@
  * the resort side where a category is typed per entry. Adding an entry
  * is here; defining a head is desk work and the screen says so.
  *
- * **Payroll.** The month and what is left to pay. Hiring is not on a
- * phone, for the same reason it is not on the resort's.
+ * **Payroll.** The month and what is left to pay. Advances and the staff
+ * list are in advances-and-the-people-paid.spec.tsx.
  */
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type { AgencyEmployee, AgencyExpensePage, AgencyWallet } from "@rh/shared";
@@ -120,6 +120,16 @@ const employee = (over: Partial<AgencyEmployee> = {}): AgencyEmployee => ({
 });
 
 beforeEach(() => {
+  // the fixtures are September's; read off a real clock this file went red
+  // on 1 October with nothing changed
+  jest.useFakeTimers({
+    now: new Date("2026-09-20T06:00:00Z"),
+    doNotFake: [
+      "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+      "setImmediate", "clearImmediate", "nextTick", "queueMicrotask",
+      "performance", "requestAnimationFrame", "cancelAnimationFrame",
+    ],
+  });
   jest.clearAllMocks();
   mockWallet.mockResolvedValue(wallet());
   mockExpenses.mockResolvedValue(expensePage());
@@ -153,6 +163,8 @@ beforeEach(() => {
     },
   });
 });
+
+afterEach(() => jest.useRealTimers());
 
 describe("the agency's wallet", () => {
   it("leads with the balance", async () => {
@@ -239,14 +251,9 @@ describe("what the agency pays its people", () => {
 
   it("names each person and what they are still owed", async () => {
     const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText("Shorif")).toBeTruthy());
+    await waitFor(() => expect(r.getByLabelText("Shorif, salary ৳18,000, ৳13,000 left")).toBeTruthy());
   });
 
-  it("says where hiring happens", async () => {
-    const r = await open(PayrollScreen);
-    await waitFor(() => expect(r.getByText("Shorif")).toBeTruthy());
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
-  });
 
   it("says nobody is on payroll rather than drawing an empty sheet", async () => {
     mockSheet.mockResolvedValue({

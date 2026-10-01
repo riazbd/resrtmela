@@ -65,9 +65,21 @@ const feed = (over: Partial<AgencyCalendar> = {}): AgencyCalendar => ({
 const open = async () => render(<Harness><CalendarScreen /></Harness>);
 
 beforeEach(() => {
+  // the feed is September's; on a real clock the calendar opened on October
+  // from 1 October on, and the September night was off the screen
+  jest.useFakeTimers({
+    now: new Date("2026-09-20T06:00:00Z"),
+    doNotFake: [
+      "setTimeout", "clearTimeout", "setInterval", "clearInterval",
+      "setImmediate", "clearImmediate", "nextTick", "queueMicrotask",
+      "performance", "requestAnimationFrame", "cancelAnimationFrame",
+    ],
+  });
   jest.clearAllMocks();
   mockCalendar.mockResolvedValue(feed());
 });
+
+afterEach(() => jest.useRealTimers());
 
 describe("can the agency sell that night", () => {
   it("asks for a whole month at once", async () => {
