@@ -16,7 +16,7 @@
  * here for the reason revoking anything is: the moment you need it, you
  * need it from wherever you are.
  */
-import { render, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type {
   AgencyApiKey,
   AgencyGuestRow,
@@ -29,6 +29,9 @@ import type {
 const mockPackages = jest.fn();
 const mockGuests = jest.fn();
 const mockStaff = jest.fn();
+const mockSetRole = jest.fn();
+const mockAddStaff = jest.fn();
+const mockCreateRole = jest.fn();
 const mockRoles = jest.fn();
 const mockSite = jest.fn();
 const mockKeys = jest.fn();
@@ -54,6 +57,12 @@ jest.mock("../src/api/session", () => ({
       guests: (...a: unknown[]) => mockGuests(...a),
       staff: (...a: unknown[]) => mockStaff(...a),
       roles: (...a: unknown[]) => mockRoles(...a),
+      setStaffRole: (...a: unknown[]) => mockSetRole(...a),
+      addStaff: (...a: unknown[]) => mockAddStaff(...a),
+      createRole: (...a: unknown[]) => mockCreateRole(...a),
+      deleteRole: jest.fn(),
+      setStaffPassword: jest.fn(),
+      activity: () => Promise.resolve([]),
       site: (...a: unknown[]) => mockSite(...a),
       apiKeys: {
         list: (...a: unknown[]) => mockKeys(...a),
@@ -71,6 +80,9 @@ const WebsiteScreen = require("../app/(tabs)/(desk)/agent/website").default;
 const ApiScreen = require("../app/(tabs)/(desk)/agent/api").default;
 const { Harness } = require("./harness");
 /* eslint-enable @typescript-eslint/no-var-requires */
+
+// several screens, and the first pays for a cold start
+jest.setTimeout(30_000);
 
 const open = async (Screen: React.ComponentType) => render(<Harness><Screen /></Harness>);
 
@@ -217,23 +229,45 @@ describe("who has travelled with the agency", () => {
 });
 
 describe("who works at the agency", () => {
-  it("names each person and the role they hold", async () => {
+  it("names each person, with their role chosen", async () => {
     const r = await open(TeamScreen);
     await waitFor(() => expect(r.getByText("Nusrat")).toBeTruthy());
-    // the role is beside the person and again in the roles card below,
-    // which is the screen working rather than a duplicate
-    expect(r.getAllByText("Counter").length).toBe(2);
+    expect(r.getByRole("button", { name: "Counter" }).props.accessibilityState).toMatchObject({ selected: true });
   });
 
-  it("says how many permissions a role carries rather than listing thirty", async () => {
+  /** Setting a role used to "stay on the desk"; whatever the console has, the app has. */
+  it("changes somebody's role", async () => {
+    mockSetRole.mockResolvedValue({});
+    mockRoles.mockResolvedValue([role(), role({ id: 3, name: "Manager", staff: 0 })]);
     const r = await open(TeamScreen);
-    await waitFor(() => expect(r.getByText(/2 permissions/)).toBeTruthy());
+    await waitFor(() => expect(r.getByRole("button", { name: "Manager" })).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Manager" }));
+    await waitFor(() => expect(mockSetRole).toHaveBeenCalledWith(31, 3));
   });
 
-  it("says where the matrix lives", async () => {
+  it("adds somebody with a first password", async () => {
+    mockAddStaff.mockResolvedValue({ id: 40 });
+    const r = await open(TeamScreen);
+    await waitFor(() => expect(r.getByText("Add someone")).toBeTruthy());
+    await fireEvent.changeText(r.getByLabelText("Name"), "Rafi");
+    await fireEvent.changeText(r.getByLabelText("Email"), "rafi@example.com");
+    await fireEvent.changeText(r.getByLabelText("Phone"), "01711111111");
+    await fireEvent.changeText(r.getByLabelText("Temporary password"), "first-pass-1");
+    await fireEvent.press(r.getByRole("button", { name: "Add them" }));
+    await waitFor(() =>
+      expect(mockAddStaff).toHaveBeenCalledWith({ name: "Rafi", email: "rafi@example.com", phone: "01711111111", password: "first-pass-1" }),
+    );
+  });
+
+  it("lists what a role may do, and makes a new one", async () => {
+    mockCreateRole.mockResolvedValue({ id: 9 });
     const r = await open(TeamScreen);
     await waitFor(() => expect(r.getByText("Nusrat")).toBeTruthy());
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
+    await fireEvent.press(r.getByRole("button", { name: "Roles" }));
+    await waitFor(() => expect(r.getByText("A new role")).toBeTruthy());
+    await fireEvent.changeText(r.getByPlaceholderText("Junior booker"), "Junior");
+    await fireEvent.press(r.getByRole("button", { name: "Create the role" }));
+    await waitFor(() => expect(mockCreateRole).toHaveBeenCalledWith({ name: "Junior", permissions: ["agent.book"] }));
   });
 });
 
