@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { WalletGlance } from "@/components/glance";
 import { api, client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, Empty, Spinner, Stat, Td, Th } from "@/components/ui";
@@ -79,6 +80,8 @@ export default function AgentWalletPage() {
           This wallet is not active yet. The resort activates it when they approve your agency.
         </div>
       )}
+
+      <WalletGlance txns={wallet.txns} />
 
       <Card className="!p-0" title="Movements">
         {wallet.txns.length === 0 ? (

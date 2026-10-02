@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PeopleGlance } from "@/components/glance";
 import { client } from "@/lib/api";
 import type { AgencyActivity } from "@rh/shared";
 import { AGENT_PERMISSIONS, PERMISSIONS } from "@rh/shared";
@@ -97,6 +98,7 @@ export default function AgentTeamPage() {
 
       {tab === "People" && (
         <div className="space-y-4">
+          <PeopleGlance people={(staff ?? []).map((s) => ({ name: s.name, group: roles.find((r) => r.id === s.agentRoleId)?.name ?? "Default", active: s.status === "active" }))} />
           <Card className="!p-0" title={`People (${staff?.length ?? 0})`}>
             {staff === null ? (
               <Spinner />

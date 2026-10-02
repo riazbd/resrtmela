@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ToursGlance } from "@/components/glance";
 import { client, money } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -235,6 +236,7 @@ function PackagesTab() {
 
   return (
     <div className="space-y-4">
+      <ToursGlance packages={data ?? []} />
       <Card
         className="!p-0"
         title={`Packages (${data?.length ?? 0})`}

@@ -33,6 +33,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
+import { CalendarGlance } from "../../src/screens/glance";
 import {
   NIGHT_MEANING,
   addDaysIso,
@@ -329,6 +330,7 @@ export default function CalendarScreen() {
           />
         }
       >
+        <CalendarGlance occupancy={occupancy} sellable={sellable.length} bookings={calQ.data?.bookings ?? []} />
         {view === "Month" ? (
           /*
             Dragging sideways moves a month, as the arrows do — the month is

@@ -5,6 +5,7 @@ import { Table } from "@/components/patterns";
 import { useRouter } from "next/navigation";
 import { client, type CalendarBooking, type Room, money } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
+import { CalendarGlance } from "@/components/glance";
 import { useAuth } from "@/lib/auth";
 import { OCCUPIED, DUE_STRIPE, FREE_CELL, type OccupiedState } from "@/lib/calendar-colors";
 import { Button, Card } from "@/components/ui";
@@ -240,6 +241,8 @@ export default function CalendarPage() {
           </span>
         </div>
       </div>
+
+      {!loading && !error && <CalendarGlance occupancy={occupancy} sellable={sellable.length} bookings={bookings} />}
 
       <Card className="overflow-hidden !p-0">
         {error ? (

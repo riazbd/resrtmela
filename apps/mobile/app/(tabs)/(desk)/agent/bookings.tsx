@@ -20,6 +20,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useDebounced } from "@rh/app-core";
+import { BookingsGlance } from "../../../../src/screens/glance";
 import {
   BOOKING_SORTS,
   BOOKING_STATES,
@@ -107,6 +108,7 @@ export default function AgencyBookingsScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <BookingsGlance rows={rows} total={list.data.total} money={whole} />
         <View style={styles.searchRow}>
           <Input
             accessibilityLabel="Search your bookings"

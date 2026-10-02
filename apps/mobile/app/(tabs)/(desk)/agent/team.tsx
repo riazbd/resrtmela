@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi, useQueryClient } from "@rh/app-core";
+import { PeopleGlance } from "../../../../src/screens/glance";
 import {
   AGENT_PERMISSIONS,
   PERMISSIONS,
@@ -72,6 +73,7 @@ export default function AgentTeamScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={people.isRefetching} onRefresh={() => void reload()} />}
       >
+        <PeopleGlance people={(people.data ?? []).map((p) => ({ name: p.name, group: (roles.data ?? []).find((r) => r.id === p.agentRoleId)?.name ?? "Default", active: p.status === "active" }))} />
         <Lenses options={TABS} value={tab} onChange={setTab} />
         {said ? (
           <Text step="small" weight="medium" tone={said.ok ? "ok" : "danger"}>

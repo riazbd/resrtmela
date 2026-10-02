@@ -21,6 +21,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
+import { FbGlance } from "../../../../src/screens/glance";
 import {
   addDaysIso,
   dayLabel,
@@ -142,6 +143,7 @@ export default function RestaurantScreen() {
         }
       >
         <DateNav value={date} onChange={setDate} timezone={activeResort?.timezone} />
+        <FbGlance bills={rows} money={whole} />
 
         <View style={styles.figures}>
           <Stat label="Billed" value={whole(billed)} sub="on this page" />

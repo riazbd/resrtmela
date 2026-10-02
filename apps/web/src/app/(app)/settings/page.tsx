@@ -20,6 +20,7 @@ import type {
   TenantUsage,
 } from "@rh/shared";
 import { useApi, useQueryClient } from "@/lib/query";
+import { PlanUsage } from "@/components/glance";
 import { ErrorState } from "@/components/error-state";
 import { Tabs, Table } from "@/components/patterns";
 import { PERMISSIONS, RESORT_PERMISSION_GROUPS, planFeatureLabel, scheduleSentence } from "@rh/shared";
@@ -143,12 +144,7 @@ export default function SettingsPage() {
         <div className="max-w-xl space-y-4">
           {usage && (
             <Card title={`Plan — ${usage.planLabel}`}>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-center">
-                <Stat label="Resorts" value={`${usage.resorts}/${usage.limits.maxResorts}`} />
-                <Stat label="Rooms" value={String(usage.rooms)} sub={`cap ${usage.limits.maxRoomsPerResort}/resort`} />
-                <Stat label="Staff users" value={String(usage.staffUsers)} />
-                <Stat label="Guests" value={String(usage.guests)} />
-              </div>
+              <PlanUsage usage={usage} />
               {/*
                 A "Change plan" row used to sit here. It wrote `Tenant.plan` —
                 a field the billing sweep never reads — so the fee, the renewal

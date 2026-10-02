@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ResortScene } from "@/components/art";
 import Link from "next/link";
 import { client, money } from "@/lib/api";
 import { Card, Empty, Spinner } from "@/components/ui";
@@ -51,8 +52,11 @@ export default function AgentDiscoverPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((r) => (
-          <Card key={r.id} className="flex flex-col">
+        {rows.map((r, i) => (
+          <Card key={r.id} className="flex flex-col overflow-hidden">
+            <div className="relative -mx-5 -mt-5 mb-3 h-28 overflow-hidden">
+              <ResortScene className="h-full w-full" tone={i % 2 ? "dusk" : "day"} />
+            </div>
             <div className="flex items-start justify-between">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                 <Building2 className="h-5 w-5" />

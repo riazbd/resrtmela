@@ -43,6 +43,6 @@ does, has been seen working in the browser lens, and has a test.
 
 ## Look — every screen, both clients
 
-- [ ] Every screen has a picture of its own figures (chart, meter, ring, timeline) or art, not only rows of text
+- [x] Every screen has a picture of its own figures (chart, meter, ring, timeline) or art, not only rows of text
 - [x] Bookings list, rooms, guests, housekeeping (floor of tiles), platform (overview, plans) — `glance.ts` in @rh/shared
-- [ ] Calendar, booking detail, new booking, day sheet, restaurant, activities, settings, agency screens
+- [x] Calendar, booking detail, new booking, day sheet, restaurant, activities, settings, agency screens (bookings, guests, quotations, tours, wallet, team, discover)

@@ -17,6 +17,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-n
 import { Stack } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
+import { ActivitiesGlance } from "../../../src/screens/glance";
 import {
   addDaysIso,
   dayLabel,
@@ -281,6 +282,7 @@ export default function ActivitiesScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />}
       >
+        <ActivitiesGlance acts={rows} categoryLabel={(c) => cats.find((o) => o.code === c)?.label ?? c} />
         {isManagement && !draft ? <Button label="New activity" onPress={() => setDraft(blank(cats[0]?.code ?? ""))} /> : null}
         {said ? (
           <Text step="small" weight="medium" tone={said.ok ? "ok" : "danger"}>

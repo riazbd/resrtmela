@@ -17,9 +17,10 @@
  * between this side of the app and the other. What it waits for is the
  * session, and `WhichResort` is not the shape of that wait.
  */
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Stack, router } from "expo-router";
 import { useApi } from "@rh/app-core";
+import { ResortScene } from "../../../src/design/art";
 import { formatMoney, type DiscoverResort } from "@rh/shared";
 import { client, useAuth } from "../../../src/api/session";
 import { useMoneyFormat } from "../../../src/design/money";
@@ -33,6 +34,7 @@ export default function DiscoverScreen() {
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
+  const { width } = useWindowDimensions();
   const list = useApi<DiscoverResort[]>(["agent-discover"], () => client.agent.discover(), {
     enabled: Boolean(me),
   });
@@ -92,6 +94,10 @@ export default function DiscoverScreen() {
             </Text>
           </View>
         ) : null}
+
+        <View style={styles.scene}>
+          <ResortScene width={width - 32} height={Math.round((width - 32) * 0.36)} />
+        </View>
 
         <Card title={`${rows.length} resort${rows.length === 1 ? "" : "s"}`}>
           {rows.length === 0 ? (
@@ -155,6 +161,7 @@ function size(r: DiscoverResort): string {
 }
 
 const styles = StyleSheet.create({
+  scene: { borderRadius: radius.lg, overflow: "hidden" },
   page: { padding: space.lg, gap: space.lg },
   price: { alignItems: "flex-end" },
   emptyBox: { paddingVertical: space.lg },

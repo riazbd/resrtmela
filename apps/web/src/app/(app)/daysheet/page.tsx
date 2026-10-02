@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { client, money } from "@/lib/api";
 import { useApi, keys } from "@/lib/query";
+import { DaySheetGlance } from "@/components/glance";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Spinner, Stat, Th, Td } from "@/components/ui";
@@ -58,6 +59,8 @@ export default function DaySheetPage() {
         {/* last nights, not departures — see the room chips below */}
         <Stat label={`${t("ds.arrivals")} / ${t("ds.lastNights")}`} value={`${strip.arrivals} / ${strip.departures}`} />
       </div>
+
+      <DaySheetGlance rooms={sheet.rooms} />
 
       {/* the register */}
       <Card className="!p-0">

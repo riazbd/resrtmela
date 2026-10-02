@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { BookingsGlance } from "@/components/glance";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
 import { useDebounced } from "@/lib/use-debounced";
-import { Badge, Card, Empty, Input, Select, Spinner, Stat, Td, Th } from "@/components/ui";
+import { Badge, Card, Empty, Input, Select, Spinner, Td, Th } from "@/components/ui";
 import { Table } from "@/components/patterns";
 import { ErrorState } from "@/components/error-state";
 import { BOOKING_STATES, bookingStateLabel, type AgencyBookingRow } from "@rh/shared";
@@ -50,15 +51,6 @@ export default function AgencyBookingsPage() {
   if (error) return <ErrorState error={error as Error} />;
 
   const rows: AgencyBookingRow[] = data?.rows ?? [];
-  /**
-   * Only what is on the page, and it says so.
-   *
-   * A total across all four hundred bookings would need the server to add
-   * them up; a figure that silently means "the two hundred shown" is the kind
-   * of number somebody reconciles against and cannot make balance.
-   */
-  const owed = rows.reduce((s, r) => s + r.due, 0);
-  const live = rows.filter((r) => r.state !== "CANCELLED").length;
 
   return (
     <div className="space-y-4">
@@ -69,11 +61,7 @@ export default function AgencyBookingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Bookings" value={String(data?.total ?? 0)} />
-        <Stat label="Not cancelled" value={String(live)} />
-        <Stat label="Due on this page" value={money(owed)} />
-      </div>
+      <BookingsGlance rows={rows} total={data?.total ?? 0} />
 
       <Card
         className="!p-0"

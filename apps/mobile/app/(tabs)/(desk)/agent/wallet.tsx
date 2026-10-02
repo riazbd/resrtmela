@@ -18,6 +18,7 @@
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi } from "@rh/app-core";
+import { WalletGlance } from "../../../../src/screens/glance";
 import { dayLabel, formatMoney, type AgencyWallet, type AgencyWalletTxn } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { useMoneyFormat } from "../../../../src/design/money";
@@ -77,6 +78,7 @@ export default function AgentWalletScreen() {
           <RefreshControl refreshing={wallet.isRefetching} onRefresh={() => void wallet.refetch()} />
         }
       >
+        <WalletGlance txns={w.txns} money={whole} />
         <View style={styles.figures}>
           <Stat
             label="Balance"

@@ -20,6 +20,7 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
+import { BillPicture, NightStrip } from "../../../../../src/screens/glance";
 import {
   billLines,
   bookingStateLabel,
@@ -29,6 +30,7 @@ import {
   methodLabel,
   canEditStay,
   roomNames,
+  todayIn,
   type BookingDetail,
   type NextState,
 } from "@rh/shared";
@@ -151,6 +153,12 @@ export default function BookingScreen() {
               <Fact label="Who rang" value={b.agent} />
             ) : null}
             {b.source ? <Fact label="Source" value={b.source} /> : null}
+          </View>
+        </Card>
+        <Card title="The stay">
+          <View style={styles.picture}>
+            <NightStrip checkIn={b.checkIn} checkOut={b.checkOut} today={todayIn(activeResort?.timezone)} />
+            <BillPicture bill={b} paid={b.paid} money={whole} />
           </View>
         </Card>
 
@@ -504,6 +512,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  picture: { gap: space.md },
   page: { padding: space.lg, gap: space.lg },
   middle: { flex: 1, justifyContent: "center", alignItems: "center", gap: space.md, padding: space.lg },
   who: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingBottom: space.md },

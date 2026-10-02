@@ -21,6 +21,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi } from "@rh/app-core";
+import { ToursGlance } from "../../../../src/screens/glance";
 import {
   formatMoney,
   type NewTourPackage,
@@ -94,6 +95,7 @@ export default function AgentToursScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <ToursGlance packages={rows} money={whole} />
         <Lenses options={["Packages", "What a tour is made of"] as const} value={view} onChange={setView} />
         {said ? (
           <Text step="small" tone="danger" weight="medium">

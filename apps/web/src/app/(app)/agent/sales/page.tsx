@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SalesGlance } from "@/components/glance";
 import { client, money, dmy, API_URL, getToken } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys, useQueryClient } from "@/lib/query";
@@ -132,6 +133,8 @@ export default function SalesPage() {
         />
         <Stat label="Outstanding" value={money(outstanding)} tone={outstanding > 0 ? "amber" : undefined} />
       </div>
+
+      <SalesGlance docs={(data ?? []).filter((d) => d.status !== "VOID")} what={tab} />
 
       <Card className="!p-0" title={tab}>
         {isLoading && !data ? (

@@ -5,6 +5,7 @@ import { Table } from "@/components/patterns";
 import { client, money, dmy, cur } from "@/lib/api";
 import type { Activity as SharedActivity, ActivitySchedule, ActivitySlot } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { ActivitiesGlance } from "@/components/glance";
 import { ErrorState } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import {
@@ -188,6 +189,7 @@ export default function ActivitiesPage() {
 
   return (
     <div className="space-y-4">
+      <ActivitiesGlance acts={rows} categoryLabel={(c) => categoryChoices.find((o) => o.code === c)?.label ?? c} />
       <Card
         title="Activities"
         action={canManage ? <Button size="sm" onClick={openNew}>+ New activity</Button> : undefined}

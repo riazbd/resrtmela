@@ -1,6 +1,7 @@
 "use client";
 
 import { money, currentMoneyFormat } from "@/lib/api";
+import { BillPicture } from "@/components/glance";
 import { quoteBill, type BookingQuote } from "@rh/shared";
 
 /**
@@ -49,6 +50,10 @@ export function StayBill({ quote, advance, loading }: {
         <span className="text-[11px] text-slate-400">
           {quote.nights} night{quote.nights === 1 ? "" : "s"}
         </span>
+      </div>
+
+      <div className="mb-3">
+        <BillPicture bill={quote} paid={advance} paidLabel="Advance" />
       </div>
 
       <table className="w-full text-sm">

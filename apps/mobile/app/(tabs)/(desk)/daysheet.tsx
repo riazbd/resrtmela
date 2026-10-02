@@ -15,6 +15,7 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
+import { DaySheetGlance } from "../../../src/screens/glance";
 import {
   addDaysIso,
   formatMoney,
@@ -137,6 +138,7 @@ export default function DaySheetScreen() {
         }
       >
         <DateNav value={date} onChange={setDate} timezone={activeResort?.timezone} />
+        <DaySheetGlance rooms={rooms} money={whole} />
 
         <View style={styles.figures}>
           <Stat

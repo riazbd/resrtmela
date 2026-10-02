@@ -13,6 +13,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi, useDebounced } from "@rh/app-core";
+import { AgencyGuestsGlance } from "../../../../src/screens/glance";
 import { dayLabel, formatMoney, type AgencyGuestRow } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { Input } from "../../../../src/design/input";
@@ -74,6 +75,7 @@ export default function AgentGuestsScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <AgencyGuestsGlance rows={rows} money={whole} />
         <Input
           value={typed}
           onChangeText={setTyped}

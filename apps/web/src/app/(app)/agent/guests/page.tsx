@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AgencyGuestsGlance } from "@/components/glance";
 import { client, money, dmy } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useApi, keys } from "@/lib/query";
@@ -51,6 +52,8 @@ export default function AgencyGuestsPage() {
         <Stat label="Stays sold" value={String(stays)} />
         <Stat label="Booked through you" value={money(lifetime)} />
       </div>
+
+      <AgencyGuestsGlance rows={rows} />
 
       <Card
         className="!p-0"

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Table } from "@/components/patterns";
 import { client, money, type FoodPackage, cur } from "@/lib/api";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { FbGlance } from "@/components/glance";
 import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
@@ -290,6 +291,8 @@ export default function FbPage() {
           <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
       </div>
+
+      <FbGlance bills={bills} />
 
       {canManage && (
         <Card title="Food packages (items & combos)">

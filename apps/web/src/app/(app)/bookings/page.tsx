@@ -31,7 +31,7 @@ import {
   nextStates, transitionCanWait, paths, canEditStay, todayIn, addDaysIso,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
-import { BookingsGlance } from "@/components/glance";
+import { BillPicture, BookingsGlance, NightStrip } from "@/components/glance";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
 interface RoomTypeLite {
@@ -645,6 +645,11 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
           <Badge value={b.paymentState} />
           <Badge value={b.source} />
         </div>
+      </div>
+
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+        <NightStrip checkIn={b.checkIn} checkOut={b.checkOut} today={todayIn(activeResort?.timezone)} />
+        <BillPicture bill={b} paid={b.paid} />
       </div>
 
       {b.cancelState === "REQUESTED" && (

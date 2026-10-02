@@ -17,6 +17,7 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
+import { BillPicture } from "../../../../src/screens/glance";
 import {
   formatMoney,
   quoteBill,
@@ -193,6 +194,7 @@ export default function WhatItCostsScreen() {
           <Loading what="what the stay comes to" />
         ) : (
           <View style={[styles.bill, priced.isFetching ? styles.settling : null]}>
+            {priced.data ? <BillPicture bill={priced.data} paid={draft.advance} money={(n) => formatMoney(n, whole)} paidLabel="Advance" /> : null}
             {bill.map((row) => (
               <BillRow key={row.id} row={row} money={whole} />
             ))}

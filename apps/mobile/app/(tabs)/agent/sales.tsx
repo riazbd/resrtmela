@@ -22,6 +22,7 @@ import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { useApi } from "@rh/app-core";
+import { SalesGlance } from "../../../src/screens/glance";
 import {
   addDaysIso,
   dayLabel,
@@ -122,6 +123,7 @@ export default function AgentSalesScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <SalesGlance docs={(list.data ?? []).filter((d) => d.status !== "VOID")} money={whole} />
         <View style={styles.figures}>
           <Stat
             label="Outstanding"

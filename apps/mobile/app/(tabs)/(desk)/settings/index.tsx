@@ -9,7 +9,10 @@
  */
 import { ScrollView, StyleSheet } from "react-native";
 import { Stack, router } from "expo-router";
-import { useAuth } from "../../../../src/api/session";
+import { keys, useApi } from "@rh/app-core";
+import type { TenantUsage } from "@rh/shared";
+import { client, useAuth } from "../../../../src/api/session";
+import { PlanUsage } from "../../../../src/screens/glance";
 import { WhichResort } from "../../../../src/screens/which-resort";
 import { Empty } from "../../../../src/design/states";
 import { Card } from "../../../../src/design/surface";
@@ -44,6 +47,9 @@ const SECTIONS: Section[] = [
 export default function SettingsScreen() {
   const { activeResort, can } = useAuth();
   const mine = SECTIONS.filter((s) => !s.perm || can(s.perm));
+  const usage = useApi<TenantUsage>(["tenant-usage", activeResort?.tenantId], () => client.resort.usage(activeResort!.tenantId), {
+    enabled: Boolean(activeResort?.tenantId) && can("settings.manage"),
+  });
 
   const header = <Stack.Screen options={{ title: "Settings" }} />;
 
@@ -60,6 +66,11 @@ export default function SettingsScreen() {
     <>
       {header}
       <ScrollView contentContainerStyle={styles.page}>
+        {usage.data ? (
+          <Card title={`Plan — ${usage.data.planLabel}`}>
+            <PlanUsage usage={usage.data} />
+          </Card>
+        ) : null}
         {mine.length === 0 ? (
           <Card title={activeResort.name}>
             <Empty message="Nothing here is yours to change" hint="Ask the owner for the permissions you need." />
