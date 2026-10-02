@@ -37,6 +37,7 @@ const mockSite = jest.fn();
 const mockSaveSite = jest.fn();
 const mockKeys = jest.fn();
 const mockRevoke = jest.fn();
+const mockCreateKey = jest.fn();
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
@@ -75,6 +76,7 @@ jest.mock("../src/api/session", () => ({
       apiKeys: {
         list: (...a: unknown[]) => mockKeys(...a),
         revoke: (...a: unknown[]) => mockRevoke(...a),
+        create: (...a: unknown[]) => mockCreateKey(...a),
       },
     },
   },
@@ -316,10 +318,15 @@ describe("the keys the agency's website signs with", () => {
   });
 
   /** The secret is shown once, at creation, and never again. */
-  it("does not pretend it can show the secret", async () => {
+  /** Keys used to be "minted at the desk"; the secret is shown once, here as there. */
+  it("makes a key and shows its secret once, to share", async () => {
+    mockCreateKey.mockResolvedValue({ secret: "rm_agency_SECRET" });
     const r = await open(ApiScreen);
     await waitFor(() => expect(r.getByText("Website")).toBeTruthy());
-    expect(r.getByText(/shown once/i)).toBeTruthy();
+    await fireEvent.changeText(r.getByPlaceholderText("Our website"), "Our site");
+    await fireEvent.press(r.getByRole("button", { name: "Make the key" }));
+    await waitFor(() => expect(r.getByText("rm_agency_SECRET")).toBeTruthy());
+    expect(mockCreateKey).toHaveBeenCalledWith("Our site", ["read"]);
   });
 
   it("offers to revoke one, because that is the thing you need from anywhere", async () => {
