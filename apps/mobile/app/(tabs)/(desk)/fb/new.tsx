@@ -237,7 +237,7 @@ export default function NewTicketScreen() {
             <View style={styles.emptyBox}>
               <Empty
                 message="No food packages yet"
-                hint="They are set up on the desk; until then, add a line by hand below."
+                hint="Add dishes on the Restaurant screen, under The menu; until then, add a line by hand below."
               />
             </View>
           ) : (

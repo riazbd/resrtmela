@@ -299,9 +299,9 @@ describe("what a resort sells besides a bed", () => {
   it("says the price, the length and how many it takes", async () => {
     const r = await open(ActivitiesScreen);
     await waitFor(() =>
-      expect(r.getByLabelText("Sunset cruise, ৳1,200 for 90 minutes")).toBeTruthy(),
+      expect(r.getByLabelText(/^Sunset cruise, ৳1,200 for 90 minutes/)).toBeTruthy(),
     );
-    expect(r.getByLabelText("Takes 2 to 12 people")).toBeTruthy();
+    expect(r.getByLabelText(/takes 2 to 12 people$/)).toBeTruthy();
   });
 
   it("says which days it runs", async () => {
@@ -317,14 +317,14 @@ describe("what a resort sells besides a bed", () => {
   it("warns when something is on offer with no slots", async () => {
     mockActivities.mockResolvedValue([activity({ upcomingSlots: 0, nextSlot: null })]);
     const r = await open(ActivitiesScreen);
-    await waitFor(() => expect(r.getByText(/no slots generated/)).toBeTruthy());
+    await waitFor(() => expect(r.getByText(/no slots made/)).toBeTruthy());
   });
 
   it("does not warn about one that is switched off", async () => {
     mockActivities.mockResolvedValue([activity({ active: false, upcomingSlots: 0, nextSlot: null })]);
     const r = await open(ActivitiesScreen);
     await waitFor(() => expect(r.getByText("Not on offer")).toBeTruthy());
-    expect(r.queryByText(/no slots generated/)).toBeNull();
+    expect(r.queryByText(/no slots made/)).toBeNull();
   });
 
   /** A slot that has already run is not an answer to "is there room". */

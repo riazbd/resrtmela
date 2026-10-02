@@ -18,8 +18,8 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **Settings → Messages**: notification templates
 - [x] **Settings → Your data**: full archive export
 - [x] **Settings → Resort info**: booking / invoice / restaurant-bill prefixes; currency, timezone, number format editable (now "Set on the desk")
-- [ ] **Activities**: create, edit, delete activities and their slots; slot occupancy chart (now "set up on the desk")
-- [ ] **Restaurant**: food packages (items & combos) managed; bills list with collect; in-house/walk-in (now "set up on the desk")
+- [x] **Activities**: create, edit, delete activities and their slots; slot occupancy chart (now "set up on the desk")
+- [x] **Restaurant**: food packages (items & combos) managed; bills list with collect; in-house/walk-in (now "set up on the desk")
 - [ ] **Bookings list**: group tag, status, source, date filters and sort; invoice by email and PDF
 - [ ] **Rooms**: seasonal rate plans beside the rooms; edit room and type
 - [ ] **Mailbox**: compose and send a campaign
