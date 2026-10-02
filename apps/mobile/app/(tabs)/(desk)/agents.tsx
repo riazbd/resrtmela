@@ -35,6 +35,7 @@ import { client, useAuth } from "../../../src/api/session";
 import { WhichResort } from "../../../src/screens/which-resort";
 import { Button } from "../../../src/design/button";
 import { Chip } from "../../../src/design/chip";
+import { ask } from "../../../src/screens/payroll-month";
 import { Field, Input } from "../../../src/design/input";
 import { useMoneyFormat } from "../../../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
@@ -242,6 +243,32 @@ function Statement({
     }
   };
 
+  /** the console's credit limit, set here too; empty is no limit */
+  const [limit, setLimit] = useState<string | null>(null);
+  const [limitSaid, setLimitSaid] = useState<string | null>(null);
+  const saveLimit = async (value: string) => {
+    setLimitSaid(null);
+    try {
+      await client.agentAccounts.setLimit(resortId, summary.agencyId, value.trim() === "" ? null : Number(value));
+      setLimit(null);
+      await s.refetch();
+      setLimitSaid(value.trim() === "" ? "No limit now" : "Limit saved");
+    } catch (e) {
+      setLimitSaid(e instanceof Error ? e.message : "That did not go through.");
+    }
+  };
+  const removeLine = (entryId: string) =>
+    ask("Remove this line?", "The balance will move.", "Remove", () => {
+      void (async () => {
+        try {
+          await client.agentAccounts.remove(resortId, entryId);
+          await s.refetch();
+        } catch (e) {
+          setLimitSaid(e instanceof Error ? e.message : "That did not go through.");
+        }
+      })();
+    });
+
   if (s.error && !s.data) return <Problem error={s.error} onRetry={() => void s.refetch()} />;
   if (!s.data) return <Loading what="the statement" />;
 
@@ -325,6 +352,28 @@ function Statement({
           <Button label="Received from agent" onPress={() => setWriting("received")} />
           {/* an advance, commission paid out, a correction — the console's "Add a line" */}
           <Button label="Add a line" kind="ghost" onPress={() => setWriting("line")} />
+          <Card title="Credit limit">
+            <View style={styles.limit}>
+              <View style={styles.flexOne}>
+                <Input
+                  accessibilityLabel="Credit limit"
+                  value={limit ?? (d.creditLimit == null ? "" : String(d.creditLimit))}
+                  onChangeText={setLimit}
+                  keyboardType="numeric"
+                  placeholder="No limit"
+                />
+              </View>
+              <Button label="Save" kind="ghost" block={false} onPress={() => void saveLimit(limit ?? (d.creditLimit == null ? "" : String(d.creditLimit)))} />
+            </View>
+            <Text step="caption" tone="muted">
+              How much of the resort's money the agency may hold before it cannot book. Empty is no limit.
+            </Text>
+            {limitSaid ? (
+              <Text step="small" weight="medium" tone="ok">
+                {limitSaid}
+              </Text>
+            ) : null}
+          </Card>
         </>
       ) : null}
 
@@ -352,10 +401,15 @@ function Statement({
                 r.status === "PENDING" ? ", declared, tap to confirm" : ""
               }`}
               right={
-                <Text step="body" weight="medium" tone={r.amount > 0 ? "danger" : "ok"} tabular>
-                  {r.amount > 0 ? "+" : "−"}
-                  {whole(Math.abs(r.amount))}
-                </Text>
+                <View style={styles.lineRight}>
+                  <Text step="body" weight="medium" tone={r.amount > 0 ? "danger" : "ok"} tabular>
+                    {r.amount > 0 ? "+" : "−"}
+                    {whole(Math.abs(r.amount))}
+                  </Text>
+                  {mayManage ? (
+                    <Button label="×" kind="subtle" block={false} accessibilityLabel={`Remove the ${agentEntryLabel(r.kind).toLowerCase()} of ${dayLabel(r.date)}`} onPress={() => removeLine(r.id)} />
+                  ) : null}
+                </View>
               }
             />
           ))
@@ -639,6 +693,9 @@ function AddLine({
 }
 
 const styles = StyleSheet.create({
+  limit: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  flexOne: { flex: 1 },
+  lineRight: { flexDirection: "row", alignItems: "center", gap: space.sm },
   page: { padding: space.lg, gap: space.lg },
   middle: { flex: 1, justifyContent: "center", padding: space.lg },
   figures: { flexDirection: "row", gap: space.sm },

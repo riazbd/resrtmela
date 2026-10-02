@@ -25,7 +25,7 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **Mailbox**: compose and send a campaign
 - [x] **Reports**: audit trail, financial-year picker, idle inventory
 - [x] **Import**: the reconciliation report — rooms created, row detail
-- [ ] **Agent accounts**: credit limit, received from the agent, add a line (check each)
+- [x] **Agent accounts**: credit limit, received from the agent, add a line (check each)
 
 ## Agency side
 

@@ -19,6 +19,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type { AgentAccountList, AgentStatement, DiscoverResort, MyAccountList } from "@rh/shared";
 
+const mockSetLimit = jest.fn();
 const mockMyList = jest.fn();
 const mockMyStatement = jest.fn();
 const mockDeclare = jest.fn();
@@ -56,6 +57,8 @@ jest.mock("../src/api/session", () => ({
       entry: (...a: unknown[]) => mockEntry(...a),
       received: jest.fn(),
       confirm: jest.fn(),
+      setLimit: (...a: unknown[]) => mockSetLimit(...a),
+      remove: jest.fn(),
     },
   },
 }));
@@ -230,6 +233,15 @@ async function resortStatement() {
 }
 
 describe("the resort's side", () => {
+  /** The console's credit limit, set from the phone too. */
+  it("sets how much of the resort's money the agency may hold", async () => {
+    mockSetLimit.mockReset().mockResolvedValue({});
+    const r = await resortStatement();
+    await fireEvent.changeText(r.getByLabelText("Credit limit"), "50000");
+    await fireEvent.press(r.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockSetLimit).toHaveBeenCalledWith(3, 7, 50000));
+  });
+
   it("shows how much the agency has advanced", async () => {
     const r = await resortStatement();
     expect(r.getByLabelText("Advances: ৳20,000")).toBeTruthy();
