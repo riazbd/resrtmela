@@ -64,6 +64,9 @@ describe("the sentence about choosing a resort", () => {
    * sent *to*.
    */
   const NO_RESORT_NEEDED = new Set([
+    // bulk email belongs to the account, resort or agency; the resort is
+    // read only to address a campaign to that resort's guests
+    "app/(tabs)/(desk)/mailbox.tsx",
     "app/(tabs)/more.tsx",
     "app/(tabs)/_layout.tsx",
     "app/login.tsx",

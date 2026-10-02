@@ -26,6 +26,7 @@ import { Card, Row } from "../../../src/design/surface";
 import { Text } from "../../../src/design/text";
 import { useAction } from "../../../src/design/use-action";
 import { MyPayCards } from "../../../src/screens/my-pay";
+import { AgentProfileCards } from "../../../src/screens/agent-profile";
 import { color, radius, space } from "../../../src/design/tokens";
 
 /** Short enough to type on a phone, long enough to be worth typing. */
@@ -114,6 +115,8 @@ export default function ProfileScreen() {
             ))}
           </Card>
         ) : null}
+
+        <AgentProfileCards />
 
         <MyPayCards />
 

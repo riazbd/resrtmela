@@ -34,7 +34,7 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **API**: create a key (shown once), what it may do
 - [x] **Expenses**: heads managed
 - [x] **Tours**: "what a tour is made of" headings
-- [ ] **Profile**: agent profile, agency users, recent bookings
+- [x] **Profile**: agent profile, agency users, recent bookings
 - [ ] **Calendar / sales / search / discover / bookings / guests / wallet**: check field by field
 
 ## Platform
