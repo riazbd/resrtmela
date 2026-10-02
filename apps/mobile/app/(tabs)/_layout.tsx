@@ -17,7 +17,8 @@
  * invisible to every test, which has no screen. So the group carries the
  * top inset itself.
  */
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Text } from "../../src/design/text";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { useT } from "@rh/app-core";
@@ -41,7 +42,7 @@ const FILES = [
 ] as const;
 
 export default function TabLayout() {
-  const { me, role, can, features } = useAuth();
+  const { me, role, can, features, isImpersonating, exitImpersonation } = useAuth();
   const t = useT();
 
   const mine = me ? tabsFor({ role, can, features }) : [];
@@ -61,6 +62,19 @@ export default function TabLayout() {
      * drawing through the clock.
      */
     <View style={{ flex: 1, backgroundColor: color.screen }}>
+    {/* the platform owner looking through somebody's account says so, and
+        offers the way back — the console's amber bar, on the phone */}
+    {isImpersonating ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Viewing as ${me?.name ?? "someone"}. Back to the platform`}
+        onPress={exitImpersonation}
+        style={{ backgroundColor: color.warn.bg, borderBottomWidth: 1, borderBottomColor: color.warn.line, paddingVertical: 8, paddingHorizontal: 16, flexDirection: "row", justifyContent: "space-between" }}
+      >
+        <Text step="small" weight="medium" tone="warn">{`Viewing as ${me?.name ?? ""}`}</Text>
+        <Text step="small" weight="bold" tone="warn">Back to the platform</Text>
+      </Pressable>
+    ) : null}
     <Tabs
       /**
        * Back goes back, not home.

@@ -266,14 +266,24 @@ export function AuthProvider({
     storage.removeItem(IMPERSONATOR);
     if (original) {
       storage.setItem(TOKEN, original);
-      navigate("/platform");
+      storage.removeItem(RESORT_ID);
+      // the console reloads on navigating; the phone does not, so the platform
+      // owner's own account is read back rather than left as the one viewed
+      void client.me().then(
+        (meData) => {
+          setMe(meData);
+          setActive(meData.resorts.map((r) => r.resort)[0] ?? null);
+          navigate("/platform");
+        },
+        () => navigate("/platform"),
+      );
     } else {
       storage.removeItem(TOKEN);
       setMe(null);
       setActive(null);
       navigate("/login");
     }
-  }, [storage, navigate]);
+  }, [storage, navigate, client]);
 
   const setActiveResort = useCallback((r: Resort) => {
     setActive(r);
