@@ -23,8 +23,8 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **Bookings list**: group tag, status, source, date filters and sort; invoice by email and PDF
 - [x] **Rooms**: seasonal rate plans beside the rooms; edit room and type
 - [x] **Mailbox**: compose and send a campaign
-- [ ] **Reports**: audit trail, financial-year picker, idle inventory
-- [ ] **Import**: the reconciliation report — rooms created, row detail
+- [x] **Reports**: audit trail, financial-year picker, idle inventory
+- [x] **Import**: the reconciliation report — rooms created, row detail
 - [ ] **Agent accounts**: credit limit, received from the agent, add a line (check each)
 
 ## Agency side

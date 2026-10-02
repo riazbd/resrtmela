@@ -23,11 +23,14 @@ import {
   formatMoney,
   stayRange,
   todayIn,
+  type AuditRow,
+  type FiscalYears,
   type ResortMetrics,
 } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { WhichResort } from "../../../../src/screens/which-resort";
 import { Lenses } from "../../../../src/design/lenses";
+import { Chip } from "../../../../src/design/chip";
 import { useMoneyFormat } from "../../../../src/design/money";
 import { Loading, Problem, Stale } from "../../../../src/design/states";
 import { Card, Row, Stat } from "../../../../src/design/surface";
@@ -57,14 +60,23 @@ export function rangeFor(period: Period, today: string): { from: string; to: str
 }
 
 export default function ReportsScreen() {
-  const { activeResort, can } = useAuth();
+  const { activeResort, can, isManagement } = useAuth();
   const resortId = activeResort?.id;
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
   const [period, setPeriod] = useState<Period>("This month");
   const today = todayIn(activeResort?.timezone);
-  const range = rangeFor(period, today);
+  /** a financial year chosen from the resort's own, in place of a named period */
+  const [fy, setFy] = useState<{ label: string; from: string; to: string } | null>(null);
+  const range = fy ? { from: fy.from, to: fy.to } : rangeFor(period, today);
+  const years = useApi<FiscalYears>(keys.reports(resortId, "fiscal-years"), () => client.resort.fiscalYears(resortId!), {
+    enabled: resortId !== undefined,
+    staleTime: 3_600_000,
+  });
+  const audit = useApi<AuditRow[]>(keys.reports(resortId, "audit"), () => client.reports.audit(resortId!, 30), {
+    enabled: resortId !== undefined && isManagement,
+  });
 
   const metrics = useApi<ResortMetrics>(
     keys.reports(resortId, "metrics", range),
@@ -118,7 +130,14 @@ export default function ReportsScreen() {
           <RefreshControl refreshing={metrics.isRefetching} onRefresh={() => void metrics.refetch()} />
         }
       >
-        <Lenses options={PERIODS} value={period} onChange={setPeriod} />
+        <Lenses options={PERIODS} value={period} onChange={(p) => { setFy(null); setPeriod(p); }} />
+        {(years.data?.years.length ?? 0) > 0 ? (
+          <View style={styles.years}>
+            {years.data!.years.map((y) => (
+              <Chip key={y.from} label={`FY ${y.label}`} on={fy?.from === y.from} onPress={() => setFy(fy?.from === y.from ? null : y)} />
+            ))}
+          </View>
+        ) : null}
 
         <View style={[styles.figures, metrics.isFetching ? styles.settling : null]}>
           <Stat
@@ -219,6 +238,24 @@ export default function ReportsScreen() {
           />
         </Card>
 
+        {isManagement && (audit.data?.length ?? 0) > 0 ? (
+          <Card title="Audit trail">
+            {audit.data!.map((a) => (
+              <View key={a.id} style={styles.audit}>
+                <View style={styles.auditDot} />
+                <View style={styles.flex}>
+                  <Text step="small" weight="medium" tone="title" numberOfLines={1}>
+                    {`${a.actor} · ${a.action.replace(/\./g, " · ")}`}
+                  </Text>
+                  <Text step="caption" tone="muted" numberOfLines={1}>
+                    {`${new Date(a.at).toLocaleString("en-GB")} · ${a.entity}${a.entityId ? ` #${a.entityId}` : ""}`}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         <Card title="In more detail">
           {can("reports.pl") ? (
             <Row
@@ -254,5 +291,9 @@ const styles = StyleSheet.create({
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   settling: { opacity: 0.5 },
   pictures: { gap: space.sm },
+  years: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  flex: { flex: 1 },
+  audit: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs },
+  auditDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.brand[500] },
   footnote: { textAlign: "center" },
 });

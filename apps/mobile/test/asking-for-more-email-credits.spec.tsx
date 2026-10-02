@@ -232,8 +232,8 @@ describe("requests already made", () => {
  */
 describe("a campaign written on the phone", () => {
   it("is sent to the resort's guests, after saying who that is", async () => {
-    const { Alert } = require("react-native");
-    jest.spyOn(Alert, "alert").mockImplementation((_t: unknown, _m: unknown, buttons: { style?: string; onPress?: () => void }[]) => {
+    const { Alert } = require("react-native") as typeof import("react-native");
+    jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
       buttons?.find((b) => b.style === "destructive")?.onPress?.();
     });
     mockSend.mockResolvedValue({ sent: 42, failed: 0 });
