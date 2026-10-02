@@ -40,6 +40,8 @@ import { Card, Row, Stat } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
 import { useAction } from "../../../../src/design/use-action";
 import { color, radius, space } from "../../../../src/design/tokens";
+import { Shares } from "../../../../src/design/charts";
+import { ask, refusal } from "../../../../src/screens/payroll-month";
 
 export default function AgentExpensesScreen() {
   const { me } = useAuth();
@@ -126,6 +128,10 @@ export default function AgentExpensesScreen() {
 
         {data.summary.byHead.length > 0 ? (
           <Card title="Under each head">
+            <Shares
+              format={whole}
+              parts={data.summary.byHead.map((h, i) => ({ label: h.head, value: h.amount, color: color.chart.series[i % color.chart.series.length]! }))}
+            />
             {data.summary.byHead.map((h, i) => (
               <Row
                 key={String(h.headId ?? h.head)}
@@ -178,9 +184,22 @@ export default function AgentExpensesScreen() {
                   row.amount,
                 )}, ${dayLabel(row.date, { style: "full" })}`}
                 right={
-                  <Text step="body" weight="medium" tone="title" tabular>
-                    {whole(row.amount)}
-                  </Text>
+                  <View style={styles.entryRight}>
+                    <Text step="body" weight="medium" tone="title" tabular>
+                      {whole(row.amount)}
+                    </Text>
+                    <Button
+                      label="×"
+                      kind="subtle"
+                      block={false}
+                      accessibilityLabel={`Remove the ${row.head} entry of ${dayLabel(row.date, { style: "full" })}`}
+                      onPress={() =>
+                        ask("Remove this entry?", "It comes off the books and the totals.", "Remove", () => {
+                          void client.agent.books.removeExpense(row.id).then(() => page.refetch());
+                        })
+                      }
+                    />
+                  </View>
                 }
               />
             ))
@@ -197,13 +216,74 @@ export default function AgentExpensesScreen() {
           />
         ) : null}
 
-        <Text step="caption" tone="muted" style={styles.footnote}>
-          Heads — office rent, fuel, salaries — are defined on the desk. They
-          decide how a year of reports adds up, so they are set once and not
-          invented at a petrol pump.
-        </Text>
+        <HeadsCard heads={heads.data ?? []} whole={whole} onDone={() => { void heads.refetch(); void page.refetch(); }} />
       </ScrollView>
     </>
+  );
+}
+
+/**
+ * The heads expenses are filed under — office rent, fuel, salaries. They used
+ * to be "defined on the desk"; the owner's rule since 2026-10-02 is that
+ * whatever the console has, the app has. One with entries is retired rather
+ * than deleted, so those entries keep a name.
+ */
+function HeadsCard({ heads, whole, onDone }: { heads: ExpenseHeadRow[]; whole: (n: number) => string; onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [said, setSaid] = useState<string | null>(null);
+  return (
+    <Card title={`Heads (${heads.length})`}>
+      {heads.map((h, i) => (
+        <Row
+          key={h.id}
+          title={h.name}
+          subtitle={`${h.entries} entr${h.entries === 1 ? "y" : "ies"} · ${whole(h.amount)}${h.active ? "" : " · retired"}`}
+          last={i === heads.length - 1}
+          accessibilityLabel={`${h.name}, ${h.entries} entries${h.active ? "" : ", retired"}`}
+          right={
+            h.active ? (
+              <Button
+                label="Remove"
+                kind="subtle"
+                block={false}
+                accessibilityLabel={`Remove the head ${h.name}`}
+                onPress={() =>
+                  ask(`Remove ${h.name}?`, h.entries > 0 ? "It has entries, so it is retired: they keep its name." : "Nothing is filed under it.", "Remove", () => {
+                    void client.agent.books.deleteHead(h.id).then(onDone, (e) => setSaid(refusal(e)));
+                  })
+                }
+              />
+            ) : (
+              <Button label="Use again" kind="ghost" block={false} onPress={() => void client.agent.books.updateHead(h.id, { active: true }).then(onDone, (e) => setSaid(refusal(e)))} />
+            )
+          }
+        />
+      ))}
+      <View style={styles.headForm}>
+        <View style={styles.flexOne}>
+          <Input value={name} onChangeText={setName} placeholder="A new head — Fuel" accessibilityLabel="A new head" />
+        </View>
+        <Button
+          label="Add"
+          block={false}
+          disabled={!name.trim()}
+          onPress={() =>
+            void client.agent.books.createHead(name.trim()).then(
+              () => {
+                setName("");
+                onDone();
+              },
+              (e) => setSaid(refusal(e)),
+            )
+          }
+        />
+      </View>
+      {said ? (
+        <Text step="small" tone="danger">
+          {said}
+        </Text>
+      ) : null}
+    </Card>
   );
 }
 
@@ -288,6 +368,9 @@ function NewEntry({ heads, onDone }: { heads: ExpenseHeadRow[]; onDone: () => vo
 }
 
 const styles = StyleSheet.create({
+  entryRight: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  headForm: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingTop: space.md },
+  flexOne: { flex: 1 },
   page: { padding: space.lg, gap: space.lg },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   fields: { gap: space.md },

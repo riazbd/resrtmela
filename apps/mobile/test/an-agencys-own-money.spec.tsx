@@ -20,6 +20,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type { AgencyEmployee, AgencyExpensePage, AgencyWallet } from "@rh/shared";
 
+const mockCreateHead = jest.fn();
 const mockWallet = jest.fn();
 const mockExpenses = jest.fn();
 const mockHeads = jest.fn();
@@ -49,6 +50,10 @@ jest.mock("../src/api/session", () => ({
         expenses: (...a: unknown[]) => mockExpenses(...a),
         heads: (...a: unknown[]) => mockHeads(...a),
         addExpense: (...a: unknown[]) => mockAddExpense(...a),
+        createHead: (...a: unknown[]) => mockCreateHead(...a),
+        deleteHead: jest.fn(),
+        updateHead: jest.fn(),
+        removeExpense: jest.fn(),
       },
       payroll: {
         employees: (...a: unknown[]) => mockEmployees(...a),
@@ -215,23 +220,27 @@ describe("what the agency spends", () => {
   it("shows the range's total and what is under each head", async () => {
     const r = await open(ExpensesScreen);
     await waitFor(() => expect(r.getAllByText(/৳3,200/).length).toBeGreaterThan(0));
-    // "Fuel" is the head's own total and the entry's head, which is the
-    // point of the screen rather than a duplicate to complain about
-    expect(r.getAllByText("Fuel").length).toBe(2);
+    // "Fuel" is under the head's own total (as a share and a row), on the
+    // entry, and in the list of heads — the point of the screen, not a duplicate
+    expect(r.getAllByText("Fuel").length).toBeGreaterThanOrEqual(2);
   });
 
   it("files a new entry under a head the agency already keeps", async () => {
     mockAddExpense.mockResolvedValue({ id: 9 });
     const r = await open(ExpensesScreen);
     await waitFor(() => expect(r.getAllByText("Fuel").length).toBeGreaterThan(0));
-    fireEvent.press(r.getByText("Add"));
+    fireEvent.press(r.getAllByText("Add")[0]!);
     await waitFor(() => expect(r.getByText("File it")).toBeTruthy());
   });
 
-  it("says where a head gets defined", async () => {
+  /** Heads used to be "defined on the desk"; whatever the console has, the app has. */
+  it("adds a head to file under", async () => {
+    mockCreateHead.mockResolvedValue({ id: 5, name: "Office rent" });
     const r = await open(ExpensesScreen);
-    await waitFor(() => expect(r.getAllByText("Fuel").length).toBeGreaterThan(0));
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
+    await waitFor(() => expect(r.getByLabelText("A new head")).toBeTruthy());
+    await fireEvent.changeText(r.getByLabelText("A new head"), "Office rent");
+    await fireEvent.press(r.getAllByRole("button", { name: "Add" }).at(-1)!);
+    await waitFor(() => expect(mockCreateHead).toHaveBeenCalledWith("Office rent"));
   });
 
   it("says nothing was filed rather than drawing an empty list", async () => {
