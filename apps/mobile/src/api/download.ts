@@ -37,3 +37,11 @@ export async function shareDownload(path: string, filename: string): Promise<voi
   }
   await Share.share({ title: filename, message: text });
 }
+
+/** A page the API renders as HTML — a printable document — read with the session's token. */
+export async function fetchHtml(path: string): Promise<string> {
+  const token = session.getItem(TOKEN_KEY);
+  const res = await fetch(`${API_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Could not open it (${res.status})`);
+  return res.text();
+}

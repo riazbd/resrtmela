@@ -170,7 +170,7 @@ export default function ApiScreen() {
               An address on your server that hears about bookings and payments the moment they happen.
             </Text>
             <Field label="Your address">
-              <Input value={url} onChangeText={setUrl} placeholder="https://example.com/hooks/resort" autoCapitalize="none" keyboardType="url" />
+              <Input value={url} onChangeText={setUrl} placeholder="example.com/hooks/resort" autoCapitalize="none" keyboardType="url" />
             </Field>
             <Button
               label="Add the address"

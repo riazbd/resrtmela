@@ -23,9 +23,7 @@ import { useApi, useQueryClient } from "@rh/app-core";
 import { dayLabel, formatMoney, type SalesDocDetail } from "@rh/shared";
 import * as Print from "expo-print";
 import { client, useAuth } from "../../../../../src/api/session";
-import { API_URL } from "../../../../../src/api/config";
-import { TOKEN_KEY } from "../../../../../src/api/transport";
-import { session } from "../../../../../src/api/wire";
+import { fetchHtml } from "../../../../../src/api/download";
 import { ask, refusal } from "../../../../../src/screens/payroll-month";
 import { WriteDocument } from "../../../agent/sales";
 import { Button } from "../../../../../src/design/button";
@@ -222,10 +220,7 @@ function DocActions({ doc, onChanged }: { doc: SalesDocDetail; onChanged: () => 
   const print = async () => {
     setSaid(null);
     try {
-      const token = session.getItem(TOKEN_KEY);
-      const res = await fetch(`${API_URL}${client.agent.sales.printPath(doc.id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (!res.ok) throw new Error(`Could not open it (${res.status})`);
-      await Print.printAsync({ html: await res.text() });
+      await Print.printAsync({ html: await fetchHtml(client.agent.sales.printPath(doc.id)) });
     } catch (e) {
       setSaid({ ok: false, text: refusal(e) });
     }

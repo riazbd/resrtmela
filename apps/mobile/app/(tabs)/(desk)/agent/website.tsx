@@ -167,10 +167,10 @@ export default function AgentWebsiteScreen() {
               <Input {...field("address")} />
             </Field>
             <Field label="Facebook page">
-              <Input {...field("facebook")} autoCapitalize="none" placeholder="https://facebook.com/…" />
+              <Input {...field("facebook")} autoCapitalize="none" placeholder="facebook.com/your-page" />
             </Field>
             <Field label="Instagram">
-              <Input {...field("instagram")} autoCapitalize="none" placeholder="https://instagram.com/…" />
+              <Input {...field("instagram")} autoCapitalize="none" placeholder="instagram.com/your-page" />
             </Field>
           </View>
         </Card>

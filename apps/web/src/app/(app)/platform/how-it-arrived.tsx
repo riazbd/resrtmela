@@ -19,33 +19,9 @@ import type { OptionChoice } from "@/lib/resort-options";
  */
 
 /** Cash, because money can be handed over before any screen has loaded. */
-const FALLBACK: OptionChoice[] = [
-  { code: "CASH", label: "Cash" },
-  { code: "BKASH", label: "bKash" },
-  { code: "BANK", label: "Bank transfer" },
-];
+/** Moved to `@rh/shared` so the app offers the same methods; re-exported for this page. */
+export { paymentMethodsFrom } from "@rh/shared";
 
-/** The methods the platform accepts, out of its own settings. */
-export function paymentMethodsFrom(settings: Record<string, string>): OptionChoice[] {
-  const raw = settings["options.PAYMENT_METHOD.defaults"];
-  if (!raw) return FALLBACK;
-  try {
-    const parsed = JSON.parse(raw) as OptionChoice[];
-    const usable = parsed.filter((m) => m && typeof m.code === "string" && m.code);
-    return usable.length ? usable : FALLBACK;
-  } catch {
-    // a setting somebody has broken must not take the collect button with it
-    return FALLBACK;
-  }
-}
-
-/**
- * The question, asked before anything is marked paid.
- *
- * Deliberately has no default: pre-selecting one is how "CASH" came to be
- * written against transfers in the first place, and the collector is looking
- * at the bank app or the notes in their hand as they answer.
- */
 export function HowItArrived({
   methods,
   what,

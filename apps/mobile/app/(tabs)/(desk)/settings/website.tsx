@@ -268,10 +268,10 @@ export default function WebsiteScreen() {
               <Input value={draft.whatsapp} onChangeText={(t) => setDraft({ ...draft, whatsapp: t })} keyboardType="phone-pad" placeholder="8801700000000" />
             </Field>
             <Field label="Facebook page">
-              <Input value={draft.facebook} onChangeText={(t) => setDraft({ ...draft, facebook: t })} autoCapitalize="none" placeholder="https://facebook.com/…" />
+              <Input value={draft.facebook} onChangeText={(t) => setDraft({ ...draft, facebook: t })} autoCapitalize="none" placeholder="facebook.com/your-page" />
             </Field>
             <Field label="Instagram">
-              <Input value={draft.instagram} onChangeText={(t) => setDraft({ ...draft, instagram: t })} autoCapitalize="none" placeholder="https://instagram.com/…" />
+              <Input value={draft.instagram} onChangeText={(t) => setDraft({ ...draft, instagram: t })} autoCapitalize="none" placeholder="instagram.com/your-page" />
             </Field>
             <Button
               label="Save"

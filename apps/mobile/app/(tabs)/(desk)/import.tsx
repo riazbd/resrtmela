@@ -58,7 +58,7 @@ export default function ImportScreen() {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const header = <Stack.Screen options={{ title: "Import" }} />;
+  const header = <Stack.Screen options={{ title: "Import CSV" }} />;
   if (!activeResort) return (<>{header}<WhichResort what="where the books go" /></>);
   if (!isManagement) {
     return (
