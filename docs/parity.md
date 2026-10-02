@@ -20,9 +20,9 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **Settings → Resort info**: booking / invoice / restaurant-bill prefixes; currency, timezone, number format editable (now "Set on the desk")
 - [x] **Activities**: create, edit, delete activities and their slots; slot occupancy chart (now "set up on the desk")
 - [x] **Restaurant**: food packages (items & combos) managed; bills list with collect; in-house/walk-in (now "set up on the desk")
-- [ ] **Bookings list**: group tag, status, source, date filters and sort; invoice by email and PDF
-- [ ] **Rooms**: seasonal rate plans beside the rooms; edit room and type
-- [ ] **Mailbox**: compose and send a campaign
+- [x] **Bookings list**: group tag, status, source, date filters and sort; invoice by email and PDF
+- [x] **Rooms**: seasonal rate plans beside the rooms; edit room and type
+- [x] **Mailbox**: compose and send a campaign
 - [ ] **Reports**: audit trail, financial-year picker, idle inventory
 - [ ] **Import**: the reconciliation report — rooms created, row detail
 - [ ] **Agent accounts**: credit limit, received from the agent, add a line (check each)

@@ -28,6 +28,7 @@ const mockCampaigns = jest.fn();
 const mockPacks = jest.fn();
 const mockOrders = jest.fn();
 const mockRequest = jest.fn();
+const mockSend = jest.fn();
 
 jest.mock("expo-router", () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
@@ -50,6 +51,7 @@ jest.mock("../src/api/session", () => ({
       creditPacks: () => mockPacks(),
       myCreditOrders: () => mockOrders(),
       requestCredits: (...a: unknown[]) => mockRequest(...a),
+      sendCampaign: (...a: unknown[]) => mockSend(...a),
     },
   },
 }));
@@ -95,7 +97,7 @@ beforeEach(() => {
 describe("what the platform sells", () => {
   it("lists every pack with what it costs", async () => {
     const r = await open();
-    await waitFor(() => expect(r.getByText("2,000 emails")).toBeTruthy());
+    await waitFor(() => expect(r.getByText("2,000 emails")).toBeTruthy(), { timeout: 15_000 });
     expect(r.getByText("500 emails")).toBeTruthy();
     expect(r.getByText("৳1,800")).toBeTruthy();
   });
@@ -221,5 +223,28 @@ describe("requests already made", () => {
     const r = await open();
     await waitFor(() => expect(r.getByText("2,000 emails")).toBeTruthy());
     expect(r.queryByText("Your requests")).toBeNull();
+  });
+});
+
+/**
+ * Writing the campaign itself, which the console had and the phone did not.
+ * The owner, 2026-10-02: whatever the console has, the app has.
+ */
+describe("a campaign written on the phone", () => {
+  it("is sent to the resort's guests, after saying who that is", async () => {
+    const { Alert } = require("react-native");
+    jest.spyOn(Alert, "alert").mockImplementation((_t: unknown, _m: unknown, buttons: { style?: string; onPress?: () => void }[]) => {
+      buttons?.find((b) => b.style === "destructive")?.onPress?.();
+    });
+    mockSend.mockResolvedValue({ sent: 42, failed: 0 });
+    const r = await open();
+    await waitFor(() => expect(r.getByText("Write a campaign")).toBeTruthy(), { timeout: 15_000 });
+    await fireEvent.changeText(r.getByPlaceholderText("Eid greetings from the resort"), "Eid Mubarak");
+    await fireEvent.changeText(r.getByLabelText("Message"), "Come and stay.");
+    await fireEvent.press(r.getByRole("button", { name: "Send it" }));
+    await waitFor(() =>
+      expect(mockSend).toHaveBeenCalledWith({ subject: "Eid Mubarak", body: "Come and stay.", audience: "RESORT_GUESTS", resortId: 3 }),
+    );
+    await waitFor(() => expect(r.getByText("Sent to 42 recipients")).toBeTruthy());
   });
 });

@@ -39,6 +39,7 @@ export default function InvoiceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookingId = Number(id);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState<string | null>(null);
 
   const doc = useApi<InvoicePayload>(
     ["invoice", bookingId],
@@ -82,6 +83,31 @@ export default function InvoiceScreen() {
           // and is told where it went rather than left with a dead button
           setShareError(`Saved to ${uri}`);
         }
+      } catch (ex) {
+        setShareError((ex as Error).message);
+      }
+    }, [doc.data]),
+  );
+
+  /** The console's other two ways out: to the address on the guest's record, and to a printer. */
+  const email = useAction(
+    useCallback(async () => {
+      setShareError(null);
+      setEmailed(null);
+      try {
+        const r = await client.bookings.emailInvoice(bookingId);
+        setEmailed(r.sent ? `Sent to ${doc.data?.guest.email ?? "the guest"}` : "Not sent — the guest has no email address on file");
+      } catch (ex) {
+        setShareError((ex as Error).message);
+      }
+    }, [bookingId, doc.data?.guest.email]),
+  );
+  const print = useAction(
+    useCallback(async () => {
+      if (!doc.data) return;
+      setShareError(null);
+      try {
+        await Print.printAsync({ html: invoiceHtml(doc.data) });
       } catch (ex) {
         setShareError((ex as Error).message);
       }
@@ -221,6 +247,13 @@ export default function InvoiceScreen() {
         ) : null}
 
         <Button label="Share as PDF" onPress={share.go} loading={share.busy} />
+        <Button label="Email it to the guest" kind="ghost" onPress={email.go} loading={email.busy} disabled={!doc.data.guest.email} />
+        <Button label="Print" kind="ghost" onPress={print.go} loading={print.busy} />
+        {emailed ? (
+          <Text step="small" tone="ok" weight="medium" style={styles.centred}>
+            {emailed}
+          </Text>
+        ) : null}
         {shareError ? (
           <Text step="small" tone="danger" weight="medium" style={styles.centred}>
             {shareError}

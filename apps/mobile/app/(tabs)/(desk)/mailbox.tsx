@@ -31,10 +31,14 @@ import {
   type CreditPack,
   type EmailCampaign,
   type EmailCreditOrderRow,
+  type NewCampaign,
 } from "@rh/shared";
-import { useApi } from "@rh/app-core";
+import { useApi, useQueryClient } from "@rh/app-core";
 import { client, useAuth } from "../../../src/api/session";
 import { Button } from "../../../src/design/button";
+import { Chip } from "../../../src/design/chip";
+import { Field, Input } from "../../../src/design/input";
+import { ask, refusal } from "../../../src/screens/payroll-month";
 import { useMoneyFormat } from "../../../src/design/money";
 import { Empty, Loading, Problem, Stale } from "../../../src/design/states";
 import { Card, Row, Stat } from "../../../src/design/surface";
@@ -43,7 +47,39 @@ import { useAction } from "../../../src/design/use-action";
 import { color, radius, space } from "../../../src/design/tokens";
 
 export default function MailboxScreen() {
-  const { me } = useAuth();
+  const { me, isAgent, activeResort } = useAuth();
+  const qc = useQueryClient();
+  const [audience, setAudience] = useState<NewCampaign["audience"]>(isAgent ? "MY_GUESTS" : "RESORT_GUESTS");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
+  const send = useAction(async () => {
+    const who = audience === "AGENTS" ? "every agent at this resort" : audience === "RESORT_GUESTS" ? "every guest of this resort with an email address" : "every guest you have booked";
+    await new Promise<void>((done) =>
+      ask(`Send "${subject}" to ${who}?`, "This cannot be undone.", "Send", () => {
+        void (async () => {
+          setSaid(null);
+          try {
+            const r = await client.engage.sendCampaign({
+              subject,
+              body,
+              audience,
+              resortId: audience === "RESORT_GUESTS" || audience === "AGENTS" ? activeResort?.id : undefined,
+            });
+            setSaid({ ok: true, text: `Sent to ${r.sent} recipient${r.sent === 1 ? "" : "s"}${r.failed ? `, ${r.failed} failed` : ""}` });
+            setSubject("");
+            setBody("");
+            await qc.invalidateQueries({ queryKey: ["email-credits"] });
+            await qc.invalidateQueries({ queryKey: ["email-campaigns"] });
+          } catch (e) {
+            setSaid({ ok: false, text: refusal(e) });
+          } finally {
+            done();
+          }
+        })();
+      }),
+    );
+  });
 
   const credits = useApi(["email-credits"], () => client.engage.credits(), {
     enabled: Boolean(me),
@@ -110,6 +146,33 @@ export default function MailboxScreen() {
             </Text>
           </View>
         ) : null}
+
+        <Card title="Write a campaign">
+          <View style={styles.compose}>
+            <View style={styles.chips}>
+              {isAgent ? (
+                <Chip label="My clients" on={audience === "MY_GUESTS"} onPress={() => setAudience("MY_GUESTS")} />
+              ) : (
+                <>
+                  <Chip label="All the resort's guests" on={audience === "RESORT_GUESTS"} onPress={() => setAudience("RESORT_GUESTS")} />
+                  <Chip label="My agents" on={audience === "AGENTS"} onPress={() => setAudience("AGENTS")} />
+                </>
+              )}
+            </View>
+            <Field label="Subject">
+              <Input value={subject} onChangeText={setSubject} placeholder="Eid greetings from the resort" />
+            </Field>
+            <Field label="Message" hint="Plain text — sent as a formatted email">
+              <Input value={body} onChangeText={setBody} multiline placeholder={"Dear guest,\n\nWishing you a wonderful season ahead…"} style={styles.box} />
+            </Field>
+            {said ? (
+              <Text step="small" weight="medium" tone={said.ok ? "ok" : "danger"}>
+                {said.text}
+              </Text>
+            ) : null}
+            <Button label="Send it" loading={send.busy} disabled={!subject.trim() || !body.trim() || left === 0} onPress={send.go} />
+          </View>
+        </Card>
 
         <Card title="Already sent">
           {campaigns.error && !campaigns.data ? (
@@ -344,6 +407,9 @@ function BuyCredits({ payTo, onAsked }: { payTo: string; onAsked: () => void }) 
 }
 
 const styles = StyleSheet.create({
+  compose: { gap: space.md },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  box: { minHeight: 120, textAlignVertical: "top" },
   page: { padding: space.lg, gap: space.lg },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   asking: { gap: space.md, paddingVertical: space.sm },

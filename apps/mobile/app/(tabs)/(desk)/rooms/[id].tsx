@@ -31,6 +31,7 @@ import { Empty, Loading, Problem } from "../../../../src/design/states";
 import { Card, Row } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
 import { Toggle } from "../../../../src/design/toggle";
+import { ask } from "../../../../src/screens/payroll-month";
 import { useAction } from "../../../../src/design/use-action";
 import { color, radius, space } from "../../../../src/design/tokens";
 
@@ -270,6 +271,30 @@ function Detail({
       ) : null}
 
       {mayEdit ? <Button label="Save changes" loading={save.busy} onPress={save.go} /> : null}
+      {mayEdit ? (
+        <Button
+          label="Remove the room"
+          kind="danger"
+          onPress={() =>
+            ask(
+              `Remove ${room.name}?`,
+              "If it has never been sold it is deleted. If it has, it is retired: it leaves the calendar and the room count, and its past bookings, invoices and reports keep it. This cannot be undone.",
+              "Remove",
+              () => {
+                void (async () => {
+                  try {
+                    await client.rooms.remove(room.id);
+                    await reload();
+                    router.replace("/rooms");
+                  } catch (error) {
+                    setRefused(error instanceof Error ? error.message : "That did not go through.");
+                  }
+                })();
+              },
+            )
+          }
+        />
+      ) : null}
     </ScrollView>
   );
 }
