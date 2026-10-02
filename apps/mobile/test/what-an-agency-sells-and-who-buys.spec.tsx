@@ -34,6 +34,7 @@ const mockAddStaff = jest.fn();
 const mockCreateRole = jest.fn();
 const mockRoles = jest.fn();
 const mockSite = jest.fn();
+const mockSaveSite = jest.fn();
 const mockKeys = jest.fn();
 const mockRevoke = jest.fn();
 
@@ -64,6 +65,13 @@ jest.mock("../src/api/session", () => ({
       setStaffPassword: jest.fn(),
       activity: () => Promise.resolve([]),
       site: (...a: unknown[]) => mockSite(...a),
+      saveSite: (...a: unknown[]) => mockSaveSite(...a),
+      publishSite: jest.fn(),
+      setSiteAddress: jest.fn(),
+      movePhoto: jest.fn(),
+      removePhoto: jest.fn(),
+      photoPath: () => "/agent/site/photos",
+      domains: { list: () => Promise.resolve([]), claim: jest.fn(), verify: jest.fn(), setCanonical: jest.fn(), remove: jest.fn() },
       apiKeys: {
         list: (...a: unknown[]) => mockKeys(...a),
         revoke: (...a: unknown[]) => mockRevoke(...a),
@@ -274,7 +282,7 @@ describe("who works at the agency", () => {
 describe("the agency's own website", () => {
   it("says whether it is live and at what address", async () => {
     const r = await open(WebsiteScreen);
-    await waitFor(() => expect(r.getByText(/Live|Published/i)).toBeTruthy());
+    await waitFor(() => expect(r.getByText("● Live")).toBeTruthy());
     expect(r.getByText(/demo-travels/)).toBeTruthy();
   });
 
@@ -284,13 +292,19 @@ describe("the agency's own website", () => {
     // the stat says it and the warning says it again, deliberately: the
     // second one is what somebody reads when they are wondering why a
     // customer cannot see the site
-    await waitFor(() => expect(r.getAllByText(/Not published|nobody can see it/i).length).toBeGreaterThan(1));
+    await waitFor(() => expect(r.getByText(/Not published — nobody can see it/)).toBeTruthy());
   });
 
-  it("says where the pages get written", async () => {
+  /** The words, the colour and the resorts on the page used to be "written on the desk". */
+  it("saves what the page says, and which resorts it shows", async () => {
+    mockSaveSite.mockResolvedValue(site());
     const r = await open(WebsiteScreen);
     await waitFor(() => expect(r.getByText(/demo-travels/)).toBeTruthy());
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
+    await fireEvent.press(r.getByRole("button", { name: "Demo Bay Resort" }));
+    await fireEvent.press(r.getByRole("button", { name: "Save the page" }));
+    await waitFor(() =>
+      expect(mockSaveSite).toHaveBeenCalledWith(expect.objectContaining({ headline: "Hills, done properly", hiddenResortIds: [3] })),
+    );
   });
 });
 
