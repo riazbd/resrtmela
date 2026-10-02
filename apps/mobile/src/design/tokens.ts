@@ -18,7 +18,7 @@
  * Resort staff scan numbers, and the screen should let them.
  */
 
-import { MONEY_TONE, PAYROLL_STATE_TONE, SERIES_COLORS } from "@rh/shared";
+import { MONEY_TONE, PAYROLL_STATE_TONE, SERIES_COLORS, BOOKING_STATE_TONE, PAYMENT_STATE_TONE, HOUSEKEEPING_TONE } from "@rh/shared";
 
 /**
  * The brand ramp, from `apps/web/tailwind.config.ts`.
@@ -82,6 +82,9 @@ const chart = {
   money: MONEY_TONE,
   series: SERIES_COLORS,
   payrollState: PAYROLL_STATE_TONE,
+  bookingState: BOOKING_STATE_TONE,
+  paymentState: PAYMENT_STATE_TONE,
+  housekeeping: HOUSEKEEPING_TONE,
 } as const;
 
 /**

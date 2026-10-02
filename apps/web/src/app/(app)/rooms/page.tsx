@@ -5,6 +5,7 @@ import { Table } from "@/components/patterns";
 import { client, money, dmy, currentMoneyFormat, type RatePlan, type Room, type RoomType, cur } from "@/lib/api";
 import { extraPersonNote, housekeepingLabel, nextRoomStatus, roomStatusLabel } from "@rh/shared";
 import { useApi, keys, useQueryClient } from "@/lib/query";
+import { RoomsGlance } from "@/components/glance";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
 import { ErrorState, Skeleton } from "@/components/error-state";
@@ -93,6 +94,7 @@ This cannot be undone.`;
 
   return (
     <div className="space-y-6">
+      <RoomsGlance rooms={rooms} />
       <Card
         title="Rooms"
         action={canEdit ? <Button size="sm" variant="ghost" onClick={() => setAddRoom(true)}>+ Add room</Button> : undefined}

@@ -31,6 +31,7 @@ import {
   nextStates, transitionCanWait, paths, canEditStay, todayIn, addDaysIso,
 } from "@rh/shared";
 import { RoomChoice } from "./room-choice";
+import { BookingsGlance } from "@/components/glance";
 
 /** Just enough of a room type to decide whether extra persons are allowed. */
 interface RoomTypeLite {
@@ -1143,6 +1144,10 @@ function BookingsInner() {
           <Button onClick={() => setShowNew(true)}>+ New booking</Button>
         </div>
       </div>
+
+      {!listQ.error && !loading && (
+        <BookingsGlance rows={rows} total={total} sourceLabel={(c) => sourceChoices.find((s) => s.code === c)?.label ?? c} />
+      )}
 
       {/* only while something is chosen: a bar that is always there is a
           delete button that is always there */}

@@ -20,6 +20,7 @@ export * from "./plan-schedule";
 export * from "./payroll";
 export * from "./payroll-rules";
 export * from "./chart";
+export * from "./glance";
 export * from "./payslip";
 export * from "./platform-methods";
 export * from "./platform-policy";

@@ -24,6 +24,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, router } from "expo-router";
 import { keys, useApi } from "@rh/app-core";
+import { RoomsGlance } from "../../src/screens/glance";
 import {
   extraPersonNote,
   formatMoney,
@@ -105,6 +106,8 @@ export default function RoomsScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <RoomsGlance rooms={rooms} money={(n) => formatMoney(n, { ...money, decimals: 0 })} />
+
         <Card title={`${rooms.length} room${rooms.length === 1 ? "" : "s"}`}>
           {rooms.length === 0 ? (
             <View style={styles.emptyBox}>

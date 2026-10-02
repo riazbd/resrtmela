@@ -21,6 +21,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack } from "expo-router";
 import { useApi } from "@rh/app-core";
+import { RoomBoard } from "../../../src/screens/glance";
 import {
   dayLabel,
   housekeepingLabel,
@@ -130,6 +131,8 @@ export default function HousekeepingScreen() {
           />
           <Stat label="Ready" value={String(ready)} sub="can be sold" tone="ok" />
         </View>
+
+        <RoomBoard rooms={all} busy={busy} onMove={mayMove ? (r) => void move(r) : undefined} />
 
         <View style={styles.lenses}>
           <Chip

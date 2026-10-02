@@ -12,6 +12,7 @@ import { Pagination, Table } from "@/components/patterns";
 import { useDebounced } from "@/lib/use-debounced";
 import type { GuestRow } from "@rh/shared";
 import { GuestStays } from "./guest-stays";
+import { GuestsGlance } from "@/components/glance";
 
 export default function GuestsPage() {
   const { activeResort, isStaff } = useAuth();
@@ -37,6 +38,8 @@ export default function GuestsPage() {
   if (error) return <ErrorState error={error} />;
 
   return (
+    <div className="space-y-4">
+    <GuestsGlance rows={rows} total={total} />
     <Card
       title={t("g.title")}
       action={
@@ -105,5 +108,6 @@ export default function GuestsPage() {
         onOpenBooking={(id) => router.push(`/bookings?id=${id}`)}
       />
     </Card>
+    </div>
   );
 }

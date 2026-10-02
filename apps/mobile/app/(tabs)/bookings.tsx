@@ -35,7 +35,7 @@ import { Empty, Loading, Problem, Stale } from "../../src/design/states";
 import { Card, Row } from "../../src/design/surface";
 import { Text } from "../../src/design/text";
 import { color, elevation, radius, space } from "../../src/design/tokens";
-import { SplitBar } from "../../src/design/charts";
+import { BookingsGlance } from "../../src/screens/glance";
 
 export default function BookingsScreen() {
   const { activeResort } = useAuth();
@@ -140,7 +140,6 @@ export default function BookingsScreen() {
   const total = list.data.total ?? rows.length;
   const narrowed = Boolean(search) || state !== null || source !== null || Boolean(group) || Boolean(from) || Boolean(to);
   /** the list's make-up by state, drawn above it — how much of it is in house, pending, gone */
-  const mix = BOOKING_STATES.map((st) => ({ st, n: rows.filter((b) => b.state === st).length })).filter((m) => m.n > 0);
 
   return (
     <>
@@ -239,12 +238,7 @@ export default function BookingsScreen() {
           </Card>
         ) : null}
 
-        {rows.length > 0 ? (
-          <SplitBar
-            parts={mix.map((m) => ({ label: `${bookingStateLabel(m.st)} ${m.n}`, value: m.n, color: STATE_TONE[m.st] ?? color.ink[400] }))}
-            format={() => ""}
-          />
-        ) : null}
+        <BookingsGlance rows={rows} total={total} money={whole} sourceLabel={(c) => sources.data?.find((o) => o.code === c)?.label ?? c} />
 
         <Card title={`${total} booking${total === 1 ? "" : "s"}`}>
           {rows.length === 0 ? (

@@ -17,6 +17,7 @@ import { keys, useApi, useDebounced } from "@rh/app-core";
 import { dayLabel, type GuestRow, type Page } from "@rh/shared";
 import { client, useAuth } from "../../../../src/api/session";
 import { WhichResort } from "../../../../src/screens/which-resort";
+import { GuestsGlance } from "../../../../src/screens/glance";
 import { Input } from "../../../../src/design/input";
 import { Empty, Loading, Problem, Stale } from "../../../../src/design/states";
 import { Card, Row } from "../../../../src/design/surface";
@@ -95,6 +96,8 @@ export default function GuestsScreen() {
           autoCorrect={false}
           returnKeyType="search"
         />
+
+        <GuestsGlance rows={rows} total={total} />
 
         <Card title={`${total} guest${total === 1 ? "" : "s"}`}>
           {rows.length === 0 ? (

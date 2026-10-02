@@ -13,6 +13,7 @@ import { useApi, useQueryClient } from "@/lib/query";
 import { useAuth } from "@/lib/auth";
 import { Badge, Button, Card, Empty, Spinner, Stat, Td, Th, useToast } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
+import { RoomBoard } from "@/components/glance";
 
 /**
  * Which rooms are ready.
@@ -100,6 +101,8 @@ export default function HousekeepingPage() {
         <Stat label="Being cleaned" value={String(underway)} tone="amber" />
         <Stat label="Ready" value={String(ready)} tone="green" />
       </div>
+
+      <RoomBoard rooms={all} busy={busy} onMove={mayMove ? (r) => void move(r) : undefined} />
 
       <Tabs tabs={["To do", "All"] as const} value={lens} onChange={setLens} />
 
