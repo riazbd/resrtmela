@@ -132,11 +132,10 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rm-card rounded-2xl border border-slate-200/70 bg-white ${className}`}>
+    <div className={`rm-card min-w-0 rounded-2xl border border-slate-200/70 bg-white ${className}`}>
       {(title || action) && (
         <div className="flex items-center justify-between gap-3 border-b border-slate-100/80 px-5 py-3.5">
           <h3 className="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-800">
-            <span aria-hidden className="h-4 w-1 rounded-full bg-gradient-to-b from-emerald-400 to-teal-600" />
             {title}
           </h3>
           {action}

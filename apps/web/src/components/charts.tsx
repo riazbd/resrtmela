@@ -151,7 +151,7 @@ export function ColumnChart({
   const y = (v: number) => pad.top + innerH - (v / top) * innerH;
 
   return (
-    <div ref={ref} className="relative w-full select-none" onMouseLeave={() => setHover(null)}>
+    <div ref={ref} className="relative w-full min-w-0 select-none" onMouseLeave={() => setHover(null)}>
       <svg width={width} height={height} role="img" aria-label={series.map((s) => s.label).join(", ")}>
         <defs>
           {series.map((s) => (
@@ -282,7 +282,7 @@ export function AreaChart({
   }
 
   return (
-    <div ref={ref} className="relative w-full select-none">
+    <div ref={ref} className="relative w-full min-w-0 select-none">
       <svg width={width} height={height} onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label={series.map((s) => s.label).join(", ")}>
         <defs>
           {series.map((s) => (

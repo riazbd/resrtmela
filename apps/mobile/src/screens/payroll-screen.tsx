@@ -167,5 +167,5 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   explainHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  point: { gap: 2, borderLeftWidth: 3, borderLeftColor: color.brand[500], paddingLeft: space.sm },
+  point: { gap: 2 },
 });

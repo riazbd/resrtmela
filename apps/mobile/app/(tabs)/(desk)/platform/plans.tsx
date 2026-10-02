@@ -57,7 +57,6 @@ export default function PlatformPlans() {
           const priced = p.schedules.filter((s) => s.active);
           return (
             <View key={p.name} style={[styles.plan, !p.active && styles.retired]}>
-              <View style={[styles.band, { backgroundColor: p.highlight ? color.chart.money.income.solid : p.active ? color.chart.money.paid.solid : color.ink[300] }]} />
               <View style={styles.body}>
                 <View style={styles.head}>
                   <View style={styles.flex}>
@@ -157,7 +156,6 @@ const styles = StyleSheet.create({
   gapSm: { gap: space.xs },
   plan: { flexDirection: "row", backgroundColor: color.surface, borderRadius: radius.lg, overflow: "hidden", borderWidth: 1, borderColor: color.ink[100], ...elevation.raised },
   retired: { opacity: 0.75 },
-  band: { width: 6 },
   body: { flex: 1, padding: space.lg, gap: space.md },
   head: { flexDirection: "row", alignItems: "center", gap: space.sm },
   state: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.xl },

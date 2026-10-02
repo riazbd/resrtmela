@@ -29,7 +29,9 @@ export function Hero({
 }) {
   return (
     <section className="rm-card relative overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white">
-      <ResortScene className="pointer-events-none absolute inset-y-0 right-0 h-full w-[70%] opacity-95 [mask-image:linear-gradient(to_left,black_55%,transparent)] sm:w-[60%]" />
+      {/* no sky of its own: a pale sky behind white words is how the
+          greeting vanished on a phone. The hills sit at the foot instead. */}
+      <ResortScene sky={false} className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%] w-full opacity-40 sm:inset-x-auto sm:right-0 sm:h-full sm:w-[55%] sm:opacity-70 sm:[mask-image:linear-gradient(to_left,black_55%,transparent)]" />
       <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
       <div className="relative px-6 py-6 sm:px-8 sm:py-7">
         <h1 className="text-2xl font-extrabold tracking-tight drop-shadow-sm sm:text-3xl">{title}</h1>
@@ -43,7 +45,7 @@ export function Hero({
 /** A figure on the scene: frosted glass, so the picture shows through. */
 export function HeroFigure({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-[8.5rem] rounded-2xl bg-white/15 px-4 py-2.5 ring-1 ring-inset ring-white/25 backdrop-blur-md">
+    <div className="min-w-[8.5rem] flex-1 rounded-2xl bg-emerald-950/25 px-4 py-2.5 ring-1 ring-inset ring-white/20 backdrop-blur-md sm:flex-none">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-50/90">{label}</div>
       <div className="text-xl font-extrabold tabular-nums">{value}</div>
       {hint && <div className="text-[11px] text-emerald-50/80">{hint}</div>}

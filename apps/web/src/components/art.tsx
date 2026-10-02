@@ -14,7 +14,7 @@
 
 import { useId } from "react";
 
-export function ResortScene({ className = "", tone = "day" }: { className?: string; tone?: "day" | "dusk" }) {
+export function ResortScene({ className = "", tone = "day", sky: withSky = true }: { className?: string; tone?: "day" | "dusk"; /** off where the scene sits on its own colour, as on the hero */ sky?: boolean }) {
   const id = useId().replace(/:/g, "");
   const sky = tone === "day" ? ["#ecfdf5", "#d1fae5"] : ["#fff7ed", "#fde68a"];
   return (
@@ -42,7 +42,7 @@ export function ResortScene({ className = "", tone = "day" }: { className?: stri
           <stop offset="1" stopColor="#0d9488" />
         </linearGradient>
       </defs>
-      <rect width="400" height="200" fill={`url(#${id}-sky)`} />
+      {withSky && <rect width="400" height="200" fill={`url(#${id}-sky)`} />}
       <circle cx="300" cy="70" r="46" fill={`url(#${id}-sun)`} opacity="0.55" />
       <circle cx="300" cy="70" r="22" fill="#fbbf24" />
       {/* birds */}
@@ -81,11 +81,23 @@ export function ResortScene({ className = "", tone = "day" }: { className?: stri
   );
 }
 
-/** A small picture for a list with nothing in it yet. */
+/**
+ * A small picture for a list with nothing in it yet — the scene as a round
+ * medallion in soft rings, not a thumbnail in a box. The box read as a
+ * placeholder image that had failed to load.
+ */
 export function EmptyArt({ className = "" }: { className?: string }) {
   return (
-    <div className={`mx-auto h-20 w-40 overflow-hidden rounded-2xl opacity-90 ring-1 ring-emerald-100 ${className}`}>
-      <ResortScene className="h-full w-full" />
+    <div aria-hidden className={`relative mx-auto flex h-36 w-36 items-center justify-center ${className}`}>
+      <div className="absolute inset-0 rounded-full bg-gradient-to-b from-emerald-50 to-teal-50/40" />
+      <div className="absolute inset-3 rounded-full bg-emerald-100/50" />
+      <div className="relative h-24 w-24 overflow-hidden rounded-full shadow-lg shadow-emerald-900/10 ring-4 ring-white">
+        <ResortScene className="h-full w-full" />
+      </div>
+      <span className="absolute left-3 top-6 h-2 w-2 rounded-full bg-amber-300" />
+      <span className="absolute right-4 top-3 h-1.5 w-1.5 rounded-full bg-emerald-300" />
+      <span className="absolute bottom-5 right-2 h-2.5 w-2.5 rounded-full bg-teal-200" />
+      <span className="absolute bottom-3 left-6 h-1.5 w-1.5 rounded-full bg-sky-200" />
     </div>
   );
 }

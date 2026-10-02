@@ -94,11 +94,46 @@ export function ResortScene({
   );
 }
 
-/** A small scene for a list with nothing in it yet. */
+/**
+ * A small picture for a list with nothing in it yet — the scene as a round
+ * medallion in soft rings, as the console draws it. A thumbnail in a box
+ * read as a picture that had failed to load.
+ */
 export function EmptyArt() {
-  return <ResortScene width={150} height={76} style={styles.empty} />;
+  return (
+    <View style={styles.medal} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[styles.ring, styles.ringOuter]} />
+      <View style={[styles.ring, styles.ringInner]} />
+      <View style={styles.coin}>
+        <ResortScene width={150} height={96} style={styles.coinScene} />
+      </View>
+      <View style={[styles.dot, { left: 12, top: 24, width: 8, height: 8, backgroundColor: a.sun }]} />
+      <View style={[styles.dot, { right: 16, top: 12, width: 6, height: 6, backgroundColor: a.hillFar }]} />
+      <View style={[styles.dot, { right: 8, bottom: 20, width: 10, height: 10, backgroundColor: a.lake }]} />
+      <View style={[styles.dot, { left: 24, bottom: 12, width: 6, height: 6, backgroundColor: a.skyLow }]} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  empty: { borderRadius: 16, opacity: 0.95 },
+  medal: { width: 144, height: 144, alignItems: "center", justifyContent: "center", alignSelf: "center" },
+  ring: { position: "absolute", borderRadius: 999 },
+  ringOuter: { top: 0, left: 0, right: 0, bottom: 0, backgroundColor: color.brand[50] },
+  ringInner: { top: 12, left: 12, right: 12, bottom: 12, backgroundColor: color.brand[100], opacity: 0.5 },
+  coin: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    overflow: "hidden",
+    borderWidth: 4,
+    borderColor: color.surface,
+    backgroundColor: a.sky,
+    shadowColor: color.ink[900],
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  coinScene: { marginLeft: -40 },
+  dot: { position: "absolute", borderRadius: 999 },
 });

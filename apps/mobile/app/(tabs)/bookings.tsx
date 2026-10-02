@@ -265,7 +265,7 @@ export default function BookingsScreen() {
   );
 }
 
-/** A booking's state as a colour, drawn down the card's edge and in the mix above the list. */
+/** A booking's state as a colour, on the guest's initial. */
 const STATE_TONE: Record<string, string> = {
   PENDING: color.chart.money.left.solid,
   CONFIRMED: color.chart.money.paid.solid,
@@ -291,7 +291,6 @@ function BookingListRow({ booking, whole }: { booking: BookingRow; whole: (amoun
       onPress={() => router.push(`/bookings/${booking.id}` as never)}
       style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
     >
-      <View style={[styles.edge, { backgroundColor: tone }]} />
       <View style={[styles.avatar, { backgroundColor: tone }]}>
         <Text step="body" weight="bold" tone="onBrand">
           {(booking.guest?.fullName ?? "#").slice(0, 1).toUpperCase()}
@@ -345,7 +344,6 @@ const styles = StyleSheet.create({
     ...elevation.raised,
   },
   pressed: { opacity: 0.7 },
-  edge: { position: "absolute", left: 0, top: 0, bottom: 0, width: 5 },
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   cardBody: { flex: 1, gap: 2 },
   cardRight: { alignItems: "flex-end", gap: space.xs },

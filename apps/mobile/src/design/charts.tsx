@@ -381,7 +381,7 @@ export function Kpi({
   children?: ReactNode;
 }) {
   return (
-    <View style={[styles.kpi, { borderLeftColor: tint }]} accessible accessibilityLabel={`${label}: ${value}`}>
+    <View style={styles.kpi} accessible accessibilityLabel={`${label}: ${value}`}>
       <Text step="caption" tone="muted" numberOfLines={1}>
         {label}
       </Text>
@@ -463,8 +463,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     borderWidth: 1,
     borderColor: color.line,
-    borderLeftWidth: 4,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: space.md,
     gap: 2,
   },

@@ -34,6 +34,8 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-n
 import { Stack, router } from "expo-router";
 import { keys, useApi, useQueryClient } from "@rh/app-core";
 import { CalendarGlance } from "../../src/screens/glance";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { SplitBar } from "../../src/design/charts";
 import {
   NIGHT_MEANING,
   addDaysIso,
@@ -330,7 +332,12 @@ export default function CalendarScreen() {
           />
         }
       >
-        <CalendarGlance occupancy={occupancy} sellable={sellable.length} bookings={calQ.data?.bookings ?? []} />
+        {/* the month grid is its own picture of the nights; the strip of rooms gets this one */}
+        {view === "Rooms" ? (
+          <View style={styles.glance}>
+            <CalendarGlance occupancy={occupancy} sellable={sellable.length} bookings={calQ.data?.bookings ?? []} />
+          </View>
+        ) : null}
         {view === "Month" ? (
           /*
             Dragging sideways moves a month, as the arrows do — the month is
@@ -494,46 +501,64 @@ function MonthTotals({
   const full = occupancy.filter((o) => o.taken >= sellable).length;
   const empty = occupancy.filter((o) => o.taken === 0).length;
   const pct = possible > 0 ? Math.round((sold / possible) * 100) : 0;
+  const tone = color.chart.money;
+  // each night as a dot: sold out, some sold, nobody
+  const dot = (taken: number) => (taken >= sellable ? tone.late.solid : taken > 0 ? tone.paid.solid : tone.left.soft);
 
   return (
     <View style={styles.totals}>
-      <View style={styles.totalsRow}>
-        <Figure value={`${pct}%`} label="full this month" tone={pct >= 70 ? "ok" : "title"} />
-        <Figure value={`${sold}`} label={`of ${possible} room-nights`} tone="title" />
+      <View style={styles.totalsHead}>
+        <Text step="figure" weight="bold" tone={pct >= 70 ? "ok" : "title"} tabular>
+          {`${pct}%`}
+        </Text>
+        <Text step="small" tone="muted" style={styles.flex}>
+          {`full this month — ${sold} of ${possible} room-nights`}
+        </Text>
+      </View>
+      <SplitBar
+        format={(n) => String(n)}
+        parts={[
+          { label: "Sold", value: sold, color: tone.paid.solid },
+          { label: "Free", value: Math.max(0, possible - sold), color: tone.paid.soft },
+        ]}
+      />
+      <View style={styles.pulse} accessible accessibilityLabel={`${full} sold out, ${empty} with nobody`}>
+        {occupancy.map((o) => (
+          <View key={o.day} style={[styles.pulseDot, { backgroundColor: dot(o.taken) }]} />
+        ))}
       </View>
       <View style={styles.totalsRow}>
-        <Figure
-          value={`${full}`}
-          label={full === 1 ? "night sold out" : "nights sold out"}
-          tone={full > 0 ? "danger" : "muted"}
-        />
-        <Figure
-          value={`${empty}`}
-          label={empty === 1 ? "night with nobody" : "nights with nobody"}
-          tone={empty > 0 ? "warn" : "muted"}
-        />
+        <Badge icon="calendar-check" value={full} label={full === 1 ? "night sold out" : "nights sold out"} tint={tone.late} />
+        <Badge icon="calendar-blank-outline" value={empty} label={empty === 1 ? "night with nobody" : "nights with nobody"} tint={tone.left} />
       </View>
     </View>
   );
 }
 
-function Figure({
+function Badge({
+  icon,
   value,
   label,
-  tone,
+  tint,
 }: {
-  value: string;
+  icon: "calendar-check" | "calendar-blank-outline";
+  value: number;
   label: string;
-  tone: "ok" | "warn" | "danger" | "muted" | "title";
+  tint: { solid: string; soft: string };
 }) {
   return (
-    <View style={styles.figure}>
-      <Text step="title" weight="bold" tone={tone} tabular numberOfLines={1}>
-        {value}
-      </Text>
-      <Text step="caption" tone="muted" numberOfLines={2}>
-        {label}
-      </Text>
+    <View style={[styles.badge, { backgroundColor: tint.soft }]}>
+      <View style={[styles.badgeIcon, { backgroundColor: tint.solid }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={color.surface} />
+      </View>
+      <View style={styles.flex}>
+        <Text step="title" weight="bold" tone="title" tabular numberOfLines={1}>
+          {String(value)}
+        </Text>
+        <Text step="caption" tone="body" numberOfLines={2}>
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -563,6 +588,13 @@ function NightKey() {
 }
 
 const styles = StyleSheet.create({
+  glance: { marginHorizontal: space.lg, marginTop: space.md, marginBottom: space.lg },
+  flex: { flex: 1 },
+  totalsHead: { flexDirection: "row", alignItems: "baseline", gap: space.sm },
+  pulse: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  pulseDot: { width: 10, height: 10, borderRadius: 5 },
+  badge: { flex: 1, flexDirection: "row", alignItems: "center", gap: space.sm, padding: space.md, borderRadius: radius.lg },
+  badgeIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   key: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -585,8 +617,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: color.line,
   },
-  totalsRow: { flexDirection: "row", gap: space.lg },
-  figure: { flex: 1, gap: 2 },
+  totalsRow: { flexDirection: "row", gap: space.sm },
   week: { flexDirection: "row", gap: space.xs },
   weekday: { flex: 1, textAlign: "center" },
   square: { flex: 1, aspectRatio: 0.82 },

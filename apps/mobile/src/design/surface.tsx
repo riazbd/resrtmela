@@ -43,7 +43,6 @@ export function Card({
             `a-word-does-not-fall-off-the-end`.
           */}
           <View style={styles.cardTitle}>
-            <View style={styles.cardMark} />
             <Text step="strong" weight="bold" tone="title" numberOfLines={1} style={styles.shrink}>
               {title}
             </Text>
@@ -196,7 +195,6 @@ const styles = StyleSheet.create({
     ...elevation.raised,
   },
   cardTitle: { flexDirection: "row", alignItems: "center", gap: space.sm, flexShrink: 1 },
-  cardMark: { width: 4, height: 16, borderRadius: 2, backgroundColor: color.brand[500] },
   shrink: { flexShrink: 1 },
   cardHead: {
     flexDirection: "row",
