@@ -35,7 +35,7 @@ does, has been seen working in the browser lens, and has a test.
 - [x] **Expenses**: heads managed
 - [x] **Tours**: "what a tour is made of" headings
 - [x] **Profile**: agent profile, agency users, recent bookings
-- [ ] **Calendar / sales / search / discover / bookings / guests / wallet**: check field by field
+- [x] **Calendar / sales / search / discover / bookings / guests / wallet**: check field by field
 
 ## Platform
 

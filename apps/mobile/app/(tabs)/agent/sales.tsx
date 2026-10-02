@@ -29,6 +29,8 @@ import {
   todayIn,
   PLATFORM_TIMEZONE,
   type NewSalesDoc,
+  type AgencyMoneyReceived,
+  type SalesDocDetail,
   type SalesDocKind,
   type SalesDocRow,
   type SalesDocStatus,
@@ -47,6 +49,7 @@ import { Text } from "../../../src/design/text";
 import { Toggle } from "../../../src/design/toggle";
 import { useAction } from "../../../src/design/use-action";
 import { color, radius, space } from "../../../src/design/tokens";
+import { BarList } from "../../../src/design/charts";
 
 /**
  * Finished, one way or another.
@@ -58,7 +61,7 @@ const SETTLED: SalesDocStatus[] = ["PAID", "VOID", "DECLINED", "EXPIRED"];
 
 const owing = (d: SalesDocRow) => !SETTLED.includes(d.status) && d.totals.due > 0;
 
-const LENSES = ["All", "Unpaid"] as const;
+const LENSES = ["All", "Unpaid", "Money received"] as const;
 
 export default function AgentSalesScreen() {
   const { me, can } = useAuth();
@@ -70,6 +73,10 @@ export default function AgentSalesScreen() {
 
   const list = useApi<SalesDocRow[]>(["agent-sales"], () => client.agent.sales.list(), {
     enabled: Boolean(me),
+  });
+
+  const received = useApi<AgencyMoneyReceived>(["agent-sales", "money-received"], () => client.agent.sales.moneyReceived(), {
+    enabled: Boolean(me) && lens === "Money received",
   });
 
   const all = useMemo(() => list.data ?? [], [list.data]);
@@ -131,6 +138,42 @@ export default function AgentSalesScreen() {
           ))}
         </View>
 
+        {lens === "Money received" ? (
+          !received.data ? (
+            <Loading what="the money received" />
+          ) : (
+            <>
+              <Card title={`Received — ${whole(received.data.total)}`}>
+                <BarList
+                  format={whole}
+                  barColor={color.chart.money.paid.solid}
+                  rows={received.data.rows.map((r) => ({ label: r.name, sub: `${r.count} payment${r.count === 1 ? "" : "s"}`, value: r.total }))}
+                />
+              </Card>
+              <Card title="The latest">
+                {received.data.recent.length === 0 ? (
+                  <Empty message="Nothing received yet" />
+                ) : (
+                  received.data.recent.map((m, i) => (
+                    <Row
+                      key={m.id}
+                      title={m.from}
+                      subtitle={`${m.document} · ${m.method}${m.receivedBy ? ` · taken by ${m.receivedBy}` : ""}`}
+                      meta={dayLabel(m.at, { style: "short" })}
+                      last={i === received.data!.recent.length - 1}
+                      accessibilityLabel={`${whole(m.amount)} from ${m.from} for ${m.document}`}
+                      right={
+                        <Text step="body" weight="bold" tone="ok" tabular>
+                          {whole(m.amount)}
+                        </Text>
+                      }
+                    />
+                  ))
+                )}
+              </Card>
+            </>
+          )
+        ) : (
         <Card title={lens === "Unpaid" ? "Unpaid" : "Everything"}>
           {shown.length === 0 ? (
             <View style={styles.emptyBox}>
@@ -177,6 +220,7 @@ export default function AgentSalesScreen() {
             ))
           )}
         </Card>
+        )}
 
         {writing ? (
           <WriteDocument
@@ -191,10 +235,6 @@ export default function AgentSalesScreen() {
           <Button label="Write a document" kind="ghost" onPress={() => setWriting(true)} />
         ) : null}
 
-        <Text step="caption" tone="muted" style={styles.footnote}>
-          The printed copy a client keeps stays on the desk — it is a page, not
-          a screen.
-        </Text>
       </ScrollView>
     </>
   );
@@ -295,32 +335,37 @@ function FromPackage({
  * comes back; this exists so the person typing can see the figure they
  * are about to send.
  */
-function WriteDocument({
+export function WriteDocument({
+  initial,
   onClose,
   onSaved,
 }: {
+  /** a document being changed; absent for a new one */
+  initial?: SalesDocDetail | null;
   onClose: () => void;
   onSaved: (id: number) => Promise<void>;
 }) {
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
-  const [kind, setKind] = useState<SalesDocKind>("QUOTATION");
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
+  const [kind, setKind] = useState<SalesDocKind>(initial?.kind ?? "QUOTATION");
+  const [clientName, setClientName] = useState(initial?.clientName ?? "");
+  const [clientPhone, setClientPhone] = useState(initial?.clientPhone ?? "");
+  const [clientEmail, setClientEmail] = useState(initial?.clientEmail ?? "");
   // an agency has no resort and so no resort's day; its documents are dated
   // in the platform's zone, as every other agency screen is
-  const [issueDate, setIssueDate] = useState(() => todayIn(PLATFORM_TIMEZONE));
-  const [expires, setExpires] = useState(false);
+  const [issueDate, setIssueDate] = useState(() => initial?.issueDate?.slice(0, 10) ?? todayIn(PLATFORM_TIMEZONE));
+  const [expires, setExpires] = useState(Boolean(initial?.validUntil));
   const [validUntil, setValidUntil] = useState(() =>
-    addDaysIso(todayIn(PLATFORM_TIMEZONE), 14),
+    initial?.validUntil?.slice(0, 10) ?? addDaysIso(todayIn(PLATFORM_TIMEZONE), 14),
   );
-  const [packageId, setPackageId] = useState<number | null>(null);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [discount, setDiscount] = useState(0);
-  const [taxRate, setTaxRate] = useState(0);
-  const [notes, setNotes] = useState("");
+  const [packageId, setPackageId] = useState<number | null>(initial?.packageId ?? null);
+  const [lines, setLines] = useState<Line[]>(
+    (initial?.items ?? []).map((it) => ({ key: `l${it.id}`, label: it.label, qty: it.qty, unitPrice: it.unitPrice })),
+  );
+  const [discount, setDiscount] = useState(initial?.totals.discount ?? 0);
+  const [taxRate, setTaxRate] = useState(initial?.taxRate ?? 0);
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [tried, setTried] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   /** Minted when the form opens, so a replayed write is still one document. */
@@ -359,15 +404,21 @@ function WriteDocument({
           unitPrice: l.unitPrice,
         })),
       };
-      const made = await client.agent.sales.create(body);
-      await onSaved(made.id);
+      if (initial) {
+        const { clientRef: _ref, ...edit } = body;
+        await client.agent.sales.update(initial.id, edit);
+        await onSaved(initial.id);
+      } else {
+        const made = await client.agent.sales.create(body);
+        await onSaved(made.id);
+      }
     } catch (error) {
       setRefused(error instanceof Error ? error.message : "That did not go through.");
     }
   });
 
   return (
-    <Card title="A new document">
+    <Card title={initial ? `Change ${initial.number}` : "A new document"}>
       <View style={styles.fields}>
         <Field
           label="What it is"

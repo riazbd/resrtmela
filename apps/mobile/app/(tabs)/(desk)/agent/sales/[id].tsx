@@ -21,7 +21,13 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useLocalSearchParams, router } from "expo-router";
 import { useApi, useQueryClient } from "@rh/app-core";
 import { dayLabel, formatMoney, type SalesDocDetail } from "@rh/shared";
+import * as Print from "expo-print";
 import { client, useAuth } from "../../../../../src/api/session";
+import { API_URL } from "../../../../../src/api/config";
+import { TOKEN_KEY } from "../../../../../src/api/transport";
+import { session } from "../../../../../src/api/wire";
+import { ask, refusal } from "../../../../../src/screens/payroll-month";
+import { WriteDocument } from "../../../agent/sales";
 import { Button } from "../../../../../src/design/button";
 import { Field, Input } from "../../../../../src/design/input";
 import { useMoneyFormat } from "../../../../../src/design/money";
@@ -154,6 +160,7 @@ export default function SalesDocScreen() {
         {d.totals.due > 0 ? <TakePayment doc={d} onDone={() => void doc.refetch()} /> : null}
 
         <Convert doc={d} />
+        <DocActions doc={d} onChanged={() => void doc.refetch()} />
 
         <Text step="caption" tone="muted" style={styles.footnote}>
           Editing the lines and the printed copy a client keeps stay on the
@@ -190,6 +197,83 @@ export default function SalesDocScreen() {
  * appeared; no test saw it, because a test mounts one screen with one
  * answer and never comes back to a stale one.
  */
+/**
+ * The console's other acts on a document: change it, email it to the client,
+ * print it, and delete it (or void it, once the client has seen it). The
+ * owner's rule since 2026-10-02 is that whatever the console has, the app has.
+ */
+function DocActions({ doc, onChanged }: { doc: SalesDocDetail; onChanged: () => void }) {
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
+  if (!can("agent.sales.manage")) return null;
+
+  const send = async () => {
+    setSaid(null);
+    try {
+      const r = await client.agent.sales.send(doc.id);
+      setSaid({ ok: true, text: `Sent to ${r.to}` });
+      onChanged();
+    } catch (e) {
+      setSaid({ ok: false, text: refusal(e) });
+    }
+  };
+  const print = async () => {
+    setSaid(null);
+    try {
+      const token = session.getItem(TOKEN_KEY);
+      const res = await fetch(`${API_URL}${client.agent.sales.printPath(doc.id)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(`Could not open it (${res.status})`);
+      await Print.printAsync({ html: await res.text() });
+    } catch (e) {
+      setSaid({ ok: false, text: refusal(e) });
+    }
+  };
+
+  if (editing) {
+    return (
+      <WriteDocument
+        initial={doc}
+        onClose={() => setEditing(false)}
+        onSaved={async () => {
+          setEditing(false);
+          await qc.invalidateQueries({ queryKey: ["agent-sales"] });
+          onChanged();
+        }}
+      />
+    );
+  }
+
+  return (
+    <View style={styles.convert}>
+      <Button label="Change it" kind="ghost" onPress={() => setEditing(true)} />
+      <Button label="Email it to the client" kind="ghost" disabled={!doc.clientEmail} onPress={() => void send()} />
+      <Button label="Print" kind="ghost" onPress={() => void print()} />
+      <Button
+        label="Delete it"
+        kind="danger"
+        onPress={() =>
+          ask(`Remove ${doc.number}?`, doc.sentAt ? "The client has seen it, so it is voided rather than deleted." : "It is deleted.", "Remove", () => {
+            void client.agent.sales.remove(doc.id).then(
+              async () => {
+                await qc.invalidateQueries({ queryKey: ["agent-sales"] });
+                router.back();
+              },
+              (e) => setSaid({ ok: false, text: refusal(e) }),
+            );
+          })
+        }
+      />
+      {said ? (
+        <Text step="small" weight="medium" tone={said.ok ? "ok" : "danger"}>
+          {said.text}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function Convert({ doc }: { doc: SalesDocDetail }) {
   const { can } = useAuth();
   const qc = useQueryClient();

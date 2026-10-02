@@ -37,7 +37,19 @@ jest.mock("../src/api/session", () => ({
     activeResort: null,
     can: () => true,
   }),
-  client: { agent: { sales: { list: (...a: unknown[]) => mockList(...a) } } },
+  client: {
+    agent: {
+      sales: {
+        list: (...a: unknown[]) => mockList(...a),
+        moneyReceived: () =>
+          Promise.resolve({
+            total: 9000,
+            rows: [{ userId: 1, name: "Karim", count: 2, total: 9000 }],
+            recent: [{ id: 1, at: "2026-09-20T05:00:00.000Z", amount: 9000, method: "CASH", from: "Rafiq", document: "INV-0007", receivedBy: "Karim", note: null }],
+          }),
+      },
+    },
+  },
 }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -129,10 +141,12 @@ describe("what the agency quoted and billed", () => {
   });
 
   /** Every absence is deliberate and said on the screen. */
-  it("says where a quote gets written", async () => {
+  /** The console's third tab; whatever the console has, the app has. */
+  it("says what money came in, and from whom", async () => {
     const r = await open();
     await waitFor(() => expect(r.getByText("INV-0007")).toBeTruthy());
-    expect(r.getByText(/on the desk/i)).toBeTruthy();
+    await fireEvent.press(r.getByRole("button", { name: "Money received" }));
+    await waitFor(() => expect(r.getByLabelText("৳9,000 from Rafiq for INV-0007")).toBeTruthy());
   });
 
   describe("the states it owes", () => {
