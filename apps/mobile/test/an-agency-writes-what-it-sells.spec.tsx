@@ -21,6 +21,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import type { SalesDocDetail, SalesDocRow, TourPackageRow } from "@rh/shared";
 
+const mockCreateCategory = jest.fn();
 const mockPackages = jest.fn();
 const mockPackage = jest.fn();
 const mockCreatePackage = jest.fn();
@@ -51,6 +52,11 @@ jest.mock("../src/api/session", () => ({
         packages: (...a: unknown[]) => mockPackages(...a),
         package: (...a: unknown[]) => mockPackage(...a),
         createPackage: (...a: unknown[]) => mockCreatePackage(...a),
+        categories: () => Promise.resolve([{ id: 1, name: "Transport", active: true, children: [] }]),
+        createCategory: (...a: unknown[]) => mockCreateCategory(...a),
+        deleteCategory: jest.fn(),
+        updatePackage: jest.fn(),
+        deletePackage: jest.fn(),
       },
       sales: {
         list: (...a: unknown[]) => mockSalesList(...a),
@@ -137,6 +143,21 @@ beforeEach(() => {
   mockSalesCreate.mockReset().mockResolvedValue({ id: 77, number: "QT-0005" });
   mockConvert.mockReset().mockResolvedValue({ id: 78, number: "INV-0009" });
   mockPush.mockReset();
+});
+
+/** "What a tour is made of" was the console's alone; whatever the console has, the app has. */
+describe("what a tour is made of", () => {
+  it("adds a heading under another", async () => {
+    mockCreateCategory.mockResolvedValue({ id: 2 });
+    const r = await render(<Harness><ToursScreen /></Harness>);
+    await waitFor(() => expect(r.getByRole("button", { name: "What a tour is made of" })).toBeTruthy(), { timeout: 15_000 });
+    await fireEvent.press(r.getByRole("button", { name: "What a tour is made of" }));
+    await waitFor(() => expect(r.getByText("Transport")).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Under Transport" }));
+    await fireEvent.changeText(r.getByLabelText("Name"), "Jeep");
+    await fireEvent.press(r.getByRole("button", { name: "Add the heading" }));
+    await waitFor(() => expect(mockCreateCategory).toHaveBeenCalledWith({ name: "Jeep", parentId: 1 }));
+  });
 });
 
 describe("building a package", () => {

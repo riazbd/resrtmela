@@ -29,11 +29,11 @@ does, has been seen working in the browser lens, and has a test.
 
 ## Agency side
 
-- [ ] **Team**: add someone, roles, activity
-- [ ] **Website**: edit everything — about, contacts, social links, colour, resorts shown and their order, pictures
-- [ ] **API**: create a key (shown once), what it may do
-- [ ] **Expenses**: heads managed
-- [ ] **Tours**: "what a tour is made of" headings
+- [x] **Team**: add someone, roles, activity
+- [x] **Website**: edit everything — about, contacts, social links, colour, resorts shown and their order, pictures
+- [x] **API**: create a key (shown once), what it may do
+- [x] **Expenses**: heads managed
+- [x] **Tours**: "what a tour is made of" headings
 - [ ] **Profile**: agent profile, agency users, recent bookings
 - [ ] **Calendar / sales / search / discover / bookings / guests / wallet**: check field by field
 

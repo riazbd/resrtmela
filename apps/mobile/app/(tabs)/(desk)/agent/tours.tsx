@@ -24,6 +24,8 @@ import { useApi } from "@rh/app-core";
 import {
   formatMoney,
   type NewTourPackage,
+  type TourCategoryNode,
+  type TourPackageDetail,
   type TourPackageLineInput,
   type TourPackageRow,
 } from "@rh/shared";
@@ -37,6 +39,9 @@ import { Card, Row } from "../../../../src/design/surface";
 import { Text } from "../../../../src/design/text";
 import { useAction } from "../../../../src/design/use-action";
 import { color, radius, space } from "../../../../src/design/tokens";
+import { Chip } from "../../../../src/design/chip";
+import { Lenses } from "../../../../src/design/lenses";
+import { ask, refusal } from "../../../../src/screens/payroll-month";
 
 export default function AgentToursScreen() {
   const { me, can } = useAuth();
@@ -44,6 +49,12 @@ export default function AgentToursScreen() {
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
   const mayManage = can("agent.tours.manage");
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<TourPackageDetail | null>(null);
+  const [view, setView] = useState<"Packages" | "What a tour is made of">("Packages");
+  const [said, setSaid] = useState<string | null>(null);
+  const cats = useApi<TourCategoryNode[]>(["agent-tour-categories"], () => client.agent.tours.categories(), {
+    enabled: Boolean(me),
+  });
 
   const list = useApi<TourPackageRow[]>(
     ["agent-tours"],
@@ -83,6 +94,16 @@ export default function AgentToursScreen() {
           <RefreshControl refreshing={list.isRefetching} onRefresh={() => void list.refetch()} />
         }
       >
+        <Lenses options={["Packages", "What a tour is made of"] as const} value={view} onChange={setView} />
+        {said ? (
+          <Text step="small" tone="danger" weight="medium">
+            {said}
+          </Text>
+        ) : null}
+        {view === "What a tour is made of" ? (
+          <Headings tree={cats.data ?? []} mayManage={mayManage} onDone={() => void cats.refetch()} />
+        ) : (
+        <>
         <Card title={`${rows.length} package${rows.length === 1 ? "" : "s"}`}>
           {rows.length === 0 ? (
             <View style={styles.emptyBox}>
@@ -112,6 +133,18 @@ export default function AgentToursScreen() {
                 } people, sells at ${whole(p.totals.price)}, margin ${whole(p.totals.margin)}${
                   p.active ? "" : ", not on sale"
                 }`}
+                onPress={
+                  mayManage
+                    ? () =>
+                        void client.agent.tours.package(p.id).then(
+                          (d) => {
+                            setAdding(false);
+                            setEditing(d);
+                          },
+                          (e) => setSaid(refusal(e)),
+                        )
+                    : undefined
+                }
                 right={
                   <View style={styles.right}>
                     <Text
@@ -134,17 +167,26 @@ export default function AgentToursScreen() {
           )}
         </Card>
 
-        {adding ? (
+        {adding || editing ? (
           <PackageBuilder
-            onClose={() => setAdding(false)}
+            key={editing?.id ?? "new"}
+            initial={editing}
+            categories={cats.data ?? []}
+            onClose={() => {
+              setAdding(false);
+              setEditing(null);
+            }}
             onSaved={async () => {
               setAdding(false);
+              setEditing(null);
               await list.refetch();
             }}
           />
         ) : mayManage ? (
           <Button label="Build a package" kind="ghost" onPress={() => setAdding(true)} />
         ) : null}
+        </>
+        )}
 
         <Text step="caption" tone="muted" style={styles.footnote}>
           Every line carries a cost and a price. The margin is the business, so
@@ -174,21 +216,38 @@ interface Line extends TourPackageLineInput {
  * whatever the server says when it comes back in the list.
  */
 function PackageBuilder({
+  initial,
+  categories,
   onClose,
   onSaved,
 }: {
+  /** a package being changed; absent for a new one */
+  initial?: TourPackageDetail | null;
+  categories: TourCategoryNode[];
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  /** every heading, flattened with its parent's name, for a line to sit under */
+  const headings = categories.flatMap((c) => [{ id: c.id, name: c.name }, ...c.children.map((k) => ({ id: k.id, name: `${c.name} › ${k.name}` }))]);
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
 
-  const [name, setName] = useState("");
-  const [summary, setSummary] = useState("");
-  const [days, setDays] = useState(2);
-  const [nights, setNights] = useState(1);
-  const [pax, setPax] = useState(2);
-  const [lines, setLines] = useState<Line[]>([]);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [summary, setSummary] = useState(initial?.summary ?? "");
+  const [days, setDays] = useState(initial?.days ?? 2);
+  const [nights, setNights] = useState(initial?.nights ?? 1);
+  const [pax, setPax] = useState(initial?.pax ?? 2);
+  const [active, setActive] = useState(initial?.active ?? true);
+  const [lines, setLines] = useState<Line[]>(
+    (initial?.items ?? []).map((it) => ({
+      key: `l${it.id}`,
+      label: it.label,
+      categoryId: it.categoryId,
+      qty: it.qty,
+      unitCost: it.unitCost,
+      unitPrice: it.unitPrice,
+    })),
+  );
   const [tried, setTried] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   /**
@@ -220,14 +279,23 @@ function PackageBuilder({
         nights,
         pax,
         clientRef: ref,
+        active,
         items: priced.map((l) => ({
+          // a new package's line names a heading only when one was chosen;
+          // a changed one says null too, which is how a heading is cleared
+          ...(l.categoryId != null || initial ? { categoryId: l.categoryId ?? null } : {}),
           label: l.label.trim(),
           qty: l.qty,
           unitCost: l.unitCost,
           unitPrice: l.unitPrice,
         })),
       };
-      await client.agent.tours.createPackage(body);
+      if (initial) {
+        const { clientRef: _ref, ...edit } = body;
+        await client.agent.tours.updatePackage(initial.id, edit);
+      } else {
+        await client.agent.tours.createPackage(body);
+      }
       await onSaved();
     } catch (error) {
       setRefused(error instanceof Error ? error.message : "That did not go through.");
@@ -235,7 +303,7 @@ function PackageBuilder({
   });
 
   return (
-    <Card title="A new package">
+    <Card title={initial ? `Change — ${initial.name}` : "A new package"}>
       <View style={styles.fields}>
         <Field label="Name" error={tried && !name.trim() ? "A package needs a name." : null}>
           <Input
@@ -270,6 +338,13 @@ function PackageBuilder({
 
         {lines.map((line) => (
           <View key={line.key} style={styles.line}>
+            {headings.length > 0 ? (
+              <View style={styles.chips}>
+                {headings.map((h) => (
+                  <Chip key={h.id} label={h.name} on={line.categoryId === h.id} onPress={() => edit(line.key, { categoryId: line.categoryId === h.id ? null : h.id })} />
+                ))}
+              </View>
+            ) : null}
             <Field label="What it is">
               <Input
                 value={line.label}
@@ -365,10 +440,98 @@ function PackageBuilder({
           </View>
         ) : null}
 
+        <View style={styles.chips}>
+          <Chip label="On sale" on={active} onPress={() => setActive(true)} />
+          <Chip label="Not on sale" on={!active} onPress={() => setActive(false)} />
+        </View>
         <Button label="Save the package" loading={save.busy} onPress={save.go} />
+        {initial ? (
+          <Button
+            label="Delete the package"
+            kind="danger"
+            onPress={() =>
+              ask(`Delete ${initial.name}?`, "Quotations already written from it keep their lines.", "Delete", () => {
+                void client.agent.tours.deletePackage(initial.id).then(onSaved, (e) => setRefused(refusal(e)));
+              })
+            }
+          />
+        ) : null}
         <Button label="Cancel" kind="ghost" onPress={onClose} />
       </View>
     </Card>
+  );
+}
+
+/**
+ * What a tour is made of — the headings lines are filed under (Transport,
+ * Stay, Food), each with its own sub-headings. The console's second tab; on
+ * the phone since the owner's rule that whatever the console has, the app has.
+ */
+function Headings({ tree, mayManage, onDone }: { tree: TourCategoryNode[]; mayManage: boolean; onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [under, setUnder] = useState<number | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const add = () =>
+    void client.agent.tours.createCategory({ name: name.trim(), parentId: under }).then(
+      () => {
+        setName("");
+        onDone();
+      },
+      (e) => setSaid(refusal(e)),
+    );
+  const remove = (c: TourCategoryNode) =>
+    ask(`Remove ${c.name}?`, c.children.length ? "Its sub-headings go with it." : "Lines filed under it keep their words.", "Remove", () => {
+      void client.agent.tours.deleteCategory(c.id).then(onDone, (e) => setSaid(refusal(e)));
+    });
+  return (
+    <>
+      <Card title={`Your headings (${tree.length})`}>
+        {tree.length === 0 ? (
+          <Empty message="No headings yet" hint="Transport, Stay, Food — whatever a package is built from." />
+        ) : (
+          tree.map((c, i) => (
+            <View key={c.id} style={styles.heading}>
+              <View style={styles.headingRow}>
+                <View style={[styles.dot, { backgroundColor: color.chart.series[i % color.chart.series.length] }]} />
+                <Text step="body" weight="bold" tone="title" style={styles.half}>
+                  {c.name}
+                </Text>
+                {mayManage ? <Button label="×" kind="subtle" block={false} accessibilityLabel={`Remove ${c.name}`} onPress={() => remove(c)} /> : null}
+              </View>
+              {c.children.map((k) => (
+                <View key={k.id} style={styles.child}>
+                  <Text step="small" tone="body" style={styles.half}>
+                    {k.name}
+                  </Text>
+                  {mayManage ? <Button label="×" kind="subtle" block={false} accessibilityLabel={`Remove ${k.name}`} onPress={() => remove(k)} /> : null}
+                </View>
+              ))}
+            </View>
+          ))
+        )}
+      </Card>
+      {mayManage ? (
+        <Card title={under == null ? "A new heading" : `Under ${tree.find((c) => c.id === under)?.name ?? ""}`}>
+          <View style={styles.fields}>
+            <View style={styles.chips}>
+              <Chip label="At the top" on={under == null} onPress={() => setUnder(null)} />
+              {tree.map((c) => (
+                <Chip key={c.id} label={`Under ${c.name}`} on={under === c.id} onPress={() => setUnder(c.id)} />
+              ))}
+            </View>
+            <Field label="Name">
+              <Input value={name} onChangeText={setName} placeholder="Transport" />
+            </Field>
+            {said ? (
+              <Text step="small" tone="danger">
+                {said}
+              </Text>
+            ) : null}
+            <Button label="Add the heading" disabled={!name.trim()} onPress={add} />
+          </View>
+        </Card>
+      ) : null}
+    </>
   );
 }
 
@@ -380,6 +543,11 @@ const styles = StyleSheet.create({
   fields: { gap: space.md },
   pair: { flexDirection: "row", gap: space.md },
   half: { flex: 1 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  heading: { paddingVertical: space.sm, gap: space.xs, borderBottomWidth: 1, borderBottomColor: color.line },
+  headingRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  child: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingLeft: space.xl },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   line: {
     gap: space.md,
     paddingTop: space.md,
