@@ -23,6 +23,7 @@ import { Card, Empty, Spinner, Th, Td, useToast } from "@/components/ui";
 import { Button as Btn } from "@/components/ui";
 import { HowItArrived, paymentMethodsFrom } from "./how-it-arrived";
 import { POLICY_FIELDS } from "./policy-fields";
+import { CMS_FIELDS } from "@rh/shared";
 import { Building2, Users, RefreshCw, ChevronLeft, ChevronRight, Ban, CheckCircle2, CreditCard, Wallet, LogIn, Globe, Gauge, PlayCircle } from "lucide-react";
 import { monthOf, todayIn, PLATFORM_TIMEZONE } from "@/lib/resort-dates";
 import { ErrorState } from "@/components/error-state";
@@ -1359,23 +1360,7 @@ function NewPlanCard({
   );
 }
 
-const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
-  { key: "hero.title", label: "Hero title", hint: "big headline on the homepage" },
-  { key: "hero.subtitle", label: "Hero subtitle", hint: "one line under the title" },
-  { key: "hero.cta", label: "Hero button text" },
-  { key: "hero.badge", label: "Hero badge", hint: "small pill above the title" },
-  { key: "stats.1.value", label: "Figure 1", hint: "the four figures under the hero — keep them to claims you can show are true" },
-  { key: "stats.1.label", label: "Figure 1 caption" },
-  { key: "stats.2.value", label: "Figure 2" },
-  { key: "stats.2.label", label: "Figure 2 caption" },
-  { key: "stats.3.value", label: "Figure 3" },
-  { key: "stats.3.label", label: "Figure 3 caption" },
-  { key: "stats.4.value", label: "Figure 4" },
-  { key: "stats.4.label", label: "Figure 4 caption" },
-  { key: "cta.title", label: "Bottom CTA title" },
-  { key: "cta.body", label: "Bottom CTA text" },
-  { key: "cta.button", label: "Bottom CTA button" },
-];
+// the fields live in @rh/shared (`platform-policy.ts`), so the app edits the same ones
 
 /**
  * The commercial terms, as a form.

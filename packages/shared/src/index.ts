@@ -22,6 +22,7 @@ export * from "./payroll-rules";
 export * from "./chart";
 export * from "./payslip";
 export * from "./platform-methods";
+export * from "./platform-policy";
 export * from "./discount";
 export * from "./booking-state";
 export * from "./booking-edit";

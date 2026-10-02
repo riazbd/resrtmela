@@ -39,7 +39,7 @@ does, has been seen working in the browser lens, and has a test.
 
 ## Platform
 
-- [ ] **The platform console**: overview, resorts, agents, plans, offers, subscriptions, dues, money received, email credits, calendar, billing policy, website CMS, log in as (now "on the desk")
+- [x] **The platform console**: overview, resorts, agents, plans, offers, subscriptions, dues, money received, email credits, calendar, billing policy, website CMS, log in as — `app/(tabs)/(desk)/platform/`
 
 ## Look — every screen, both clients
 

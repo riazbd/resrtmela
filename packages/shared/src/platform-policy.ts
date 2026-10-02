@@ -1,0 +1,126 @@
+/**
+ * The Billing policy form's fields.
+ *
+ * These four numbers decide when a paying customer stops being one, so they
+ * belong to whoever owns that decision — not to a constant somebody has to
+ * redeploy.
+ *
+ * The contact fields start empty and stay empty until the owner fills them in.
+ * That is deliberate: the platform cannot guess a bKash number, and a *stored*
+ * guess is worse than a blank. One was seeded once — "bKash (Merchant)
+ * 01711-000111 · Resort Mela Ltd, City Bank, A/C 1402-345678-001" — and it sat
+ * in production reading exactly like a real merchant account, which is a
+ * customer's money sent nowhere.
+ *
+ * A `placeholder` is the safe half of that idea: it shows the shape of the
+ * answer, is greyed out, is never submitted, and never reaches a buyer. It is
+ * written so nobody could mistake it for the platform's own number —
+ * `an-example-is-not-a-value.spec.ts` fails on anything that looks dialable.
+ *
+ * Lifted out of the page so the test can read it without rendering the console.
+ */
+export interface PolicyField {
+  key: string;
+  label: string;
+  hint: string;
+  unit?: string;
+  /** the shape of the answer, shown in the empty box; never stored */
+  placeholder?: string;
+}
+
+export const POLICY_FIELDS: PolicyField[] = [
+  {
+    key: "billing.graceDays",
+    label: "Grace period",
+    unit: "days",
+    hint: "after the due date before the bill is marked overdue. bKash and bank transfers have a human in the loop — a day is not enough.",
+    placeholder: "e.g. 7",
+  },
+  {
+    key: "billing.suspendAfterDays",
+    label: "Suspend after",
+    unit: "days",
+    hint: "days past the due date before the resort stops accepting new entries. Reads and exports always stay open.",
+    placeholder: "e.g. 15",
+  },
+  {
+    key: "billing.noticeDays",
+    label: "Notice before",
+    unit: "days",
+    hint: "warning sent before a trial ends and before a suspension lands.",
+    placeholder: "e.g. 3",
+  },
+  {
+    key: "platform.name",
+    label: "Platform name",
+    hint: "how the platform signs the mail it sends tenants about their account.",
+    placeholder: "e.g. Resort Mela",
+  },
+  {
+    key: "platform.supportEmail",
+    label: "Support email",
+    hint: "shown to tenants who need to sort out a bill, and linked in every bill email. Use an address somebody reads.",
+    placeholder: "e.g. support@yourdomain.com",
+  },
+  {
+    key: "platform.supportPhone",
+    label: "Support phone",
+    hint: "same, for the ones who would rather call.",
+    placeholder: "e.g. 01XXXXXXXXX, or +8801XXXXXXXXX",
+  },
+  /*
+   * The app is not on Play or the App Store, so nothing updates anybody
+   * and no store enforces a floor. These four are the floor, and they
+   * are here rather than in the source because raising it is a decision
+   * made on the Tuesday a bug is found.
+   */
+  {
+    key: "app.latestVersion",
+    label: "Latest app version",
+    hint: "what the download page offers, and what an older phone is told to update to. Must match the version in the build.",
+    placeholder: "e.g. 0.7.0",
+  },
+  {
+    key: "app.minimumVersion",
+    label: "Oldest app allowed",
+    hint: "anything below this is refused on every request and shown a download screen it cannot get past. Raise it only once the new build is actually downloadable — every phone below it stops working the moment you save.",
+    placeholder: "e.g. 0.6.0",
+  },
+  {
+    key: "app.apkUrl",
+    label: "The APK file",
+    hint: "what the download page's button links to. Paste the address of the build itself — until there is one, the page says the download is unavailable rather than offering a button that goes nowhere.",
+    placeholder: "e.g. https://expo.dev/artifacts/eas/....apk",
+  },
+  {
+    key: "app.downloadUrl",
+    label: "Where a blocked phone is sent",
+    hint: "left empty, the console's own /app page — which is almost always right, because installing a file Android did not get from Play needs that page's instructions. This is a page for a person, not the file.",
+    placeholder: "leave empty for /app",
+  },
+  {
+    key: "app.updateNotes",
+    label: "What is new",
+    hint: "one or two lines, shown on the download page and on the update screen. Empty is fine; a stale one is not.",
+    placeholder: "e.g. Faster day sheet, and the invoice now prints in Bangla.",
+  },
+];
+
+/** The front page's words the platform owner may change without a deploy. */
+export const CMS_FIELDS: { key: string; label: string; hint?: string }[] = [
+  { key: "hero.title", label: "Hero title", hint: "big headline on the homepage" },
+  { key: "hero.subtitle", label: "Hero subtitle", hint: "one line under the title" },
+  { key: "hero.cta", label: "Hero button text" },
+  { key: "hero.badge", label: "Hero badge", hint: "small pill above the title" },
+  { key: "stats.1.value", label: "Figure 1", hint: "the four figures under the hero — keep them to claims you can show are true" },
+  { key: "stats.1.label", label: "Figure 1 caption" },
+  { key: "stats.2.value", label: "Figure 2" },
+  { key: "stats.2.label", label: "Figure 2 caption" },
+  { key: "stats.3.value", label: "Figure 3" },
+  { key: "stats.3.label", label: "Figure 3 caption" },
+  { key: "stats.4.value", label: "Figure 4" },
+  { key: "stats.4.label", label: "Figure 4 caption" },
+  { key: "cta.title", label: "Bottom CTA title" },
+  { key: "cta.body", label: "Bottom CTA text" },
+  { key: "cta.button", label: "Bottom CTA button" },
+];

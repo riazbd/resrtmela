@@ -63,3 +63,20 @@ export async function uploadPicture<T = unknown>(path: string, picture: { uri: s
   }
   return payload as T;
 }
+
+/**
+ * A picture chosen and read as a data URL — the platform's icon and logo are
+ * stored that way, as the console stores them.
+ */
+export async function pickPictureAsDataUrl(): Promise<string | null> {
+  let p: Picker;
+  try {
+    p = picker();
+  } catch (e) {
+    throw e instanceof PickerMissing ? e : new PickerMissing();
+  }
+  const chosen = await p.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, base64: true });
+  const a = chosen.canceled ? null : chosen.assets[0];
+  if (!a?.base64) return null;
+  return `data:${a.mimeType ?? "image/png"};base64,${a.base64}`;
+}
