@@ -44,4 +44,5 @@ does, has been seen working in the browser lens, and has a test.
 ## Look — every screen, both clients
 
 - [ ] Every screen has a picture of its own figures (chart, meter, ring, timeline) or art, not only rows of text
-- [ ] Bookings list, calendar, booking detail, new booking, rooms, guests, housekeeping, day sheet, restaurant, activities, settings, agency screens, platform
+- [x] Bookings list, rooms, guests, housekeeping (floor of tiles), platform (overview, plans) — `glance.ts` in @rh/shared
+- [ ] Calendar, booking detail, new booking, day sheet, restaurant, activities, settings, agency screens
