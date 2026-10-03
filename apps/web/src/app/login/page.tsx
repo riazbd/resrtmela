@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, Suspense, useState } from "react";
+import { SceneBackdrop } from "@/components/art";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -70,6 +71,7 @@ function LoginInner() {
       <div className="relative hidden flex-1 flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-700 via-brand-800 to-brand-900 p-10 text-white lg:flex">
         <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/5 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-emerald-300/10 blur-2xl" />
+        <SceneBackdrop height="h-72" />
         <Link href="/" className="relative">
           <Logo size={40} tone="onDark" sub="Resort management platform" />
         </Link>

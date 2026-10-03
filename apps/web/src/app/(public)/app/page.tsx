@@ -16,6 +16,7 @@
  * does not think is current.
  */
 import type { Metadata } from "next";
+import { SceneBackdrop } from "@/components/art";
 import { API_URL } from "@/lib/api-url";
 import { fetchBrand } from "@/lib/brand";
 import type { AppRelease } from "@rh/shared";
@@ -58,20 +59,23 @@ export default async function DownloadPage() {
   const [brand, release] = await Promise.all([fetchBrand(), currentRelease()]);
 
   return (
-    <div className="mx-auto max-w-2xl px-5 py-12 sm:py-16">
-      <a href="/" className="text-sm font-semibold text-brand-700 hover:underline">
-        ← {brand.name}
-      </a>
+    <div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-600 text-white">
+        <SceneBackdrop height="h-40 sm:h-48" />
+        <div className="relative mx-auto max-w-2xl px-5 pb-36 pt-10 sm:pb-40">
+          <a href="/" className="text-sm font-semibold text-emerald-50 hover:underline">
+            ← {brand.name}
+          </a>
+          <h1 className="mt-6 text-3xl font-black tracking-tight drop-shadow-sm sm:text-5xl">Resort Mela for Android</h1>
+          <p className="mt-3 max-w-lg text-base text-emerald-50/90">
+            The front desk in your pocket — today&rsquo;s arrivals, taking a booking, taking money, and
+            what every room is doing.
+          </p>
+        </div>
+      </section>
+    <div className="mx-auto -mt-16 max-w-2xl px-5 pb-12 sm:pb-16">
 
-      <h1 className="mt-6 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-        Resort Mela for Android
-      </h1>
-      <p className="mt-3 text-base text-slate-600">
-        The front desk in your pocket — today&rsquo;s arrivals, taking a booking, taking money, and
-        what every room is doing.
-      </p>
-
-      <div className="mt-8 rounded-2xl bg-slate-50 p-5 ring-1 ring-slate-200">
+      <div className="relative rounded-3xl bg-white p-6 shadow-xl shadow-slate-900/10 ring-1 ring-slate-100">
         {release?.apkUrl ? (
           /*
            * `apkUrl`, not `downloadUrl`. The two are different
@@ -136,6 +140,7 @@ export default async function DownloadPage() {
         </a>{" "}
         and add it to your home screen.
       </p>
+    </div>
     </div>
   );
 }

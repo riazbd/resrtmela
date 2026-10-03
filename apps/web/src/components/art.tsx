@@ -101,3 +101,18 @@ export function EmptyArt({ className = "" }: { className?: string }) {
     </div>
   );
 }
+
+/**
+ * The sun and the hills behind a green page — the sign-in, sign-up and
+ * download pages wear the front page's scene, so the door and the house match.
+ * Drop it as the first child of a `relative overflow-hidden` block.
+ */
+export function SceneBackdrop({ height = "h-56" }: { height?: string }) {
+  return (
+    <>
+      <div aria-hidden className="pointer-events-none absolute right-[10%] top-12 h-36 w-36 rounded-full bg-amber-300/30 blur-2xl" />
+      <div aria-hidden className="pointer-events-none absolute right-[13%] top-20 h-14 w-14 rounded-full bg-amber-300/90" />
+      <ResortScene sky={false} className={`pointer-events-none absolute inset-x-0 bottom-0 w-full opacity-60 [mask-image:linear-gradient(to_bottom,transparent,black_45%)] ${height}`} />
+    </>
+  );
+}

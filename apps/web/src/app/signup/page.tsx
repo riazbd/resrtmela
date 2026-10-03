@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { SceneBackdrop } from "@/components/art";
 import { RegisterAs } from "@/components/register-as";
 import { useRouter } from "next/navigation";
 import { client, API_URL } from "@/lib/api";
@@ -193,8 +194,9 @@ export default function SignupPage() {
       : "";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-brand-900 via-brand-700 to-emerald-600 px-4 py-10">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-brand-900 via-brand-700 to-emerald-600 px-4 py-10">
+      <SceneBackdrop height="h-44 sm:h-52" />
+      <div className="relative w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl shadow-emerald-950/40">
         <div className="mb-6 text-center">
           <LogoMark size={44} className="mx-auto mb-2" />
           <h1 className="text-xl font-bold text-slate-900">Create your workspace</h1>

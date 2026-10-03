@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatMoney, periodNoun, planFeatureLabel, scheduleSentence } from "@rh/shared";
@@ -8,6 +8,8 @@ import { Logo } from "@/components/logo";
 import type { PublicPlan } from "./plan";
 import type { HomeData } from "./home-data";
 import { signupHref } from "./signup-href";
+import { HeroDevices, HeroGround, IconBubble, MockCalendar, MockFrontDesk, MockRestaurant, type Tone } from "./home-art";
+import { ResortScene } from "@/components/art";
 import {
   CalendarDays,
   BedDouble,
@@ -67,99 +69,55 @@ function trialFor(days: number): string {
   return days ? `${days} days` : "Free";
 }
 
-function MockDaySheet() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-        <div className="text-xs font-bold text-slate-700">Day Sheet · Today</div>
-        <div className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">LIVE</div>
-      </div>
-      <div className="grid grid-cols-2 gap-1.5 p-3">
-        {[
-          { r: "Camellia", g: "Raju · arrives 12 PM", s: "in" },
-          { r: "Lunaria", g: "shakil · staying", s: "stay" },
-          { r: "Snow Drop", g: "available", s: "free" },
-          { r: "Cherry Blossom", g: "local · staying", s: "stay" },
-          { r: "Margarita", g: "maliha · checkout", s: "out" },
-          { r: "Lavender", g: "available", s: "free" },
-        ].map((c) => (
-          <div
-            key={c.r}
-            className={`rounded-lg border px-2.5 py-2 text-[11px] ${
-              c.s === "free"
-                ? "border-dashed border-slate-200 text-slate-400"
-                : c.s === "in"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : c.s === "out"
-                    ? "border-amber-200 bg-amber-50 text-amber-800"
-                    : "border-sky-200 bg-sky-50 text-sky-800"
-            }`}
-          >
-            <div className="font-bold">{c.r}</div>
-            <div className="truncate opacity-75">{c.g}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-2 border-t border-slate-100 p-3">
-        {[
-          { l: "Arrivals", v: "6", c: "text-emerald-600" },
-          { l: "In-house", v: "14", c: "text-sky-600" },
-          { l: "Dues", v: "৳48,200", c: "text-amber-600" },
-        ].map((s) => (
-          <div key={s.l} className="rounded-lg bg-slate-50 p-2.5 text-center">
-            <div className={`text-base font-black ${s.c}`}>{s.v}</div>
-            <div className="text-[10px] text-slate-400">{s.l}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+/** How each of the four figures under the hero is marked. */
+const STAT_LOOKS: { icon: ComponentType<{ className?: string }>; tone: Tone }[] = [
+  { icon: ShieldCheck, tone: "emerald" },
+  { icon: TrendingUp, tone: "sky" },
+  { icon: MessageSquare, tone: "violet" },
+  { icon: Star, tone: "amber" },
+];
 
-function MockBooking() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">New booking · BK-00095</div>
-      <div className="space-y-2 p-4 text-[11px]">
-        <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-          <span className="text-slate-400">Guest</span><span className="font-semibold text-slate-700">Kazi Abir</span>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-          <span className="text-slate-400">Room</span><span className="font-semibold text-slate-700">Lunaria · 2 nights</span>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
-          <span className="text-emerald-600">Advance</span><span className="font-bold text-emerald-700">৳1,000 paid</span>
-        </div>
-        <div className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-          <span className="text-slate-400">Source</span><span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700">AGENT · Rikan</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+/** The three things the product is bought for, each with its picture. */
+const FEATURES = [
+  {
+    tag: "Booking calendar",
+    icon: CalendarDays,
+    tone: "emerald" as Tone,
+    title: "Your channel manager to manage reservations",
+    body: "See every room, every day, on one screen. With one click check availability on any date and make a booking for the calling customer — no overbooking, no register, no spreadsheet.",
+    points: ["Click any open date to book", "Walk-in, phone & agent bookings", "Check-in / check-out & day sheet", "Live availability per room"],
+    mock: <MockCalendar />,
+  },
+  {
+    tag: "Front desk & PMS",
+    icon: BedDouble,
+    tone: "sky" as Tone,
+    title: "Run the whole resort from one screen",
+    body: "Rooms, rates, extra-person charges, seasonal price plans, discounts and guest history. Everything the front desk touches — without the notebook.",
+    points: ["Room types & seasonal rates", "Extra-person pricing", "Resort-wide or per-room discounts", "Guest database & stay history"],
+    mock: <MockFrontDesk />,
+  },
+  {
+    tag: "Restaurant POS",
+    icon: UtensilsCrossed,
+    tone: "amber" as Tone,
+    title: "Restaurant billing for walk-ins and room tabs",
+    body: "Counter sales and in-house room charges in one POS. Partial payments, daily F&B revenue and separate resort-vs-restaurant reports — all automatic.",
+    points: ["Walk-in cash counter", "Charge to room tab", "Partial & full payments", "Separate F&B revenue reports"],
+    mock: <MockRestaurant />,
+  },
+];
 
-function MockPos() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-      <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700">Restaurant · Table order</div>
-      <div className="space-y-1.5 p-4 text-[11px]">
-        {[
-          { i: "Lunch buffet", q: 2, p: "৳1,200" },
-          { i: "Grilled Rui", q: 1, p: "৳450" },
-          { i: "Cold coffee", q: 3, p: "৳360" },
-        ].map((it) => (
-          <div key={it.i} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-            <span className="text-slate-600">{it.i} × {it.q}</span>
-            <span className="font-semibold text-slate-700">{it.p}</span>
-          </div>
-        ))}
-        <div className="flex items-center justify-between rounded-lg bg-brand-600 px-3 py-2.5 font-bold text-white">
-          <span>Bill total</span><span>৳2,010 · cash</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+const SOLUTIONS: { label: string; icon: ComponentType<{ className?: string }>; tone: Tone }[] = [
+  { label: "Resorts", icon: BedDouble, tone: "emerald" },
+  { label: "Eco resorts & cottages", icon: Star, tone: "teal" },
+  { label: "Guest houses", icon: Users, tone: "sky" },
+  { label: "Tour agencies", icon: Wallet, tone: "violet" },
+  { label: "Multi-property owners", icon: BarChart3, tone: "amber" },
+];
+
+const PLAN_ICONS = [Receipt, TrendingUp, BarChart3, Star];
+const PLAN_TONES: Tone[] = ["sky", "emerald", "violet", "amber"];
 
 /** One row of the platform's price list, as `/cms/plans` sends it. */
 /**
@@ -295,7 +253,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
   return (
     <div className="bg-white text-slate-800">
       {/* ── nav ── */}
-      <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-50 bg-white/90 shadow-sm shadow-slate-900/5 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/">
             <Logo size={38} sub="Resort management platform" />
@@ -321,7 +279,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
             </Link>
             <Link
               href="/signup"
-              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700"
+              className="rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-700 px-4 py-2 text-sm font-bold text-white shadow-md shadow-emerald-600/30 transition hover:-translate-y-0.5"
             >
               Register
             </Link>
@@ -344,142 +302,114 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
       </header>
 
       {/* ── hero ── */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-brand-50 via-white to-white">
-        <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-brand-100/60 blur-3xl" />
-        <div className="pointer-events-none absolute -right-24 top-40 h-72 w-72 rounded-full bg-teal-100/50 blur-3xl" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pt-20">
+      <HeroGround>
+        <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-44 pt-14 lg:grid-cols-[1fr_1.05fr] lg:pb-52 lg:pt-20">
           <div>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-sm">
-              <Star className="h-3.5 w-3.5 fill-brand-600 text-brand-600" />
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold text-emerald-50 ring-1 ring-inset ring-white/25 backdrop-blur">
+              <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />
               {cms["hero.badge"] || "The all-in-one software for resorts"}
             </div>
-            <h1 className="text-4xl font-black leading-[1.08] tracking-tight text-slate-900 sm:text-5xl">
-              {/* The same words as the CMS default. The page is a client
-                  component, so this fallback is what a crawler and a link
-                  preview see, and what shows for the moment before the fetch
-                  lands — a different sentence there means Google indexes copy
-                  nobody chose, and visitors watch the headline change under
-                  them. */}
+            <h1 className="text-4xl font-black leading-[1.05] tracking-tight drop-shadow-sm sm:text-6xl">
+              {/* The same words as the CMS default, so a crawler and a link
+                  preview read the sentence somebody chose. */}
               {cms["hero.title"] || "Every booking in one place. No room ever sold twice."}
             </h1>
-            <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-emerald-50/90">
               {cms["hero.subtitle"] ||
                 "Book rooms for walk-in and phone guests in one click, run the restaurant, pay agents, and see every taka — from your phone or laptop. In Bangla and English."}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
-                className="group inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-700"
+                className="group inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-300 to-amber-400 px-7 py-4 text-base font-black text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:-translate-y-0.5 hover:from-amber-200 hover:to-amber-300"
               >
                 {cms["hero.cta"] || "Create free account"}
                 <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </Link>
               <a
                 href="#features"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-7 py-4 text-base font-semibold text-white ring-1 ring-inset ring-white/30 backdrop-blur transition hover:bg-white/20"
               >
                 See how it works
               </a>
             </div>
-            <p className="mt-3 text-xs font-medium text-slate-500">
+            <p className="mt-3 text-xs font-medium text-emerald-50/80">
               {trialDays ? `${trialDays} days free · ` : ""}no card required · cancel anytime
             </p>
-            <div className="mt-10 flex items-center gap-8">
+            <div className="mt-10 flex items-center gap-6">
+              <div className="flex -space-x-2.5">
+                {[
+                  ["R", "from-amber-300 to-orange-500"],
+                  ["S", "from-sky-300 to-blue-600"],
+                  ["T", "from-rose-300 to-pink-600"],
+                  ["M", "from-violet-300 to-purple-600"],
+                ].map(([l, g]) => (
+                  <span key={l} className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-sm font-black text-white ring-2 ring-emerald-700 ${g}`}>
+                    {l}
+                  </span>
+                ))}
+              </div>
               <div>
-                <div className="flex items-center gap-1 text-amber-400">
+                <div className="flex items-center gap-0.5 text-amber-300">
                   {[...Array(5)].map((_, i) => (
                     <Star key={i} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
-                <div className="mt-1 text-xs text-slate-500">Loved by resort teams</div>
-              </div>
-              <div className="h-10 w-px bg-slate-200" />
-              <div>
-                <div className="text-2xl font-black text-slate-900">{trialFor(trialDays)}</div>
-                <div className="text-xs text-slate-500">free trial on every plan</div>
+                <div className="mt-0.5 text-xs text-emerald-50/80">Loved by resort teams · {trialFor(trialDays)} free on every plan</div>
               </div>
             </div>
           </div>
-          <div className="relative">
-            {/* the plate bleeds 16px past the card, which is the look — but on
-                a 390px screen that 16px is past the screen too, and the whole
-                homepage drags sideways. It bleeds where there is room for it. */}
-            <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-brand-100/70 to-teal-50 sm:-inset-4" />
-            <div className="relative">
-              <MockDaySheet />
-              <div className="absolute -bottom-6 -left-4 hidden rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg sm:block">
-                <div className="flex items-center gap-2.5">
-                  <Bell className="h-4 w-4 text-brand-600" />
-                  <div>
-                    <div className="text-[11px] font-bold text-slate-800">New booking · BK-00095</div>
-                    <div className="text-[10px] text-slate-400">Agent Rikan · Lunaria · 2 nights</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <HeroDevices />
         </div>
-      </section>
+      </HeroGround>
 
       {/* ── trust bar ── */}
-      <section className="border-y border-slate-100 bg-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-4 py-10 sm:grid-cols-4">
-          {STAT_KEYS.map((key) => {
+      <section className="relative z-10 -mt-14 px-4">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+          {STAT_KEYS.map((key, i) => {
             const fallback = STAT_FALLBACKS[key]!;
             // the trial is the plan's to state; the rest are the owner's words
             const value =
               cms[`${key}.value`] || (key === "stats.4" ? trialFor(trialDays) : fallback.n);
             const label = cms[`${key}.label`] || fallback.l;
+            const look = STAT_LOOKS[i]!;
             return (
-              <div key={key} className="text-center">
-                <div className="text-3xl font-black text-slate-900">{value}</div>
-                <div className="mt-0.5 text-xs font-medium uppercase tracking-wider text-slate-400">{label}</div>
+              <div key={key} className="flex items-center gap-3 rounded-3xl bg-white p-4 shadow-xl shadow-slate-900/10 ring-1 ring-slate-100 sm:p-5">
+                <IconBubble icon={look.icon} tone={look.tone} />
+                <div className="min-w-0">
+                  <div className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{value}</div>
+                  <div className="text-[11px] font-semibold leading-tight text-slate-500">{label}</div>
+                </div>
               </div>
             );
           })}
         </div>
       </section>
 
-      {/* ── feature blocks (alternating, bed-booking style) ── */}
-      <section id="features" className="bg-white py-20">
-        <div className="mx-auto max-w-6xl space-y-20 px-4">
-          {[
-            {
-              tag: "BOOKING CALENDAR",
-              title: "Your channel manager to manage reservations",
-              body: "See every room, every day, on one screen. With one click check availability on any date and make a booking for the calling customer — no overbooking, no register, no spreadsheet.",
-              points: ["Click any open date to book", "Walk-in, phone & agent bookings", "Check-in / check-out & day sheet", "Live availability per room"],
-              mock: <MockDaySheet />,
-            },
-            {
-              tag: "FRONT DESK & PMS",
-              title: "Run the whole resort from one screen",
-              body: "Rooms, rates, extra-person charges, seasonal price plans, discounts and guest history. Everything the front desk touches — without the notebook.",
-              points: ["Room types & seasonal rates", "Extra-person pricing", "Resort-wide or per-room discounts", "Guest database & stay history"],
-              mock: <MockBooking />,
-            },
-            {
-              tag: "RESTAURANT POS",
-              title: "Restaurant billing for walk-ins and room tabs",
-              body: "Counter sales and in-house room charges in one POS. Partial payments, daily F&B revenue and separate resort-vs-restaurant reports — all automatic.",
-              points: ["Walk-in cash counter", "Charge to room tab", "Partial & full payments", "Separate F&B revenue reports"],
-              mock: <MockPos />,
-            },
-          ].map((f, i) => (
-            <div key={f.tag} className={`grid items-center gap-10 lg:grid-cols-2 ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}>
+      {/* ── feature blocks ── */}
+      <section id="features" className="bg-white py-24">
+        <div className="mx-auto max-w-6xl space-y-28 px-4">
+          {FEATURES.map((f, i) => (
+            <div key={f.tag} className={`grid items-center gap-12 lg:grid-cols-2 ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}>
               <div>
-                <div className="text-xs font-black uppercase tracking-[0.18em] text-brand-600">{f.tag}</div>
-                <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{f.title}</h2>
-                <p className="mt-4 leading-relaxed text-slate-600">{f.body}</p>
-                <ul className="mt-6 grid gap-2.5 sm:grid-cols-2">
+                <div className="inline-flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 ring-1 ring-slate-100">
+                  <IconBubble icon={f.icon} tone={f.tone} size="sm" />
+                  <span className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-600">{f.tag}</span>
+                </div>
+                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{f.title}</h2>
+                <p className="mt-4 text-lg leading-relaxed text-slate-600">{f.body}</p>
+                <ul className="mt-6 grid gap-3 sm:grid-cols-2">
                   {f.points.map((p) => (
-                    <li key={p} className="flex items-start gap-2 text-sm text-slate-700">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" /> {p}
+                    <li key={p} className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                        <Check className="h-3 w-3 text-emerald-700" />
+                      </span>
+                      {p}
                     </li>
                   ))}
                 </ul>
-                <Link href="/signup" className="mt-6 inline-flex items-center gap-1.5 text-sm font-bold text-brand-700 hover:text-brand-800">
-                  MORE INFORMATION <ArrowRight className="h-4 w-4" />
+                <Link href="/signup" className="mt-7 inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                  Try it free <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
               <div className="relative">{f.mock}</div>
@@ -489,26 +419,27 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
       </section>
 
       {/* ── solutions ── */}
-      <section id="solutions" className="bg-brand-50/60 py-16">
-        <div className="mx-auto max-w-6xl px-4 text-center">
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Made for every kind of stay</h2>
+      <section id="solutions" className="relative overflow-hidden bg-gradient-to-b from-emerald-50 to-white py-24">
+        <div className="relative mx-auto max-w-6xl px-4 text-center">
+          <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Made for every kind of stay</h2>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {["Resorts", "Eco resorts & cottages", "Guest houses", "Tour agencies", "Multi-property owners"].map((s) => (
-              <span key={s} className="rounded-full border border-brand-200 bg-white px-5 py-2.5 text-sm font-semibold text-brand-800 shadow-sm">
-                {s}
+            {SOLUTIONS.map((s) => (
+              <span key={s.label} className="inline-flex items-center gap-2 rounded-full bg-white py-1.5 pl-1.5 pr-4 text-sm font-semibold text-slate-800 shadow-sm ring-1 ring-slate-100">
+                <IconBubble icon={s.icon} tone={s.tone} size="sm" />
+                {s.label}
               </span>
             ))}
           </div>
-          <div className="mt-10 grid gap-4 text-left sm:grid-cols-3">
+          <div className="mt-12 grid gap-5 text-left sm:grid-cols-3">
             {[
-              { icon: Users, t: "Agents with wallets", d: "Activate trusted agents, give them logins and wallets. They book for clients; you track commission and dues." },
-              { icon: ShieldCheck, t: "Roles & activity log", d: "Manager, front desk, housekeeping — least-privilege access with a full who-did-what log." },
-              { icon: BarChart3, t: "Money you can trust", d: "Dues, payments, subscription billing and P&L — resort and restaurant separated." },
+              { icon: Users, tone: "violet" as Tone, t: "Agents with wallets", d: "Activate trusted agents, give them logins and wallets. They book for clients; you track commission and dues." },
+              { icon: ShieldCheck, tone: "sky" as Tone, t: "Roles & activity log", d: "Manager, front desk, housekeeping — least-privilege access with a full who-did-what log." },
+              { icon: BarChart3, tone: "emerald" as Tone, t: "Money you can trust", d: "Dues, payments, subscription billing and P&L — resort and restaurant separated." },
             ].map((c) => (
-              <div key={c.t} className="rounded-2xl border border-brand-100 bg-white p-6 shadow-sm">
-                <c.icon className="h-6 w-6 text-brand-600" />
-                <div className="mt-3 font-bold text-slate-900">{c.t}</div>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{c.d}</p>
+              <div key={c.t} className="group rounded-3xl bg-white p-7 shadow-lg shadow-slate-900/5 ring-1 ring-slate-100 transition hover:-translate-y-1 hover:shadow-xl">
+                <IconBubble icon={c.icon} tone={c.tone} size="lg" />
+                <div className="mt-5 text-lg font-bold text-slate-900">{c.t}</div>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{c.d}</p>
               </div>
             ))}
           </div>
@@ -516,25 +447,27 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
       </section>
 
       {/* ── extra capabilities strip ── */}
-      <section className="bg-white py-16">
+      <section className="bg-white py-20">
         <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Bell, t: "Notification system", d: "In-app alerts for bookings, dues and agent deadlines." },
-            { icon: FileText, t: "Invoice PDF + email", d: "Auto invoice on checkout, printable and emailed to guests." },
-            { icon: Smartphone, t: "Works on your phone", d: "Full console on mobile — manage from anywhere." },
-            { icon: MessageSquare, t: "Bangla & English", d: "Switch the whole console with one tap." },
+            { icon: Bell, tone: "rose" as Tone, t: "Notification system", d: "In-app alerts for bookings, dues and agent deadlines." },
+            { icon: FileText, tone: "amber" as Tone, t: "Invoice PDF + email", d: "Auto invoice on checkout, printable and emailed to guests." },
+            { icon: Smartphone, tone: "teal" as Tone, t: "Works on your phone", d: "An app of its own, and the full console on mobile — manage from anywhere." },
+            { icon: MessageSquare, tone: "violet" as Tone, t: "Bangla & English", d: "Switch the whole console with one tap." },
           ].map((c) => (
-            <div key={c.t} className="rounded-2xl border border-slate-200 p-5">
-              <c.icon className="h-5 w-5 text-brand-600" />
-              <div className="mt-2.5 text-sm font-bold text-slate-900">{c.t}</div>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.d}</p>
+            <div key={c.t} className="flex items-start gap-4 rounded-3xl bg-slate-50 p-5">
+              <IconBubble icon={c.icon} tone={c.tone} />
+              <div>
+                <div className="text-sm font-bold text-slate-900">{c.t}</div>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">{c.d}</p>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── pricing ── */}
-      <section id="pricing" className="bg-slate-50 py-20">
+      <section id="pricing" className="relative overflow-hidden bg-gradient-to-b from-slate-50 to-emerald-50/60 py-24">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">Simple plans</h2>
@@ -617,14 +550,15 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
           )}
 
           <div className={`mt-12 grid gap-6 ${pricingColumns((plans ?? []).length)}`}>
-            {(plans ?? []).map((p) => (
-              <div key={p.name} className={`relative flex flex-col rounded-3xl border bg-white p-8 shadow-sm ${p.highlight ? "border-brand-500 shadow-lg shadow-brand-600/10" : "border-slate-200"}`}>
+            {(plans ?? []).map((p, i) => (
+              <div key={p.name} className={`relative flex flex-col rounded-3xl bg-white p-8 transition hover:-translate-y-1 ${p.highlight ? "shadow-2xl shadow-emerald-600/20 ring-2 ring-emerald-500" : "shadow-lg shadow-slate-900/5 ring-1 ring-slate-200"}`}>
                 {p.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-amber-300 to-amber-400 px-4 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-950 shadow-md">
                     Most popular
                   </div>
                 )}
-                <div className="text-lg font-bold text-slate-900">{p.label}</div>
+                <IconBubble icon={PLAN_ICONS[i % PLAN_ICONS.length]!} tone={PLAN_TONES[i % PLAN_TONES.length]!} />
+                <div className="mt-4 text-lg font-bold text-slate-900">{p.label}</div>
                 <div className="mt-1 text-xs text-slate-500">{p.blurb ?? ""}</div>
                 {/**
                  * Two numbers, never one.
@@ -706,7 +640,10 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                 <ul className="mt-6 mb-8 space-y-2.5">
                   {planTicks(p, audience).map((f) => (
                     <li key={f} className="flex items-center gap-2.5 text-sm text-slate-700">
-                      <Check className="h-4 w-4 shrink-0 text-brand-600" /> {f}
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                        <Check className="h-3 w-3 text-emerald-700" />
+                      </span>
+                      {f}
                     </li>
                   ))}
                 </ul>
@@ -723,7 +660,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                  */}
                 <Link
                   href={signupHref({ audience, plan: p.name, scheduleId: shelfOf(p)?.id ?? null })}
-                  className={`mt-auto block rounded-xl py-3 text-center text-sm font-bold transition ${p.highlight ? "bg-brand-600 text-white hover:bg-brand-700" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+                  className={`mt-auto block rounded-2xl py-3.5 text-center text-sm font-bold transition ${p.highlight ? "bg-gradient-to-r from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-600/30 hover:-translate-y-0.5" : "bg-slate-900 text-white hover:bg-slate-800"}`}
                 >
                   Start free trial
                 </Link>
@@ -734,7 +671,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
       </section>
 
       {/* ── testimonials ── */}
-      <section className="border-y border-slate-100 bg-slate-50 py-20">
+      <section className="bg-white py-24">
         <div className="mx-auto max-w-6xl px-4">
           <div className="text-center">
             <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">More than 10,000 bookings handled</h2>
@@ -742,19 +679,25 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
           </div>
           <div className="mt-12 grid gap-5 md:grid-cols-3">
             {[
-              { quote: "The day sheet used to take my manager an hour every morning. Now it opens with everything already there — bookings, dues, restaurant, expenses.", name: "Resort Manager", meta: "Partner resort · Sylhet" },
-              { quote: "I manage 3 resorts. Before this I had three Excel files and a notebook. Now one login, three resorts, zero confusion.", name: "Resort Owner", meta: "Multi-property owner" },
-              { quote: "My agents used to call for every booking. Now they book from their own accounts and I just approve and track commission.", name: "Owner", meta: "Tour & travel partners" },
+              { quote: "The day sheet used to take my manager an hour every morning. Now it opens with everything already there — bookings, dues, restaurant, expenses.", name: "Resort Manager", meta: "Partner resort · Sylhet", tone: "from-emerald-400 to-teal-600" },
+              { quote: "I manage 3 resorts. Before this I had three Excel files and a notebook. Now one login, three resorts, zero confusion.", name: "Resort Owner", meta: "Multi-property owner", tone: "from-sky-400 to-blue-600" },
+              { quote: "My agents used to call for every booking. Now they book from their own accounts and I just approve and track commission.", name: "Owner", meta: "Tour & travel partners", tone: "from-amber-300 to-orange-500" },
             ].map((t) => (
-              <div key={t.name} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+              <div key={t.name} className="relative flex flex-col rounded-3xl bg-slate-50 p-7">
+                <span aria-hidden className="absolute right-6 top-3 font-serif text-7xl leading-none text-emerald-200">&ldquo;</span>
                 <div className="flex gap-0.5 text-amber-400">
                   {[...Array(5)].map((_, i) => (
                     <Star key={i} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
-                <p className="mt-4 text-sm leading-relaxed text-slate-600">“{t.quote}”</p>
-                <div className="mt-5 text-sm font-bold text-slate-900">{t.name}</div>
-                <div className="text-xs text-slate-400">{t.meta}</div>
+                <p className="relative mt-4 flex-1 text-[15px] leading-relaxed text-slate-700">{t.quote}</p>
+                <div className="mt-6 flex items-center gap-3">
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br text-base font-black text-white ${t.tone}`}>{t.name.charAt(0)}</span>
+                  <div>
+                    <div className="text-sm font-bold text-slate-900">{t.name}</div>
+                    <div className="text-xs text-slate-400">{t.meta}</div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -762,20 +705,25 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
       </section>
 
       {/* ── final CTA ── */}
-      <section className="bg-gradient-to-br from-brand-700 to-brand-900 py-20 text-white">
-        <div className="mx-auto max-w-3xl px-4 text-center">
-          <h2 className="text-4xl font-black tracking-tight">{cms["cta.title"] || `Start today — ${trialDays ? `${trialDays} days free` : "free to try"}`}</h2>
-          <p className="mt-4 text-lg text-brand-50/90">
-            {cms["cta.body"] ||
-              "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen."}
-          </p>
-          <Link
-            href="/signup"
-            className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-8 py-4 text-base font-bold text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:bg-emerald-300"
-          >
-            {cms["cta.button"] || "Create free account"}
-            <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-          </Link>
+      <section className="px-4 pb-20">
+        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-600 px-6 pb-40 pt-16 text-center text-white sm:pb-48">
+          <div aria-hidden className="pointer-events-none absolute right-[14%] top-10 h-28 w-28 rounded-full bg-amber-300/40 blur-2xl" />
+          <div aria-hidden className="pointer-events-none absolute right-[16%] top-16 h-12 w-12 rounded-full bg-amber-300/90" />
+          <ResortScene sky={false} className="pointer-events-none absolute inset-x-0 bottom-0 h-48 w-full opacity-70 sm:h-56 [mask-image:linear-gradient(to_bottom,transparent,black_45%)]" />
+          <div className="relative mx-auto max-w-2xl">
+            <h2 className="text-4xl font-black tracking-tight sm:text-5xl">{cms["cta.title"] || `Start today — ${trialDays ? `${trialDays} days free` : "free to try"}`}</h2>
+            <p className="mt-4 text-lg text-emerald-50/90">
+              {cms["cta.body"] ||
+                "Every day you wait is another day of register-keeping. Bring your rooms, your team and your agents — and run the whole resort from one screen."}
+            </p>
+            <Link
+              href="/signup"
+              className="group mt-9 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-300 to-amber-400 px-8 py-4 text-base font-black text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:-translate-y-0.5"
+            >
+              {cms["cta.button"] || "Create free account"}
+              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
+            </Link>
+          </div>
         </div>
       </section>
 
