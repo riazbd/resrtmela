@@ -19,6 +19,7 @@ export * from "./imported-receipt";
 export * from "./plan-schedule";
 export * from "./payroll";
 export * from "./payroll-rules";
+export * from "./pay-run";
 export * from "./chart";
 export * from "./glance";
 export * from "./payslip";

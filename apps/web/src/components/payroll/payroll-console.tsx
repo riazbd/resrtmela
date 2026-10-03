@@ -17,10 +17,15 @@ import { MonthTab } from "./month-tab";
 import { PeopleTab } from "./people-tab";
 import { YearTab } from "./year-tab";
 
-const TABS = ["Month", "Year & reports", "People"] as const;
+const TABS = ["Run payroll", "Team", "Reports"] as const;
 
 export function PayrollConsole({ a, subtitle }: { a: PayrollAdapter; subtitle: string }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Month");
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Run payroll");
+  const [adding, setAdding] = useState(false);
+  const toTeam = (add: boolean) => {
+    setAdding(add);
+    setTab("Team");
+  };
   const [month, setMonth] = useState(() => a.today.slice(0, 7));
   const [year, setYear] = useState(() => Number(a.today.slice(0, 4)));
 
@@ -32,19 +37,19 @@ export function PayrollConsole({ a, subtitle }: { a: PayrollAdapter; subtitle: s
       </div>
       <PayrollExplained owner={a.owner} />
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
-      {tab === "Month" && <MonthTab a={a} month={month} setMonth={setMonth} />}
-      {tab === "Year & reports" && (
+      {tab === "Run payroll" && <MonthTab a={a} month={month} setMonth={setMonth} toTeam={toTeam} />}
+      {tab === "Reports" && (
         <YearTab
           a={a}
           year={year}
           setYear={setYear}
           openMonth={(m) => {
             setMonth(m);
-            setTab("Month");
+            setTab("Run payroll");
           }}
         />
       )}
-      {tab === "People" && <PeopleTab a={a} />}
+      {tab === "Team" && <PeopleTab a={a} startAdding={adding} />}
     </div>
   );
 }

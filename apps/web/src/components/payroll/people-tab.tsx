@@ -36,10 +36,10 @@ type Draft = {
 
 const blank: Draft = { name: "", phone: "", designation: "", salary: "", joinDate: "", leftDate: "", userId: "" };
 
-export function PeopleTab({ a }: { a: PayrollAdapter }) {
+export function PeopleTab({ a, startAdding = false }: { a: PayrollAdapter; startAdding?: boolean }) {
   const { push } = useToast();
   const q = useApi(a.peopleKey, () => a.people());
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(() => (startAdding ? { ...blank, joinDate: a.today } : null));
   const [leaving, setLeaving] = useState<PayrollPerson | null>(null);
   const data: PayrollPeople | undefined = q.data;
 

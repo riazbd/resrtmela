@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useApi } from "@rh/app-core";
-import { addMonths, formatMoney, monthName, type PayrollPeople, type PayrollSheet, type PayrollYear } from "@rh/shared";
+import { addMonths, formatMoney, monthName, payRunOf, type PayrollPeople, type PayrollSheet, type PayrollYear } from "@rh/shared";
 import { Button } from "../design/button";
 import { Lenses } from "../design/lenses";
 import { useMoneyFormat } from "../design/money";
@@ -19,11 +19,13 @@ import { Loading, Problem, Stale } from "../design/states";
 import { Text } from "../design/text";
 import { color, radius, space } from "../design/tokens";
 import type { PayrollAdapter } from "./payroll-adapter";
-import { PayrollFigures, PayrollMonth, type PayMethod } from "./payroll-month";
+import { PayrollMonth, type PayMethod } from "./payroll-month";
+import { NobodyThisMonth, PayRunCard, PayrollSetup } from "./pay-run";
 import { PayrollPeopleView } from "./payroll-people";
 import { PayrollYearView } from "./payroll-year";
 
-const VIEWS = ["Month", "Year", "People"] as const;
+/** Named for what a payroll desk does: run the month, keep the team, read the reports. */
+const VIEWS = ["Run payroll", "Team", "Reports"] as const;
 type View_ = (typeof VIEWS)[number];
 
 function Explained({ owner }: { owner: "resort" | "agency" }) {
@@ -83,44 +85,56 @@ export function PayrollScreen({
 }) {
   const money = useMoneyFormat();
   const whole = (n: number) => formatMoney(n, { ...money, decimals: 0 });
-  const [view, setView] = useState<View_>("Month");
+  const [view, setView] = useState<View_>("Run payroll");
+  const [adding, setAdding] = useState(false);
+  const toTeam = (add: boolean) => {
+    setAdding(add);
+    setView("Team");
+  };
   const [month, setMonth] = useState(a.currentMonth);
   const [year, setYear] = useState(Number(a.currentMonth.slice(0, 4)));
 
   const sheet = useApi<PayrollSheet>(a.sheetKey(month), () => a.sheet(month), {
-    enabled: view === "Month",
+    enabled: view === "Run payroll",
     placeholderData: (prev: PayrollSheet | undefined) => prev,
   });
   const yearQ = useApi<PayrollYear>(a.yearKey(year), () => a.year(year), {
-    enabled: view === "Year",
+    enabled: view === "Reports",
     placeholderData: (prev: PayrollYear | undefined) => prev,
   });
-  const people = useApi<PayrollPeople>(a.peopleKey, () => a.people(), { enabled: view === "People" });
+  const people = useApi<PayrollPeople>(a.peopleKey, () => a.people(), { enabled: view !== "Reports" });
 
-  const q = view === "Month" ? sheet : view === "Year" ? yearQ : people;
+  const q = view === "Run payroll" ? (sheet.data ? people : sheet) : view === "Reports" ? yearQ : people;
 
   let body: React.ReactNode;
   if (q.error && !q.data) body = <Problem error={q.error} onRetry={() => void q.refetch()} />;
-  else if (!q.data) body = <Loading what={view === "People" ? "the people on payroll" : "the payroll"} />;
-  else if (view === "Month" && sheet.data)
-    body = (
-      <>
-        <PayrollFigures sheet={sheet.data} whole={whole} />
-        <PayrollMonth key={month} a={a} sheet={sheet.data} month={month} monthName={monthName(month)} methods={methods} whole={whole} />
-      </>
-    );
-  else if (view === "Year" && yearQ.data)
+  else if (!q.data) body = <Loading what={view === "Team" ? "the people on payroll" : "the payroll"} />;
+  else if (view === "Run payroll" && sheet.data && people.data) {
+    const everyone = people.data.people;
+    body =
+      everyone.length === 0 ? (
+        <PayrollSetup onAdd={() => toTeam(true)} />
+      ) : sheet.data.rows.length === 0 ? (
+        <NobodyThisMonth month={month} people={everyone} onTeam={() => toTeam(false)} />
+      ) : (
+        <>
+          <PayRunCard run={payRunOf(sheet.data, { today, peopleCount: everyone.length })} a={a} sheet={sheet.data} methods={methods} whole={whole} />
+          <PayrollMonth key={month} a={a} sheet={sheet.data} month={month} monthName={monthName(month)} methods={methods} whole={whole} />
+        </>
+      );
+  }
+  else if (view === "Reports" && yearQ.data)
     body = (
       <PayrollYearView
         y={yearQ.data}
         whole={whole}
         openMonth={(m) => {
           setMonth(m);
-          setView("Month");
+          setView("Run payroll");
         }}
       />
     );
-  else if (view === "People" && people.data) body = <PayrollPeopleView a={a} people={people.data} whole={whole} today={today} />;
+  else if (view === "Team" && people.data) body = <PayrollPeopleView a={a} people={people.data} whole={whole} today={today} startAdding={adding} />;
 
   return (
     <>
@@ -132,7 +146,7 @@ export function PayrollScreen({
       >
         <Explained owner={a.owner} />
         <Lenses options={VIEWS} value={view} onChange={setView} />
-        {view === "Month" ? (
+        {view === "Run payroll" ? (
           <View style={styles.stepper}>
             <Button label="‹ Prev" kind="ghost" block={false} onPress={() => setMonth(addMonths(month, -1))} />
             <Text step="body" weight="medium" tone="title">
@@ -140,7 +154,7 @@ export function PayrollScreen({
             </Text>
             <Button label="Next ›" kind="ghost" block={false} onPress={() => setMonth(addMonths(month, 1))} />
           </View>
-        ) : view === "Year" ? (
+        ) : view === "Reports" ? (
           <View style={styles.stepper}>
             <Button label="‹ Prev" kind="ghost" block={false} onPress={() => setYear(year - 1)} />
             <Text step="body" weight="medium" tone="title">

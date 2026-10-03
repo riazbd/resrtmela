@@ -12,7 +12,6 @@
 
 import { Fragment, useState } from "react";
 import {
-  Banknote,
   ChevronDown,
   Gift,
   HandCoins,
@@ -20,17 +19,17 @@ import {
   Printer,
   Undo2,
   Wallet,
-  CircleAlert,
 } from "lucide-react";
 import { MONEY_TONE, monthName, percentOf, type PayrollSheet } from "@rh/shared";
 import { money } from "@/lib/api";
 import { useApi } from "@/lib/query";
 import { Button, Card, Empty, Field, Input, Modal, Select, Spinner, useToast } from "@/components/ui";
 import { ErrorState } from "@/components/error-state";
-import { KpiCard, Meter } from "@/components/charts";
 import type { PayrollAdapter } from "./adapter";
 import { LoginChip, MonthStepper, StatePill } from "./bits";
 import { printPayslips } from "./payslip";
+import { NobodyThisMonth, PayRunCard, PayrollSetup } from "./pay-run";
+import { payRunOf } from "@rh/shared";
 
 type Row = PayrollSheet["rows"][number];
 
@@ -48,13 +47,15 @@ const ACT_WORDS: Record<Act["kind"], { title: string; button: string; help: stri
 
 const dm = (iso: string | Date) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-export function MonthTab({ a, month, setMonth }: { a: PayrollAdapter; month: string; setMonth: (m: string) => void }) {
+export function MonthTab({ a, month, setMonth, toTeam }: { a: PayrollAdapter; month: string; setMonth: (m: string) => void; toTeam: (add: boolean) => void }) {
   const { push } = useToast();
   const q = useApi(a.sheetKey(month), () => a.sheet(month), { placeholderData: (prev: PayrollSheet | undefined) => prev });
   const [open, setOpen] = useState<number | null>(null);
   const [act, setAct] = useState<Act | null>(null);
   const [busy, setBusy] = useState(false);
   const sheet = q.data;
+  const peopleQ = useApi(a.peopleKey, () => a.people());
+  const people = peopleQ.data?.people ?? [];
 
   if (q.error) return <ErrorState error={q.error as Error} />;
 
@@ -83,55 +84,23 @@ export function MonthTab({ a, month, setMonth }: { a: PayrollAdapter; month: str
     }
   }
 
-  const t = sheet?.totals;
-  const salaryPaid = t ? Math.max(0, t.paid - t.advance) : 0;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <MonthStepper month={month} now={a.today.slice(0, 7)} onChange={setMonth} />
-        {sheet && sheet.rows.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => printPayslips(a.ownerName, month, sheet.rows) || push("Allow pop-ups to print", "err")}>
-            <Printer className="h-4 w-4" /> Payslips for everyone
-          </Button>
-        )}
       </div>
 
-      {!sheet ? (
+      {!sheet || !peopleQ.data ? (
         <Spinner />
+      ) : people.length === 0 ? (
+        <PayrollSetup owner={a.owner} onAdd={() => toTeam(true)} />
+      ) : sheet.rows.length === 0 ? (
+        <NobodyThisMonth month={month} people={people} onTeam={() => toTeam(false)} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <KpiCard label="The month is worth" value={money(t!.expected)} tone="#0f172a" icon={<Banknote className="h-3.5 w-3.5" />} sub={`${t!.headcount} ${t!.headcount === 1 ? "person" : "people"} on payroll`} />
-            <KpiCard label="Handed over" value={money(t!.paid)} tone={MONEY_TONE.paid.solid} icon={<HandCoins className="h-3.5 w-3.5" />} sub={`${t!.settledCount} of ${t!.headcount} fully paid`} />
-            <KpiCard label="Advances in it" value={money(t!.advance)} tone={MONEY_TONE.advance.solid} icon={<Wallet className="h-3.5 w-3.5" />} sub="taken before the month was settled" />
-            <KpiCard label="Still to pay" value={money(t!.remaining)} tone={t!.remaining > 0 ? "#b45309" : MONEY_TONE.paid.solid} icon={<CircleAlert className="h-3.5 w-3.5" />} sub={t!.remaining > 0 ? `${100 - percentOf(t!.remaining, t!.expected)}% of the month paid` : "nothing left this month"} />
-            <KpiCard label="From earlier months" value={money(t!.arrears)} tone={t!.arrears > 0 ? MONEY_TONE.late.solid : "#94a3b8"} icon={<CircleAlert className="h-3.5 w-3.5" />} sub={t!.arrears > 0 ? "still to pay for months gone by" : "earlier months are clear"} />
-          </div>
+          <PayRunCard run={payRunOf(sheet, { today: a.today, peopleCount: people.length })} a={a} sheet={sheet} onPaid={() => void q.refetch()} />
 
-          {t!.expected > 0 && (
-            <Card title={`Where ${monthName(month)} stands`}>
-              <Meter
-                height={16}
-                total={t!.expected}
-                format={money}
-                parts={[
-                  { label: "Paid as salary", value: salaryPaid, color: MONEY_TONE.paid.solid },
-                  { label: "Paid as advances", value: t!.advance, color: MONEY_TONE.advance.solid },
-                  { label: "Still to pay", value: t!.remaining, color: MONEY_TONE.left.solid },
-                ]}
-              />
-              {(t!.bonus > 0 || t!.deduction > 0) && (
-                <p className="mt-2 text-xs text-slate-500">
-                  The month includes {t!.bonus > 0 ? <b className="text-violet-700">{money(t!.bonus)} in bonuses</b> : null}
-                  {t!.bonus > 0 && t!.deduction > 0 ? " and " : ""}
-                  {t!.deduction > 0 ? <b className="text-slate-700">{money(t!.deduction)} deducted</b> : null}.
-                </p>
-              )}
-            </Card>
-          )}
-
-          <Card title={`Everyone on ${monthName(month)}`} className="!p-0">
+          <Card title={`Review each person — ${monthName(month)}`} className="!p-0">
             {sheet.rows.length === 0 ? (
               <Empty msg="Nobody is on payroll this month. Add people on the People tab." />
             ) : (

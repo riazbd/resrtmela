@@ -269,10 +269,10 @@ const shirin = /^Shirin Akter, worth ৳8,500/;
 describe("the month, for everyone", () => {
   it("says what it is worth, what has gone and what is still to pay", async () => {
     const r = await open(PayrollRoute);
-    await waitFor(() => expect(r.getByLabelText("The month is worth: ৳26,500")).toBeTruthy());
-    expect(r.getByLabelText("Handed over: ৳6,000")).toBeTruthy();
-    expect(r.getByLabelText("Still to pay: ৳20,500")).toBeTruthy();
-    expect(r.getByText("+ ৳4,000 from earlier months")).toBeTruthy();
+    await waitFor(() => expect(r.getByLabelText("Net pay: ৳26,500")).toBeTruthy());
+    expect(r.getByLabelText("Already paid: ৳6,000")).toBeTruthy();
+    expect(r.getByLabelText("To pay now: ৳20,500")).toBeTruthy();
+    expect(r.getByText("৳4,000 is still due from earlier months.")).toBeTruthy();
   });
 
   it("says plainly who signs in to the app and who does not", async () => {
@@ -349,7 +349,7 @@ describe("paying", () => {
 describe("the year", () => {
   it("draws who was paid when, and a month opens from it", async () => {
     const r = await open(PayrollRoute);
-    await fireEvent.press(r.getByRole("button", { name: "Year" }));
+    await fireEvent.press(r.getByRole("button", { name: "Reports" }));
     await waitFor(() => expect(r.getByText("Who was paid when")).toBeTruthy());
     expect(mockYear).toHaveBeenCalledWith(3, 2026);
     expect(r.getByLabelText("Paid out: ৳24,000")).toBeTruthy();
@@ -362,7 +362,7 @@ describe("the year", () => {
 describe("the people, beside the logins", () => {
   it("lists logins nobody has put on payroll, and puts one on with the login linked", async () => {
     const r = await open(PayrollRoute);
-    await fireEvent.press(r.getByRole("button", { name: "People" }));
+    await fireEvent.press(r.getByRole("button", { name: "Team" }));
     await waitFor(() => expect(r.getByText("App logins not on payroll (1)")).toBeTruthy());
     await fireEvent.press(r.getByRole("button", { name: "Put on payroll" }));
     await fireEvent.changeText(r.getByPlaceholderText("0"), "12000");
@@ -382,7 +382,7 @@ describe("the people, beside the logins", () => {
   it("takes somebody off payroll on the day they left", async () => {
     agree();
     const r = await open(PayrollRoute);
-    await fireEvent.press(r.getByRole("button", { name: "People" }));
+    await fireEvent.press(r.getByRole("button", { name: "Team" }));
     await waitFor(() => expect(r.getByLabelText(/^Jamal Uddin, ৳18,000 a month/)).toBeTruthy());
     await fireEvent.press(r.getByLabelText(/^Jamal Uddin, ৳18,000 a month/));
     await fireEvent.press(r.getByRole("button", { name: "Has left — take off payroll" }));
@@ -407,5 +407,25 @@ describe("how payroll works, on the screen", () => {
     await fireEvent.press(r.getByRole("button", { name: "How payroll works" }));
     expect(r.getByText("Who is on payroll")).toBeTruthy();
     expect(r.getByText(/Agents earn commission, not a salary/)).toBeTruthy();
+  });
+});
+
+describe("the month as a pay run", () => {
+  it("pays everybody who has something left, in one go", async () => {
+    const r = await open(PayrollRoute);
+    await fireEvent.press(r.getByRole("button", { name: "Pay everyone ৳20,500" }));
+    await fireEvent.press(r.getByRole("button", { name: "Pay 2 · ৳20,500" }));
+    await waitFor(() => expect(mockPay).toHaveBeenCalledTimes(2));
+    expect(mockPay).toHaveBeenCalledWith(3, 4, { month: "2026-09", kind: "SALARY", method: "CASH" });
+    expect(mockPay).toHaveBeenCalledWith(3, 5, { month: "2026-09", kind: "SALARY", method: "CASH" });
+  });
+
+  it("before anybody is on payroll, says how to start and opens the form for the first person", async () => {
+    mockPeople.mockResolvedValue({ people: [], team: [] });
+    mockSheet.mockResolvedValue({ ...sheet(), rows: [], totals: { ...sheet().totals, headcount: 0, expected: 0, paid: 0, remaining: 0, arrears: 0 } });
+    const r = await open(PayrollRoute);
+    await waitFor(() => expect(r.getByText("Set up payroll in three steps")).toBeTruthy());
+    await fireEvent.press(r.getByRole("button", { name: "Add the first person" }));
+    await waitFor(() => expect(r.getByText("Monthly salary")).toBeTruthy());
   });
 });

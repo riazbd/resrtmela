@@ -402,7 +402,7 @@ export function PayrollMonth({
   ) : null;
 
   return (
-    <Card title={`Everyone on ${monthName}`}>
+    <Card title={`Review each person — ${monthName}`}>
       {sheet.rows.length === 0 ? (
         <View style={styles.emptyBox}>
           <Empty icon="account-group-outline" message="Nobody on payroll this month" hint="Add people under People." />

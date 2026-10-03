@@ -58,14 +58,17 @@ export function PayrollPeopleView({
   people,
   whole,
   today,
+  startAdding = false,
 }: {
   a: PayrollAdapter;
   people: PayrollPeople;
   whole: (n: number) => string;
   /** "YYYY-MM-DD" where the payroll is kept */
   today: string;
+  /** open with the form for a new person already showing */
+  startAdding?: boolean;
 }) {
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(() => (startAdding ? blank(today) : null));
   const [refused, setRefused] = useState<string | null>(null);
   const current = people.people.filter((p) => p.active);
   const former = people.people.filter((p) => !p.active);
