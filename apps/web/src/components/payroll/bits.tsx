@@ -42,7 +42,7 @@ export function LoginChip({ login }: { login: PayrollLogin | null }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-700 ring-1 ring-inset ring-sky-200" title={`Signs in to the app as ${login.name} (${login.role})`}>
+    <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-1.5 py-0.5 text-[11px] text-sky-700 ring-1 ring-inset ring-slate-200" title={`Signs in to the app as ${login.name} (${login.role})`}>
       <KeyRound className="h-3 w-3" /> {login.name} · {login.role}
       {login.status !== "active" && <span className="text-slate-400"> · {login.status}</span>}
     </span>

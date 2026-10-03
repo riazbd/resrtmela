@@ -267,7 +267,7 @@ export default function SignupPage() {
                 <label className="text-xs font-medium text-slate-600">Password</label>
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="min 8 characters" />
               </div>
-              {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
+              {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-slate-200">{err}</div>}
               <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(1)}>
                 ← Back
               </Button>
@@ -326,7 +326,7 @@ export default function SignupPage() {
                             // new plan's own first shelf takes over
                             setPickedSchedule(null);
                           }}
-                          className={`rounded-xl px-3 py-2 text-left ring-1 ${on ? "bg-brand-50 ring-brand-500" : "ring-slate-200 hover:bg-slate-50"}`}
+                          className={`rounded-xl px-3 py-2 text-left ring-1 ${on ? "bg-brand-50 ring-slate-400" : "ring-slate-200 hover:bg-slate-50"}`}
                         >
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="text-sm font-semibold text-slate-900">{p.label}</span>
@@ -355,7 +355,7 @@ export default function SignupPage() {
                           key={sch.id}
                           type="button"
                           onClick={() => setPickedSchedule(sch.id)}
-                          className={`rounded-lg px-3 py-2 text-xs font-semibold ring-1 ${shelf?.id === sch.id ? "bg-brand-600 text-white ring-brand-600" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold ring-1 ${shelf?.id === sch.id ? "bg-brand-600 text-white ring-slate-400" : "text-slate-700 ring-slate-300 hover:bg-slate-50"}`}
                         >
                           {sch.label}
                         </button>
@@ -386,7 +386,7 @@ export default function SignupPage() {
                   You can block any one of them in Settings, and set a different commission for any of them.
                 </p>
               </div>
-              {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
+              {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-slate-200">{err}</div>}
               <Button type="button" variant="ghost" className="w-full" onClick={() => setStep(2)}>
                 ← Back
               </Button>

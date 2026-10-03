@@ -78,7 +78,7 @@ export default function DashboardPage() {
       </Hero>
 
       {roomCount === 0 && (
-        <div className="rounded-xl border border-brand-200 bg-brand-50 p-4">
+        <div className="rounded-xl border border-slate-200 bg-brand-50 p-4">
           <div className="text-sm font-semibold text-brand-900">
             Welcome to Resort Mela — set up in 2 steps
           </div>
@@ -91,7 +91,7 @@ export default function DashboardPage() {
             </a>
             <a
               href="/import"
-              className="rounded-lg border border-brand-300 bg-white px-3 py-2 text-xs font-medium text-brand-700 hover:bg-brand-100"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-brand-700 hover:bg-brand-100"
             >
               or 2. Import your existing sheet (CSV)
             </a>

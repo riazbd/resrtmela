@@ -405,7 +405,7 @@ export function PayrollMonth({
     <Card title={`Everyone on ${monthName}`}>
       {sheet.rows.length === 0 ? (
         <View style={styles.emptyBox}>
-          <Empty message="Nobody on payroll this month" hint="Add people under People." />
+          <Empty icon="account-group-outline" message="Nobody on payroll this month" hint="Add people under People." />
         </View>
       ) : (
         sheet.rows.map((row, i) => {

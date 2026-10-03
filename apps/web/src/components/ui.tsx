@@ -3,7 +3,7 @@
 import { useT, isStateKey, type DictKey } from "@/lib/i18n";
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
-import { EmptyArt } from "@/components/art";
+import { Inbox } from "lucide-react";
 
 // ── primitives ──
 
@@ -88,7 +88,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
             },
           }
         : {})}
-      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 ${props.className ?? ""}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-400 focus:ring-4 focus:ring-slate-200 ${props.className ?? ""}`}
     />
   );
 }
@@ -97,7 +97,7 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100 ${props.className ?? ""}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm shadow-slate-900/[0.03] outline-none transition hover:border-slate-300 focus:border-slate-400 focus:ring-4 focus:ring-slate-200 ${props.className ?? ""}`}
     />
   );
 }
@@ -171,7 +171,6 @@ export function Stat({
   const t = tones[tone];
   return (
     <div className="rm-card relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white p-4">
-      <div aria-hidden className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${t.rule}`} />
       <div aria-hidden className={`pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${t.wash} to-transparent`} />
       <div className="relative text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`relative mt-1.5 text-2xl font-extrabold tracking-tight tabular-nums ${t.text}`}>{value}</div>
@@ -181,15 +180,15 @@ export function Stat({
 }
 
 const STATE_STYLES: Record<string, string> = {
-  PENDING: "bg-amber-50 text-amber-700 ring-amber-200",
-  CONFIRMED: "bg-green-50 text-green-700 ring-green-200",
-  CHECKED_IN: "bg-blue-50 text-blue-700 ring-blue-200",
+  PENDING: "bg-amber-50 text-amber-700 ring-slate-200",
+  CONFIRMED: "bg-green-50 text-green-700 ring-slate-200",
+  CHECKED_IN: "bg-blue-50 text-blue-700 ring-slate-200",
   CHECKED_OUT: "bg-slate-100 text-slate-600 ring-slate-200",
-  CANCELLED: "bg-red-50 text-red-700 ring-red-200",
-  NO_SHOW: "bg-yellow-900/10 text-yellow-900 ring-yellow-900/20",
-  UNPAID: "bg-red-50 text-red-700 ring-red-200",
-  PARTIAL: "bg-orange-50 text-orange-700 ring-orange-200",
-  PAID: "bg-green-50 text-green-700 ring-green-200",
+  CANCELLED: "bg-red-50 text-red-700 ring-slate-200",
+  NO_SHOW: "bg-yellow-900/10 text-yellow-900 ring-slate-400",
+  UNPAID: "bg-red-50 text-red-700 ring-slate-200",
+  PARTIAL: "bg-orange-50 text-orange-700 ring-slate-200",
+  PAID: "bg-green-50 text-green-700 ring-slate-200",
 
   /**
    * A room is not a booking.
@@ -200,8 +199,8 @@ const STATE_STYLES: Record<string, string> = {
    * though it had been removed. Amber rather than red for the same reason: it
    * is off sale today, not gone.
    */
-  ACTIVE: "bg-green-50 text-green-700 ring-green-200",
-  OUT_OF_SERVICE: "bg-amber-50 text-amber-700 ring-amber-200",
+  ACTIVE: "bg-green-50 text-green-700 ring-slate-200",
+  OUT_OF_SERVICE: "bg-amber-50 text-amber-700 ring-slate-200",
 };
 
 /**
@@ -350,17 +349,23 @@ export function useToast() {
 export function Spinner({ label }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">
-      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-brand-600" />
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-slate-400" />
       {label ?? "Loading…"}
     </div>
   );
 }
 
 /** Nothing to show: a small picture and the sentence, never a blank box. */
-export function Empty({ msg }: { msg: string }) {
+/**
+ * Nothing here yet: an icon of what is missing, quiet and grey, and the words.
+ * A landscape here said nothing about what was empty (the owner, 2026-10-03).
+ */
+export function Empty({ msg, icon: Icon = Inbox }: { msg: string; icon?: React.ComponentType<{ className?: string }> }) {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <EmptyArt />
+      <span aria-hidden className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+        <Icon className="h-6 w-6 text-slate-400" />
+      </span>
       <div className="max-w-sm text-sm font-medium text-slate-500">{msg}</div>
     </div>
   );

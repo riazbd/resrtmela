@@ -216,7 +216,7 @@ export function PayrollPeopleView({
         {draft && !draft.id ? form : null}
         {current.length === 0 && !(draft && !draft.id) ? (
           <View style={styles.emptyBox}>
-            <Empty message="Nobody on payroll yet" />
+            <Empty icon="account-group-outline" message="Nobody on payroll yet" />
           </View>
         ) : (
           current.map((p, i) => (

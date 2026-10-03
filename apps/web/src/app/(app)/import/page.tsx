@@ -395,7 +395,7 @@ export default function ImportPage() {
             what the owner asked for by putting those Booking IDs in the sheet.
           */}
           {report.replacedDeleted > 0 && (
-            <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            <div className="rounded-xl border border-slate-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
               {report.dryRun ? "Would replace " : "Replaced "}
               <b>{report.replacedDeleted}</b>{" "}
               {report.replacedDeleted === 1 ? "booking" : "bookings"} you had deleted, because the
@@ -417,7 +417,7 @@ export default function ImportPage() {
             yet, and both are one click to fix.
           */}
           {(report.unmatchedReceivers?.length > 0 || report.unmatchedAgents?.length > 0) && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="rounded-xl border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <div className="font-semibold">Names nobody here matches</div>
               {report.unmatchedReceivers?.length > 0 && (
                 <div className="mt-1.5">
@@ -450,7 +450,7 @@ export default function ImportPage() {
           )}
 
           {report.roomTypeCreated?.assumed && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="rounded-xl border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               This resort had no room types, so the rooms were filed under{" "}
               <b>{report.roomTypeCreated.name}</b> — the suggestion, not your answer. Rename it and
               set its occupancy under Rooms whenever you like.
@@ -463,7 +463,7 @@ export default function ImportPage() {
                 {report.roomsCreated.map((r, i) => (
                   <span
                     key={i}
-                    className="rounded-md bg-brand-50 px-2 py-1 text-xs text-brand-800 ring-1 ring-brand-200"
+                    className="rounded-md bg-brand-50 px-2 py-1 text-xs text-brand-800 ring-1 ring-slate-200"
                   >
                     {r}
                   </span>

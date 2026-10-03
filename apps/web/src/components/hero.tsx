@@ -28,7 +28,7 @@ export function Hero({
   children?: ReactNode;
 }) {
   return (
-    <section className="rm-card relative overflow-hidden rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white">
+    <section className="rm-card relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-600 text-white">
       {/* no sky of its own: a pale sky behind white words is how the
           greeting vanished on a phone. The hills sit at the foot instead. */}
       <ResortScene sky={false} className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%] w-full opacity-40 sm:inset-x-auto sm:right-0 sm:h-full sm:w-[55%] sm:opacity-70 sm:[mask-image:linear-gradient(to_left,black_55%,transparent)]" />

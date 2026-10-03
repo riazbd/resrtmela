@@ -236,7 +236,7 @@ export default function CalendarPage() {
             Free
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="h-2.5 w-4 rounded-sm bg-red-200 ring-1 ring-inset ring-slate-900" />
+            <span className="h-2 w-2 rounded-full bg-slate-900" />
             Payment due
           </span>
         </div>
@@ -462,7 +462,7 @@ export default function CalendarPage() {
                               )}
                               {stripe && (
                                 <span
-                                  className={`absolute inset-x-0 bottom-0 h-1 ${stripe}`}
+                                  className={`absolute right-1 top-1 h-2 w-2 rounded-full ${stripe}`}
                                   aria-hidden
                                 />
                               )}

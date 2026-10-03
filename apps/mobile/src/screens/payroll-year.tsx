@@ -132,7 +132,7 @@ export function PayrollYearView({
 
       <Card title="Monthly wage bill, by role">
         {y.byDesignation.length === 0 ? (
-          <Empty message="Nobody on payroll now" />
+          <Empty icon="account-group-outline" message="Nobody on payroll now" />
         ) : (
           <Shares
             format={whole}

@@ -101,7 +101,7 @@ function NotInPlan({ feature, agency = false }: { feature: string | null; agency
   if (!feature) return null;
   const label = planFeatureLabel(feature);
   return (
-    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+    <div className="mb-4 rounded-xl border border-slate-200 bg-amber-50 px-4 py-3">
       <div className="text-sm font-semibold text-amber-900">{label} is not in {agency ? "your agency" : "this resort"}&apos;s plan</div>
       {/* the label is printed as written: lower-casing it turned "Restaurant POS
           & room tabs" into "restaurant pos & room tabs" */}
@@ -245,7 +245,6 @@ function Shell({ children }: { children: React.ReactNode }) {
                     : "text-emerald-100/80 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                {active && <span aria-hidden className="absolute -left-2 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-amber-300 to-emerald-300" />}
                 <span
                   className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
                     active ? "bg-white/15 text-amber-200" : "bg-white/5 text-emerald-200 group-hover:bg-white/10"
@@ -393,7 +392,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <main className="rm-ground rm-page flex-1 px-3 py-4 sm:px-6 sm:py-6">
           {/* an agency's standing with the platform: it can look around, but not sell */}
           {me?.account && me.account.status !== "active" && (
-            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {me.account.status === "pending"
                 ? "Your agency is waiting for Resort Mela to verify it. You can look around, but you cannot make bookings until it is verified — once, for every resort."
                 : me.account.suspendedReason === "billing"
@@ -534,7 +533,7 @@ function AddResortButton() {
       <button
         onClick={() => setOpen(true)}
         title="Add another resort"
-        className="rounded-lg border border-brand-300 p-1.5 text-brand-700 hover:bg-brand-50"
+        className="rounded-lg border border-slate-200 p-1.5 text-brand-700 hover:bg-brand-50"
       >
         <Plus className="h-4 w-4" />
       </button>

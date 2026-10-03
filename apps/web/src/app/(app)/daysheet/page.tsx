@@ -134,7 +134,7 @@ export default function DaySheetPage() {
                         <span className="text-xs">
                           <span className="text-emerald-600">{t("ds.available")}</span>
                           {unclean ? (
-                            <span className="ml-1.5 whitespace-nowrap rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                            <span className="ml-1.5 whitespace-nowrap rounded border border-slate-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
                               {unclean}
                             </span>
                           ) : null}
@@ -201,7 +201,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-brand-500 ${props.className ?? ""}`}
+      className={`rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-slate-400 ${props.className ?? ""}`}
     />
   );
 }

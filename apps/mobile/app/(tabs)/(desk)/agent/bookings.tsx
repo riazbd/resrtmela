@@ -181,6 +181,7 @@ export default function AgencyBookingsScreen() {
           {rows.length === 0 ? (
             <View style={styles.emptyBox}>
               <Empty
+                icon="calendar-blank-outline"
                 message={narrowed ? "Nothing matches that" : "No bookings yet"}
                 hint={
                   narrowed

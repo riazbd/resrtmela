@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     backgroundColor: color.surface,
   },
-  thisMonth: { borderColor: color.brand[600] },
+  thisMonth: { borderColor: color.ink[900] },
   chosen: { backgroundColor: color.brand[600], borderColor: color.brand[600] },
   today: {
     minHeight: TOUCH_TARGET,

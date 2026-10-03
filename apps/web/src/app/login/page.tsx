@@ -109,7 +109,7 @@ function LoginInner() {
             <p className="mt-1 text-sm text-slate-500">Sign in to your resort console</p>
           </div>
           {justReset && (
-            <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
+            <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 ring-1 ring-slate-200">
               Password updated. Sign in with your new password.
             </div>
           )}
@@ -192,7 +192,7 @@ function LoginInner() {
               </div>
             )}
             {err && (
-              <div className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-red-200">
+              <div className="rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700 ring-1 ring-slate-200">
                 {err}
               </div>
             )}

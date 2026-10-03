@@ -322,7 +322,7 @@ function ListsTab({ rid }: { rid: number }) {
         </p>
       </Card>
 
-      {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
+      {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-slate-200">{err}</div>}
 
       <Card title="Add to this list">
         <div className="flex flex-wrap items-end gap-3">
@@ -370,7 +370,7 @@ function ListsTab({ rid }: { rid: number }) {
                             void act(() => client.options.update(rid!, list, o.id, { label: next }));
                           }
                         }}
-                        className="w-full rounded-lg border border-transparent px-2 py-1 hover:border-slate-300 focus:border-brand-400 focus:outline-none"
+                        className="w-full rounded-lg border border-transparent px-2 py-1 hover:border-slate-300 focus:border-slate-200 focus:outline-none"
                       />
                     </Td>
                     <Td className="font-mono text-xs text-slate-400">{o.code}</Td>
@@ -389,7 +389,7 @@ function ListsTab({ rid }: { rid: number }) {
                             void act(() => client.options.remove(rid!, list, o.id));
                           }
                         }}
-                        className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                       >
                         Remove
                       </button>
@@ -552,7 +552,7 @@ function ExportTab({ rid, name }: { rid: number; name: string }) {
             key={d.key}
             disabled={busy !== null}
             onClick={() => grab(d.key, d.label)}
-            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-brand-300 hover:shadow-sm disabled:opacity-50"
+            className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-slate-200 hover:shadow-sm disabled:opacity-50"
           >
             <Download className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
             <span>
@@ -713,7 +713,7 @@ function AccessTab({ rid }: { rid: number }) {
                         <button
                           onClick={() => void toggleBlock(a)}
                           disabled={busy === `b${a.accountId}`}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${a.blocked ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50" : "border-red-200 text-red-600 hover:bg-red-50"}`}
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${a.blocked ? "border-slate-200 text-emerald-700 hover:bg-emerald-50" : "border-slate-200 text-red-600 hover:bg-red-50"}`}
                         >
                           {a.blocked ? "Unblock" : "Block"}
                         </button>
@@ -956,7 +956,7 @@ function UsersTab({ rid }: { rid: number }) {
                           <button
                             onClick={() => saveContact(u)}
                             disabled={contactBusy}
-                            className="rounded-lg border border-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                           >
                             Save
                           </button>
@@ -991,13 +991,13 @@ function UsersTab({ rid }: { rid: number }) {
                   <Td>
                     <div className="flex flex-wrap justify-end gap-1.5">
                       {u.status !== "active" && (
-                        <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                        <button onClick={() => patch(u.id, { status: "active" })} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                           <Check className="inline h-3.5 w-3.5" /> Activate
                         </button>
                       )}
                       {/* staff only: an agency sells the resort without being on its team */}
                       {u.status === "active" && (
-                        <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
+                        <button onClick={() => patch(u.id, { status: "suspended" })} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">
                           <Ban className="inline h-3.5 w-3.5" /> Suspend
                         </button>
                       )}
@@ -1291,7 +1291,7 @@ function ActivityTab({ rid }: { rid: number }) {
                     onClick={() => remove(r.id)}
                     disabled={busyId === r.id}
                     title="Delete activity"
-                    className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40"
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40"
                   >
                     <X className="inline h-3.5 w-3.5" /> Delete
                   </button>
@@ -1542,7 +1542,7 @@ function ApiKeysTab({ rid }: { rid: number }) {
                     <Td className="text-xs text-slate-400">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("en-GB") : "never"}</Td>
                     <Td>
                       {k.active && (
-                        <button onClick={() => revoke(k.id)} className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Revoke</button>
+                        <button onClick={() => revoke(k.id)} className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50">Revoke</button>
                       )}
                     </Td>
                   </tr>
@@ -1778,7 +1778,7 @@ If it is a shorter term you keep what you have already paid for until ${when(d.r
   return (
     <div className="max-w-3xl space-y-4">
       {d.outstanding.count > 0 && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-lg border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <b>{money(d.outstanding.amount)}</b> outstanding across {d.outstanding.count} bill
           {d.outstanding.count === 1 ? "" : "s"}. Unpaid bills eventually suspend the resort — you are
           warned before that happens.
@@ -1836,7 +1836,7 @@ If it is a shorter term you keep what you have already paid for until ${when(d.r
           {d.plans.map((p) => (
             <div
               key={p.name}
-              className={`rounded-lg border p-3 ${p.direction === "current" ? "border-brand-300 bg-brand-50" : "border-slate-200"}`}
+              className={`rounded-lg border p-3 ${p.direction === "current" ? "border-slate-200 bg-brand-50" : "border-slate-200"}`}
             >
               <div className="flex items-baseline justify-between">
                 <span className="text-sm font-bold text-slate-800">{p.label}</span>
@@ -1994,7 +1994,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 function AgentWindowField({ value, onChange }: { value: number | null; onChange: (days: number | null) => void }) {
   const choice = (active: boolean) =>
     `rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
-      active ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+      active ? "border-slate-400 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
     }`;
   return (
     <div className="space-y-1">

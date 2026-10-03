@@ -125,9 +125,8 @@ export function RoomBoard({ rooms, onMove, busy }: { rooms: HousekeepingRow[]; o
               onClick={() => onMove?.(r)}
               title={`${r.name} — ${housekeepingLabel(r.housekeeping)}${onMove ? `. Press: ${nextHousekeepingState(r.housekeeping).label}` : ""}`}
               className="group relative min-h-[112px] overflow-hidden rounded-xl p-3 text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default"
-              style={{ background: tone.soft, boxShadow: `inset 0 0 0 1.5px ${tone.solid}33` }}
+              style={{ background: tone.soft }}
             >
-              <div className="absolute inset-x-0 top-0 h-1" style={{ background: tone.solid }} />
               <Icon className="h-5 w-5" style={{ color: tone.solid }} />
               <div className="mt-1.5 text-lg font-extrabold text-slate-900">{r.name}</div>
               <div className="truncate text-[10px] font-semibold uppercase tracking-wide" style={{ color: tone.solid }}>
@@ -277,7 +276,7 @@ export function NightStrip({ checkIn, checkOut, today }: { checkIn: string | nul
       {nights.map((n) => {
         const t = NIGHT_TONE[n.when];
         return (
-          <div key={n.day} title={`${n.day}${n.when === "tonight" ? " — tonight" : ""}`} className="w-11 overflow-hidden rounded-lg text-center" style={{ background: t.soft, boxShadow: `inset 0 -3px 0 ${t.solid}` }}>
+          <div key={n.day} title={`${n.day}${n.when === "tonight" ? " — tonight" : ""}`} className="w-11 overflow-hidden rounded-lg text-center" style={{ background: t.soft }}>
             <div className="pt-1 text-[9px] font-bold uppercase tracking-wide" style={{ color: t.solid }}>{n.weekday}</div>
             <div className="pb-1.5 text-sm font-extrabold text-slate-800">{n.date}</div>
           </div>

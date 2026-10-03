@@ -173,7 +173,7 @@ export function SetSomeonesPassword({
         <button
           onClick={save}
           disabled={busy || !!newPasswordError(next, confirm)}
-          className="rounded-lg border border-emerald-200 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+          className="rounded-lg border border-slate-200 px-2 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
         >
           {busy ? "Saving…" : "Set it"}
         </button>

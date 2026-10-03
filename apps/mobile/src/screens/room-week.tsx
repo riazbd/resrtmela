@@ -94,7 +94,7 @@ function nightByNight(runs: Run<CalendarBooking>[]): Run<CalendarBooking>[] {
 /** Red by how firmly the night is held — the console's ramp, in these tokens. */
 const HELD_FILL: Record<1 | 2 | 3, string> = {
   1: color.danger.bg,
-  2: color.danger.line,
+  2: color.danger.mid,
   3: color.danger.fg,
 };
 
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   },
   head: { height: HEAD_H, backgroundColor: color.surface },
   weekend: { backgroundColor: color.ink[100] },
-  todayHead: { borderWidth: 2, borderColor: color.brand[600] },
+  todayHead: { borderWidth: 2, borderColor: color.ink[900] },
   /** The name's line is empty here; `room-scroll.tsx` draws the name over it, pinned. */
   room: { paddingTop: NAME_H, paddingBottom: ROOM_GAP },
   /** Green is free, and nothing else on this grid is green. */

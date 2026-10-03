@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
   live: { alignSelf: "flex-start", backgroundColor: color.ink[100], borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
   liveOn: { backgroundColor: color.ok.bg },
   template: { borderWidth: 1, borderColor: color.line, borderRadius: radius.md, padding: space.md, gap: 2 },
-  templateOn: { borderColor: color.brand[500], backgroundColor: color.ok.bg },
+  templateOn: { borderColor: color.ink[900], backgroundColor: color.ok.bg },
   box: { minHeight: 96, textAlignVertical: "top" },
   swatch: { width: 40, height: 40, borderRadius: radius.md, borderWidth: 1, borderColor: color.line },
   photos: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },

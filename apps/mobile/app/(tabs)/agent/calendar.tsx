@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   week: { flexDirection: "row" },
   // an outline, not a fill: the fill is what a weekend uses, and today
   // falling on a Friday must still read as both
-  todayCell: { borderWidth: 1, borderColor: color.brand[600] },
+  todayCell: { borderWidth: 1, borderColor: color.ink[900] },
   cell: {
     flex: 1,
     minHeight: TOUCH_TARGET,

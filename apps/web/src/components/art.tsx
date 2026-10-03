@@ -82,27 +82,6 @@ export function ResortScene({ className = "", tone = "day", sky: withSky = true 
 }
 
 /**
- * A small picture for a list with nothing in it yet — the scene as a round
- * medallion in soft rings, not a thumbnail in a box. The box read as a
- * placeholder image that had failed to load.
- */
-export function EmptyArt({ className = "" }: { className?: string }) {
-  return (
-    <div aria-hidden className={`relative mx-auto flex h-36 w-36 items-center justify-center ${className}`}>
-      <div className="absolute inset-0 rounded-full bg-gradient-to-b from-emerald-50 to-teal-50/40" />
-      <div className="absolute inset-3 rounded-full bg-emerald-100/50" />
-      <div className="relative h-24 w-24 overflow-hidden rounded-full shadow-lg shadow-emerald-900/10 ring-4 ring-white">
-        <ResortScene className="h-full w-full" />
-      </div>
-      <span className="absolute left-3 top-6 h-2 w-2 rounded-full bg-amber-300" />
-      <span className="absolute right-4 top-3 h-1.5 w-1.5 rounded-full bg-emerald-300" />
-      <span className="absolute bottom-5 right-2 h-2.5 w-2.5 rounded-full bg-teal-200" />
-      <span className="absolute bottom-3 left-6 h-1.5 w-1.5 rounded-full bg-sky-200" />
-    </div>
-  );
-}
-
-/**
  * The sun and the hills behind a green page — the sign-in, sign-up and
  * download pages wear the front page's scene, so the door and the house match.
  * Drop it as the first child of a `relative overflow-hidden` block.

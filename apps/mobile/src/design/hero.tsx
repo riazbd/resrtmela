@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     flexBasis: "45%",
     backgroundColor: color.art.frost,
     borderWidth: 1,
-    borderColor: color.art.frostLine,
+    borderColor: "transparent",
     borderRadius: radius.md,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,

@@ -67,10 +67,11 @@ const ink = {
  * block it sits in — which is how the console draws its own notices.
  */
 const meaning = {
-  ok: { fg: "#15803d", bg: "#f0fdf4", line: "#bbf7d0" },
-  warn: { fg: "#b45309", bg: "#fffbeb", line: "#fde68a" },
-  danger: { fg: "#b91c1c", bg: "#fef2f2", line: "#fecaca" },
-  info: { fg: "#1d4ed8", bg: "#eff6ff", line: "#bfdbfe" },
+  // `line` is a border, and a border is never a colour (the owner, 2026-10-03)
+  ok: { fg: "#15803d", bg: "#f0fdf4", line: ink[200] },
+  warn: { fg: "#b45309", bg: "#fffbeb", line: ink[200] },
+  danger: { fg: "#b91c1c", bg: "#fef2f2", line: ink[200], mid: "#fecaca" },
+  info: { fg: "#1d4ed8", bg: "#eff6ff", line: ink[200] },
 } as const;
 
 /**

@@ -141,7 +141,7 @@ ${payTo}` : "");
                   onChange={(e) => setBody(e.target.value)}
                   rows={8}
                   placeholder={"Dear guest,\n\nWishing you a wonderful season ahead…\n\n— Team Resort Mela"}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
                 />
               </Field>
               <div className="flex items-center gap-3">
@@ -196,7 +196,7 @@ ${payTo}` : "");
                   key={p.credits}
                   onClick={() => void buy(p)}
                   disabled={busy}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-brand-400 hover:bg-brand-50/40"
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-slate-200 hover:bg-brand-50/40"
                 >
                   <span className="flex items-center gap-2.5">
                     <ShoppingCart className="h-4 w-4 text-brand-600" />
@@ -212,7 +212,7 @@ ${payTo}` : "");
                   the receipt. Saying so, with the account to send it to, is the
                   only way the buyer knows what to do next. */}
               {payTo ? (
-                <div className="rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 text-[11px] leading-relaxed text-brand-900">
+                <div className="rounded-xl border border-slate-200 bg-brand-50 px-3 py-2 text-[11px] leading-relaxed text-brand-900">
                   <b>How to pay</b>
                   <div className="mt-0.5 whitespace-pre-wrap">{payTo}</div>
                   <div className="mt-1.5 text-brand-800/80">
@@ -220,7 +220,7 @@ ${payTo}` : "");
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                <div className="rounded-xl border border-slate-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
                   <b>Nothing is charged online.</b> The platform confirms each pack by hand and the
                   credits arrive then. Emails go out through your own configured SMTP account.
                 </div>

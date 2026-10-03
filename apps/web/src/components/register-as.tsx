@@ -41,7 +41,7 @@ export function RegisterAs({
           const chosen = o.key === current;
           const className = `rounded-lg px-3 py-2 text-left ring-1 transition ${
             chosen
-              ? "bg-brand-600 text-white ring-brand-600"
+              ? "bg-brand-600 text-white ring-slate-400"
               : "bg-white text-slate-700 ring-slate-300 hover:bg-slate-50"
           }`;
           const body = (

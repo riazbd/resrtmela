@@ -42,7 +42,7 @@ function DemoBadge() {
   return (
     <span
       title="Opened by the platform to test with. Left out of the figures on Overview."
-      className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-amber-200"
+      className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-slate-200"
     >
       demo
     </span>
@@ -265,7 +265,7 @@ export default function PlatformPage() {
           {/* Said out loud. A total that quietly differs from the list on the
               next tab is worse than one that is wrong where you can see it. */}
           {(ov.demoExcluded.resorts > 0 || ov.demoExcluded.agencies > 0) && (
-            <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+            <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-slate-200">
               These figures leave out{" "}
               {ov.demoExcluded.resorts > 0 && `${ov.demoExcluded.resorts} demo resort${ov.demoExcluded.resorts === 1 ? "" : "s"}`}
               {ov.demoExcluded.resorts > 0 && ov.demoExcluded.agencies > 0 && " and "}
@@ -353,7 +353,7 @@ export default function PlatformPage() {
                         <button
                           onClick={() => loginAs(r.userResorts![0]!.user.id)}
                           title={`Log in as ${r.userResorts[0].user.name} (${displayPhone(r.userResorts[0].user.phone)})`}
-                          className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                          className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                         >
                           <LogIn className="inline h-3.5 w-3.5" /> Login as
                         </button>
@@ -380,13 +380,13 @@ export default function PlatformPage() {
                             // length the rung it is standing on says that is
                             onClick={() => act(() => client.platform.renew(Number(sub(r)!.id), 1))}
                             title={`Renew for one more ${sub(r)!.scheduleLabel?.toLowerCase() ?? ""} period`}
-                            className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                           >
                             Renew
                           </button>
                           <button
                             onClick={() => act(() => client.platform.cancelSubscription(Number(sub(r)!.id)))}
-                            className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                           >
                             Cancel
                           </button>
@@ -405,7 +405,7 @@ export default function PlatformPage() {
                         title={r.tenant.demo
                           ? "Count this account in the platform's figures again"
                           : "Mark as an account opened to test with, and leave it out of the figures"}
-                        className="rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
                       >
                         {r.tenant.demo ? "Not demo" : "Mark demo"}
                       </button>
@@ -445,7 +445,7 @@ export default function PlatformPage() {
                       <button
                         onClick={() => loginAs(a.id)}
                         title={`Log in as ${a.name}`}
-                        className="rounded-lg border border-brand-300 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50"
                       >
                         <LogIn className="inline h-3.5 w-3.5" /> Login as
                       </button>
@@ -561,7 +561,7 @@ export default function PlatformPage() {
                     key={i}
                     className={`min-h-20 rounded-lg border p-1.5 text-xs transition ${
                       isToday
-                        ? "border-brand-400 bg-brand-50/60 ring-1 ring-inset ring-brand-200"
+                        ? "border-slate-200 bg-brand-50/60 ring-1 ring-inset ring-slate-200"
                         : c
                           ? "border-slate-200 bg-white"
                           : "border-slate-100 bg-white"
@@ -710,7 +710,7 @@ export default function PlatformPage() {
                       <button onClick={() => setCollecting({
                         what: `${d.account.name} · ${d.subscription.plan} — ${money(d.amount)}`,
                         pay: (m) => act(() => client.platform.payDue(Number(d.id), m)),
-                      })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                      })} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
                     )}
@@ -753,7 +753,7 @@ export default function PlatformPage() {
                       <button onClick={() => setCollecting({
                         what: `${c.account.name} · ${c.description} — ${money(c.amount)}`,
                         pay: (m) => act(() => client.platform.payCharge(c.id, m)),
-                      })} className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                      })} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                         Mark paid
                       </button>
                     )}
@@ -1175,7 +1175,7 @@ function PlanCard({
                 onDelete(plan.name);
               }
             }}
-            className="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-40"
           >
             Delete
           </button>
@@ -1218,7 +1218,7 @@ function NewPlanCard({
     return (
       <button
         onClick={() => { setForm(BLANK_PLAN); setOpen(true); }}
-        className="flex min-h-[220px] items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-500 transition hover:border-brand-400 hover:text-brand-600"
+        className="flex min-h-[220px] items-center justify-center rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-500 transition hover:border-slate-200 hover:text-brand-600"
       >
         + New plan
       </button>

@@ -95,7 +95,7 @@ function TreeTab() {
           </div>
         )}
         {stale && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <div className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
             Showing what was saved on this device {stale} — you appear to be offline.
           </div>
         )}
@@ -294,7 +294,7 @@ function PackagesTab() {
           </Table>
         )}
         {stale && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <div className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
             Showing what was saved on this device {stale} — you appear to be offline.
           </div>
         )}

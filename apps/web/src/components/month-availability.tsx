@@ -41,9 +41,9 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  */
 const LOOK: Record<NightLoadState, { box: string; num: string; note: string }> = {
   none: { box: "border-slate-200 bg-white", num: "text-slate-300", note: "text-slate-300" },
-  full: { box: "border-red-200 bg-red-50", num: "text-red-700", note: "text-red-600" },
-  tight: { box: "border-amber-200 bg-amber-50", num: "text-amber-800", note: "text-amber-700" },
-  free: { box: "border-emerald-200 bg-emerald-50", num: "text-emerald-800", note: "text-emerald-700" },
+  full: { box: "border-slate-200 bg-red-50", num: "text-red-700", note: "text-red-600" },
+  tight: { box: "border-slate-200 bg-amber-50", num: "text-amber-800", note: "text-amber-700" },
+  free: { box: "border-slate-200 bg-emerald-50", num: "text-emerald-800", note: "text-emerald-700" },
 };
 
 export function MonthAvailability({
@@ -98,7 +98,7 @@ export function MonthAvailability({
                 // the past is dimmed, not hidden: a month missing its first
                 // fortnight is hard to read as a month
                 past ? "opacity-45" : "hover:brightness-95"
-              } ${isToday ? "ring-2 ring-brand-500 ring-offset-1" : ""}`}
+              } ${isToday ? "ring-2 ring-slate-400 ring-offset-1" : ""}`}
             >
               <div className={`text-lg font-bold leading-none ${l.num}`}>{Number(day.slice(8, 10))}</div>
               <div className={`mt-1 text-[11px] font-medium leading-none ${l.note}`}>{load.label}</div>

@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Table } from "@/components/patterns";
 import { useSearchParams } from "next/navigation";
 import { bookingHandoff } from "@/lib/booking-handoff";
-import { Download, FileDown, Printer } from "lucide-react";
+import { CalendarX, Download, FileDown, Printer } from "lucide-react";
 import {
   api, client, money, dmy, iso,
   type BookingDetail, type BookingRow, type RoomAvail, cur,
@@ -309,7 +309,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
                 onChange={(e) => { setFullName(e.target.value); if (err && tried) setErr(null); }}
                 placeholder={walkIn ? "local" : "Full name"}
                 aria-invalid={tried && gaps.includes("guestName")}
-                className={tried && gaps.includes("guestName") ? "!border-red-400 !ring-2 !ring-red-100" : ""}
+                className={tried && gaps.includes("guestName") ? "!border-slate-200 !ring-2 !ring-slate-200" : ""}
               />
             </Field>
             <Field label="Mobile"><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={walkIn ? "optional" : "01XXX-XXXXXX"} /></Field>
@@ -357,7 +357,7 @@ function NewBookingModal({ open, onClose, onCreated, preset }: {
           <Field label="Remarks"><Input value={remarks} onChange={(e) => setRemarks(e.target.value)} /></Field>
         </div>
 
-        {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{err}</div>}
+        {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-slate-200">{err}</div>}
 
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -653,7 +653,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       </div>
 
       {b.cancelState === "REQUESTED" && (
-        <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
+        <div className="flex items-center justify-between rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-slate-200">
           Agent requested cancellation
           {isStaff && (
             <span className="flex gap-2">
@@ -686,7 +686,7 @@ function DetailDrawer({ id, onClose, onChanged }: { id: number; onClose: () => v
       </div>
 
       {b.agentPricing && (
-        <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3">
+        <div className="rounded-xl border border-slate-200 bg-brand-50/60 p-3">
           <div className="mb-1 text-xs font-medium text-brand-900">Your price</div>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
             <span className="text-slate-600">
@@ -1157,7 +1157,7 @@ function BookingsInner() {
       {/* only while something is chosen: a bar that is always there is a
           delete button that is always there */}
       {canDelete && picked.size > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-red-50 px-4 py-2.5">
           <span className="text-sm font-medium text-red-900">
             {picked.size} booking{picked.size === 1 ? "" : "s"} selected
           </span>
@@ -1176,7 +1176,7 @@ function BookingsInner() {
         ) : loading ? (
           <Skeleton rows={8} />
         ) : filtered.length === 0 ? (
-          <Empty msg="No bookings match" />
+          <Empty icon={CalendarX} msg="No bookings match" />
         ) : (
           <Table minWidth={860}>
               <thead className="border-b border-slate-100">

@@ -16,7 +16,7 @@ import { ApiError } from "@rh/shared";
 import { Button } from "./button";
 import { Text } from "./text";
 import { color, radius, space } from "./tokens";
-import { EmptyArt } from "./art";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 /**
  * Waiting.
@@ -43,10 +43,19 @@ export function Loading({ what }: { what: string }) {
  * The message is the screen's own words — "No arrivals today", not "No data".
  * `hint` is for the case where the emptiness has something to do about it.
  */
-export function Empty({ message, hint }: { message: string; hint?: string }) {
+export type EmptyIcon = keyof typeof MaterialCommunityIcons.glyphMap;
+
+/**
+ * Nothing here yet: an icon of the thing that is missing, quiet and grey,
+ * and the words. A landscape here said nothing about what was empty, and the
+ * owner called it what it was (2026-10-03).
+ */
+export function Empty({ message, hint, icon = "tray-remove" }: { message: string; hint?: string; icon?: EmptyIcon }) {
   return (
     <View style={styles.middle}>
-      <EmptyArt />
+      <View style={styles.emptyIcon} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <MaterialCommunityIcons name={icon} size={28} color={color.ink[400]} />
+      </View>
       <Text step="body" weight="medium" tone="title" style={styles.centred}>
         {message}
       </Text>
@@ -116,6 +125,7 @@ export function Stale({ age }: { age: string | null }) {
 }
 
 const styles = StyleSheet.create({
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: color.ink[100], alignItems: "center", justifyContent: "center" },
   middle: {
     flex: 1,
     alignItems: "center",

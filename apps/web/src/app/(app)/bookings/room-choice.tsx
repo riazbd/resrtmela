@@ -36,14 +36,14 @@ export function RoomChoice({ room, arrivingToday, checked, onToggle }: {
       onClick={() => onToggle(room.roomId)}
       className={`rounded-lg border px-3 py-2 text-left text-sm transition ${
         offer.why === "busy"
-          ? "cursor-not-allowed border-red-200 bg-red-50 text-red-400"
+          ? "cursor-not-allowed border-slate-200 bg-red-50 text-red-400"
           : offer.why === "closed"
-            ? "cursor-not-allowed border-amber-200 bg-amber-50 text-amber-600"
+            ? "cursor-not-allowed border-slate-200 bg-amber-50 text-amber-600"
             : checked
-              ? "border-brand-500 bg-brand-50 text-brand-900 ring-1 ring-brand-500"
+              ? "border-slate-400 bg-brand-50 text-brand-900 ring-1 ring-slate-400"
               : offer.why === "dirty"
-                ? "border-amber-300 bg-white text-slate-900 hover:border-amber-400"
-                : "border-slate-200 bg-white hover:border-brand-300"
+                ? "border-slate-200 bg-white text-slate-900 hover:border-slate-200"
+                : "border-slate-200 bg-white hover:border-slate-200"
       }`}
     >
       <div className="font-medium">{room.roomName}</div>

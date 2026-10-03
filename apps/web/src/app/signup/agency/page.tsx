@@ -198,7 +198,7 @@ export default function AgencySignupPage() {
                     <label
                       key={x.id}
                       className={`flex cursor-pointer items-start gap-2 rounded-lg px-3 py-2 ${
-                        shelf?.id === x.id ? "bg-brand-50 ring-1 ring-brand-200" : "bg-slate-50"
+                        shelf?.id === x.id ? "bg-brand-50 ring-1 ring-slate-200" : "bg-slate-50"
                       }`}
                     >
                       <input

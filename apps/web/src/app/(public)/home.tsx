@@ -344,7 +344,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
                   ["T", "from-rose-300 to-pink-600"],
                   ["M", "from-violet-300 to-purple-600"],
                 ].map(([l, g]) => (
-                  <span key={l} className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-sm font-black text-white ring-2 ring-emerald-700 ${g}`}>
+                  <span key={l} className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br text-sm font-black text-white ring-2 ring-slate-400 ${g}`}>
                     {l}
                   </span>
                 ))}
@@ -551,7 +551,7 @@ export default function Home({ cms, resortPlans, agencyPlans }: HomeData) {
 
           <div className={`mt-12 grid gap-6 ${pricingColumns((plans ?? []).length)}`}>
             {(plans ?? []).map((p, i) => (
-              <div key={p.name} className={`relative flex flex-col rounded-3xl bg-white p-8 transition hover:-translate-y-1 ${p.highlight ? "shadow-2xl shadow-emerald-600/20 ring-2 ring-emerald-500" : "shadow-lg shadow-slate-900/5 ring-1 ring-slate-200"}`}>
+              <div key={p.name} className={`relative flex flex-col rounded-3xl bg-white p-8 transition hover:-translate-y-1 ${p.highlight ? "shadow-2xl shadow-emerald-600/20 ring-2 ring-slate-400" : "shadow-lg shadow-slate-900/5 ring-1 ring-slate-200"}`}>
                 {p.highlight && (
                   <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-amber-300 to-amber-400 px-4 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-950 shadow-md">
                     Most popular

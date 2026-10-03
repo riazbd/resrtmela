@@ -114,7 +114,7 @@ export function RoomBoard({ rooms, onMove, busy }: { rooms: HousekeepingRow[]; o
               accessibilityLabel={`On the floor: ${r.name} — ${housekeepingLabel(r.housekeeping)}${onMove ? `. ${nextHousekeepingState(r.housekeeping).label}` : ""}`}
               disabled={!onMove || busy === r.id}
               onPress={() => onMove?.(r)}
-              style={({ pressed }) => [styles.tile, { backgroundColor: tone.soft, borderTopColor: tone.solid }, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.tile, { backgroundColor: tone.soft }, pressed && styles.pressed]}
             >
               {/* the tile's label says all of this; read twice, it is noise */}
               <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.tileWords}>
@@ -226,7 +226,7 @@ export function NightStrip({ checkIn, checkOut, today }: { checkIn: string | nul
       {nights.map((n) => {
         const t = color.chart.night[n.when];
         return (
-          <View key={n.day} style={[styles.night, { backgroundColor: t.soft, borderBottomColor: t.solid }]}>
+          <View key={n.day} style={[styles.night, { backgroundColor: t.soft }]}>
             <Text step="caption" weight="bold" style={{ color: t.solid }}>
               {n.weekday}
             </Text>
@@ -356,11 +356,11 @@ const styles = StyleSheet.create({
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   gap: { gap: space.sm },
   board: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  tile: { width: "31%", minHeight: 92, padding: space.sm, borderRadius: radius.md, borderTopWidth: 4, gap: 2 },
+  tile: { width: "31%", minHeight: 92, padding: space.sm, borderRadius: radius.md, gap: 2 },
   tileWords: { gap: 2 },
   pressed: { opacity: 0.7 },
   nights: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  night: { width: 44, alignItems: "center", paddingVertical: 4, borderRadius: radius.md, borderBottomWidth: 3 },
+  night: { width: 44, alignItems: "center", paddingVertical: 4, borderRadius: radius.md },
   faces: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
   face: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
 });

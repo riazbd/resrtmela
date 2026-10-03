@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.brand[50],
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: color.brand[100],
+    borderColor: color.line,
     padding: space.md,
   },
   pressed: { opacity: 0.7 },

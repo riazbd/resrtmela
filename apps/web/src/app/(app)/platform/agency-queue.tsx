@@ -98,7 +98,7 @@ export function AgencyQueue() {
                     {a.demo && (
                       <span
                         title="Opened by the platform to test with. Left out of the figures on Overview."
-                        className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-amber-200"
+                        className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700 ring-1 ring-slate-200"
                       >
                         demo
                       </span>
@@ -118,7 +118,7 @@ export function AgencyQueue() {
                     {a.status !== "pending" && a.status !== "suspended" && (
                       <button
                         onClick={() => void setStatus(a, "suspended")}
-                        className="mr-1.5 rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        className="mr-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
                       >
                         Suspend
                       </button>
@@ -126,7 +126,7 @@ export function AgencyQueue() {
                     {a.status === "suspended" && (
                       <button
                         onClick={() => void setStatus(a, "active")}
-                        className="mr-1.5 rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                        className="mr-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                       >
                         Let back in
                       </button>
@@ -134,7 +134,7 @@ export function AgencyQueue() {
                     {a.status === "pending" && (
                       <button
                         onClick={() => void verify(a.id)}
-                        className="rounded-lg border border-emerald-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                       >
                         Verify
                       </button>

@@ -94,5 +94,5 @@ const styles = StyleSheet.create({
     // one-source-for-a-colour.spec.ts exists to stop.
     ...step("body"),
   },
-  invalid: { borderColor: color.danger.fg },
+  invalid: { borderColor: color.ink[700] },
 });

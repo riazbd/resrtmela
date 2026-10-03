@@ -207,7 +207,7 @@ export default function SubscriptionScreen() {
 
         <Card title="Bills">
           {d.bills.length === 0 ? (
-            <Empty message="No bills yet" />
+            <Empty icon="receipt-text-outline" message="No bills yet" />
           ) : (
             d.bills.map((b) => {
               const paid = b.status === "PAID";

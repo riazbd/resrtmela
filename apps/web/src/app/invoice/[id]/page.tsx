@@ -89,7 +89,7 @@ export default function InvoicePage() {
   return (
     <main className="mx-auto max-w-2xl bg-white p-10 print:p-0" ref={paper}>
       {/* header */}
-      <div className="flex items-start justify-between border-b-2 border-brand-700 pb-4">
+      <div className="flex items-start justify-between border-b-2 border-slate-400 pb-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{inv.resort.name}</h1>
           {/* the platform's name has no business on a bill the resort hands

@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   // the owner's own flag, drawn as a border rather than a fill so the
   // card it marks is still a card and not a banner
-  pick: { borderColor: color.brand[600] },
+  pick: { borderColor: color.ink[900] },
   pressed: { backgroundColor: color.ink[50] },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   flag: {

@@ -244,6 +244,7 @@ export default function BookingsScreen() {
           {rows.length === 0 ? (
             <View style={styles.emptyBox}>
               <Empty
+                icon="calendar-blank-outline"
                 message={narrowed ? "Nothing matches that" : "No bookings yet"}
                 hint={
                   narrowed
@@ -308,7 +309,7 @@ function BookingListRow({ booking, whole }: { booking: BookingRow; whole: (amoun
         </Text>
       </View>
       <View style={styles.cardRight}>
-        <View style={[styles.statePill, { borderColor: tone }]}>
+        <View style={[styles.statePill, { backgroundColor: color.chart.bookingState[booking.state]?.soft ?? color.ink[100] }]}>
           <Text step="caption" weight="bold" numberOfLines={1} style={{ color: tone }}>
             {status}
           </Text>
@@ -347,5 +348,5 @@ const styles = StyleSheet.create({
   avatar: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   cardBody: { flex: 1, gap: 2 },
   cardRight: { alignItems: "flex-end", gap: space.xs },
-  statePill: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 1 },
+  statePill: { borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
 });

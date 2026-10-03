@@ -194,7 +194,7 @@ export function WebsiteTab({ rid }: { rid: number }) {
                   key={t.key}
                   onClick={() => pickTemplate(t.key)}
                   disabled={busy === `t${t.key}`}
-                  className={`rounded-xl px-4 py-3 text-left ring-1 ${on ? "bg-brand-50 ring-brand-500" : "ring-slate-200 hover:bg-slate-50"}`}
+                  className={`rounded-xl px-4 py-3 text-left ring-1 ${on ? "bg-brand-50 ring-slate-400" : "ring-slate-200 hover:bg-slate-50"}`}
                 >
                   <div className="text-sm font-semibold text-slate-900">{t.label}</div>
                   <div className="mt-1 text-xs leading-relaxed text-slate-500">{t.blurb}</div>

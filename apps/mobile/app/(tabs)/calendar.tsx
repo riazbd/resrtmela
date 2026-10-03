@@ -94,7 +94,7 @@ const LOAD_LOOK: Record<
  */
 const HELD_FILL: Record<1 | 2 | 3, string> = {
   1: color.danger.bg,
-  2: color.danger.line,
+  2: color.danger.mid,
   3: color.danger.fg,
 };
 
@@ -628,7 +628,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
   },
-  todayRing: { borderColor: color.brand[600], borderWidth: 2 },
+  todayRing: { borderColor: color.ink[900], borderWidth: 2 },
   /** Dimmed, not dropped. */
   past: { opacity: 0.45 },
   pressed: { backgroundColor: color.ink[100] },

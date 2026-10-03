@@ -181,7 +181,7 @@ export default function SalesPage() {
           </Table>
         )}
         {stale && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <div className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
             Showing what was saved on this device {stale} — you appear to be offline. New documents will
             wait here until the signal returns; sending one needs a connection.
           </div>
@@ -426,7 +426,7 @@ function DocEditor({
   return (
     <Modal open onClose={onClose} title={title} wide>
       {locked && (
-        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="mb-3 rounded-lg border border-slate-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {money(doc!.totals.paid)} has been paid against this. The lines are a record of what was
           agreed, so they can no longer change — void it and raise a new one instead.
         </div>

@@ -7,7 +7,7 @@ import { STAY_CHARGE_KINDS, STAY_CHARGE_LABELS, chargeLines, isStayChargeKind, t
 
 function ErrorLine({ msg }: { msg: string | null }) {
   if (!msg) return null;
-  return <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-red-200">{msg}</div>;
+  return <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 ring-1 ring-slate-200">{msg}</div>;
 }
 
 /**

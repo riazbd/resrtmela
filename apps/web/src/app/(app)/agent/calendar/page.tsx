@@ -283,7 +283,7 @@ export default function AgencyCalendarPage() {
             Free
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-            <span className="h-2.5 w-4 rounded-sm bg-red-200 ring-1 ring-inset ring-slate-900" />
+            <span className="h-2 w-2 rounded-full bg-slate-900" />
             Payment due
           </span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -319,7 +319,7 @@ export default function AgencyCalendarPage() {
             </div>
             <p className="text-xs text-slate-500">
               {lastOpenNight && (
-                <span className="mr-2 rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-amber-200">
+                <span className="mr-2 rounded bg-amber-50 px-1.5 py-0.5 font-medium text-amber-800 ring-1 ring-slate-200">
                   Open to agents until {dayNumber(lastOpenNight)} {monthLabel(lastOpenNight)}
                 </span>
               )}
@@ -572,7 +572,7 @@ function StayBar({
             {cell.code}
           </span>
         )}
-        {stripe && <span className={`absolute inset-x-0 bottom-0 h-1 ${stripe}`} aria-hidden />}
+        {stripe && <span className={`absolute right-1 top-1 h-2 w-2 rounded-full ${stripe}`} aria-hidden />}
       </button>
     </td>
   );
@@ -648,9 +648,9 @@ function FreeNights({
               }
               className={`block h-9 w-full rounded transition ${
                 isAnchor
-                  ? "bg-brand-400 ring-1 ring-inset ring-brand-600"
+                  ? "bg-brand-400 ring-1 ring-inset ring-slate-400"
                   : reachable
-                    ? "bg-brand-200 ring-1 ring-inset ring-brand-400"
+                    ? "bg-brand-200 ring-1 ring-inset ring-slate-200"
                     : // a free night is inventory, not a gap: `bg-slate-50` was
                       // the page's own background, so an empty row read as a
                       // hole in the table. The resting tint is the hover colour,

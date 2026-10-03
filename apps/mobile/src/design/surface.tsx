@@ -77,9 +77,7 @@ export function Stat({
 }) {
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${label}: ${value}`}>
-      {/* the tone, carried by a rule along the top and a wash in the corner,
-          so a row of tiles reads before a single figure is */}
-      <View style={[styles.statRule, { backgroundColor: statTint[tone] }]} />
+      {/* the tone, carried by a wash in the corner — never by a border */}
       <View style={[styles.statWash, { backgroundColor: statTint[tone] }]} />
       <Text step="caption" tone="muted">
         {label}
@@ -203,7 +201,6 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingBottom: space.sm,
   },
-  statRule: { position: "absolute", top: 0, left: 0, right: 0, height: 4 },
   statWash: { position: "absolute", top: -36, right: -36, width: 96, height: 96, borderRadius: 48, opacity: 0.1 },
   stat: {
     flex: 1,

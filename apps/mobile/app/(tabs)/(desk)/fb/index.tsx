@@ -187,6 +187,7 @@ export default function RestaurantScreen() {
           {rows.length === 0 ? (
             <View style={styles.emptyBox}>
               <Empty
+                icon="silverware-fork-knife"
                 message="Nothing sold on this day"
                 hint={can("restaurant.create") ? "Write a ticket and it appears here." : undefined}
               />
@@ -235,7 +236,6 @@ export default function RestaurantScreen() {
               <View style={styles.menu}>
                 {(packages.data ?? []).map((p, i) => (
                   <View key={p.id} style={styles.dish} accessible accessibilityLabel={`${p.name}, ${whole(Number(p.price))}${p.items ? `, ${p.items}` : ""}`}>
-                    <View style={[styles.dishBand, { backgroundColor: color.chart.series[i % color.chart.series.length] }]} />
                     <Text step="body" weight="bold" tone="title" numberOfLines={2}>
                       {p.name}
                     </Text>
@@ -352,7 +352,6 @@ const styles = StyleSheet.create({
     borderColor: color.ink[100],
     ...elevation.raised,
   },
-  dishBand: { position: "absolute", top: 0, left: 0, right: 0, height: 6 },
   dishFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.xs },
   figures: { flexDirection: "row", flexWrap: "wrap", gap: space.md },
   right: { alignItems: "flex-end", gap: space.xs },

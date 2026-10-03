@@ -270,7 +270,7 @@ export default function ImportScreen() {
                         </Text>
                       ) : null}
                     </View>
-                    <View style={[styles.pill, { borderColor: o.tone }]}>
+                    <View style={styles.pill}>
                       <Text step="caption" weight="bold" style={{ color: o.tone }}>
                         {o.label}
                       </Text>
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   room: { backgroundColor: color.ok.bg, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 2 },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, paddingVertical: space.xs, borderBottomWidth: 1, borderBottomColor: color.line },
   rowNo: { width: 40 },
-  pill: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 1 },
+  pill: { backgroundColor: color.ink[100], borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2 },
   note: { borderRadius: radius.md, padding: space.md, borderWidth: 1 },
   ok: { backgroundColor: color.ok.bg, borderColor: color.ok.line },
   bad: { backgroundColor: color.danger.bg, borderColor: color.danger.line },

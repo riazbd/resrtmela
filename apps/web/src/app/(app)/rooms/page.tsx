@@ -126,7 +126,7 @@ This cannot be undone.`;
                         its own: this table is already six columns wide and the
                         answer is empty most of the time. */}
                     {r.housekeeping && r.housekeeping !== "CLEAN" ? (
-                      <span className="ml-1.5 whitespace-nowrap rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+                      <span className="ml-1.5 whitespace-nowrap rounded border border-slate-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
                         {housekeepingLabel(r.housekeeping)}
                       </span>
                     ) : null}
@@ -165,7 +165,7 @@ This cannot be undone.`;
               key={t.id}
               onClick={() => canEdit && setEditType(t)}
               title={canEdit ? "Click to edit" : undefined}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-brand-300 hover:bg-brand-50/50"
+              className="rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-slate-200 hover:bg-brand-50/50"
             >
               <div className="text-sm font-medium">{t.name}</div>
               {/* no extra-person line: that belongs to the room, which is

@@ -221,7 +221,7 @@ export default function ReportsPage() {
                   onClick={() => { setMoneyFrom(f); setMoneyTo(t); }}
                   className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
                     moneyFrom === f && moneyTo === t
-                      ? "border-brand-600 bg-brand-600 text-white"
+                      ? "border-slate-400 bg-brand-600 text-white"
                       : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
                   }`}
                 >
@@ -474,7 +474,7 @@ export default function ReportsPage() {
             </div>
 
             {/* combined column */}
-            <div className="rounded-xl border-2 border-brand-200 bg-brand-50/40 p-4">
+            <div className="rounded-xl border-2 border-slate-200 bg-brand-50/40 p-4">
               <div className="mb-2 text-sm font-bold text-slate-800">Combined</div>
               <PLRow label="Billed" value={pl.combined.billed} />
               <PLRow label="Still due — not income" value={pl.combined.stillDue} muted />

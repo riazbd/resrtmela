@@ -90,7 +90,7 @@ function EntriesTab() {
       </div>
 
       {(heads ?? []).length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Create a head first — office rent, fuel, salaries — then file entries under it.
         </div>
       )}
@@ -136,7 +136,7 @@ function EntriesTab() {
           </Table>
         )}
         {stale && (
-          <div className="border-t border-amber-100 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <div className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
             Showing what was saved on this device {stale} — you appear to be offline.
           </div>
         )}

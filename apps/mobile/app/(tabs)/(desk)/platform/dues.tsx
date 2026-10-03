@@ -64,7 +64,7 @@ export default function PlatformDues() {
 
         {view === "Bills"
           ? (dues.data ?? []).length === 0
-            ? <Card><Empty message="No bills yet" /></Card>
+            ? <Card><Empty icon="receipt-text-outline" message="No bills yet" /></Card>
             : (dues.data ?? []).map((d) => (
                 <View key={d.id} style={styles.card}>
                   <View style={styles.head}>

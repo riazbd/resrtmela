@@ -241,7 +241,7 @@ export function MockCalendar() {
                     </div>
                   );
                 }
-                return <div key={i} className="rounded-md bg-emerald-50 ring-1 ring-inset ring-emerald-100" />;
+                return <div key={i} className="rounded-md bg-emerald-50 ring-1 ring-inset ring-slate-200" />;
               })}
             </div>
           ))}

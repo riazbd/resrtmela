@@ -76,7 +76,7 @@ export default function AgentWalletPage() {
       </div>
 
       {!wallet.active && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-xl border border-slate-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           This wallet is not active yet. The resort activates it when they approve your agency.
         </div>
       )}

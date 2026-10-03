@@ -62,7 +62,7 @@ export function OfferBanner({ state }: { state: OfferState }) {
     return <p className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">{state.problem ?? "Checking your offer…"}</p>;
   }
   return (
-    <p className="mb-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-emerald-200">
+    <p className="mb-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 ring-1 ring-slate-200">
       <b>{state.offer.invitation ? "You were invited" : "Offer applied"}:</b> {offerLine(state.offer)}
       {state.offer.invitation ? " — use the email address the invitation was sent to." : ""}
     </p>

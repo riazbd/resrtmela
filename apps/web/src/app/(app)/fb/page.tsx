@@ -10,7 +10,7 @@ import { ErrorState, Skeleton } from "@/components/error-state";
 import { useAuth } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
 import { Badge, Button, Card, Empty, Field, Input, Modal, Select, Spinner, Td, Th, useToast } from "@/components/ui";
-import { Package as PackageIcon, Trash2 } from "lucide-react";
+import { Package as PackageIcon, Trash2, UtensilsCrossed } from "lucide-react";
 import { usePaymentMethods } from "@/lib/resort-options";
 import { todayIn, addDaysIso } from "@/lib/resort-dates";
 
@@ -180,7 +180,7 @@ export default function FbPage() {
               <button
                 onClick={() => setTarget({ bookingId: null, label: "" })}
                 className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                  target?.bookingId === null ? "border-brand-500 bg-brand-50" : "border-dashed border-slate-300 hover:border-brand-300"
+                  target?.bookingId === null ? "border-slate-400 bg-brand-50" : "border-dashed border-slate-300 hover:border-slate-200"
                 }`}
               >
                 <div className="font-medium">Walk-in guest</div>
@@ -192,7 +192,7 @@ export default function FbPage() {
                   key={h.bookingId}
                   onClick={() => setTarget({ bookingId: h.bookingId, label: `${h.guestName} · ${h.rooms.join(", ")}` })}
                   className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
-                    target?.bookingId === h.bookingId ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:border-brand-300"
+                    target?.bookingId === h.bookingId ? "border-slate-400 bg-brand-50" : "border-slate-200 hover:border-slate-200"
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -219,7 +219,7 @@ export default function FbPage() {
           }
         >
           {!target ? (
-            <Empty msg="Select who the bill is for" />
+            <Empty icon={UtensilsCrossed} msg="Select who the bill is for" />
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -236,7 +236,7 @@ export default function FbPage() {
                     key={p.id}
                     onClick={() => setTicket([...ticket, { name: p.name, qty: 1, unitPrice: p.price, total: p.price }])}
                     title={p.items ?? undefined}
-                    className="rounded-full border border-brand-300 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                    className="rounded-full border border-slate-200 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
                   >
                     <PackageIcon className="mr-1 inline h-3 w-3" />{p.name} · {money(p.price)}
                   </button>
