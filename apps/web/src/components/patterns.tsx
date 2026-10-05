@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -263,7 +264,8 @@ export function Drawer({
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  // on the body, as the Modal is: a transformed ancestor would otherwise be its screen
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} aria-hidden="true" />
       <div
@@ -281,6 +283,7 @@ export function Drawer({
         </div>
         <div className="flex-1 px-5 py-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

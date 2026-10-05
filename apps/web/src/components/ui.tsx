@@ -4,6 +4,7 @@ import { useT, isStateKey, type DictKey } from "@/lib/i18n";
 
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from "react";
 import { Inbox } from "lucide-react";
+import { createPortal } from "react-dom";
 
 // ── primitives ──
 
@@ -275,7 +276,13 @@ export function Modal({
   }, [open]);
 
   if (!open) return null;
-  return (
+  /**
+   * Drawn on the body, not where it was written. A `fixed` box is fixed to
+   * the nearest ancestor with a transform, not to the screen — and the page
+   * fades in with one — so a dialog opened from a short page was a dialog
+   * the height of that page (an agency's empty bookings list, 2026-10-06).
+   */
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 pt-10 backdrop-blur-[2px]">
       <div
         ref={box}
@@ -301,7 +308,8 @@ export function Modal({
         </div>
         <div className="p-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
