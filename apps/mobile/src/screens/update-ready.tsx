@@ -28,8 +28,9 @@
  * rule `push.ts` follows. In Expo Go and in development the module is
  * there but disabled, and this renders nothing.
  */
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
+import { useOutbox } from "@rh/app-core";
 import { Text } from "../design/text";
 import { TOUCH_TARGET, color, radius, space } from "../design/tokens";
 
@@ -42,13 +43,23 @@ import { TOUCH_TARGET, color, radius, space } from "../design/tokens";
  * in the app and the alternative is a provider whose only job is to carry one
  * boolean past two components.
  */
-let pending = false;
+let waiting = false;
 const watching = new Set<() => void>();
 
 function announce(now: boolean) {
-  if (pending === now) return;
-  pending = now;
+  if (waiting === now) return;
+  waiting = now;
   for (const tell of watching) tell();
+}
+
+/**
+ * The same answer outside React, for a listener that cannot call a hook.
+ *
+ * Not named `use…`: it is a plain read of the store, and calling it from an
+ * `AppState` handler is the whole point.
+ */
+export function anUpdateIsWaiting(): boolean {
+  return waiting;
 }
 
 export function useUpdateReady(): boolean {
@@ -57,8 +68,8 @@ export function useUpdateReady(): boolean {
       watching.add(onChange);
       return () => watching.delete(onChange);
     },
-    () => pending,
-    () => pending,
+    () => waiting,
+    () => waiting,
   );
 }
 
@@ -72,9 +83,53 @@ function updates(): typeof import("expo-updates") | null {
   }
 }
 
+/**
+ * How long away counts as "nobody is in the middle of anything".
+ *
+ * A booking takes a minute or two to type. Fifteen minutes in the background
+ * is a phone that went in a pocket, and coming back to the current version is
+ * what somebody would want if they were asked.
+ */
+const AWAY_LONG_ENOUGH = 15 * 60 * 1000;
+
 export function UpdateReady() {
   const ready = useUpdateReady();
   const [restarting, setRestarting] = useState(false);
+  const { pending } = useOutbox();
+  const left = useRef<number | null>(null);
+
+  /**
+   * A downloaded update that nobody applies is a feature nobody receives.
+   *
+   * The bar has been the only way in, and it asks for a decision while
+   * somebody is looking at a screen they opened for another reason — so it
+   * gets ignored, for weeks. The owner's phone sat a month behind on a build
+   * that had the charts in it, with the bar up in every screenshot.
+   *
+   * Expo applies a pending update on the next *cold* start, and Android rarely
+   * gives it one: the process stays resident and the app is resumed, not
+   * launched. So this does what a cold start would have done, when it is
+   * plainly safe — the app has been away a quarter of an hour and there is
+   * nothing queued to send. The bar stays for everyone who wants to decide
+   * sooner.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") {
+        left.current = Date.now();
+        return;
+      }
+      const away = left.current == null ? 0 : Date.now() - left.current;
+      left.current = null;
+      if (!pending.length && away >= AWAY_LONG_ENOUGH && anUpdateIsWaiting()) {
+        const Updates = updates();
+        void Updates?.reloadAsync();
+      }
+    });
+    return () => sub.remove();
+    // `pending` by identity: a queued write appearing must be seen by the
+    // listener, and the array is replaced whenever the queue changes
+  }, [pending]);
 
   useEffect(() => {
     const Updates = updates();
@@ -108,6 +163,12 @@ export function UpdateReady() {
     void (async () => {
       try {
         const state = await Updates.checkForUpdateAsync();
+        /*
+         * `isAvailable: false` is not "nothing is waiting" — it means the
+         * server has nothing newer than what is already downloaded, which is
+         * exactly the case when a bundle from a previous run is pending. The
+         * listener above is what knows that, so this says nothing either way.
+         */
         if (!alive || !state.isAvailable) return;
         await Updates.fetchUpdateAsync();
         if (alive) announce(true);
